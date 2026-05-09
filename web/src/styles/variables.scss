@@ -1,0 +1,114 @@
+// 设计系统变量 - 基于 Data-Dense Dashboard 风格
+
+// 颜色系统
+$colors: (
+  'primary': #0F172A,
+  'on-primary': #FFFFFF,
+  'secondary': #1E293B,
+  'accent': #22C55E,
+  'background': #020617,
+  'foreground': #F8FAFC,
+  'muted': #1A1E2F,
+  'border': #334155,
+  'destructive': #EF4444,
+  'ring': #0F172A,
+  'success': #22C55E,
+  'warning': #F59E0B,
+  'error': #EF4444,
+  'info': #3B82F6,
+);
+
+// 字体系统
+$font-family-heading: 'Fira Code', monospace;
+$font-family-body: 'Fira Sans', sans-serif;
+
+// 字号系统
+$font-sizes: (
+  'xs': 0.75rem,    // 12px
+  'sm': 0.875rem,   // 14px
+  'base': 1rem,     // 16px
+  'lg': 1.125rem,   // 18px
+  'xl': 1.25rem,    // 20px
+  '2xl': 1.5rem,    // 24px
+  '3xl': 1.875rem,  // 30px
+  '4xl': 2.25rem,   // 36px
+);
+
+// 间距系统 (8px 基准)
+$spacing: (
+  '0': 0,
+  '1': 0.25rem,    // 4px
+  '2': 0.5rem,     // 8px
+  '3': 0.75rem,    // 12px
+  '4': 1rem,       // 16px
+  '5': 1.25rem,    // 20px
+  '6': 1.5rem,     // 24px
+  '8': 2rem,       // 32px
+  '10': 2.5rem,    // 40px
+  '12': 3rem,      // 48px
+  '16': 4rem,      // 64px
+);
+
+// 圆角系统
+$radius: (
+  'sm': 0.25rem,   // 4px
+  'md': 0.5rem,    // 8px
+  'lg': 0.75rem,   // 12px
+  'xl': 1rem,      // 16px
+  'full': 9999px,
+);
+
+// 阴影系统
+$shadows: (
+  'sm': 0 1px 2px 0 rgb(0 0 0 / 0.05),
+  'md': 0 4px 6px -1px rgb(0 0 0 / 0.1),
+  'lg': 0 10px 15px -3px rgb(0 0 0 / 0.1),
+  'xl': 0 20px 25px -5px rgb(0 0 0 / 0.1),
+);
+
+// 断点系统
+$breakpoints: (
+  'sm': 640px,
+  'md': 768px,
+  'lg': 1024px,
+  'xl': 1280px,
+  '2xl': 1536px,
+);
+
+// z-index 层级
+$z-index: (
+  'base': 0,
+  'dropdown': 10,
+  'sticky': 20,
+  'fixed': 40,
+  'modal-backdrop': 100,
+  'modal': 110,
+  'popover': 120,
+  'toast': 1000,
+);
+
+// 动画时间
+$transitions: (
+  'fast': 150ms,
+  'normal': 300ms,
+  'slow': 500ms,
+);
+
+// 导出 CSS 变量
+:root {
+  @each $name, $value in $colors {
+    --color-#{$name}: #{$value};
+  }
+  
+  @each $name, $value in $font-sizes {
+    --font-#{$name}: #{$value};
+  }
+  
+  @each $name, $value in $spacing {
+    --spacing-#{$name}: #{$value};
+  }
+  
+  @each $name, $value in $radius {
+    --radius-#{$name}: #{$value};
+  }
+}
