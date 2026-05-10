@@ -1,0 +1,143 @@
+<template>
+  <div class="page-container">
+    <div class="page-header">
+      <h2 class="page-title">全部演练</h2>
+    </div>
+
+    <div class="page-content">
+      <el-radio-group v-model="statusFilter" class="status-filter">
+        <el-radio-button value="">全部</el-radio-button>
+        <el-radio-button value="pending">待启动</el-radio-button>
+        <el-radio-button value="running">执行中</el-radio-button>
+        <el-radio-button value="paused">已暂停</el-radio-button>
+        <el-radio-button value="completed">已完成</el-radio-button>
+        <el-radio-button value="terminated">已终止</el-radio-button>
+      </el-radio-group>
+
+      <el-table :data="filteredInstances" style="width: 100%" class="drills-table">
+        <el-table-column prop="name" label="演练名" min-width="200" />
+        <el-table-column prop="template_name" label="模板" width="180" />
+        <el-table-column prop="status" label="状态" width="120">
+          <template #default="{ row }">
+            <DrillStatusBadge :status="row.status" type="drill" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_by_name" label="创建人" width="120" />
+        <el-table-column label="进度" width="150">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="Math.round(row.completed_steps / row.total_steps * 100)"
+              :stroke-width="6"
+              :status="row.status === 'completed' ? 'success' : undefined"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="started_at" label="开始时间" width="180">
+          <template #default="{ row }">
+            {{ row.started_at ? formatTime(row.started_at) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="viewDetail(row)">
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import type { DrillInstance } from '@/types'
+import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
+import instancesData from '@/mock/data/instances.json'
+
+const router = useRouter()
+const statusFilter = ref('')
+const instances = ref<DrillInstance[]>([])
+
+const filteredInstances = computed(() => {
+  if (!statusFilter.value) {
+    return instances.value
+  }
+  return instances.value.filter(i => i.status === statusFilter.value)
+})
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+async function loadInstances() {
+  try {
+    instances.value = instancesData as DrillInstance[]
+    ElMessage.success('演练列表加载成功')
+  } catch (error) {
+    ElMessage.error('加载演练列表失败')
+    console.error('Failed to load instances:', error)
+  }
+}
+
+function viewDetail(instance: DrillInstance) {
+  router.push(`/director/monitor/${instance.id}`)
+}
+
+loadInstances()
+</script>
+
+<style scoped lang="scss">
+@use '@/styles/layout' as *;
+@use '@/styles/variables' as *;
+
+.page-container {
+  @include page-container;
+
+  .page-header {
+    @include page-header;
+
+    .page-title {
+      font-size: $font-size-xl;
+      font-weight: $font-weight-bold;
+      color: $text-primary;
+      margin: 0;
+    }
+  }
+
+  .page-content {
+    @include page-content;
+
+    .status-filter {
+      margin-bottom: $spacing-base;
+    }
+
+    .drills-table {
+      background: $bg-secondary;
+      border-radius: $radius-base;
+
+      :deep(.el-table__header th) {
+        background: $bg-tertiary;
+        color: $text-secondary;
+      }
+
+      :deep(.el-table__row td) {
+        background: $bg-secondary;
+        color: $text-primary;
+      }
+
+      :deep(.el-table__row--striped td) {
+        background: rgba(26, 31, 46, 0.5);
+      }
+    }
+  }
+}
+</style>

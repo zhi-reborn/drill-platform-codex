@@ -1,0 +1,255 @@
+[
+  {
+    "id": 1,
+    "name": "数据库主从切换演练",
+    "category": "disaster_recovery",
+    "description": "模拟主数据库故障，切换到从数据库的完整流程",
+    "version": "1.2.0",
+    "created_by": 1,
+    "created_by_name": "系统管理员",
+    "status": "published",
+    "created_at": "2025-06-01T00:00:00Z",
+    "updated_at": "2026-04-15T00:00:00Z",
+    "steps": [
+      {
+        "id": 1,
+        "template_id": 1,
+        "name": "检查从库同步状态",
+        "description": "验证从数据库同步延迟和数据一致性",
+        "step_type": "serial",
+        "timeout_seconds": 300,
+        "order_index": 1,
+        "assignee_role": "executor",
+        "pre_check": "SELECT * FROM replication_status",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "template_id": 1,
+        "name": "停止主库写入",
+        "description": "将主数据库设置为只读模式",
+        "step_type": "serial",
+        "script": "SET GLOBAL read_only = ON",
+        "timeout_seconds": 60,
+        "order_index": 2,
+        "assignee_role": "director",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": 3,
+        "template_id": 1,
+        "name": "提升从库为主库",
+        "description": "将从数据库提升为新的主数据库",
+        "step_type": "serial",
+        "script": "STOP SLAVE; RESET SLAVE ALL",
+        "timeout_seconds": 120,
+        "order_index": 3,
+        "assignee_role": "director",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": 4,
+        "template_id": 1,
+        "name": "验证新主库可用性",
+        "description": "确认新主库可以正常读写",
+        "step_type": "serial",
+        "timeout_seconds": 180,
+        "order_index": 4,
+        "assignee_role": "executor",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": 5,
+        "template_id": 1,
+        "name": "更新应用配置",
+        "description": "切换应用连接指向新主库",
+        "step_type": "parallel",
+        "timeout_seconds": 300,
+        "order_index": 5,
+        "assignee_role": "executor",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
+      {
+        "id": 6,
+        "template_id": 1,
+        "name": "业务验证",
+        "description": "验证核心业务流程正常",
+        "step_type": "any_of",
+        "timeout_seconds": 600,
+        "order_index": 6,
+        "assignee_role": "executor",
+        "created_at": "2025-06-01T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "服务降级演练",
+    "category": "degradation",
+    "description": "在高负载场景下执行服务降级策略",
+    "version": "1.0.5",
+    "created_by": 2,
+    "created_by_name": "张三",
+    "status": "published",
+    "created_at": "2025-08-15T00:00:00Z",
+    "updated_at": "2026-03-20T00:00:00Z",
+    "steps": [
+      {
+        "id": 7,
+        "template_id": 2,
+        "name": "监控系统负载",
+        "description": "检查 CPU、内存、请求延迟等指标",
+        "step_type": "serial",
+        "timeout_seconds": 120,
+        "order_index": 1,
+        "assignee_role": "executor",
+        "pre_check": "curl -s http://monitor/health",
+        "created_at": "2025-08-15T00:00:00Z"
+      },
+      {
+        "id": 8,
+        "template_id": 2,
+        "name": "关闭非核心功能",
+        "description": "禁用推荐系统、数据分析等非核心模块",
+        "step_type": "parallel",
+        "script": "POST /api/config/disable-non-essential",
+        "timeout_seconds": 60,
+        "order_index": 2,
+        "assignee_role": "director",
+        "created_at": "2025-08-15T00:00:00Z"
+      },
+      {
+        "id": 9,
+        "template_id": 2,
+        "name": "限流配置",
+        "description": "对非 VIP 用户实施请求限流",
+        "step_type": "serial",
+        "script": "rate_limit enable --threshold 100",
+        "timeout_seconds": 30,
+        "order_index": 3,
+        "assignee_role": "executor",
+        "created_at": "2025-08-15T00:00:00Z"
+      },
+      {
+        "id": 10,
+        "template_id": 2,
+        "name": "缓存预热",
+        "description": "预加载核心数据到缓存",
+        "step_type": "serial",
+        "timeout_seconds": 300,
+        "order_index": 4,
+        "assignee_role": "executor",
+        "created_at": "2025-08-15T00:00:00Z"
+      },
+      {
+        "id": 11,
+        "template_id": 2,
+        "name": "验证核心功能",
+        "description": "确保下单、支付等核心流程正常",
+        "step_type": "any_of",
+        "timeout_seconds": 300,
+        "order_index": 5,
+        "assignee_role": "executor",
+        "created_at": "2025-08-15T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "灰度发布演练",
+    "category": "release",
+    "description": "新版本灰度发布和回滚流程",
+    "version": "2.1.0",
+    "created_by": 1,
+    "created_by_name": "系统管理员",
+    "status": "published",
+    "created_at": "2025-10-01T00:00:00Z",
+    "updated_at": "2026-05-01T00:00:00Z",
+    "steps": [
+      {
+        "id": 12,
+        "template_id": 3,
+        "name": "部署金丝雀实例",
+        "description": "部署新版本到 1 台服务器",
+        "step_type": "serial",
+        "script": "kubectl set image deployment/app app=new-version --replicas=1",
+        "timeout_seconds": 300,
+        "order_index": 1,
+        "assignee_role": "executor",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 13,
+        "template_id": 3,
+        "name": "流量切换 5%",
+        "description": "将 5% 流量导入金丝雀实例",
+        "step_type": "serial",
+        "script": "istio traffic-shift --percent 5",
+        "timeout_seconds": 60,
+        "order_index": 2,
+        "assignee_role": "director",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 14,
+        "template_id": 3,
+        "name": "监控指标观察",
+        "description": "观察错误率、延迟等关键指标 10 分钟",
+        "step_type": "condition",
+        "timeout_seconds": 600,
+        "order_index": 3,
+        "assignee_role": "executor",
+        "pre_check": "error_rate < 0.01 AND p99_latency < 200ms",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 15,
+        "template_id": 3,
+        "name": "扩大到 50%",
+        "description": "将流量扩大到 50%",
+        "step_type": "serial",
+        "script": "istio traffic-shift --percent 50",
+        "timeout_seconds": 60,
+        "order_index": 4,
+        "assignee_role": "director",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 16,
+        "template_id": 3,
+        "name": "全量发布",
+        "description": "完成全量发布",
+        "step_type": "parallel",
+        "script": "kubectl rollout status deployment/app",
+        "timeout_seconds": 600,
+        "order_index": 5,
+        "assignee_role": "executor",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 17,
+        "template_id": 3,
+        "name": "回滚预案 (条件触发)",
+        "description": "如果指标异常，执行回滚",
+        "step_type": "condition",
+        "script": "kubectl rollout undo deployment/app",
+        "timeout_seconds": 300,
+        "order_index": 6,
+        "assignee_role": "director",
+        "rollback_script": "kubectl rollout undo deployment/app",
+        "created_at": "2025-10-01T00:00:00Z"
+      },
+      {
+        "id": 18,
+        "template_id": 3,
+        "name": "发布完成确认",
+        "description": "确认发布成功并通知相关方",
+        "step_type": "serial",
+        "timeout_seconds": 120,
+        "order_index": 7,
+        "assignee_role": "executor",
+        "created_at": "2025-10-01T00:00:00Z"
+      }
+    ]
+  }
+]

@@ -1,0 +1,380 @@
+<template>
+  <div class="login-page">
+    <!-- 左侧品牌区 (60%) -->
+    <div class="login-brand">
+      <div class="brand-content">
+        <el-icon :size="64" color="#55C3D3"><Monitor /></el-icon>
+        <h1>Drill Platform</h1>
+        <p class="brand-tagline">生产演练流程管理平台</p>
+        <p class="brand-desc">指挥中心大屏 · 流程引擎驱动 · 实时通信同步</p>
+        <div class="brand-features">
+          <div class="feature"><el-icon><CircleCheck /></el-icon> 轻量级状态机引擎</div>
+          <div class="feature"><el-icon><CircleCheck /></el-icon> WebSocket 端到端延迟 &lt; 1s</div>
+          <div class="feature"><el-icon><CircleCheck /></el-icon> 模块化可扩展设计</div>
+        </div>
+      </div>
+      <div class="brand-bg-pattern"></div>
+    </div>
+
+    <!-- 右侧登录区 (40%) -->
+    <div class="login-area">
+      <!-- DEV 环境标记 -->
+      <el-tag v-if="authMode === 'dev'" class="dev-badge" type="success" effect="dark" size="small">
+        DEV 环境
+      </el-tag>
+
+      <div class="login-card">
+        <h2 class="login-title">
+          <template v-if="authMode === 'cas'">企业 SSO 登录</template>
+          <template v-else-if="authMode === 'dev'">快捷登录</template>
+          <template v-else>账号登录</template>
+        </h2>
+
+        <!-- CAS 模式 -->
+        <div v-if="authMode === 'cas'" class="cas-mode">
+          <el-button type="primary" size="large" class="cas-btn" @click="handleCasLogin" :loading="loading">
+            <el-icon :size="20"><Connection /></el-icon>
+            使用企业统一认证账号登录
+          </el-button>
+          <p class="hint">登录后将自动跳转至企业身份提供商进行认证</p>
+        </div>
+
+        <!-- DEV 模式 -->
+        <div v-else-if="authMode === 'dev'" class="dev-mode">
+          <el-select v-model="selectedUser" filterable placeholder="选择登录用户" size="large" class="user-select">
+            <el-option
+              v-for="u in activeUsers"
+              :key="u.id"
+              :label="u.id"
+              :value="u.id"
+            >
+              <div class="user-option">
+                <span>{{ u.name }} / {{ u.username }}</span>
+                <el-tag :size="'small'" :type="roleTagType(u.role) as 'primary' | 'success' | 'warning' | 'info' | 'danger'">{{ roleLabel(u.role) }}</el-tag>
+              </div>
+            </el-option>
+          </el-select>
+          <el-button type="primary" size="large" class="login-btn" @click="handleDevLogin" :loading="loading">
+            快捷登录
+          </el-button>
+          <div class="link-btn" @click="authMode = 'local'; selectedUser = 0">
+            切换手动表单登录
+          </div>
+        </div>
+
+        <!-- Local 模式 -->
+        <div v-else class="local-mode">
+          <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleLocalLogin">
+            <el-form-item prop="username">
+              <el-input
+                v-model="form.username"
+                placeholder="用户名"
+                size="large"
+                :prefix-icon="User"
+                autocomplete="username"
+              />
+            </el-form-item>
+            <el-form-item prop="password">
+              <el-input
+                v-model="form.password"
+                type="password"
+                placeholder="密码"
+                size="large"
+                :prefix-icon="Lock"
+                show-password
+                autocomplete="current-password"
+                @keyup.enter="handleLocalLogin"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-checkbox v-model="remember">记住我</el-checkbox>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" size="large" class="login-btn" @click="handleLocalLogin" :loading="loading" :disabled="!canSubmit">
+                登录
+              </el-button>
+            </el-form-item>
+          </el-form>
+          <div class="link-btn" @click="authMode = 'dev'; selectedUser = 0">
+            切换快捷登录
+          </div>
+        </div>
+
+        <!-- 错误提示 -->
+        <div v-if="error" class="login-error">
+          <el-alert type="error" :title="error" show-icon :closable="false" />
+        </div>
+      </div>
+
+      <p class="copyright">&copy; 2024 Drill Platform</p>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { User, Lock, Connection, CircleCheck, Monitor } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import type { User as UserType, Role } from '@/types'
+import usersData from '@/mock/data/users.json'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+const authMode = ref<'cas' | 'dev' | 'local'>((import.meta.env.VITE_AUTH_MODE as 'cas' | 'dev' | 'local') || 'dev')
+const loading = ref(false)
+const error = ref('')
+const remember = ref(false)
+const formRef = ref()
+
+// Dev mode
+const selectedUser = ref(0)
+const activeUsers = usersData.filter((u) => u.status === 'active') as UserType[]
+
+// Local mode
+const form = reactive({ username: '', password: '' })
+const rules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, max: 50, message: '3-50 个字符', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少 6 个字符', trigger: 'blur' }],
+}
+const canSubmit = computed(() => form.username.length >= 3 && form.password.length >= 6)
+
+function roleLabel(role: Role): string {
+  const map: Record<Role, string> = { admin: '管理员', director: '指挥员', executor: '执行者', viewer: '观察者' }
+  return map[role] || role
+}
+
+function roleTagType(role: Role): string {
+  const map: Record<Role, string> = { admin: 'danger', director: 'warning', executor: 'success', viewer: 'info' }
+  return map[role]
+}
+
+const roleDashboards: Record<Role, string> = {
+  admin: '/admin',
+  director: '/director',
+  executor: '/executor',
+  viewer: '/viewer',
+}
+
+async function handleDevLogin() {
+  if (!selectedUser.value) {
+    ElMessage.warning('请选择一个用户')
+    return
+  }
+  loading.value = true
+  error.value = ''
+  try {
+    const user = activeUsers.find(u => u.id === selectedUser.value)!
+    await authStore.loginWithUser(user)
+    ElMessage.success(`欢迎回来，${user.name}`)
+    router.push(roleDashboards[user.role])
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : '登录失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleLocalLogin() {
+  loading.value = true
+  error.value = ''
+  try {
+    await authStore.loginWithCredentials(form)
+    ElMessage.success('登录成功')
+    const user = authStore.user
+    router.push(user ? roleDashboards[user.role] : '/viewer')
+  } catch (e: unknown) {
+    error.value = '用户名或密码错误'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleCasLogin() {
+  window.location.href = '/api/v1/auth/cas?redirect=' + encodeURIComponent(window.location.origin + '/cas/callback')
+}
+
+// Restore session on mount
+onMounted(() => {
+  authStore.restoreSession()
+  if (authStore.isAuthenticated && authStore.user) {
+    router.push(roleDashboards[authStore.user.role])
+  }
+})
+</script>
+
+<style lang="scss" scoped>
+@use '@/styles/variables' as *;
+
+.login-page {
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+.login-brand {
+  flex: 0 0 60%;
+  background: linear-gradient(135deg, #0D1117 0%, #1A1F2E 50%, #0D1117 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+
+  .brand-content {
+    text-align: center;
+    z-index: 2;
+    
+    h1 {
+      font-size: 48px;
+      font-weight: 700;
+      color: $text-primary;
+      margin-top: $spacing-xl;
+      margin-bottom: $spacing-sm;
+      letter-spacing: 2px;
+    }
+  }
+
+  .brand-tagline {
+    font-size: 20px;
+    color: $color-primary;
+    margin-bottom: $spacing-base;
+    font-weight: 400;
+  }
+
+  .brand-desc {
+    font-size: 14px;
+    color: $text-secondary;
+    margin-bottom: $spacing-2xl;
+  }
+
+  .brand-features {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-sm;
+    
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      color: $text-secondary;
+      font-size: 14px;
+      
+      .el-icon {
+        color: $color-primary;
+      }
+    }
+  }
+
+  .brand-bg-pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(85, 195, 211, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(85, 195, 211, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+}
+
+.login-area {
+  flex: 0 0 40%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #161B22;
+  position: relative;
+  padding: $spacing-xl;
+
+  .dev-badge {
+    position: absolute;
+    top: $spacing-xl;
+    right: $spacing-xl;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    padding: $spacing-3xl $spacing-2xl;
+    border-radius: $radius-lg;
+    background: #0D1117;
+    border: 1px solid #30363D;
+
+    .login-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: $text-primary;
+      text-align: center;
+      margin-bottom: $spacing-2xl;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: $text-tertiary;
+      text-align: center;
+      margin-top: $spacing-base;
+    }
+  }
+
+  .cas-btn {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    height: auto;
+    background: $color-primary;
+    border-color: $color-primary;
+
+    &:hover {
+      background: $color-primary-dark;
+    }
+  }
+
+  .user-select, .login-btn {
+    width: 100%;
+    margin-bottom: $spacing-base;
+  }
+
+  .link-btn {
+    text-align: center;
+    color: $color-primary;
+    cursor: pointer;
+    font-size: 13px;
+    margin-top: $spacing-base;
+    
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .login-error {
+    margin-top: $spacing-base;
+  }
+
+  .copyright {
+    margin-top: $spacing-2xl;
+    font-size: 12px;
+    color: $text-tertiary;
+  }
+}
+
+.user-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+:deep(.el-input__wrapper) {
+  background-color: #1A1F2E !important;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+</style>

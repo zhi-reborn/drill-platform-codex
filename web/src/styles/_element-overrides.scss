@@ -1,0 +1,423 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+// Element Plus CSS variables override
+:root {
+  --el-color-primary: #{$color-primary};
+  --el-color-primary-dark-2: #{$color-primary-dark};
+  --el-color-primary-light-3: #{$color-primary-light};
+  --el-color-success: #{$color-success};
+  --el-color-warning: #{$color-warning};
+  --el-color-danger: #{$color-error};
+  --el-color-info: #{$color-info};
+
+  --el-bg-color: #{$bg-primary};
+  --el-bg-color-page: #{$bg-primary};
+  --el-bg-color-overlay: #{$bg-secondary};
+
+  --el-text-color-primary: #{$text-primary};
+  --el-text-color-regular: #{$text-primary};
+  --el-text-color-secondary: #{$text-secondary};
+  --el-text-color-placeholder: #{$text-tertiary};
+  --el-text-color-disabled: #{$text-disabled};
+
+  --el-border-color: #{$border-color};
+  --el-border-color-light: #{$border-color-light};
+
+  --el-border-radius-base: #{$radius-base};
+  --el-border-radius-small: #{$radius-sm};
+
+  --el-font-size-base: #{$font-size-base};
+  --el-font-size-small: #{$font-size-sm};
+  --el-font-size-large: #{$font-size-md};
+
+  --el-fill-color-blank: #{$bg-secondary};
+  --el-fill-color: #{$bg-tertiary};
+  --el-fill-color-light: #{rgba(85, 195, 211, 0.08)};
+}
+
+// Table overrides (force dark theme - higher specificity than Element Plus internal)
+.el-table,
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  --el-table-bg-color: #{$bg-secondary} !important;
+  --el-table-tr-bg-color: #{$bg-secondary} !important;
+  --el-table-header-bg-color: #{$bg-tertiary} !important;
+  --el-table-row-hover-bg-color: #{rgba(85, 195, 211, 0.08)} !important;
+  --el-table-border-color: #{$border-color} !important;
+  --el-table-row-hover-border-color: #{$border-color} !important;
+  --el-table-text-color: #{$text-primary} !important;
+  --el-table-header-text-color: #{$text-secondary} !important;
+  background-color: #{$bg-secondary} !important;
+}
+
+.el-table .el-table__cell {
+  background-color: inherit !important;
+  border-color: #{$border-color-light} !important;
+  color: #{$text-primary} !important;
+}
+
+.el-table th.el-table__cell {
+  background-color: #{$bg-tertiary} !important;
+  color: #{$text-secondary} !important;
+  font-weight: #{$font-weight-semibold} !important;
+  font-size: #{$font-size-sm} !important;
+  border-color: #{$border-color-light} !important;
+}
+
+.el-table td.el-table__cell {
+  border-color: #{$border-color-light} !important;
+}
+
+.el-table__body tr:hover > td.el-table__cell {
+  background-color: #{rgba(85, 195, 211, 0.08)} !important;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: #{rgba(26, 31, 46, 0.5)} !important;
+}
+
+// Striped row alternate color fix
+.el-table .el-table__body tr.el-table__row--striped:nth-child(even) td.el-table__cell {
+  background-color: #{$bg-tertiary} !important;
+}
+
+.el-table .el-table__body tr.el-table__row--striped:nth-child(odd) td.el-table__cell {
+  background-color: #{$bg-secondary} !important;
+}
+
+// Fix: element-plus may inject white background via component styles
+.el-table__inner-wrapper::before {
+  background-color: #{$bg-secondary} !important;
+}
+
+.el-table .el-table__empty-block {
+  background-color: #{$bg-secondary} !important;
+}
+
+// Card overrides
+.el-card {
+  background-color: $bg-secondary;
+  border-color: $border-color;
+  color: $text-primary;
+  
+  .el-card__header {
+    background-color: $bg-tertiary;
+    border-bottom-color: $border-color;
+    color: $text-primary;
+    font-weight: $font-weight-semibold;
+  }
+}
+
+// Dialog overrides
+.el-dialog {
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+  
+  .el-dialog__header {
+    border-bottom-color: $border-color;
+  }
+  
+  .el-dialog__title {
+    color: $text-primary;
+  }
+}
+
+// Button overrides
+.el-button--primary {
+  --el-button-hover-bg-color: #{$color-primary-dark};
+  --el-button-active-bg-color: #{$color-primary-dark};
+}
+
+// Input overrides
+.el-input__wrapper {
+  background-color: $bg-tertiary;
+  border-color: $border-color;
+  
+  &.is-focus {
+    box-shadow: 0 0 0 1px $color-primary inset;
+  }
+}
+
+// Select dropdown
+.el-select-dropdown {
+  background-color: $bg-secondary;
+  border-color: $border-color;
+}
+
+.el-scrollbar__wrap {
+  @include scrollbar;
+}
+
+// Pagination
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-text-color: #{$text-secondary};
+  --el-pagination-button-color: #{$text-secondary};
+  --el-pagination-hover-color: #{$color-primary};
+  
+  .el-pager li {
+    background-color: $bg-tertiary;
+    color: $text-secondary;
+    border: 1px solid $border-color;
+    
+    &.is-active {
+      background-color: $color-primary;
+      color: $bg-primary;
+      border-color: $color-primary;
+    }
+  }
+}
+
+// Message
+.el-message {
+  background-color: $bg-secondary;
+  border-color: $border-color;
+}
+
+// Notification
+.el-notification {
+  background-color: $bg-secondary;
+  border-color: $border-color;
+}
+
+// Card padding 统一
+.el-card__body {
+  padding: $spacing-base;
+}
+
+// Dialog
+.el-dialog__body {
+  padding: $spacing-base $spacing-xl;
+}
+
+.el-dialog__header {
+  padding: $spacing-base $spacing-xl;
+}
+
+// Steps
+.el-step__title {
+  font-size: $font-size-base;
+}
+
+// Form
+.el-form-item {
+  margin-bottom: $spacing-base;
+}
+
+// Table
+.el-table {
+  font-size: $font-size-sm;
+}
+
+.el-table .el-table__cell {
+  padding: $spacing-sm $spacing-base;
+}
+
+// Tabs
+.el-tabs__header {
+  margin: 0 0 $spacing-base 0;
+}
+
+// Breadcrumb
+.el-breadcrumb {
+  padding: $spacing-sm 0;
+}
+
+// === el-tag dark theme ===
+.el-tag {
+  border-color: transparent !important;
+  font-size: 12px;
+
+  &.el-tag--primary {
+    background-color: rgba(85, 195, 211, 0.15) !important;
+    color: #55C3D3 !important;
+  }
+  &.el-tag--success {
+    background-color: rgba(46, 160, 67, 0.15) !important;
+    color: #2EA043 !important;
+  }
+  &.el-tag--warning {
+    background-color: rgba(184, 134, 11, 0.15) !important;
+    color: #E5A50A !important;
+  }
+  &.el-tag--danger {
+    background-color: rgba(218, 54, 51, 0.15) !important;
+    color: #DA3633 !important;
+  }
+  &.el-tag--info {
+    background-color: rgba(100, 100, 100, 0.3) !important;
+    color: #8B949E !important;
+  }
+}
+
+// === el-descriptions dark theme ===
+.el-descriptions {
+  .el-descriptions__cell {
+    background-color: inherit !important;
+  }
+
+  .el-descriptions__label {
+    background-color: $bg-tertiary !important;
+    color: $text-secondary !important;
+    border-color: $border-color-light !important;
+    font-weight: $font-weight-medium;
+    font-size: $font-size-sm;
+    padding: $spacing-sm $spacing-base !important;
+  }
+
+  .el-descriptions__content {
+    background-color: $bg-secondary !important;
+    color: $text-primary !important;
+    border-color: $border-color-light !important;
+    font-size: $font-size-sm;
+    padding: $spacing-sm $spacing-base !important;
+  }
+}
+
+// === el-timeline dark theme ===
+.el-timeline {
+  .el-timeline-item__node {
+    background-color: $color-primary;
+    border-color: $color-primary;
+  }
+
+  .el-timeline-item__content {
+    .el-card {
+      background-color: $bg-tertiary;
+      border-color: $border-color;
+      color: $text-primary;
+
+      h4 {
+        color: $text-primary;
+        font-size: $font-size-base;
+        margin-bottom: $spacing-xs;
+      }
+
+      p {
+        color: $text-secondary;
+        font-size: $font-size-sm;
+        margin-bottom: $spacing-sm;
+      }
+
+      .el-tag {
+        margin-bottom: $spacing-sm;
+      }
+
+      .timeout-info {
+        color: $text-tertiary;
+        font-size: $font-size-sm;
+      }
+    }
+  }
+}
+
+// === el-form dark theme ===
+.el-form-item__label {
+  color: $text-secondary !important;
+  font-size: $font-size-sm;
+}
+
+.el-textarea__inner {
+  background-color: $bg-tertiary !important;
+  border-color: $border-color !important;
+  color: $text-primary !important;
+
+  &::placeholder {
+    color: $text-tertiary !important;
+  }
+
+  &:focus {
+    box-shadow: 0 0 0 1px $color-primary inset !important;
+  }
+}
+
+// === el-dialog body content ===
+.el-dialog__body {
+  .el-form {
+    .el-form-item {
+      .el-form-item__label {
+        color: $text-secondary;
+      }
+    }
+  }
+}
+
+// === el-dialog overrides ===
+.el-dialog {
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+
+  .el-dialog__header {
+    border-bottom-color: $border-color;
+    padding: $spacing-base $spacing-xl;
+  }
+
+  .el-dialog__title {
+    color: $text-primary;
+  }
+
+  .el-dialog__body {
+    color: $text-primary;
+    padding: $spacing-base $spacing-xl;
+  }
+
+  .el-dialog__footer {
+    border-top-color: $border-color;
+  }
+}
+
+// === el-input/textarea in dialog ===
+.el-dialog__body {
+  .el-input__wrapper,
+  .el-textarea__inner {
+    background-color: $bg-tertiary;
+    border-color: $border-color;
+  }
+}
+
+// === el-button text type in tables ===
+.el-button.is-text {
+  color: $color-primary;
+  font-size: $font-size-sm;
+
+  &:hover {
+    background-color: rgba(85, 195, 211, 0.1);
+  }
+}
+
+// === el-tabs dark theme ===
+.el-tabs__nav-wrap::after {
+  background-color: $border-color-light;
+}
+
+.el-tabs__item {
+  color: $text-secondary;
+  font-size: $font-size-sm;
+
+  &.is-active {
+    color: $color-primary;
+  }
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+
+.el-tabs__active-bar {
+  background-color: $color-primary;
+}
+
+// === el-pagination dark theme ===
+.el-pagination {
+  .btn-prev,
+  .btn-next {
+    background-color: $bg-tertiary;
+    color: $text-secondary;
+    border: 1px solid $border-color;
+
+    &:disabled {
+      background-color: $bg-secondary;
+      color: $text-disabled;
+    }
+  }
+}

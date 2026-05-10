@@ -1,0 +1,70 @@
+[
+  {
+    "id": 1,
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 3,
+    "step_name": "提升从库为主库",
+    "step_description": "将从数据库提升为新的主数据库",
+    "status": "in_progress",
+    "assigned_to": 2,
+    "assigned_to_name": "张三",
+    "script": "STOP SLAVE; RESET SLAVE ALL",
+    "created_at": "2026-05-10T09:04:00Z",
+    "updated_at": "2026-05-10T09:04:00Z"
+  },
+  {
+    "id": 2,
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 4,
+    "step_name": "验证新主库可用性",
+    "step_description": "确认新主库可以正常读写",
+    "status": "assigned",
+    "assigned_to": 3,
+    "assigned_to_name": "李四",
+    "created_at": "2026-05-10T09:00:00Z",
+    "updated_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 3,
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 5,
+    "step_name": "更新应用配置",
+    "step_description": "切换应用连接指向新主库",
+    "status": "pending",
+    "assigned_to": 4,
+    "assigned_to_name": "王五",
+    "created_at": "2026-05-10T09:00:00Z",
+    "updated_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 4,
+    "drill_id": 2,
+    "drill_name": "晚高峰降级预演",
+    "step_id": 7,
+    "step_name": "监控系统负载",
+    "step_description": "检查 CPU、内存、请求延迟等指标",
+    "status": "pending",
+    "assigned_to": 3,
+    "assigned_to_name": "李四",
+    "deadline": "2026-05-10T18:00:00Z",
+    "created_at": "2026-05-10T08:00:00Z",
+    "updated_at": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": 5,
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "step_id": 8,
+    "step_name": "关闭非核心功能",
+    "step_description": "禁用推荐系统、数据分析等非核心模块",
+    "status": "issued",
+    "assigned_to": 2,
+    "assigned_to_name": "张三",
+    "error_message": "配置中心连接超时",
+    "created_at": "2026-05-08T14:03:00Z",
+    "updated_at": "2026-05-08T14:05:00Z"
+  }
+]

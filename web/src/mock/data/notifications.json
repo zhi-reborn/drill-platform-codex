@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "user_id": 2,
+    "type": "drill_started",
+    "title": "演练已开始",
+    "content": "数据库主从切换演练已于 09:00 开始执行",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "is_read": true,
+    "created_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 2,
+    "user_id": 2,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：提升从库为主库",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 3,
+    "step_name": "提升从库为主库",
+    "is_read": true,
+    "created_at": "2026-05-10T09:04:00Z"
+  },
+  {
+    "id": 3,
+    "user_id": 3,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：验证新主库可用性",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 4,
+    "step_name": "验证新主库可用性",
+    "is_read": false,
+    "created_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 4,
+    "user_id": 2,
+    "type": "step_complete",
+    "title": "步骤完成",
+    "content": "步骤「停止主库写入」已完成执行",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 2,
+    "step_name": "停止主库写入",
+    "is_read": true,
+    "created_at": "2026-05-10T09:03:45Z"
+  },
+  {
+    "id": 5,
+    "user_id": 1,
+    "type": "drill_completed",
+    "title": "演练完成",
+    "content": "灰度发布演练 v2.1.0 已成功完成",
+    "drill_id": 3,
+    "drill_name": "v2.1.0 版本灰度发布",
+    "is_read": true,
+    "created_at": "2026-05-09T12:30:00Z"
+  },
+  {
+    "id": 6,
+    "user_id": 2,
+    "type": "step_timeout",
+    "title": "步骤超时警告",
+    "content": "步骤「关闭非核心功能」执行超时",
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "step_id": 8,
+    "step_name": "关闭非核心功能",
+    "is_read": true,
+    "created_at": "2026-05-08T14:04:00Z"
+  },
+  {
+    "id": 7,
+    "user_id": 3,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：监控系统负载",
+    "drill_id": 2,
+    "drill_name": "晚高峰降级预演",
+    "step_id": 7,
+    "step_name": "监控系统负载",
+    "is_read": false,
+    "created_at": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": 8,
+    "user_id": 1,
+    "type": "system_alert",
+    "title": "系统维护通知",
+    "content": "本周六凌晨 2:00-4:00 进行系统例行维护",
+    "is_read": false,
+    "created_at": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": 9,
+    "user_id": 4,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：更新应用配置",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 5,
+    "step_name": "更新应用配置",
+    "is_read": false,
+    "created_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 10,
+    "user_id": 2,
+    "type": "drill_paused",
+    "title": "演练已暂停",
+    "content": "降级策略失效复盘演练已暂停，等待问题排查",
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "is_read": true,
+    "created_at": "2026-05-08T14:30:00Z"
+  }
+]

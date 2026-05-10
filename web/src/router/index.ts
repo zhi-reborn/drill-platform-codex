@@ -1,153 +1,166 @@
-import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
-import { useUserStore } from '@/stores/user'
-import { ROUTE_CONFIG } from '@/utils/constants'
-import type { AppRouteRecord } from './types'
+import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 
-// 常量路由 (公开)
-const constantRoutes: AppRouteRecord[] = [
+export interface RouteMeta {
+  title: string
+  icon?: string
+  requiresRole?: string | string[]
+  hidden?: boolean
+  requiresAuth?: boolean
+  layout?: 'default' | 'blank'
+  keepAlive?: boolean
+}
+
+const routes: RouteRecordRaw[] = [
+  // 登录
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/auth/Login.vue'),
-    meta: {
-      title: '登录',
-      hidden: true,
-    },
+    component: () => import('@/views/auth/LoginView.vue'),
+    meta: { title: '登录', requiresAuth: false },
   },
-  {
-    path: '/404',
-    name: '404',
-    component: () => import('@/views/error/404.vue'),
-    meta: {
-      title: '404',
-      hidden: true,
-    },
-  },
-  {
-    path: '/500',
-    name: '500',
-    component: () => import('@/views/error/500.vue'),
-    meta: {
-      title: '500',
-      hidden: true,
-    },
-  },
-]
 
-// 动态路由 (需要权限)
-const dynamicRoutes: AppRouteRecord[] = [
+  // Admin 路由
   {
-    path: '/',
-    name: 'Layout',
-    component: () => import('@/layouts/default/Index.vue'),
-    redirect: '/display',
-    meta: {
-      requiresAuth: true,
-    },
+    path: '/admin',
+    component: () => import('@/components/layout/AppLayout.vue'),
+    meta: { title: '管理', requiresRole: 'admin' },
     children: [
       {
-        path: 'display',
-        name: 'Display',
-        component: () => import('@/views/display/Index.vue'),
-        meta: {
-          title: '指挥中心大屏',
-          icon: 'dashboard',
-          requiresAuth: true,
-          keepAlive: true,
-        },
+        path: '',
+        name: 'AdminDashboard',
+        component: () => import('@/views/admin/DashboardView.vue'),
+        meta: { title: '系统概览', icon: 'DataAnalysis' },
       },
       {
-        path: 'console',
-        name: 'Console',
-        component: () => import('@/views/console/DrillList.vue'),
-        meta: {
-          title: '演练指挥台',
-          icon: 'drill',
-          requiresAuth: true,
-          keepAlive: true,
-        },
+        path: 'users',
+        name: 'AdminUsers',
+        component: () => import('@/views/admin/UsersView.vue'),
+        meta: { title: '用户管理', icon: 'User' },
       },
       {
-        path: 'console/create',
-        name: 'DrillCreate',
-        component: () => import('@/views/console/DrillCreate.vue'),
-        meta: {
-          title: '创建演练',
-          hidden: true,
-          requiresAuth: true,
-          breadcrumb: true,
-        },
+        path: 'templates',
+        name: 'AdminTemplates',
+        component: () => import('@/views/admin/TemplatesView.vue'),
+        meta: { title: '模板管理', icon: 'Document' },
       },
       {
-        path: 'console/:id',
-        name: 'DrillControl',
-        component: () => import('@/views/console/DrillControl.vue'),
-        meta: {
-          title: '演练控制',
-          hidden: true,
-          requiresAuth: true,
-          breadcrumb: true,
-        },
-      },
-      {
-        path: 'workspace',
-        name: 'Workspace',
-        component: () => import('@/views/workspace/MyTasks.vue'),
-        meta: {
-          title: '参演工作台',
-          icon: 'workspace',
-          requiresAuth: true,
-          keepAlive: true,
-        },
+        path: 'drills',
+        name: 'AdminDrills',
+        component: () => import('@/views/admin/DrillListView.vue'),
+        meta: { title: '全部演练', icon: 'Monitor' },
       },
     ],
   },
+
+  // Director 路由
+  {
+    path: '/director',
+    component: () => import('@/components/layout/AppLayout.vue'),
+    meta: { title: '指挥', requiresRole: 'director' },
+    children: [
+      {
+        path: '',
+        name: 'DirectorDashboard',
+        component: () => import('@/views/director/DashboardView.vue'),
+        meta: { title: '指挥概览', icon: 'DataAnalysis' },
+      },
+      {
+        path: 'create',
+        name: 'DirectorCreate',
+        component: () => import('@/views/director/CreateDrillView.vue'),
+        meta: { title: '创建演练', icon: 'Plus' },
+      },
+      {
+        path: 'monitor/:id(\\d+)',
+        name: 'DirectorMonitor',
+        component: () => import('@/views/director/MonitorView.vue'),
+        meta: { title: '实时监控', icon: 'VideoCamera' },
+      },
+      {
+        path: 'messages',
+        name: 'DirectorMessages',
+        component: () => import('@/views/director/MessagesView.vue'),
+        meta: { title: '消息中心', icon: 'Bell', hidden: true },
+      },
+    ],
+  },
+
+  // Executor 路由
+  {
+    path: '/executor',
+    component: () => import('@/components/layout/AppLayout.vue'),
+    meta: { title: '执行', requiresRole: 'executor' },
+    children: [
+      {
+        path: '',
+        name: 'ExecutorTasks',
+        component: () => import('@/views/executor/TasksView.vue'),
+        meta: { title: '我的任务', icon: 'Tickets' },
+      },
+      {
+        path: 'tasks/:id(\\d+)',
+        name: 'ExecutorTaskDetail',
+        component: () => import('@/views/executor/TaskDetailView.vue'),
+        meta: { title: '任务详情', icon: 'EditPen', hidden: true },
+      },
+      {
+        path: 'messages',
+        name: 'ExecutorMessages',
+        component: () => import('@/views/executor/MessagesView.vue'),
+        meta: { title: '消息中心', icon: 'Bell', hidden: true },
+      },
+    ],
+  },
+
+  // Viewer 路由
+  {
+    path: '/viewer',
+    component: () => import('@/components/layout/AppLayout.vue'),
+    meta: { title: '观察', requiresRole: 'viewer' },
+    children: [
+      {
+        path: '',
+        name: 'ViewerDashboard',
+        component: () => import('@/views/viewer/DashboardView.vue'),
+        meta: { title: '演练概览', icon: 'View' },
+      },
+      {
+        path: 'drills/:id(\\d+)',
+        name: 'ViewerDrillDetail',
+        component: () => import('@/views/viewer/DrillDetailView.vue'),
+        meta: { title: '演练详情', icon: 'Document', hidden: true },
+      },
+    ],
+  },
+
+  // 大屏路由 (无 layout)
+  {
+    path: '/screen/:id(\\d+)',
+    name: 'Screen',
+    component: () => import('@/views/ScreenView.vue'),
+    meta: { title: '监控大屏', requiresAuth: false, layout: 'blank' },
+  },
+
+  // 全局路由
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/ForbiddenView.vue'),
+    meta: { title: '没有权限', requiresAuth: false },
+  },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/404',
-    meta: {
-      hidden: true,
-    },
+    name: 'NotFound',
+    component: () => import('@/views/NotFoundView.vue'),
+    meta: { title: '页面不存在', requiresAuth: false },
   },
 ]
 
-// 创建路由器
 const router = createRouter({
   history: createWebHistory(),
-  routes: [...constantRoutes, ...dynamicRoutes],
-  scrollBehavior(_to, _from, savedPosition) {
-    if (savedPosition) {
-      return savedPosition
-    } else {
-      return { top: 0 }
-    }
-  },
-})
-
-// 路由守卫
-router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormalized) => {
-  const userStore = useUserStore()
-  const { isLoggedIn } = userStore
-  
-  // 设置页面标题
-  document.title = to.meta.title ? `${to.meta.title} - 生产演练平台` : '生产演练平台'
-  
-  // 检查是否需要登录
-  const requiresAuth = to.meta?.requiresAuth
-  
-  if (requiresAuth && !isLoggedIn) {
-    // 未登录，重定向到登录页
-    return {
-      path: ROUTE_CONFIG.LOGIN_PATH,
-      query: { redirect: to.fullPath },
-    }
-  }
-  
-  // 如果已登录且访问登录页，重定向到首页
-  if (isLoggedIn && to.path === ROUTE_CONFIG.LOGIN_PATH) {
-    return { path: '/display' }
-  }
+  routes,
+  scrollBehavior: () => ({ top: 0 }),
 })
 
 export default router
-export { constantRoutes, dynamicRoutes }

@@ -1,40 +1,51 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import 'element-plus/theme-chalk/dark/css-vars.css'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
-import { setupStore } from './stores'
 import router from './router'
-import { loadFonts } from './styles'
+import { setupGuards } from './router/guards'
 
-// 创建应用实例
+import './styles/_reset.scss'
+import './styles/_fonts.scss'
+import './styles/_variables.scss'
+import './styles/_mixins.scss'
+import './styles/_element-overrides.scss'
+
 const app = createApp(App)
 
-// 安装 Pinia
-setupStore(app)
-
-// 安装 Vue Router
+app.use(createPinia())
 app.use(router)
-
-// 安装 Element Plus
+setupGuards(router)
 app.use(ElementPlus, {
   locale: zhCn,
-  size: 'default',
 })
 
-// 注册 Element Plus 图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
 
-// 加载字体
-loadFonts()
+if (import.meta.env.VITE_USE_MOCK === 'true') {
+  const { setupMock } = await import('./mock/handlers')
+  setupMock()
+}
 
-// 挂载应用
 app.mount('#app')
 
-// 导出 app 实例 (用于测试)
-export default app
+// Initialize WebSocket after mount
+import { useAuthStore } from './stores/auth'
+import { useWebSocket } from './composables/useWebSocket'
+
+const authStore = useAuthStore()
+authStore.restoreSession()
+
+if (authStore.isAuthenticated && authStore.token) {
+  const ws = useWebSocket()
+  ws.init(authStore.token)
+}
+
+// Make ws available globally for header component
+;(window as unknown as Record<string, unknown>).__ws = useWebSocket

@@ -1,0 +1,62 @@
+@use 'variables' as *;
+
+@mixin page-container {
+  padding: $spacing-base;
+  min-height: calc(100vh - $header-height - 48px);
+}
+
+@mixin page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $spacing-base;
+
+  .page-title {
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin: 0;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-sm;
+  }
+}
+
+@mixin page-content {
+  margin-top: $spacing-base;
+}
+
+@mixin stat-card {
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-base;
+  padding: $spacing-base;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+
+  .stat-label {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  .stat-value {
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    line-height: 1.2;
+  }
+
+  .stat-icon {
+    color: $color-primary;
+  }
+}
+
+@mixin card-compact {
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-base;
+  padding: $spacing-base;
+}
