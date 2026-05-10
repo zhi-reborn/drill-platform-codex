@@ -80,9 +80,11 @@ import { ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { post } from '@/api/request'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -117,9 +119,16 @@ const handleLogin = async () => {
         password: form.password
       })
 
-      // 保存 token
+      // 保存 token 和用户信息
       if (data?.token) {
         localStorage.setItem('token', data.token)
+        userStore.setLoginInfo(data.token, {
+          id: data.user_id,
+          username: data.username,
+          realName: data.real_name,
+          role: data.role,
+          department: data.department
+        })
       }
 
       ElMessage.success('登录成功')

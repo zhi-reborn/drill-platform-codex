@@ -35,3 +35,4 @@ vendor/
 .opencode/
 web/node_modules/
 openspec/
+playwright/
