@@ -47,19 +47,19 @@ const breadcrumbs = computed(() => {
   padding-top: $header-height;
   transition: margin-left 0.3s ease;
   min-height: calc(100vh - $header-height);
-  background: $bg-primary;
+  background: #F8FAFC;
 }
 
 .app-breadcrumb {
   padding: $spacing-sm $spacing-base;
-  background: $bg-secondary;
-  border-bottom: 1px solid $border-color;
-  
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+
   :deep(.el-breadcrumb__inner) {
-    color: $text-secondary;
+    color: #64748B;
   }
   :deep(.el-breadcrumb__inner.is-link:hover) {
-    color: $color-primary;
+    color: #0891B2;
   }
 }
 
@@ -68,7 +68,6 @@ const breadcrumbs = computed(() => {
   overflow-x: hidden;
 }
 
-// When sidebar collapsed
 .app-layout:has(.app-sidebar.is-collapsed) .app-main {
   margin-left: $sidebar-collapsed-width;
 }

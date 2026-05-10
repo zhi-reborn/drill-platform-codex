@@ -31,8 +31,9 @@
 @mixin stat-card {
   background: $bg-secondary;
   border: 1px solid $border-color;
-  border-radius: $radius-base;
+  border-radius: $radius-md;
   padding: $spacing-base;
+  box-shadow: $shadow-sm;
   display: flex;
   flex-direction: column;
   gap: $spacing-sm;
@@ -57,6 +58,7 @@
 @mixin card-compact {
   background: $bg-secondary;
   border: 1px solid $border-color;
-  border-radius: $radius-base;
+  border-radius: $radius-md;
   padding: $spacing-base;
+  box-shadow: $shadow-sm;
 }

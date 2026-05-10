@@ -43,8 +43,9 @@
 @mixin card {
   background: $bg-secondary;
   border: 1px solid $border-color;
-  border-radius: $radius-base;
+  border-radius: $radius-md;
   padding: $spacing-base;
+  box-shadow: $shadow-sm;
 }
 
 @mixin status-dot($color) {

@@ -102,11 +102,11 @@ const __VLS_20 = {}.ElIcon;
 // @ts-ignore
 const __VLS_21 = __VLS_asFunctionalComponent(__VLS_20, new __VLS_20({
     size: (24),
-    color: "#55C3D3",
+    color: "#0891B2",
 }));
 const __VLS_22 = __VLS_21({
     size: (24),
-    color: "#55C3D3",
+    color: "#0891B2",
 }, ...__VLS_functionalComponentArgsRest(__VLS_21));
 __VLS_23.slots.default;
 const __VLS_24 = {}.Monitor;

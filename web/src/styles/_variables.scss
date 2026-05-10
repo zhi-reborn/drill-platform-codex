@@ -1,38 +1,38 @@
-// === 金融科技色彩体系 ===
+// === 金融科技色彩体系 (浅色主题) ===
 // 主色调
-$color-primary: #55C3D3;
-$color-primary-dark: #3AAFBF;
-$color-primary-light: #7DD4E0;
-$color-primary-bg: rgba(85, 195, 211, 0.1);
+$color-primary: #0891B2;
+$color-primary-dark: #0E7490;
+$color-primary-light: #06B6D4;
+$color-primary-bg: rgba(8, 145, 178, 0.08);
 
 // 辅助色
-$color-secondary: #7D7D7D;
-$color-auxiliary: #646464;
+$color-secondary: #64748B;
+$color-auxiliary: #475569;
 
 // 语义色
-$color-success: #2EA043;
-$color-success-bg: rgba(46, 160, 67, 0.1);
-$color-warning: #B8860B;
-$color-warning-bg: rgba(184, 134, 11, 0.1);
-$color-error: #DA3633;
-$color-error-bg: rgba(218, 54, 51, 0.1);
-$color-info: #55C3D3;
+$color-success: #059669;
+$color-success-bg: rgba(5, 150, 105, 0.08);
+$color-warning: #D97706;
+$color-warning-bg: rgba(217, 119, 6, 0.08);
+$color-error: #DC2626;
+$color-error-bg: rgba(220, 38, 38, 0.08);
+$color-info: #0891B2;
 
-// 暗色主题 (主用)
-$bg-primary: #0D1117;
-$bg-secondary: #161B22;
-$bg-tertiary: #1A1F2E;
-$bg-overlay: rgba(0, 0, 0, 0.45);
+// 浅色主题背景
+$bg-primary: #F8FAFC;
+$bg-secondary: #FFFFFF;
+$bg-tertiary: #F1F5F9;
+$bg-overlay: rgba(0, 0, 0, 0.4);
 
 // 边框
-$border-color: #30363D;
-$border-color-light: #21262D;
+$border-color: #E2E8F0;
+$border-color-light: #F1F5F9;
 
 // 文字
-$text-primary: #E0E6ED;
-$text-secondary: #8B949E;
-$text-tertiary: #6E7681;
-$text-disabled: #484F58;
+$text-primary: #1E293B;
+$text-secondary: #64748B;
+$text-tertiary: #94A3B8;
+$text-disabled: #CBD5E1;
 
 // 字体
 $font-family-ui: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -67,16 +67,16 @@ $spacing-2xl: 32px;
 $spacing-3xl: 40px;
 $spacing-4xl: 48px;
 
-// 圆角 (sharp fintech feel)
-$radius-sm: 2px;
-$radius-base: 4px;
-$radius-md: 6px;
-$radius-lg: 8px;
+// 圆角 (柔和的圆角)
+$radius-sm: 4px;
+$radius-base: 6px;
+$radius-md: 8px;
+$radius-lg: 12px;
 
-// 阴影
-$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-$shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
-$shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+// 阴影 (浅色主题需要更柔和的阴影)
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 
 // 布局
 $header-height: 56px;

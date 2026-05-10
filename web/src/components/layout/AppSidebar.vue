@@ -70,18 +70,19 @@ const visibleMenus = computed<MenuItem[]>(() => {
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
+// 深色侧边栏
 .app-sidebar {
   width: $sidebar-width;
   height: calc(100vh - $header-height);
   position: fixed;
   left: 0;
   top: $header-height;
-  background: $bg-secondary;
-  border-right: 1px solid $border-color;
+  background: #1E293B;
+  border-right: 1px solid #334155;
   z-index: $z-index-sidebar;
   transition: width 0.3s ease;
   overflow: hidden;
-  
+
   &.is-collapsed {
     width: $sidebar-collapsed-width;
   }
@@ -90,31 +91,35 @@ const visibleMenus = computed<MenuItem[]>(() => {
 .sidebar-menu {
   border-right: none;
   background: transparent;
-  
+
+  :deep(.el-menu) {
+    background: transparent;
+  }
+
   :deep(.el-menu-item),
   :deep(.el-sub-menu__title) {
     height: 40px;
     min-height: 40px;
-    color: $text-secondary;
+    color: #94A3B8;
     font-size: $font-size-sm;
-    
+
     &:hover {
-      color: $color-primary;
-      background: $color-primary-bg;
+      color: #F1F5F9;
+      background: #334155;
     }
-    
+
     &.is-active {
-      color: $color-primary;
-      background: $color-primary-bg;
-      border-right: 2px solid $color-primary;
+      color: #F1F5F9;
+      background: #334155;
+      border-right: 2px solid #0891B2;
     }
   }
-  
+
   :deep(.el-sub-menu__title) {
     height: 40px;
     min-height: 40px;
   }
-  
+
   :deep(.el-icon) {
     color: inherit;
   }

@@ -1,7 +1,8 @@
 @use 'variables' as *;
 @use 'mixins' as *;
 
-// Element Plus CSS variables override
+// Element Plus CSS variables override (浅色主题 - 深色导航)
+// 导航区使用深色主题，内容区使用浅色主题
 :root {
   --el-color-primary: #{$color-primary};
   --el-color-primary-dark-2: #{$color-primary-dark};
@@ -33,16 +34,16 @@
 
   --el-fill-color-blank: #{$bg-secondary};
   --el-fill-color: #{$bg-tertiary};
-  --el-fill-color-light: #{rgba(85, 195, 211, 0.08)};
+  --el-fill-color-light: #{$color-primary-bg};
 }
 
-// Table overrides (force dark theme - higher specificity than Element Plus internal)
+// Table overrides (浅色主题)
 .el-table,
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
   --el-table-bg-color: #{$bg-secondary} !important;
   --el-table-tr-bg-color: #{$bg-secondary} !important;
   --el-table-header-bg-color: #{$bg-tertiary} !important;
-  --el-table-row-hover-bg-color: #{rgba(85, 195, 211, 0.08)} !important;
+  --el-table-row-hover-bg-color: #{$color-primary-bg} !important;
   --el-table-border-color: #{$border-color} !important;
   --el-table-row-hover-border-color: #{$border-color} !important;
   --el-table-text-color: #{$text-primary} !important;
@@ -69,11 +70,11 @@
 }
 
 .el-table__body tr:hover > td.el-table__cell {
-  background-color: #{rgba(85, 195, 211, 0.08)} !important;
+  background-color: #{$color-primary-bg} !important;
 }
 
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background-color: #{rgba(26, 31, 46, 0.5)} !important;
+  background-color: #{rgba(241, 245, 249, 0.5)} !important;
 }
 
 // Striped row alternate color fix
@@ -85,7 +86,7 @@
   background-color: #{$bg-secondary} !important;
 }
 
-// Fix: element-plus may inject white background via component styles
+// Fix: element-plus may inject background via component styles
 .el-table__inner-wrapper::before {
   background-color: #{$bg-secondary} !important;
 }
@@ -94,15 +95,16 @@
   background-color: #{$bg-secondary} !important;
 }
 
-// Card overrides
+// Card overrides (浅色主题)
 .el-card {
   background-color: $bg-secondary;
-  border-color: $border-color;
+  border: 1px solid $border-color;
+  box-shadow: $shadow-sm;
   color: $text-primary;
-  
+
   .el-card__header {
     background-color: $bg-tertiary;
-    border-bottom-color: $border-color;
+    border-bottom: 1px solid $border-color;
     color: $text-primary;
     font-weight: $font-weight-semibold;
   }
@@ -112,11 +114,12 @@
 .el-dialog {
   background-color: $bg-secondary;
   border: 1px solid $border-color;
-  
+  box-shadow: $shadow-lg;
+
   .el-dialog__header {
     border-bottom-color: $border-color;
   }
-  
+
   .el-dialog__title {
     color: $text-primary;
   }
@@ -130,9 +133,10 @@
 
 // Input overrides
 .el-input__wrapper {
-  background-color: $bg-tertiary;
+  background-color: $bg-secondary;
   border-color: $border-color;
-  
+  box-shadow: none;
+
   &.is-focus {
     box-shadow: 0 0 0 1px $color-primary inset;
   }
@@ -142,6 +146,7 @@
 .el-select-dropdown {
   background-color: $bg-secondary;
   border-color: $border-color;
+  box-shadow: $shadow-md;
 }
 
 .el-scrollbar__wrap {
@@ -154,15 +159,15 @@
   --el-pagination-text-color: #{$text-secondary};
   --el-pagination-button-color: #{$text-secondary};
   --el-pagination-hover-color: #{$color-primary};
-  
+
   .el-pager li {
-    background-color: $bg-tertiary;
+    background-color: $bg-secondary;
     color: $text-secondary;
     border: 1px solid $border-color;
-    
+
     &.is-active {
       background-color: $color-primary;
-      color: $bg-primary;
+      color: white;
       border-color: $color-primary;
     }
   }
@@ -172,12 +177,14 @@
 .el-message {
   background-color: $bg-secondary;
   border-color: $border-color;
+  box-shadow: $shadow-md;
 }
 
 // Notification
 .el-notification {
   background-color: $bg-secondary;
   border-color: $border-color;
+  box-shadow: $shadow-lg;
 }
 
 // Card padding 统一
@@ -223,34 +230,34 @@
   padding: $spacing-sm 0;
 }
 
-// === el-tag dark theme ===
+// === el-tag 浅色主题 ===
 .el-tag {
   border-color: transparent !important;
   font-size: 12px;
 
   &.el-tag--primary {
-    background-color: rgba(85, 195, 211, 0.15) !important;
-    color: #55C3D3 !important;
+    background-color: #{$color-primary-bg} !important;
+    color: #{$color-primary} !important;
   }
   &.el-tag--success {
-    background-color: rgba(46, 160, 67, 0.15) !important;
-    color: #2EA043 !important;
+    background-color: #{$color-success-bg} !important;
+    color: #{$color-success} !important;
   }
   &.el-tag--warning {
-    background-color: rgba(184, 134, 11, 0.15) !important;
-    color: #E5A50A !important;
+    background-color: #{$color-warning-bg} !important;
+    color: #{$color-warning} !important;
   }
   &.el-tag--danger {
-    background-color: rgba(218, 54, 51, 0.15) !important;
-    color: #DA3633 !important;
+    background-color: #{$color-error-bg} !important;
+    color: #{$color-error} !important;
   }
   &.el-tag--info {
-    background-color: rgba(100, 100, 100, 0.3) !important;
-    color: #8B949E !important;
+    background-color: rgba(100, 116, 139, 0.1) !important;
+    color: #{$color-secondary} !important;
   }
 }
 
-// === el-descriptions dark theme ===
+// === el-descriptions 浅色主题 ===
 .el-descriptions {
   .el-descriptions__cell {
     background-color: inherit !important;
@@ -274,7 +281,7 @@
   }
 }
 
-// === el-timeline dark theme ===
+// === el-timeline 浅色主题 ===
 .el-timeline {
   .el-timeline-item__node {
     background-color: $color-primary;
@@ -285,6 +292,7 @@
     .el-card {
       background-color: $bg-tertiary;
       border-color: $border-color;
+      box-shadow: $shadow-sm;
       color: $text-primary;
 
       h4 {
@@ -311,16 +319,17 @@
   }
 }
 
-// === el-form dark theme ===
+// === el-form 浅色主题 ===
 .el-form-item__label {
   color: $text-secondary !important;
   font-size: $font-size-sm;
 }
 
 .el-textarea__inner {
-  background-color: $bg-tertiary !important;
+  background-color: $bg-secondary !important;
   border-color: $border-color !important;
   color: $text-primary !important;
+  box-shadow: none;
 
   &::placeholder {
     color: $text-tertiary !important;
@@ -346,6 +355,7 @@
 .el-dialog {
   background-color: $bg-secondary;
   border: 1px solid $border-color;
+  box-shadow: $shadow-lg;
 
   .el-dialog__header {
     border-bottom-color: $border-color;
@@ -370,7 +380,7 @@
 .el-dialog__body {
   .el-input__wrapper,
   .el-textarea__inner {
-    background-color: $bg-tertiary;
+    background-color: $bg-secondary;
     border-color: $border-color;
   }
 }
@@ -381,11 +391,11 @@
   font-size: $font-size-sm;
 
   &:hover {
-    background-color: rgba(85, 195, 211, 0.1);
+    background-color: $color-primary-bg;
   }
 }
 
-// === el-tabs dark theme ===
+// === el-tabs 浅色主题 ===
 .el-tabs__nav-wrap::after {
   background-color: $border-color-light;
 }
@@ -407,17 +417,85 @@
   background-color: $color-primary;
 }
 
-// === el-pagination dark theme ===
+// === el-pagination 浅色主题 ===
 .el-pagination {
   .btn-prev,
   .btn-next {
-    background-color: $bg-tertiary;
+    background-color: $bg-secondary;
     color: $text-secondary;
     border: 1px solid $border-color;
 
     &:disabled {
-      background-color: $bg-secondary;
+      background-color: $bg-tertiary;
       color: $text-disabled;
     }
   }
+}
+
+// === el-menu 浅色主题 ===
+.el-menu {
+  background-color: transparent;
+  border-right: none;
+
+  &.el-menu--collapse {
+    width: $sidebar-collapsed-width;
+  }
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  color: $text-secondary;
+
+  &:hover {
+    color: $color-primary;
+    background-color: $color-primary-bg;
+  }
+
+  &.is-active {
+    color: $color-primary;
+    background-color: $color-primary-bg;
+    border-right: 2px solid $color-primary;
+  }
+}
+
+// === el-dropdown 浅色主题 ===
+.el-dropdown-menu {
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+  box-shadow: $shadow-md;
+
+  .el-dropdown-menu__item {
+    color: $text-primary;
+
+    &:hover {
+      background-color: $bg-tertiary;
+      color: $color-primary;
+    }
+
+    &.is-disabled {
+      color: $text-disabled;
+    }
+  }
+}
+
+// === el-popover 浅色主题 ===
+.el-popover.el-popper {
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+  box-shadow: $shadow-lg;
+}
+
+// === el-tooltip 浅色主题 ===
+.el-tooltip__popper {
+  background-color: $text-primary !important;
+  box-shadow: $shadow-md;
+
+  .el-tooltip__arrow::before {
+    background-color: $text-primary !important;
+  }
+}
+
+// === el-badge 浅色主题 ===
+.el-badge__content {
+  background-color: $color-error;
 }

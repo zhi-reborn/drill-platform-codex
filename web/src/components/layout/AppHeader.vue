@@ -5,17 +5,17 @@
         <el-icon :size="20"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
       </el-button>
       <div class="logo">
-        <el-icon :size="24" color="#55C3D3"><Monitor /></el-icon>
+        <el-icon :size="24" color="#0891B2"><Monitor /></el-icon>
         <span class="logo-text">Drill Platform</span>
       </div>
     </div>
-    
+
     <div class="header-right">
       <!-- WebSocket status -->
       <div class="ws-status" :class="wsStatus" :title="wsStatusText">
         <span class="status-dot"></span>
       </div>
-      
+
       <!-- Notifications bell -->
       <el-popover v-model:visible="showNotifications" placement="bottom-end" :width="360" trigger="click">
         <template #reference>
@@ -56,7 +56,7 @@
           </el-scrollbar>
         </div>
       </el-popover>
-      
+
       <!-- User dropdown -->
       <el-dropdown trigger="click" @command="handleUserCommand">
         <div class="user-info">
@@ -132,10 +132,11 @@ function handleUserCommand(command: string) {
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
+// 深色顶部栏
 .app-header {
   height: $header-height;
-  background: $bg-secondary;
-  border-bottom: 1px solid $border-color;
+  background: #1E293B;
+  border-bottom: 1px solid #334155;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -157,11 +158,11 @@ function handleUserCommand(command: string) {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  
+
   .logo-text {
     font-size: $font-size-lg;
     font-weight: $font-weight-bold;
-    color: $text-primary;
+    color: #F1F5F9;
     letter-spacing: 0.5px;
   }
 }
@@ -176,12 +177,12 @@ function handleUserCommand(command: string) {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  
+
   &.connected .status-dot {
     background: $color-success;
     box-shadow: 0 0 4px $color-success;
   }
-  
+
   &.disconnected .status-dot {
     background: $color-error;
   }
@@ -189,6 +190,7 @@ function handleUserCommand(command: string) {
 
 .notification-bell {
   cursor: pointer;
+  color: #F1F5F9;
 }
 
 .notification-popover {
@@ -199,45 +201,45 @@ function handleUserCommand(command: string) {
     padding-bottom: $spacing-sm;
     border-bottom: 1px solid $border-color;
     margin-bottom: $spacing-sm;
-    
+
     .popover-title {
       font-size: $font-size-base;
       font-weight: $font-weight-semibold;
       color: $text-primary;
     }
   }
-  
+
   .empty-state {
     padding: $spacing-lg 0;
   }
-  
+
   .notification-list {
     .notification-item {
       padding: $spacing-sm;
       border-radius: $radius-base;
       cursor: pointer;
-      
+
       &:hover {
         background: $bg-tertiary;
       }
-      
+
       &.is-unread {
         background: $color-primary-bg;
       }
-      
+
       .notification-content {
         .notification-title {
           font-size: $font-size-sm;
           color: $text-primary;
           margin-bottom: $spacing-xs;
         }
-        
+
         .notification-meta {
           display: flex;
           justify-content: space-between;
           font-size: $font-size-xs;
           color: $text-secondary;
-          
+
           .notification-type {
             text-transform: capitalize;
           }
@@ -254,21 +256,26 @@ function handleUserCommand(command: string) {
   cursor: pointer;
   padding: $spacing-xs $spacing-sm;
   border-radius: $radius-base;
-  
+  color: #F1F5F9;
+
   &:hover {
-    background: $bg-tertiary;
+    background: #334155;
   }
-  
+
   .user-name {
     font-size: $font-size-sm;
-    color: $text-primary;
+    color: #F1F5F9;
   }
 }
 
 .user-avatar {
   background: $color-primary;
-  color: $bg-primary;
+  color: white;
   font-weight: $font-weight-semibold;
   font-size: $font-size-sm;
+}
+
+:deep(.el-button) {
+  color: #F1F5F9;
 }
 </style>
