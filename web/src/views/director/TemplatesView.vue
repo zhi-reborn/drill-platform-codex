@@ -114,9 +114,9 @@
         <div class="steps-drawer-header">
           <span>编辑步骤 - {{ editingTemplateName }}</span>
           <div class="header-right">
-            <el-button type="primary" @click="openImportDialog">
+            <el-button type="primary" @click="openBatchImportDialog">
               <el-icon><Download /></el-icon>
-              导入步骤
+              批量导入
             </el-button>
           </div>
         </div>
@@ -146,9 +146,12 @@
                 {{ row.assignee || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="110" align="center" fixed="right">
+            <el-table-column label="操作" width="160" align="center" fixed="right">
               <template #default="{ $index }">
                 <el-button-group size="small">
+                  <el-button text type="primary" @click="openStepEditDialog($index)" title="编辑">
+                    <el-icon><Edit /></el-icon>
+                  </el-button>
                   <el-button :disabled="$index === 0" text @click="moveStep($index, -1)" title="上移">
                     <el-icon><Top /></el-icon>
                   </el-button>
@@ -162,10 +165,16 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="single-add-wrapper">
+            <el-button type="primary" plain @click="openSingleAddDialog">
+              <el-icon><Plus /></el-icon>
+              单个添加
+            </el-button>
+          </div>
         </div>
         <div v-else class="steps-empty">
           <el-empty description="暂无步骤">
-            <el-button type="primary" @click="openImportDialog">
+            <el-button type="primary" @click="openBatchImportDialog">
               <el-icon><Download /></el-icon>
               导入步骤
             </el-button>
@@ -253,7 +262,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Plus, Delete, Setting, Upload, Download, Top, Bottom } from '@element-plus/icons-vue'
+import { Refresh, Plus, Delete, Setting, Upload, Download, Top, Bottom, Edit } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillTemplate, StepTemplate, TemplateCategory, StepType } from '@/types'
@@ -311,9 +320,17 @@ const singleStepForm = reactive({
   assignee: '',
 })
 
-function openImportDialog() {
+const singleStepEditIndex = ref<number | null>(null)
+
+function openBatchImportDialog() {
   importTab.value = 'excel'
+  importVisible.value = true
+}
+
+function openSingleAddDialog() {
+  importTab.value = 'single'
   resetSingleStepForm()
+  singleStepEditIndex.value = null
   importVisible.value = true
 }
 
@@ -330,19 +347,34 @@ function handleAddSingleStep() {
     ElMessage.warning('请输入步骤名称')
     return
   }
-  editingSteps.value.push({
-    id: Date.now(),
-    template_id: editingTemplateId.value || 0,
-    name: singleStepForm.name.trim(),
-    description: singleStepForm.description.trim(),
-    step_type: singleStepForm.step_type as StepType,
-    timeout_seconds: singleStepForm.timeout_seconds,
-    assignee: singleStepForm.assignee.trim(),
-    order_index: editingSteps.value.length + 1,
-    created_at: new Date().toISOString(),
-  })
-  ElMessage.success('步骤已添加')
+
+  if (singleStepEditIndex.value !== null) {
+    // 编辑模式
+    const step = editingSteps.value[singleStepEditIndex.value]
+    step.name = singleStepForm.name.trim()
+    step.description = singleStepForm.description.trim()
+    step.step_type = singleStepForm.step_type as StepType
+    step.timeout_seconds = singleStepForm.timeout_seconds
+    step.assignee = singleStepForm.assignee.trim()
+    ElMessage.success('步骤已更新')
+  } else {
+    // 新增模式
+    editingSteps.value.push({
+      id: Date.now(),
+      template_id: editingTemplateId.value || 0,
+      name: singleStepForm.name.trim(),
+      description: singleStepForm.description.trim(),
+      step_type: singleStepForm.step_type as StepType,
+      timeout_seconds: singleStepForm.timeout_seconds,
+      assignee: singleStepForm.assignee.trim(),
+      order_index: editingSteps.value.length + 1,
+      created_at: new Date().toISOString(),
+    })
+    ElMessage.success('步骤已添加')
+  }
+
   resetSingleStepForm()
+  importVisible.value = false
 }
 
 function moveStep(index: number, direction: number) {
@@ -352,6 +384,18 @@ function moveStep(index: number, direction: number) {
   editingSteps.value[index] = editingSteps.value[newIndex]
   editingSteps.value[newIndex] = temp
   editingSteps.value.forEach((s: StepTemplate, i: number) => { s.order_index = i + 1 })
+}
+
+function openStepEditDialog(index: number) {
+  const step = editingSteps.value[index]
+  singleStepForm.name = step.name
+  singleStepForm.description = step.description || ''
+  singleStepForm.step_type = step.step_type as StepType
+  singleStepForm.timeout_seconds = step.timeout_seconds
+  singleStepForm.assignee = step.assignee || ''
+  singleStepEditIndex.value = index
+  importTab.value = 'single'
+  importVisible.value = true
 }
 
 function getCategoryLabel(value: string): string {
@@ -685,6 +729,12 @@ loadTemplates()
 
   .steps-empty {
     padding: 60px 0;
+  }
+
+  .single-add-wrapper {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
   }
 }
 
