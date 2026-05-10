@@ -63,7 +63,11 @@
               </div>
               <div class="drill-actions">
                 <el-button type="primary" size="small" @click="viewDrill(drill.id)">
-                  查看
+                  监控
+                </el-button>
+                <el-button type="success" size="small" @click="viewScreen(drill.id)">
+                  <el-icon><Monitor /></el-icon>
+                  大屏
                 </el-button>
               </div>
             </el-card>
@@ -104,6 +108,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Monitor, ArrowRight } from '@element-plus/icons-vue'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import instancesData from '@/mock/data/instances.json'
@@ -184,6 +189,10 @@ async function loadInstances() {
 
 function viewDrill(drillId: number) {
   router.push(`/director/monitor/${drillId}`)
+}
+
+function viewScreen(drillId: number) {
+  router.push(`/screen/${drillId}`)
 }
 
 loadInstances()

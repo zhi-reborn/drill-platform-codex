@@ -7,7 +7,7 @@
     "content": "数据库主从切换演练已于 09:00 开始执行",
     "drill_id": 1,
     "drill_name": "5 月 10 日数据库切换演练",
-    "is_read": true,
+    "is_read": false,
     "created_at": "2026-05-10T09:00:00Z"
   },
   {
@@ -20,11 +20,140 @@
     "drill_name": "5 月 10 日数据库切换演练",
     "step_id": 3,
     "step_name": "提升从库为主库",
-    "is_read": true,
+    "is_read": false,
     "created_at": "2026-05-10T09:04:00Z"
   },
   {
     "id": 3,
+    "user_id": 2,
+    "type": "step_complete",
+    "title": "步骤完成",
+    "content": "步骤「停止主库写入」已完成执行",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 2,
+    "step_name": "停止主库写入",
+    "is_read": false,
+    "created_at": "2026-05-10T09:03:45Z"
+  },
+  {
+    "id": 4,
+    "user_id": 2,
+    "type": "step_timeout",
+    "title": "步骤超时警告",
+    "content": "步骤「关闭非核心功能」执行超时",
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "step_id": 8,
+    "step_name": "关闭非核心功能",
+    "is_read": true,
+    "created_at": "2026-05-10T09:05:00Z"
+  },
+  {
+    "id": 5,
+    "user_id": 2,
+    "type": "drill_completed",
+    "title": "演练完成",
+    "content": "灰度发布演练 v2.1.0 已成功完成",
+    "drill_id": 3,
+    "drill_name": "v2.1.0 版本灰度发布",
+    "is_read": true,
+    "created_at": "2026-05-10T09:06:00Z"
+  },
+  {
+    "id": 6,
+    "user_id": 2,
+    "type": "drill_paused",
+    "title": "演练已暂停",
+    "content": "降级策略失效复盘演练已暂停，等待问题排查",
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "is_read": true,
+    "created_at": "2026-05-10T09:07:00Z"
+  },
+  {
+    "id": 7,
+    "user_id": 2,
+    "type": "system_alert",
+    "title": "系统维护通知",
+    "content": "本周六凌晨 2:00-4:00 进行系统例行维护",
+    "is_read": false,
+    "created_at": "2026-05-10T09:08:00Z"
+  },
+  {
+    "id": 8,
+    "user_id": 2,
+    "type": "drill_resumed",
+    "title": "演练已恢复",
+    "content": "降级策略失效复盘演练已恢复执行",
+    "drill_id": 5,
+    "drill_name": "降级策略失效复盘",
+    "is_read": false,
+    "created_at": "2026-05-10T09:09:00Z"
+  },
+  {
+    "id": 9,
+    "user_id": 2,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：验证数据库同步状态",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "step_id": 6,
+    "step_name": "验证数据库同步",
+    "is_read": false,
+    "created_at": "2026-05-10T09:10:00Z"
+  },
+  {
+    "id": 10,
+    "user_id": 2,
+    "type": "drill_terminated",
+    "title": "演练已终止",
+    "content": "压力测试演练因资源不足已终止",
+    "drill_id": 6,
+    "drill_name": "压力测试演练",
+    "is_read": true,
+    "created_at": "2026-05-09T14:30:00Z"
+  },
+  {
+    "id": 11,
+    "user_id": 2,
+    "type": "step_complete",
+    "title": "步骤完成",
+    "content": "步骤「启动备用电源」已完成",
+    "drill_id": 7,
+    "drill_name": "停电应急演练",
+    "step_id": 1,
+    "step_name": "启动备用电源",
+    "is_read": false,
+    "created_at": "2026-05-08T10:00:00Z"
+  },
+  {
+    "id": 12,
+    "user_id": 2,
+    "type": "step_complete",
+    "title": "步骤完成",
+    "content": "步骤「检查网络连通性」已完成",
+    "drill_id": 7,
+    "drill_name": "停电应急演练",
+    "step_id": 2,
+    "step_name": "检查网络连通性",
+    "is_read": false,
+    "created_at": "2026-05-08T10:05:00Z"
+  },
+  {
+    "id": 13,
+    "user_id": 2,
+    "type": "drill_started",
+    "title": "演练已开始",
+    "content": "数据库主从切换演练已于 09:00 开始执行",
+    "drill_id": 1,
+    "drill_name": "5 月 10 日数据库切换演练",
+    "is_read": false,
+    "created_at": "2026-05-10T09:00:00Z"
+  },
+  {
+    "id": 14,
     "user_id": 3,
     "type": "task_assigned",
     "title": "新任务分配",
@@ -37,17 +166,17 @@
     "created_at": "2026-05-10T09:00:00Z"
   },
   {
-    "id": 4,
-    "user_id": 2,
-    "type": "step_complete",
-    "title": "步骤完成",
-    "content": "步骤「停止主库写入」已完成执行",
-    "drill_id": 1,
-    "drill_name": "5 月 10 日数据库切换演练",
-    "step_id": 2,
-    "step_name": "停止主库写入",
-    "is_read": true,
-    "created_at": "2026-05-10T09:03:45Z"
+    "id": 15,
+    "user_id": 3,
+    "type": "task_assigned",
+    "title": "新任务分配",
+    "content": "您有新的任务：监控系统负载",
+    "drill_id": 2,
+    "drill_name": "晚高峰降级预演",
+    "step_id": 7,
+    "step_name": "监控系统负载",
+    "is_read": false,
+    "created_at": "2026-05-10T08:00:00Z"
   },
   {
     "id": 5,
@@ -59,32 +188,6 @@
     "drill_name": "v2.1.0 版本灰度发布",
     "is_read": true,
     "created_at": "2026-05-09T12:30:00Z"
-  },
-  {
-    "id": 6,
-    "user_id": 2,
-    "type": "step_timeout",
-    "title": "步骤超时警告",
-    "content": "步骤「关闭非核心功能」执行超时",
-    "drill_id": 5,
-    "drill_name": "降级策略失效复盘",
-    "step_id": 8,
-    "step_name": "关闭非核心功能",
-    "is_read": true,
-    "created_at": "2026-05-08T14:04:00Z"
-  },
-  {
-    "id": 7,
-    "user_id": 3,
-    "type": "task_assigned",
-    "title": "新任务分配",
-    "content": "您有新的任务：监控系统负载",
-    "drill_id": 2,
-    "drill_name": "晚高峰降级预演",
-    "step_id": 7,
-    "step_name": "监控系统负载",
-    "is_read": false,
-    "created_at": "2026-05-10T08:00:00Z"
   },
   {
     "id": 8,
@@ -107,16 +210,5 @@
     "step_name": "更新应用配置",
     "is_read": false,
     "created_at": "2026-05-10T09:00:00Z"
-  },
-  {
-    "id": 10,
-    "user_id": 2,
-    "type": "drill_paused",
-    "title": "演练已暂停",
-    "content": "降级策略失效复盘演练已暂停，等待问题排查",
-    "drill_id": 5,
-    "drill_name": "降级策略失效复盘",
-    "is_read": true,
-    "created_at": "2026-05-08T14:30:00Z"
   }
 ]

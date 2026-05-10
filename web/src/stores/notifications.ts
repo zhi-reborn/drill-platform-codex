@@ -13,9 +13,15 @@ export const useNotificationStore = defineStore('notifications', () => {
   async function fetchNotifications(): Promise<void> {
     try {
       const data = await notificationApi.getList({ page: 1, page_size: 50 })
+      console.log('[NotificationStore] fetchNotifications response:', data)
       notifications.value = data.items
       unreadCount.value = data.items.filter(n => !n.is_read).length
-    } catch {
+      console.log('[NotificationStore] State after fetch:', {
+        total: notifications.value.length,
+        unread: unreadCount.value,
+      })
+    } catch (err) {
+      console.error('[NotificationStore] fetchNotifications error:', err)
       notifications.value = []
     }
   }

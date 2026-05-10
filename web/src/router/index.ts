@@ -80,7 +80,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'messages',
         name: 'DirectorMessages',
-        component: () => import('@/views/director/MessagesView.vue'),
+        component: () => import('@/views/MessagesView.vue'),
         meta: { title: '消息中心', icon: 'Bell', hidden: true },
       },
     ],
@@ -107,7 +107,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'messages',
         name: 'ExecutorMessages',
-        component: () => import('@/views/executor/MessagesView.vue'),
+        component: () => import('@/views/MessagesView.vue'),
         meta: { title: '消息中心', icon: 'Bell', hidden: true },
       },
     ],
@@ -134,12 +134,17 @@ const routes: RouteRecordRaw[] = [
     ],
   },
 
-  // 大屏路由 (无 layout)
+  // 大屏路由 (无 layout) - 仅支持单演练模式
   {
     path: '/screen/:id(\\d+)',
     name: 'Screen',
     component: () => import('@/views/ScreenView.vue'),
     meta: { title: '监控大屏', requiresAuth: false, layout: 'blank' },
+  },
+  // 重定向旧版 /screen/all 到首页
+  {
+    path: '/screen/all',
+    redirect: '/viewer',
   },
 
   // 全局路由

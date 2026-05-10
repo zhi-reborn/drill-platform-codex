@@ -51,14 +51,15 @@ export const useAuthStore = defineStore('auth', () => {
         const response = await authApi.login(credentials);
         token.value = response.access_token;
         refreshToken.value = response.refresh_token;
+        await fetchCurrentUser();
         localStorage.setItem('drill_auth', JSON.stringify({
             access_token: response.access_token,
             refresh_token: response.refresh_token,
+            userId: user.value?.id,
         }));
-        await fetchCurrentUser();
     }
     async function loginWithUser(userObj) {
-        const mockToken = `mock_${userObj.username}_${Date.now()}`;
+        const mockToken = `mock_token_${userObj.id}_${Date.now()}`;
         token.value = mockToken;
         refreshToken.value = mockToken;
         localStorage.setItem('drill_auth', JSON.stringify({
@@ -95,7 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
         const auth = localStorage.getItem('drill_auth');
         const userData = localStorage.getItem('drill_user');
         if (auth) {
-            const { access_token, refresh_token } = JSON.parse(auth);
+            const { access_token, refresh_token, userId } = JSON.parse(auth);
             token.value = access_token;
             refreshToken.value = refresh_token;
         }

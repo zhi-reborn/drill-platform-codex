@@ -66,7 +66,7 @@ const routes = [
             {
                 path: 'messages',
                 name: 'DirectorMessages',
-                component: () => import('@/views/director/MessagesView.vue'),
+                component: () => import('@/views/MessagesView.vue'),
                 meta: { title: '消息中心', icon: 'Bell', hidden: true },
             },
         ],
@@ -92,7 +92,7 @@ const routes = [
             {
                 path: 'messages',
                 name: 'ExecutorMessages',
-                component: () => import('@/views/executor/MessagesView.vue'),
+                component: () => import('@/views/MessagesView.vue'),
                 meta: { title: '消息中心', icon: 'Bell', hidden: true },
             },
         ],

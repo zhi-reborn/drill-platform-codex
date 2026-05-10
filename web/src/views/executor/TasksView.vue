@@ -1,78 +1,202 @@
 <template>
   <div class="executor-tasks">
-    <div class="page-header">
-      <h2 class="page-title">我的任务</h2>
-      <div class="filter-group">
-        <el-radio-group v-model="filterStatus" size="default" @change="handleFilterChange">
-          <el-radio-button value="">全部</el-radio-button>
-          <el-radio-button value="pending">待执行</el-radio-button>
-          <el-radio-button value="assigned">已分配</el-radio-button>
-          <el-radio-button value="in_progress">执行中</el-radio-button>
-          <el-radio-button value="completed">已完成</el-radio-button>
-          <el-radio-button value="issued">异常</el-radio-button>
-        </el-radio-group>
+    <!-- 页面 1: 活跃演练列表 -->
+    <div v-if="!selectedDrillId" class="drill-list-page">
+      <div class="page-header">
+        <h2 class="page-title">我的任务</h2>
+      </div>
+
+      <div class="page-content">
+        <!-- 统计卡片 -->
+        <el-row :gutter="20" class="stats-row">
+          <el-col :span="6">
+            <el-card class="stat-card">
+              <div class="stat-label">我的任务</div>
+              <div class="stat-value">{{ myTasksCount }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card class="stat-card">
+              <div class="stat-label">待执行</div>
+              <div class="stat-value pending">{{ pendingTasksCount }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card class="stat-card">
+              <div class="stat-label">执行中</div>
+              <div class="stat-value in-progress">{{ inProgressTasksCount }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card class="stat-card">
+              <div class="stat-label">已完成</div>
+              <div class="stat-value completed">{{ completedTasksCount }}</div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <!-- 活跃演练列表 -->
+        <el-card class="section-card">
+          <template #header>
+            <span class="card-title">活跃演练 - 选择演练查看任务</span>
+          </template>
+          <el-row :gutter="20">
+            <el-col
+              v-for="drill in activeDrillsWithTasks"
+              :key="drill.id"
+              :xs="24"
+              :sm="12"
+              :lg="8"
+            >
+              <el-card class="drill-card" @click="selectDrill(drill.id)">
+                <div class="drill-header">
+                  <span class="drill-name">{{ drill.name }}</span>
+                  <DrillStatusBadge :status="drill.drillStatus" type="drill" />
+                </div>
+                <div class="drill-progress">
+                  <el-progress
+                    :percentage="Math.round(drill.completedSteps / drill.totalSteps * 100)"
+                    :stroke-width="8"
+                  />
+                </div>
+                <div class="drill-tasks-summary">
+                  <div class="task-stat">
+                    <span class="label">我的任务</span>
+                    <span class="value">{{ drill.myTasksCount }}</span>
+                  </div>
+                  <div class="task-stat">
+                    <span class="label">待执行</span>
+                    <span class="value pending">{{ drill.pendingTasksCount }}</span>
+                  </div>
+                </div>
+                <div class="drill-actions">
+                  <el-button type="success" size="small" @click.stop="viewScreen(drill.id)">
+                    <el-icon><Monitor /></el-icon>
+                    大屏
+                  </el-button>
+                  <el-button type="primary" size="small">
+                    <el-icon><ArrowRight /></el-icon>
+                    查看任务
+                  </el-button>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+          <div v-if="activeDrillsWithTasks.length === 0" class="empty-tip">
+            暂无活跃演练
+          </div>
+        </el-card>
+
+        <!-- 最近活动 -->
+        <el-card class="section-card">
+          <template #header>
+            <span class="card-title">最近活动</span>
+          </template>
+          <el-table :data="recentActivity" stripe style="width: 100%">
+            <el-table-column prop="type" label="类型" width="120">
+              <template #default="{ row }">
+                <el-tag :type="getActivityTypeTag(row.type)" size="small">
+                  {{ getActivityLabel(row.type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="drill_name" label="演练名称" min-width="180" />
+            <el-table-column prop="operator" label="操作人" width="100" />
+            <el-table-column prop="created_at" label="时间" width="160">
+              <template #default="{ row }">
+                {{ formatTime(row.created_at) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
       </div>
     </div>
 
-    <div v-loading="loading" class="tasks-container">
-      <EmptyBox v-if="!loading && filteredTasks.length === 0" title="暂无任务" description="当前没有分配给您的任务" />
+    <!-- 页面 2: 选中演练的任务列表 -->
+    <div v-else class="tasks-detail-page">
+      <div class="page-header">
+        <div class="breadcrumb" @click="backToDrillList">
+          <el-icon><ArrowLeft /></el-icon>
+          <span>返回演练列表</span>
+        </div>
+        <h2 class="page-title">{{ currentDrill?.name || '任务列表' }}</h2>
+        <div class="header-actions">
+          <el-button type="success" @click="viewScreen(selectedDrillId)">
+            <el-icon><Monitor /></el-icon>
+            大屏
+          </el-button>
+        </div>
+        <div class="filter-group">
+          <el-radio-group v-model="filterStatus" size="default" @change="handleFilterChange">
+            <el-radio-button value="">全部</el-radio-button>
+            <el-radio-button value="pending">待执行</el-radio-button>
+            <el-radio-button value="assigned">已分配</el-radio-button>
+            <el-radio-button value="in_progress">执行中</el-radio-button>
+            <el-radio-button value="completed">已完成</el-radio-button>
+            <el-radio-button value="issued">异常</el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
 
-      <el-row v-else :gutter="20" class="tasks-grid">
-        <el-col v-for="task in filteredTasks" :key="task.id" :xs="24" :sm="12" :lg="8" :xl="6">
-          <div class="task-card" :class="getStatusClass(task.status)">
-            <div class="task-card-header">
-              <div class="task-drill-name">{{ task.drill_name }}</div>
-              <DrillStatusBadge :status="task.status" type="step" />
-            </div>
+      <div v-loading="loading" class="tasks-container">
+        <EmptyBox v-if="!loading && filteredTasks.length === 0" title="暂无任务" description="当前没有分配给您的任务" />
 
-            <div class="task-card-body">
-              <div class="task-step-name">{{ task.step_name }}</div>
-              <div class="task-description">{{ task.step_description }}</div>
+        <el-row v-else :gutter="20" class="tasks-grid">
+          <el-col v-for="task in filteredTasks" :key="task.id" :xs="24" :sm="12" :lg="8" :xl="6">
+            <div class="task-card" :class="getStatusClass(task.status)">
+              <div class="task-card-header">
+                <div class="task-step-name">{{ task.step_name }}</div>
+                <DrillStatusBadge :status="task.status" type="step" />
+              </div>
 
-              <div class="task-meta">
-                <div v-if="task.deadline" class="task-deadline">
-                  <el-icon><Clock /></el-icon>
-                  <span>截止：{{ formatDeadline(task.deadline) }}</span>
-                </div>
-                <div class="task-assignee">
-                  <el-icon><User /></el-icon>
-                  <span>{{ task.assigned_to_name }}</span>
+              <div class="task-card-body">
+                <div class="task-description">{{ task.step_description }}</div>
+
+                <div class="task-meta">
+                  <div v-if="task.deadline" class="task-deadline">
+                    <el-icon><Clock /></el-icon>
+                    <span>截止：{{ formatDeadline(task.deadline) }}</span>
+                  </div>
+                  <div class="task-assignee">
+                    <el-icon><User /></el-icon>
+                    <span>{{ task.assigned_to_name }}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="task-card-footer">
-              <el-button
-                v-if="task.status === 'pending' || task.status === 'assigned'"
-                type="primary"
-                class="action-btn"
-                @click="goToTaskDetail(task.id)"
-              >
-                开始执行
-              </el-button>
-              <el-button
-                v-else-if="task.status === 'in_progress'"
-                type="primary"
-                class="action-btn"
-                @click="goToTaskDetail(task.id)"
-              >
-                继续
-              </el-button>
-              <el-button
-                v-else-if="task.status === 'issued'"
-                type="warning"
-                class="action-btn"
-                @click="goToTaskDetail(task.id)"
-              >
-                查看异常
-              </el-button>
-              <el-button v-else disabled class="action-btn">
-                已完成
-              </el-button>
+              <div class="task-card-footer">
+                <el-button
+                  v-if="task.status === 'pending' || task.status === 'assigned'"
+                  type="primary"
+                  class="action-btn"
+                  @click="goToTaskDetail(task.id)"
+                >
+                  开始执行
+                </el-button>
+                <el-button
+                  v-else-if="task.status === 'in_progress'"
+                  type="primary"
+                  class="action-btn"
+                  @click="goToTaskDetail(task.id)"
+                >
+                  继续
+                </el-button>
+                <el-button
+                  v-else-if="task.status === 'issued'"
+                  type="warning"
+                  class="action-btn"
+                  @click="goToTaskDetail(task.id)"
+                >
+                  查看异常
+                </el-button>
+                <el-button v-else disabled class="action-btn">
+                  已完成
+                </el-button>
+              </div>
             </div>
-          </div>
-        </el-col>
-      </el-row>
+          </el-col>
+        </el-row>
+      </div>
     </div>
   </div>
 </template>
@@ -81,24 +205,70 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Clock, User } from '@element-plus/icons-vue'
-import { taskApi } from '@/api/modules/task'
-import type { Task } from '@/types'
+import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import type { Task, DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
 import tasksData from '@/mock/data/tasks.json'
+import instancesData from '@/mock/data/instances.json'
 
 const router = useRouter()
 
 const loading = ref(false)
 const tasks = ref<Task[]>([])
+const instances = ref<DrillInstance[]>([])
 const filterStatus = ref<string>('')
 
+// 选中的演练 ID
+const selectedDrillId = ref<number | null>(null)
+const currentDrill = ref<DrillInstance | null>(null)
+
+// 统计
+const myTasksCount = computed(() => tasks.value.length)
+const pendingTasksCount = computed(() => tasks.value.filter(t => t.status === 'pending' || t.status === 'assigned').length)
+const inProgressTasksCount = computed(() => tasks.value.filter(t => t.status === 'in_progress').length)
+const completedTasksCount = computed(() => tasks.value.filter(t => t.status === 'completed').length)
+
+// 活跃演练（带任务统计）
+const activeDrillsWithTasks = computed(() => {
+  return instances.value
+    .filter(i => i.status === 'running' || i.status === 'paused')
+    .map(drill => {
+      const drillTasks = tasks.value.filter(t => t.drill_id === drill.id)
+      return {
+        id: drill.id,
+        name: drill.name,
+        drillStatus: drill.status,
+        completedSteps: drill.completed_steps,
+        totalSteps: drill.total_steps,
+        myTasksCount: drillTasks.length,
+        pendingTasksCount: drillTasks.filter(t => t.status === 'pending' || t.status === 'assigned').length,
+      }
+    })
+})
+
 const filteredTasks = computed(() => {
-  if (!filterStatus.value) {
-    return tasks.value
+  let result = tasks.value
+  // 只显示当前选中演练的任务
+  if (selectedDrillId.value) {
+    result = result.filter(t => t.drill_id === selectedDrillId.value)
   }
-  return tasks.value.filter((task) => task.status === filterStatus.value)
+  // 再应用状态筛选
+  if (filterStatus.value) {
+    result = result.filter(t => t.status === filterStatus.value)
+  }
+  return result
+})
+
+const recentActivity = computed(() => {
+  // 如果有选中的演练，只显示该演练的活动
+  if (selectedDrillId.value) {
+    const drill = instances.value.find(i => i.id === selectedDrillId.value)
+    if (drill) {
+      return (tasksData as any[]).filter((a: any) => a.drill_name === drill.name).slice(0, 5)
+    }
+  }
+  return []
 })
 
 const getStatusClass = (status: string) => {
@@ -110,12 +280,38 @@ const getStatusClass = (status: string) => {
   return classMap[status] || ''
 }
 
-// 处理筛选变化
-function handleFilterChange() {
-  // filter is reactive, filteredTasks computed handles it
+function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
+  const map: Record<string, any> = {
+    drill_start: 'primary',
+    drill_complete: 'success',
+    drill_terminate: 'danger',
+    step_start: 'info',
+    step_complete: 'success',
+  }
+  return map[type] || 'info'
 }
 
-// 格式化截止时间
+function getActivityLabel(type: string): string {
+  const map: Record<string, string> = {
+    drill_start: '演练开始',
+    drill_complete: '演练完成',
+    drill_terminate: '演练终止',
+    step_start: '步骤开始',
+    step_complete: '步骤完成',
+  }
+  return map[type] || type
+}
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function formatDeadline(d: string): string {
   if (!d) return '无'
   const date = new Date(d)
@@ -132,17 +328,40 @@ function formatDeadline(d: string): string {
   return `${hours}小时`
 }
 
+// 选择演练
+function selectDrill(drillId: number) {
+  selectedDrillId.value = drillId
+  currentDrill.value = instances.value.find(i => i.id === drillId) || null
+}
+
+// 返回演练列表
+function backToDrillList() {
+  selectedDrillId.value = null
+  currentDrill.value = null
+  filterStatus.value = ''
+}
+
+// 处理筛选变化
+function handleFilterChange() {
+  // filter is reactive, filteredTasks computed handles it
+}
+
 // 跳转到任务详情
 function goToTaskDetail(taskId: number) {
   router.push(`/executor/tasks/${taskId}`)
+}
+
+// 查看大屏
+function viewScreen(drillId: number) {
+  router.push(`/screen/${drillId}`)
 }
 
 // 加载数据
 async function loadTasks() {
   loading.value = true
   try {
-    // 使用 mock 数据
     tasks.value = tasksData as Task[]
+    instances.value = instancesData as DrillInstance[]
   } catch (error) {
     ElMessage.error('加载任务失败')
     console.error('Failed to load tasks:', error)
@@ -170,6 +389,27 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: $spacing-sm;
 
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: $radius-base;
+    transition: all 0.2s;
+
+    &:hover {
+      background: $bg-tertiary;
+      color: $text-primary;
+    }
+
+    .el-icon {
+      font-size: 14px;
+    }
+  }
+
   .page-title {
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
@@ -177,7 +417,14 @@ onMounted(() => {
     margin: 0;
   }
 
+  .header-actions {
+    margin-left: auto;
+  }
+
   .filter-group {
+    width: 100%;
+    margin-top: $spacing-sm;
+
     :deep(.el-radio-group) {
       display: flex;
       flex-wrap: wrap;
@@ -198,6 +445,141 @@ onMounted(() => {
       background: $color-primary;
       border-color: $color-primary;
       color: #fff;
+    }
+  }
+}
+
+.page-content {
+  @include page-content;
+
+  .stats-row {
+    margin-bottom: $spacing-base;
+
+    .stat-card {
+      @include stat-card;
+      text-align: center;
+
+      .stat-value {
+        font-size: $font-size-xl;
+        font-weight: $font-weight-bold;
+        color: $text-primary;
+
+        &.pending {
+          color: $color-warning;
+        }
+
+        &.in-progress {
+          color: $color-info;
+        }
+
+        &.completed {
+          color: $color-success;
+        }
+      }
+    }
+  }
+
+  .section-card {
+    @include card-compact;
+    margin-bottom: $spacing-base;
+
+    .card-title {
+      font-size: $font-size-base;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+    }
+
+    .drill-card {
+      background: $bg-tertiary;
+      border-color: $border-color-light;
+      margin-bottom: $spacing-sm;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: $shadow-md;
+        border-color: $color-primary;
+      }
+
+      .drill-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: $spacing-sm;
+
+        .drill-name {
+          font-size: $font-size-base;
+          font-weight: $font-weight-semibold;
+          color: $text-primary;
+        }
+      }
+
+      .drill-progress {
+        margin-bottom: $spacing-sm;
+      }
+
+      .drill-tasks-summary {
+        display: flex;
+        gap: $spacing-base;
+        margin-bottom: $spacing-sm;
+        padding: $spacing-sm 0;
+        border-top: 1px solid $border-color-light;
+        border-bottom: 1px solid $border-color-light;
+
+        .task-stat {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+
+          .label {
+            font-size: $font-size-xs;
+            color: $text-secondary;
+            margin-bottom: 2px;
+          }
+
+          .value {
+            font-size: $font-size-lg;
+            font-weight: $font-weight-bold;
+            color: $text-primary;
+
+            &.pending {
+              color: $color-warning;
+            }
+          }
+        }
+      }
+
+      .drill-actions {
+        display: flex;
+        gap: $spacing-xs;
+        justify-content: flex-end;
+      }
+    }
+
+    .empty-tip {
+      text-align: center;
+      color: $text-tertiary;
+      padding: $spacing-base;
+    }
+
+    :deep(.el-table) {
+      background: $bg-secondary;
+      color: $text-primary;
+
+      .el-table__header th {
+        background: $bg-tertiary;
+        color: $text-secondary;
+      }
+
+      .el-table__row td {
+        background: $bg-secondary;
+        border-color: $border-color-light;
+      }
+
+      .el-table__row--striped td {
+        background: rgba(26, 31, 46, 0.5);
+      }
     }
   }
 }
@@ -238,8 +620,8 @@ onMounted(() => {
       margin-bottom: $spacing-sm;
       gap: $spacing-xs;
 
-      .task-drill-name {
-        font-size: $font-size-sm;
+      .task-step-name {
+        font-size: $font-size-base;
         font-weight: $font-weight-semibold;
         color: $text-primary;
         @include ellipsis(1);

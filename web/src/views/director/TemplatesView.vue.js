@@ -19,7 +19,6 @@ const stepsVisible = ref(false);
 const deleteVisible = ref(false);
 const categoryVisible = ref(false);
 const importVisible = ref(false);
-const importTab = ref('excel');
 const editableCategories = ref([]);
 const isEditing = ref(false);
 const editingId = ref(null);
@@ -45,15 +44,14 @@ const singleStepForm = reactive({
     assignee: '',
 });
 const singleStepEditIndex = ref(null);
+const singleAddVisible = ref(false);
 function openBatchImportDialog() {
-    importTab.value = 'excel';
     importVisible.value = true;
 }
 function openSingleAddDialog() {
-    importTab.value = 'single';
     resetSingleStepForm();
     singleStepEditIndex.value = null;
-    importVisible.value = true;
+    singleAddVisible.value = true;
 }
 function resetSingleStepForm() {
     singleStepForm.name = '';
@@ -93,7 +91,7 @@ function handleAddSingleStep() {
         ElMessage.success('步骤已添加');
     }
     resetSingleStepForm();
-    importVisible.value = false;
+    singleAddVisible.value = false;
 }
 function moveStep(index, direction) {
     const newIndex = index + direction;
@@ -112,8 +110,7 @@ function openStepEditDialog(index) {
     singleStepForm.timeout_seconds = step.timeout_seconds;
     singleStepForm.assignee = step.assignee || '';
     singleStepEditIndex.value = index;
-    importTab.value = 'single';
-    importVisible.value = true;
+    singleAddVisible.value = true;
 }
 function getCategoryLabel(value) {
     const cat = categories.value.find(c => c.value === value);
@@ -1650,426 +1647,405 @@ const __VLS_444 = {}.ElDialog;
 // @ts-ignore
 const __VLS_445 = __VLS_asFunctionalComponent(__VLS_444, new __VLS_444({
     modelValue: (__VLS_ctx.importVisible),
-    title: "导入步骤",
+    title: "批量导入步骤",
     width: "520px",
 }));
 const __VLS_446 = __VLS_445({
     modelValue: (__VLS_ctx.importVisible),
-    title: "导入步骤",
+    title: "批量导入步骤",
     width: "520px",
 }, ...__VLS_functionalComponentArgsRest(__VLS_445));
 __VLS_447.slots.default;
-const __VLS_448 = {}.ElTabs;
-/** @type {[typeof __VLS_components.ElTabs, typeof __VLS_components.elTabs, typeof __VLS_components.ElTabs, typeof __VLS_components.elTabs, ]} */ ;
-// @ts-ignore
-const __VLS_449 = __VLS_asFunctionalComponent(__VLS_448, new __VLS_448({
-    modelValue: (__VLS_ctx.importTab),
-    ...{ class: "import-tabs" },
-}));
-const __VLS_450 = __VLS_449({
-    modelValue: (__VLS_ctx.importTab),
-    ...{ class: "import-tabs" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_449));
-__VLS_451.slots.default;
-const __VLS_452 = {}.ElTabPane;
-/** @type {[typeof __VLS_components.ElTabPane, typeof __VLS_components.elTabPane, typeof __VLS_components.ElTabPane, typeof __VLS_components.elTabPane, ]} */ ;
-// @ts-ignore
-const __VLS_453 = __VLS_asFunctionalComponent(__VLS_452, new __VLS_452({
-    label: "Excel 导入",
-    name: "excel",
-}));
-const __VLS_454 = __VLS_453({
-    label: "Excel 导入",
-    name: "excel",
-}, ...__VLS_functionalComponentArgsRest(__VLS_453));
-__VLS_455.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "excel-upload" },
 });
-const __VLS_456 = {}.ElUpload;
+const __VLS_448 = {}.ElUpload;
 /** @type {[typeof __VLS_components.ElUpload, typeof __VLS_components.elUpload, typeof __VLS_components.ElUpload, typeof __VLS_components.elUpload, ]} */ ;
 // @ts-ignore
-const __VLS_457 = __VLS_asFunctionalComponent(__VLS_456, new __VLS_456({
+const __VLS_449 = __VLS_asFunctionalComponent(__VLS_448, new __VLS_448({
     ref: "uploadRef",
     beforeUpload: (__VLS_ctx.handleExcelUpload),
     showFileList: (false),
     accept: ".xlsx,.xls",
     ...{ class: "upload-area" },
 }));
-const __VLS_458 = __VLS_457({
+const __VLS_450 = __VLS_449({
     ref: "uploadRef",
     beforeUpload: (__VLS_ctx.handleExcelUpload),
     showFileList: (false),
     accept: ".xlsx,.xls",
     ...{ class: "upload-area" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_457));
+}, ...__VLS_functionalComponentArgsRest(__VLS_449));
 /** @type {typeof __VLS_ctx.uploadRef} */ ;
-var __VLS_460 = {};
-__VLS_459.slots.default;
+var __VLS_452 = {};
+__VLS_451.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "upload-content" },
 });
-const __VLS_462 = {}.ElIcon;
+const __VLS_454 = {}.ElIcon;
 /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
 // @ts-ignore
-const __VLS_463 = __VLS_asFunctionalComponent(__VLS_462, new __VLS_462({
+const __VLS_455 = __VLS_asFunctionalComponent(__VLS_454, new __VLS_454({
     ...{ class: "upload-icon" },
 }));
-const __VLS_464 = __VLS_463({
+const __VLS_456 = __VLS_455({
     ...{ class: "upload-icon" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_463));
-__VLS_465.slots.default;
-const __VLS_466 = {}.Upload;
+}, ...__VLS_functionalComponentArgsRest(__VLS_455));
+__VLS_457.slots.default;
+const __VLS_458 = {}.Upload;
 /** @type {[typeof __VLS_components.Upload, ]} */ ;
 // @ts-ignore
-const __VLS_467 = __VLS_asFunctionalComponent(__VLS_466, new __VLS_466({}));
-const __VLS_468 = __VLS_467({}, ...__VLS_functionalComponentArgsRest(__VLS_467));
-var __VLS_465;
+const __VLS_459 = __VLS_asFunctionalComponent(__VLS_458, new __VLS_458({}));
+const __VLS_460 = __VLS_459({}, ...__VLS_functionalComponentArgsRest(__VLS_459));
+var __VLS_457;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "upload-text" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "upload-hint" },
 });
-var __VLS_459;
+var __VLS_451;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "template-download" },
 });
-const __VLS_470 = {}.ElButton;
+const __VLS_462 = {}.ElButton;
 /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
 // @ts-ignore
-const __VLS_471 = __VLS_asFunctionalComponent(__VLS_470, new __VLS_470({
+const __VLS_463 = __VLS_asFunctionalComponent(__VLS_462, new __VLS_462({
     ...{ 'onClick': {} },
     type: "info",
     plain: true,
 }));
-const __VLS_472 = __VLS_471({
+const __VLS_464 = __VLS_463({
     ...{ 'onClick': {} },
     type: "info",
     plain: true,
-}, ...__VLS_functionalComponentArgsRest(__VLS_471));
-let __VLS_474;
-let __VLS_475;
-let __VLS_476;
-const __VLS_477 = {
+}, ...__VLS_functionalComponentArgsRest(__VLS_463));
+let __VLS_466;
+let __VLS_467;
+let __VLS_468;
+const __VLS_469 = {
     onClick: (__VLS_ctx.downloadTemplate)
 };
-__VLS_473.slots.default;
-const __VLS_478 = {}.ElIcon;
+__VLS_465.slots.default;
+const __VLS_470 = {}.ElIcon;
 /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
 // @ts-ignore
-const __VLS_479 = __VLS_asFunctionalComponent(__VLS_478, new __VLS_478({}));
-const __VLS_480 = __VLS_479({}, ...__VLS_functionalComponentArgsRest(__VLS_479));
-__VLS_481.slots.default;
-const __VLS_482 = {}.Download;
+const __VLS_471 = __VLS_asFunctionalComponent(__VLS_470, new __VLS_470({}));
+const __VLS_472 = __VLS_471({}, ...__VLS_functionalComponentArgsRest(__VLS_471));
+__VLS_473.slots.default;
+const __VLS_474 = {}.Download;
 /** @type {[typeof __VLS_components.Download, ]} */ ;
 // @ts-ignore
-const __VLS_483 = __VLS_asFunctionalComponent(__VLS_482, new __VLS_482({}));
-const __VLS_484 = __VLS_483({}, ...__VLS_functionalComponentArgsRest(__VLS_483));
-var __VLS_481;
+const __VLS_475 = __VLS_asFunctionalComponent(__VLS_474, new __VLS_474({}));
+const __VLS_476 = __VLS_475({}, ...__VLS_functionalComponentArgsRest(__VLS_475));
 var __VLS_473;
-var __VLS_455;
-const __VLS_486 = {}.ElTabPane;
-/** @type {[typeof __VLS_components.ElTabPane, typeof __VLS_components.elTabPane, typeof __VLS_components.ElTabPane, typeof __VLS_components.elTabPane, ]} */ ;
+var __VLS_465;
+var __VLS_447;
+const __VLS_478 = {}.ElDialog;
+/** @type {[typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, ]} */ ;
 // @ts-ignore
-const __VLS_487 = __VLS_asFunctionalComponent(__VLS_486, new __VLS_486({
-    label: "单个添加",
-    name: "single",
+const __VLS_479 = __VLS_asFunctionalComponent(__VLS_478, new __VLS_478({
+    modelValue: (__VLS_ctx.singleAddVisible),
+    title: "添加步骤",
+    width: "520px",
 }));
-const __VLS_488 = __VLS_487({
-    label: "单个添加",
-    name: "single",
-}, ...__VLS_functionalComponentArgsRest(__VLS_487));
-__VLS_489.slots.default;
-const __VLS_490 = {}.ElForm;
+const __VLS_480 = __VLS_479({
+    modelValue: (__VLS_ctx.singleAddVisible),
+    title: "添加步骤",
+    width: "520px",
+}, ...__VLS_functionalComponentArgsRest(__VLS_479));
+__VLS_481.slots.default;
+const __VLS_482 = {}.ElForm;
 /** @type {[typeof __VLS_components.ElForm, typeof __VLS_components.elForm, typeof __VLS_components.ElForm, typeof __VLS_components.elForm, ]} */ ;
 // @ts-ignore
-const __VLS_491 = __VLS_asFunctionalComponent(__VLS_490, new __VLS_490({
+const __VLS_483 = __VLS_asFunctionalComponent(__VLS_482, new __VLS_482({
     model: (__VLS_ctx.singleStepForm),
     labelWidth: "90px",
     ...{ class: "single-step-form" },
 }));
-const __VLS_492 = __VLS_491({
+const __VLS_484 = __VLS_483({
     model: (__VLS_ctx.singleStepForm),
     labelWidth: "90px",
     ...{ class: "single-step-form" },
+}, ...__VLS_functionalComponentArgsRest(__VLS_483));
+__VLS_485.slots.default;
+const __VLS_486 = {}.ElFormItem;
+/** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
+// @ts-ignore
+const __VLS_487 = __VLS_asFunctionalComponent(__VLS_486, new __VLS_486({
+    label: "步骤名称",
+    required: true,
+}));
+const __VLS_488 = __VLS_487({
+    label: "步骤名称",
+    required: true,
+}, ...__VLS_functionalComponentArgsRest(__VLS_487));
+__VLS_489.slots.default;
+const __VLS_490 = {}.ElInput;
+/** @type {[typeof __VLS_components.ElInput, typeof __VLS_components.elInput, ]} */ ;
+// @ts-ignore
+const __VLS_491 = __VLS_asFunctionalComponent(__VLS_490, new __VLS_490({
+    modelValue: (__VLS_ctx.singleStepForm.name),
+    placeholder: "请输入步骤名称",
+    maxlength: "100",
+    showWordLimit: true,
+}));
+const __VLS_492 = __VLS_491({
+    modelValue: (__VLS_ctx.singleStepForm.name),
+    placeholder: "请输入步骤名称",
+    maxlength: "100",
+    showWordLimit: true,
 }, ...__VLS_functionalComponentArgsRest(__VLS_491));
-__VLS_493.slots.default;
+var __VLS_489;
 const __VLS_494 = {}.ElFormItem;
 /** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
 // @ts-ignore
 const __VLS_495 = __VLS_asFunctionalComponent(__VLS_494, new __VLS_494({
-    label: "步骤名称",
-    required: true,
+    label: "描述",
 }));
 const __VLS_496 = __VLS_495({
-    label: "步骤名称",
-    required: true,
+    label: "描述",
 }, ...__VLS_functionalComponentArgsRest(__VLS_495));
 __VLS_497.slots.default;
 const __VLS_498 = {}.ElInput;
 /** @type {[typeof __VLS_components.ElInput, typeof __VLS_components.elInput, ]} */ ;
 // @ts-ignore
 const __VLS_499 = __VLS_asFunctionalComponent(__VLS_498, new __VLS_498({
-    modelValue: (__VLS_ctx.singleStepForm.name),
-    placeholder: "请输入步骤名称",
-    maxlength: "100",
+    modelValue: (__VLS_ctx.singleStepForm.description),
+    type: "textarea",
+    placeholder: "步骤描述",
+    rows: (2),
+    maxlength: "500",
     showWordLimit: true,
 }));
 const __VLS_500 = __VLS_499({
-    modelValue: (__VLS_ctx.singleStepForm.name),
-    placeholder: "请输入步骤名称",
-    maxlength: "100",
+    modelValue: (__VLS_ctx.singleStepForm.description),
+    type: "textarea",
+    placeholder: "步骤描述",
+    rows: (2),
+    maxlength: "500",
     showWordLimit: true,
 }, ...__VLS_functionalComponentArgsRest(__VLS_499));
 var __VLS_497;
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "form-row" },
+});
 const __VLS_502 = {}.ElFormItem;
 /** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
 // @ts-ignore
 const __VLS_503 = __VLS_asFunctionalComponent(__VLS_502, new __VLS_502({
-    label: "描述",
+    label: "步骤类型",
 }));
 const __VLS_504 = __VLS_503({
-    label: "描述",
+    label: "步骤类型",
 }, ...__VLS_functionalComponentArgsRest(__VLS_503));
 __VLS_505.slots.default;
-const __VLS_506 = {}.ElInput;
-/** @type {[typeof __VLS_components.ElInput, typeof __VLS_components.elInput, ]} */ ;
-// @ts-ignore
-const __VLS_507 = __VLS_asFunctionalComponent(__VLS_506, new __VLS_506({
-    modelValue: (__VLS_ctx.singleStepForm.description),
-    type: "textarea",
-    placeholder: "步骤描述",
-    rows: (2),
-    maxlength: "500",
-    showWordLimit: true,
-}));
-const __VLS_508 = __VLS_507({
-    modelValue: (__VLS_ctx.singleStepForm.description),
-    type: "textarea",
-    placeholder: "步骤描述",
-    rows: (2),
-    maxlength: "500",
-    showWordLimit: true,
-}, ...__VLS_functionalComponentArgsRest(__VLS_507));
-var __VLS_505;
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "form-row" },
-});
-const __VLS_510 = {}.ElFormItem;
-/** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
-// @ts-ignore
-const __VLS_511 = __VLS_asFunctionalComponent(__VLS_510, new __VLS_510({
-    label: "步骤类型",
-}));
-const __VLS_512 = __VLS_511({
-    label: "步骤类型",
-}, ...__VLS_functionalComponentArgsRest(__VLS_511));
-__VLS_513.slots.default;
-const __VLS_514 = {}.ElSelect;
+const __VLS_506 = {}.ElSelect;
 /** @type {[typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, ]} */ ;
 // @ts-ignore
-const __VLS_515 = __VLS_asFunctionalComponent(__VLS_514, new __VLS_514({
+const __VLS_507 = __VLS_asFunctionalComponent(__VLS_506, new __VLS_506({
     modelValue: (__VLS_ctx.singleStepForm.step_type),
 }));
-const __VLS_516 = __VLS_515({
+const __VLS_508 = __VLS_507({
     modelValue: (__VLS_ctx.singleStepForm.step_type),
+}, ...__VLS_functionalComponentArgsRest(__VLS_507));
+__VLS_509.slots.default;
+const __VLS_510 = {}.ElOption;
+/** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+// @ts-ignore
+const __VLS_511 = __VLS_asFunctionalComponent(__VLS_510, new __VLS_510({
+    label: "串行",
+    value: "serial",
+}));
+const __VLS_512 = __VLS_511({
+    label: "串行",
+    value: "serial",
+}, ...__VLS_functionalComponentArgsRest(__VLS_511));
+const __VLS_514 = {}.ElOption;
+/** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+// @ts-ignore
+const __VLS_515 = __VLS_asFunctionalComponent(__VLS_514, new __VLS_514({
+    label: "并行",
+    value: "parallel",
+}));
+const __VLS_516 = __VLS_515({
+    label: "并行",
+    value: "parallel",
 }, ...__VLS_functionalComponentArgsRest(__VLS_515));
-__VLS_517.slots.default;
 const __VLS_518 = {}.ElOption;
 /** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
 // @ts-ignore
 const __VLS_519 = __VLS_asFunctionalComponent(__VLS_518, new __VLS_518({
-    label: "串行",
-    value: "serial",
+    label: "任选",
+    value: "any_of",
 }));
 const __VLS_520 = __VLS_519({
-    label: "串行",
-    value: "serial",
+    label: "任选",
+    value: "any_of",
 }, ...__VLS_functionalComponentArgsRest(__VLS_519));
 const __VLS_522 = {}.ElOption;
 /** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
 // @ts-ignore
 const __VLS_523 = __VLS_asFunctionalComponent(__VLS_522, new __VLS_522({
-    label: "并行",
-    value: "parallel",
+    label: "条件",
+    value: "condition",
 }));
 const __VLS_524 = __VLS_523({
-    label: "并行",
-    value: "parallel",
+    label: "条件",
+    value: "condition",
 }, ...__VLS_functionalComponentArgsRest(__VLS_523));
-const __VLS_526 = {}.ElOption;
-/** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+var __VLS_509;
+var __VLS_505;
+const __VLS_526 = {}.ElFormItem;
+/** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
 // @ts-ignore
 const __VLS_527 = __VLS_asFunctionalComponent(__VLS_526, new __VLS_526({
-    label: "任选",
-    value: "any_of",
+    label: "超时时间",
 }));
 const __VLS_528 = __VLS_527({
-    label: "任选",
-    value: "any_of",
+    label: "超时时间",
 }, ...__VLS_functionalComponentArgsRest(__VLS_527));
-const __VLS_530 = {}.ElOption;
-/** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+__VLS_529.slots.default;
+const __VLS_530 = {}.ElInputNumber;
+/** @type {[typeof __VLS_components.ElInputNumber, typeof __VLS_components.elInputNumber, ]} */ ;
 // @ts-ignore
 const __VLS_531 = __VLS_asFunctionalComponent(__VLS_530, new __VLS_530({
-    label: "条件",
-    value: "condition",
+    modelValue: (__VLS_ctx.singleStepForm.timeout_seconds),
+    min: (30),
+    max: (3600),
+    controlsPosition: "right",
 }));
 const __VLS_532 = __VLS_531({
-    label: "条件",
-    value: "condition",
+    modelValue: (__VLS_ctx.singleStepForm.timeout_seconds),
+    min: (30),
+    max: (3600),
+    controlsPosition: "right",
 }, ...__VLS_functionalComponentArgsRest(__VLS_531));
-var __VLS_517;
-var __VLS_513;
+var __VLS_529;
 const __VLS_534 = {}.ElFormItem;
 /** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
 // @ts-ignore
 const __VLS_535 = __VLS_asFunctionalComponent(__VLS_534, new __VLS_534({
-    label: "超时时间",
+    label: "操作人",
 }));
 const __VLS_536 = __VLS_535({
-    label: "超时时间",
+    label: "操作人",
 }, ...__VLS_functionalComponentArgsRest(__VLS_535));
 __VLS_537.slots.default;
-const __VLS_538 = {}.ElInputNumber;
-/** @type {[typeof __VLS_components.ElInputNumber, typeof __VLS_components.elInputNumber, ]} */ ;
-// @ts-ignore
-const __VLS_539 = __VLS_asFunctionalComponent(__VLS_538, new __VLS_538({
-    modelValue: (__VLS_ctx.singleStepForm.timeout_seconds),
-    min: (30),
-    max: (3600),
-    controlsPosition: "right",
-}));
-const __VLS_540 = __VLS_539({
-    modelValue: (__VLS_ctx.singleStepForm.timeout_seconds),
-    min: (30),
-    max: (3600),
-    controlsPosition: "right",
-}, ...__VLS_functionalComponentArgsRest(__VLS_539));
-var __VLS_537;
-const __VLS_542 = {}.ElFormItem;
-/** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
-// @ts-ignore
-const __VLS_543 = __VLS_asFunctionalComponent(__VLS_542, new __VLS_542({
-    label: "操作人",
-}));
-const __VLS_544 = __VLS_543({
-    label: "操作人",
-}, ...__VLS_functionalComponentArgsRest(__VLS_543));
-__VLS_545.slots.default;
-const __VLS_546 = {}.ElInput;
+const __VLS_538 = {}.ElInput;
 /** @type {[typeof __VLS_components.ElInput, typeof __VLS_components.elInput, ]} */ ;
 // @ts-ignore
-const __VLS_547 = __VLS_asFunctionalComponent(__VLS_546, new __VLS_546({
+const __VLS_539 = __VLS_asFunctionalComponent(__VLS_538, new __VLS_538({
     modelValue: (__VLS_ctx.singleStepForm.assignee),
     placeholder: "填写操作人",
 }));
-const __VLS_548 = __VLS_547({
+const __VLS_540 = __VLS_539({
     modelValue: (__VLS_ctx.singleStepForm.assignee),
     placeholder: "填写操作人",
-}, ...__VLS_functionalComponentArgsRest(__VLS_547));
-var __VLS_545;
-const __VLS_550 = {}.ElFormItem;
-/** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
-// @ts-ignore
-const __VLS_551 = __VLS_asFunctionalComponent(__VLS_550, new __VLS_550({}));
-const __VLS_552 = __VLS_551({}, ...__VLS_functionalComponentArgsRest(__VLS_551));
-__VLS_553.slots.default;
-const __VLS_554 = {}.ElButton;
-/** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
-// @ts-ignore
-const __VLS_555 = __VLS_asFunctionalComponent(__VLS_554, new __VLS_554({
-    ...{ 'onClick': {} },
-    type: "primary",
-}));
-const __VLS_556 = __VLS_555({
-    ...{ 'onClick': {} },
-    type: "primary",
-}, ...__VLS_functionalComponentArgsRest(__VLS_555));
-let __VLS_558;
-let __VLS_559;
-let __VLS_560;
-const __VLS_561 = {
-    onClick: (__VLS_ctx.handleAddSingleStep)
-};
-__VLS_557.slots.default;
-const __VLS_562 = {}.ElIcon;
-/** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
-// @ts-ignore
-const __VLS_563 = __VLS_asFunctionalComponent(__VLS_562, new __VLS_562({}));
-const __VLS_564 = __VLS_563({}, ...__VLS_functionalComponentArgsRest(__VLS_563));
-__VLS_565.slots.default;
-const __VLS_566 = {}.Plus;
-/** @type {[typeof __VLS_components.Plus, ]} */ ;
-// @ts-ignore
-const __VLS_567 = __VLS_asFunctionalComponent(__VLS_566, new __VLS_566({}));
-const __VLS_568 = __VLS_567({}, ...__VLS_functionalComponentArgsRest(__VLS_567));
-var __VLS_565;
-var __VLS_557;
-var __VLS_553;
-var __VLS_493;
-var __VLS_489;
-var __VLS_451;
-var __VLS_447;
-const __VLS_570 = {}.ElDialog;
+}, ...__VLS_functionalComponentArgsRest(__VLS_539));
+var __VLS_537;
+var __VLS_485;
+{
+    const { footer: __VLS_thisSlot } = __VLS_481.slots;
+    const __VLS_542 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_543 = __VLS_asFunctionalComponent(__VLS_542, new __VLS_542({
+        ...{ 'onClick': {} },
+    }));
+    const __VLS_544 = __VLS_543({
+        ...{ 'onClick': {} },
+    }, ...__VLS_functionalComponentArgsRest(__VLS_543));
+    let __VLS_546;
+    let __VLS_547;
+    let __VLS_548;
+    const __VLS_549 = {
+        onClick: (...[$event]) => {
+            __VLS_ctx.singleAddVisible = false;
+        }
+    };
+    __VLS_545.slots.default;
+    var __VLS_545;
+    const __VLS_550 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_551 = __VLS_asFunctionalComponent(__VLS_550, new __VLS_550({
+        ...{ 'onClick': {} },
+        type: "primary",
+    }));
+    const __VLS_552 = __VLS_551({
+        ...{ 'onClick': {} },
+        type: "primary",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_551));
+    let __VLS_554;
+    let __VLS_555;
+    let __VLS_556;
+    const __VLS_557 = {
+        onClick: (__VLS_ctx.handleAddSingleStep)
+    };
+    __VLS_553.slots.default;
+    var __VLS_553;
+}
+var __VLS_481;
+const __VLS_558 = {}.ElDialog;
 /** @type {[typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, ]} */ ;
 // @ts-ignore
-const __VLS_571 = __VLS_asFunctionalComponent(__VLS_570, new __VLS_570({
+const __VLS_559 = __VLS_asFunctionalComponent(__VLS_558, new __VLS_558({
     modelValue: (__VLS_ctx.deleteVisible),
     title: "确认删除",
     width: "400px",
 }));
-const __VLS_572 = __VLS_571({
+const __VLS_560 = __VLS_559({
     modelValue: (__VLS_ctx.deleteVisible),
     title: "确认删除",
     width: "400px",
-}, ...__VLS_functionalComponentArgsRest(__VLS_571));
-__VLS_573.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_559));
+__VLS_561.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
 (__VLS_ctx.deleteTarget?.name);
 {
-    const { footer: __VLS_thisSlot } = __VLS_573.slots;
-    const __VLS_574 = {}.ElButton;
+    const { footer: __VLS_thisSlot } = __VLS_561.slots;
+    const __VLS_562 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_575 = __VLS_asFunctionalComponent(__VLS_574, new __VLS_574({
+    const __VLS_563 = __VLS_asFunctionalComponent(__VLS_562, new __VLS_562({
         ...{ 'onClick': {} },
     }));
-    const __VLS_576 = __VLS_575({
+    const __VLS_564 = __VLS_563({
         ...{ 'onClick': {} },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_575));
-    let __VLS_578;
-    let __VLS_579;
-    let __VLS_580;
-    const __VLS_581 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_563));
+    let __VLS_566;
+    let __VLS_567;
+    let __VLS_568;
+    const __VLS_569 = {
         onClick: (...[$event]) => {
             __VLS_ctx.deleteVisible = false;
         }
     };
-    __VLS_577.slots.default;
-    var __VLS_577;
-    const __VLS_582 = {}.ElButton;
+    __VLS_565.slots.default;
+    var __VLS_565;
+    const __VLS_570 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_583 = __VLS_asFunctionalComponent(__VLS_582, new __VLS_582({
+    const __VLS_571 = __VLS_asFunctionalComponent(__VLS_570, new __VLS_570({
         ...{ 'onClick': {} },
         type: "danger",
     }));
-    const __VLS_584 = __VLS_583({
+    const __VLS_572 = __VLS_571({
         ...{ 'onClick': {} },
         type: "danger",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_583));
-    let __VLS_586;
-    let __VLS_587;
-    let __VLS_588;
-    const __VLS_589 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_571));
+    let __VLS_574;
+    let __VLS_575;
+    let __VLS_576;
+    const __VLS_577 = {
         onClick: (__VLS_ctx.confirmDelete)
     };
-    __VLS_585.slots.default;
-    var __VLS_585;
+    __VLS_573.slots.default;
+    var __VLS_573;
 }
-var __VLS_573;
+var __VLS_561;
 /** @type {__VLS_StyleScopedClasses['page-container']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-title']} */ ;
@@ -2088,7 +2064,6 @@ var __VLS_573;
 /** @type {__VLS_StyleScopedClasses['single-add-wrapper']} */ ;
 /** @type {__VLS_StyleScopedClasses['steps-empty']} */ ;
 /** @type {__VLS_StyleScopedClasses['drawer-footer']} */ ;
-/** @type {__VLS_StyleScopedClasses['import-tabs']} */ ;
 /** @type {__VLS_StyleScopedClasses['excel-upload']} */ ;
 /** @type {__VLS_StyleScopedClasses['upload-area']} */ ;
 /** @type {__VLS_StyleScopedClasses['upload-content']} */ ;
@@ -2099,7 +2074,7 @@ var __VLS_573;
 /** @type {__VLS_StyleScopedClasses['single-step-form']} */ ;
 /** @type {__VLS_StyleScopedClasses['form-row']} */ ;
 // @ts-ignore
-var __VLS_461 = __VLS_460;
+var __VLS_453 = __VLS_452;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
@@ -2120,7 +2095,6 @@ const __VLS_self = (await import('vue')).defineComponent({
             deleteVisible: deleteVisible,
             categoryVisible: categoryVisible,
             importVisible: importVisible,
-            importTab: importTab,
             editableCategories: editableCategories,
             isEditing: isEditing,
             editingSteps: editingSteps,
@@ -2129,6 +2103,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             filteredTemplates: filteredTemplates,
             form: form,
             singleStepForm: singleStepForm,
+            singleAddVisible: singleAddVisible,
             openBatchImportDialog: openBatchImportDialog,
             openSingleAddDialog: openSingleAddDialog,
             handleAddSingleStep: handleAddSingleStep,

@@ -67,55 +67,97 @@
         </el-col>
       </el-row>
 
-      <!-- 图表和表格 -->
-      <el-row :gutter="20" class="charts-row">
-        <el-col :span="24">
-          <el-card class="table-card">
-            <template #header>
-              <span class="card-title">最近活动</span>
+      <!-- 活跃演练 -->
+      <el-card class="section-card">
+        <template #header>
+          <span class="card-title">活跃演练</span>
+        </template>
+        <el-row :gutter="20">
+          <el-col
+            v-for="drill in activeDrills"
+            :key="drill.id"
+            :xs="24"
+            :sm="12"
+            :lg="8"
+          >
+            <el-card class="drill-card">
+              <div class="drill-header">
+                <span class="drill-name">{{ drill.name }}</span>
+                <DrillStatusBadge :status="drill.status" type="drill" />
+              </div>
+              <div class="drill-progress">
+                <el-progress
+                  :percentage="Math.round(drill.completed_steps / drill.total_steps * 100)"
+                  :stroke-width="8"
+                />
+              </div>
+              <div class="drill-current-step">
+                <span class="label">当前步骤:</span>
+                <span class="value">{{ getCurrentStepName(drill.id) }}</span>
+              </div>
+              <div class="drill-actions">
+                <el-button type="primary" size="small" @click="viewMonitor(drill.id)">
+                  监控
+                </el-button>
+                <el-button type="success" size="small" @click="viewScreen(drill.id)">
+                  <el-icon><Monitor /></el-icon>
+                  大屏
+                </el-button>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <div v-if="activeDrills.length === 0" class="empty-tip">
+          暂无活跃演练
+        </div>
+      </el-card>
+
+      <!-- 最近活动 -->
+      <el-card class="section-card">
+        <template #header>
+          <span class="card-title">最近活动</span>
+        </template>
+        <el-table :data="recentActivity" stripe style="width: 100%">
+          <el-table-column prop="type" label="类型" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getActivityTypeTag(row.type)" size="small">
+                {{ getActivityLabel(row.type) }}
+              </el-tag>
             </template>
-            <el-table :data="recentActivity" stripe style="width: 100%">
-              <el-table-column prop="type" label="类型" width="120">
-                <template #default="{ row }">
-                  <el-tag :type="getActivityTypeTag(row.type)" size="small">
-                    {{ getActivityLabel(row.type) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="drill_name" label="演练名称" min-width="180" />
-              <el-table-column prop="step_name" label="步骤" min-width="150" v-if="rowHasStep" />
-              <el-table-column prop="operator" label="操作人" width="100" />
-              <el-table-column prop="created_at" label="时间" width="160">
-                <template #default="{ row }">
-                  {{ formatTime(row.created_at) }}
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-card>
-        </el-col>
-      </el-row>
+          </el-table-column>
+          <el-table-column prop="drill_name" label="演练名称" min-width="180" />
+          <el-table-column prop="step_name" label="步骤" min-width="150" v-if="rowHasStep" />
+          <el-table-column prop="operator" label="操作人" width="100" />
+          <el-table-column prop="created_at" label="时间" width="160">
+            <template #default="{ row }">
+              {{ formatTime(row.created_at) }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import BarChart from '@/components/charts/BarChart.vue'
+import { Monitor } from '@element-plus/icons-vue'
+import type { DrillInstance, StepInstance } from '@/types'
+import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
+import instancesData from '@/mock/data/instances.json'
+import stepsData from '@/mock/data/steps.json'
 import dashboardData from '@/mock/data/dashboard.json'
 
-const loading = ref(false)
+const router = useRouter()
 
-// 柱状图数据
-const barChartData = computed(() => {
-  return dashboardData.by_category.map(item => ({
-    name: getCategoryLabel(item.category),
-    value: item.count,
-    category: item.category,
-  }))
+const instances = ref<DrillInstance[]>([])
+
+const activeDrills = computed(() => {
+  return instances.value.filter(i => i.status === 'running' || i.status === 'paused')
 })
 
-// 最近活动数据
 const recentActivity = computed(() => {
   return dashboardData.recent_activity.slice(0, 5)
 })
@@ -124,18 +166,18 @@ const rowHasStep = computed(() => {
   return recentActivity.value.some(item => item.step_name)
 })
 
-// 分类标签映射
-function getCategoryLabel(category: string): string {
-  const map: Record<string, string> = {
-    disaster_recovery: '灾备切换',
-    degradation: '服务降级',
-    release: '发布演练',
-    security: '安全事件',
+function getCurrentStepName(drillId: number): string {
+  const drillSteps = (stepsData as StepInstance[]).filter(s => s.drill_id === drillId && s.status === 'running')
+  if (drillSteps.length > 0) {
+    return drillSteps[0].step_name
   }
-  return map[category] || category
+  const pendingSteps = (stepsData as StepInstance[]).filter(s => s.drill_id === drillId && s.status === 'pending')
+  if (pendingSteps.length > 0) {
+    return pendingSteps[0].step_name
+  }
+  return '无'
 }
 
-// 活动类型标签
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
   const map: Record<string, any> = {
     drill_start: 'primary',
@@ -168,21 +210,24 @@ function formatTime(dateStr: string): string {
   })
 }
 
-// 加载数据
-async function loadDashboardData() {
-  loading.value = true
+function viewMonitor(drillId: number) {
+  router.push(`/admin/drills`)
+}
+
+function viewScreen(drillId: number) {
+  router.push(`/screen/${drillId}`)
+}
+
+async function loadInstances() {
   try {
-    // mock 数据已直接导入
-    ElMessage.success('数据加载成功')
+    instances.value = instancesData as DrillInstance[]
   } catch (error) {
     ElMessage.error('加载数据失败')
-    console.error('Failed to load dashboard data:', error)
-  } finally {
-    loading.value = false
+    console.error('Failed to load instances:', error)
   }
 }
 
-loadDashboardData()
+loadInstances()
 </script>
 
 <style scoped lang="scss">
@@ -257,38 +302,81 @@ loadDashboardData()
       }
     }
 
-    .charts-row {
-      margin-top: $spacing-base;
+    .section-card {
+      @include card-compact;
+      margin-bottom: $spacing-base;
 
-      .chart-card,
-      .table-card {
-        @include card-compact;
+      .card-title {
+        font-size: $font-size-base;
+        font-weight: $font-weight-semibold;
+        color: $text-primary;
+      }
 
-        .card-title {
-          font-size: $font-size-base;
-          font-weight: $font-weight-semibold;
-          color: $text-primary;
+      .drill-card {
+        background: $bg-tertiary;
+        border-color: $border-color-light;
+        margin-bottom: $spacing-sm;
+
+        .drill-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: $spacing-sm;
+
+          .drill-name {
+            font-size: $font-size-base;
+            font-weight: $font-weight-semibold;
+            color: $text-primary;
+          }
+        }
+
+        .drill-progress {
+          margin-bottom: $spacing-sm;
+        }
+
+        .drill-current-step {
+          font-size: $font-size-sm;
+          color: $text-secondary;
+          margin-bottom: $spacing-sm;
+
+          .label {
+            margin-right: $spacing-xs;
+          }
+
+          .value {
+            color: $text-primary;
+          }
+        }
+
+        .drill-actions {
+          display: flex;
+          gap: $spacing-xs;
+          justify-content: flex-end;
         }
       }
 
-      .table-card {
-        :deep(.el-table) {
+      .empty-tip {
+        text-align: center;
+        color: $text-tertiary;
+        padding: $spacing-base;
+      }
+
+      :deep(.el-table) {
+        background: #{$bg-secondary};
+        color: #{$text-primary};
+
+        .el-table__header th {
+          background: #{$bg-tertiary};
+          color: #{$text-secondary};
+        }
+
+        .el-table__row td {
           background: #{$bg-secondary};
-          color: #{$text-primary};
+          border-color: #{$border-color-light};
+        }
 
-          .el-table__header th {
-            background: #{$bg-tertiary};
-            color: #{$text-secondary};
-          }
-
-          .el-table__row td {
-            background: #{$bg-secondary};
-            border-color: #{$border-color-light};
-          }
-
-          .el-table__row--striped td {
-            background: #{rgba(26, 31, 46, 0.5)};
-          }
+        .el-table__row--striped td {
+          background: #{rgba(26, 31, 46, 0.5)};
         }
       }
     }

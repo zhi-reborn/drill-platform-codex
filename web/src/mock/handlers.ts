@@ -13,8 +13,24 @@ interface MockSession {
   currentUserId?: number
 }
 
-const mockSession: MockSession = {
-  currentUserId: undefined,
+const mockSession: MockSession = {}
+
+function getUserIdFromToken(token: string): number | undefined {
+  // mock token 格式：mock_token_{userId}_{timestamp}
+  const match = token.match(/^mock_token_(\d+)_/)
+  if (match) {
+    return Number(match[1])
+  }
+  return undefined
+}
+
+function getCurrentUserIdFromHeaders(config: InternalAxiosRequestConfig): number | undefined {
+  const authHeader = config.headers?.Authorization as string | undefined
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '')
+    return getUserIdFromToken(token)
+  }
+  return mockSession.currentUserId
 }
 
 function delay(ms: number): Promise<void> {
@@ -58,21 +74,30 @@ function findUserById(id: number) {
 }
 
 export function setupMock(): void {
+  console.log('[Mock API] Setting up mock adapter...')
   const mockAdapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
     await delay(200 + Math.random() * 300)
 
     const url = config.url || ''
+    const baseURL = config.baseURL || ''
+    const fullUrl = baseURL + url
     const method = (config.method || 'GET').toUpperCase()
 
-    if (!url.startsWith('/api/v1/')) {
-      return axios.get(url, config)
+    console.log('[Mock API] Intercepted:', { fullUrl, url, baseURL, method, startsWithV1: url.startsWith('/v1/') })
+
+    if (!url.startsWith('/v1/')) {
+      console.log('[Mock API] Passing through (not /v1/):', url)
+      // 不是 /v1/ 的请求，让原始 axios 处理（会发 HTTP 请求）
+      return axios.request(config)
     }
 
+    console.log('[Mock API] Handling mock request:', url)
     const mockResponse = await handleMockRequest(url, method, config)
     return mockResponse
   }
 
   axios.defaults.adapter = mockAdapter
+  console.log('[Mock API] Mock adapter installed')
 }
 
 async function handleMockRequest(
@@ -80,10 +105,11 @@ async function handleMockRequest(
   method: string,
   config: InternalAxiosRequestConfig
 ): Promise<AxiosResponse> {
+  console.log('[Mock API] Request:', { url, method, userId: getCurrentUserIdFromHeaders(config) })
   const params = config.params as Record<string, unknown> | undefined
   const data = config.data as Record<string, unknown> | undefined
 
-  if (/^\/api\/v1\/auth\/login$/.test(url) && method === 'POST') {
+  if (/^\/v1\/auth\/login$/.test(url) && method === 'POST') {
     const { username, password } = data as { username: string; password: string }
     const user = findUserByUsername(username)
 
@@ -105,27 +131,29 @@ async function handleMockRequest(
     })
   }
 
-  if (/^\/api\/v1\/auth\/logout$/.test(url) && method === 'POST') {
+  if (/^\/v1\/auth\/logout$/.test(url) && method === 'POST') {
     mockSession.currentUserId = undefined
     return createResponse(null)
   }
 
-  if (/^\/api\/v1\/auth\/current$/.test(url) && method === 'GET') {
-    if (!mockSession.currentUserId) {
+  if (/^\/v1\/auth\/current$/.test(url) && method === 'GET') {
+    const currentUserId = getCurrentUserIdFromHeaders(config)
+    if (!currentUserId) {
       return createErrorResponse('未登录', 401)
     }
-    const user = findUserById(mockSession.currentUserId)
+    const user = findUserById(currentUserId)
     if (!user) {
       return createErrorResponse('用户不存在', 404)
     }
     return createResponse(user)
   }
 
-  if (/^\/api\/v1\/auth\/refresh$/.test(url) && method === 'POST') {
-    if (!mockSession.currentUserId) {
+  if (/^\/v1\/auth\/refresh$/.test(url) && method === 'POST') {
+    const currentUserId = getCurrentUserIdFromHeaders(config)
+    if (!currentUserId) {
       return createErrorResponse('未登录', 401)
     }
-    const user = findUserById(mockSession.currentUserId)
+    const user = findUserById(currentUserId)
     return createResponse({
       access_token: `mock_token_${user?.id}_${Date.now()}`,
       refresh_token: `mock_refresh_${user?.id}`,
@@ -134,7 +162,7 @@ async function handleMockRequest(
     })
   }
 
-  if (/^\/api\/v1\/drills$/.test(url) && method === 'GET') {
+  if (/^\/v1\/drills$/.test(url) && method === 'GET') {
     let filtered = [...instancesData]
 
     if (params?.status) {
@@ -153,7 +181,7 @@ async function handleMockRequest(
     })
   }
 
-  if (/^\/api\/v1\/drills\/\d+$/.test(url) && method === 'GET') {
+  if (/^\/v1\/drills\/\d+$/.test(url) && method === 'GET') {
     const id = Number(url.split('/').pop())
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -162,7 +190,7 @@ async function handleMockRequest(
     return createResponse(drill)
   }
 
-  if (/^\/api\/v1\/drills$/.test(url) && method === 'POST') {
+  if (/^\/v1\/drills$/.test(url) && method === 'POST') {
     const newDrill = {
       id: Math.max(...instancesData.map((i) => i.id)) + 1,
       template_id: Number(data?.template_id),
@@ -180,7 +208,7 @@ async function handleMockRequest(
     return createResponse(newDrill)
   }
 
-  if (/^\/api\/v1\/drills\/\d+\/start$/.test(url) && method === 'POST') {
+  if (/^\/v1\/drills\/\d+\/start$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -189,7 +217,7 @@ async function handleMockRequest(
     return createResponse({ ...drill, status: 'running', started_at: new Date().toISOString() })
   }
 
-  if (/^\/api\/v1\/drills\/\d+\/pause$/.test(url) && method === 'POST') {
+  if (/^\/v1\/drills\/\d+\/pause$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -198,7 +226,7 @@ async function handleMockRequest(
     return createResponse({ ...drill, status: 'paused', paused_at: new Date().toISOString() })
   }
 
-  if (/^\/api\/v1\/drills\/\d+\/resume$/.test(url) && method === 'POST') {
+  if (/^\/v1\/drills\/\d+\/resume$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -207,7 +235,7 @@ async function handleMockRequest(
     return createResponse({ ...drill, status: 'running' })
   }
 
-  if (/^\/api\/v1\/drills\/\d+\/terminate$/.test(url) && method === 'POST') {
+  if (/^\/v1\/drills\/\d+\/terminate$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -216,13 +244,13 @@ async function handleMockRequest(
     return createResponse({ ...drill, status: 'terminated' })
   }
 
-  if (/^\/api\/v1\/drills\/\d+\/steps$/.test(url) && method === 'GET') {
+  if (/^\/v1\/drills\/\d+\/steps$/.test(url) && method === 'GET') {
     const drillId = Number(url.split('/')[3])
     const steps = stepsData.filter((s) => s.drill_id === drillId)
     return createResponse(steps)
   }
 
-  if (/^\/api\/v1\/steps\/\d+\/logs$/.test(url) && method === 'GET') {
+  if (/^\/v1\/steps\/\d+\/logs$/.test(url) && method === 'GET') {
     const stepId = Number(url.split('/')[3])
     const logs = stepsData
       .filter((s) => s.id === stepId)
@@ -238,7 +266,7 @@ async function handleMockRequest(
     return createResponse(logs)
   }
 
-  if (/^\/api\/v1\/templates$/.test(url) && method === 'GET') {
+  if (/^\/v1\/templates$/.test(url) && method === 'GET') {
     let filtered = [...templatesData]
     if (params?.category) {
       filtered = filtered.filter((t) => t.category === params.category)
@@ -246,7 +274,7 @@ async function handleMockRequest(
     return createResponse(filtered)
   }
 
-  if (/^\/api\/v1\/templates\/\d+$/.test(url) && method === 'GET') {
+  if (/^\/v1\/templates\/\d+$/.test(url) && method === 'GET') {
     const id = Number(url.split('/').pop())
     const template = templatesData.find((t) => t.id === id)
     if (!template) {
@@ -255,7 +283,7 @@ async function handleMockRequest(
     return createResponse(template)
   }
 
-  if (/^\/api\/v1\/templates$/.test(url) && method === 'POST') {
+  if (/^\/v1\/templates$/.test(url) && method === 'POST') {
     const newTemplate = {
       id: Math.max(...templatesData.map((t) => t.id)) + 1,
       name: data?.name || 'New Template',
@@ -272,7 +300,7 @@ async function handleMockRequest(
     return createResponse(newTemplate)
   }
 
-  if (/^\/api\/v1\/templates\/\d+\/publish$/.test(url) && method === 'POST') {
+  if (/^\/v1\/templates\/\d+\/publish$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const template = templatesData.find((t) => t.id === id)
     if (!template) {
@@ -281,18 +309,19 @@ async function handleMockRequest(
     return createResponse({ ...template, status: 'published', updated_at: new Date().toISOString() })
   }
 
-  if (/^\/api\/v1\/tasks\/my$/.test(url) && method === 'GET') {
-    if (!mockSession.currentUserId) {
+  if (/^\/v1\/tasks\/my$/.test(url) && method === 'GET') {
+    const currentUserId = getCurrentUserIdFromHeaders(config)
+    if (!currentUserId) {
       return createErrorResponse('未登录', 401)
     }
-    let filtered = tasksData.filter((t) => t.assigned_to === mockSession.currentUserId)
+    let filtered = tasksData.filter((t) => t.assigned_to === currentUserId)
     if (params?.status) {
       filtered = filtered.filter((t) => t.status === params.status)
     }
     return createResponse(filtered)
   }
 
-  if (/^\/api\/v1\/tasks\/\d+$/.test(url) && method === 'GET') {
+  if (/^\/v1\/tasks\/\d+$/.test(url) && method === 'GET') {
     const id = Number(url.split('/').pop())
     const task = tasksData.find((t) => t.id === id)
     if (!task) {
@@ -301,7 +330,7 @@ async function handleMockRequest(
     return createResponse(task)
   }
 
-  if (/^\/api\/v1\/tasks\/\d+\/action$/.test(url) && method === 'POST') {
+  if (/^\/v1\/tasks\/\d+\/action$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const task = tasksData.find((t) => t.id === id)
     if (!task) {
@@ -326,7 +355,7 @@ async function handleMockRequest(
     return createResponse(updatedTask)
   }
 
-  if (/^\/api\/v1\/users$/.test(url) && method === 'GET') {
+  if (/^\/v1\/users$/.test(url) && method === 'GET') {
     let filtered = [...usersData]
     if (params?.role) {
       filtered = filtered.filter((u) => u.role === params.role)
@@ -342,7 +371,7 @@ async function handleMockRequest(
     })
   }
 
-  if (/^\/api\/v1\/users\/\d+$/.test(url) && method === 'GET') {
+  if (/^\/v1\/users\/\d+$/.test(url) && method === 'GET') {
     const id = Number(url.split('/').pop())
     const user = usersData.find((u) => u.id === id)
     if (!user) {
@@ -351,11 +380,17 @@ async function handleMockRequest(
     return createResponse(user)
   }
 
-  if (/^\/api\/v1\/notifications$/.test(url) && method === 'GET') {
-    if (!mockSession.currentUserId) {
+  if (/^\/v1\/notifications$/.test(url) && method === 'GET') {
+    const currentUserId = getCurrentUserIdFromHeaders(config)
+    console.log('[Mock API] /v1/notifications GET:', {
+      currentUserId,
+      authHeader: config.headers?.Authorization,
+    })
+    if (!currentUserId) {
       return createErrorResponse('未登录', 401)
     }
-    let filtered = notificationsData.filter((n) => n.user_id === mockSession.currentUserId)
+    let filtered = notificationsData.filter((n) => n.user_id === currentUserId)
+    console.log('[Mock API] Filtered notifications for user', currentUserId, ':', filtered.length, 'items')
     if (params?.unread_only) {
       filtered = filtered.filter((n) => !n.is_read)
     }
@@ -370,7 +405,7 @@ async function handleMockRequest(
     })
   }
 
-  if (/^\/api\/v1\/notifications\/\d+\/read$/.test(url) && method === 'POST') {
+  if (/^\/v1\/notifications\/\d+\/read$/.test(url) && method === 'POST') {
     const id = Number(url.split('/')[3])
     const notification = notificationsData.find((n) => n.id === id)
     if (!notification) {
@@ -379,23 +414,24 @@ async function handleMockRequest(
     return createResponse({ ...notification, is_read: true })
   }
 
-  if (/^\/api\/v1\/notifications\/read-all$/.test(url) && method === 'POST') {
-    if (!mockSession.currentUserId) {
+  if (/^\/v1\/notifications\/read-all$/.test(url) && method === 'POST') {
+    const currentUserId = getCurrentUserIdFromHeaders(config)
+    if (!currentUserId) {
       return createErrorResponse('未登录', 401)
     }
     return createResponse(null)
   }
 
-  if (/^\/api\/v1\/display\/dashboard$/.test(url) && method === 'GET') {
+  if (/^\/v1\/display\/dashboard$/.test(url) && method === 'GET') {
     return createResponse(dashboardData)
   }
 
-  if (/^\/api\/v1\/display\/active-drills$/.test(url) && method === 'GET') {
+  if (/^\/v1\/display\/active-drills$/.test(url) && method === 'GET') {
     const activeDrills = instancesData.filter((i) => i.status === 'running' || i.status === 'paused')
     return createResponse(activeDrills)
   }
 
-  if (/^\/api\/v1\/display\/drills\/\d+$/.test(url) && method === 'GET') {
+  if (/^\/v1\/display\/drills\/\d+$/.test(url) && method === 'GET') {
     const id = Number(url.split('/').pop())
     const drill = instancesData.find((i) => i.id === id)
     if (!drill) {
@@ -404,7 +440,7 @@ async function handleMockRequest(
     return createResponse(drill)
   }
 
-  if (/^\/api\/v1\/config\/system$/.test(url) && method === 'GET') {
+  if (/^\/v1\/config\/system$/.test(url) && method === 'GET') {
     return createResponse({
       site_name: '生产演练平台',
       version: '1.0.0',
