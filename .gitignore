@@ -36,3 +36,4 @@ vendor/
 web/node_modules/
 openspec/
 playwright/
+.worktrees/
