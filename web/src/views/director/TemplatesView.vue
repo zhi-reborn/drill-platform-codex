@@ -189,64 +189,59 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="importVisible" title="导入步骤" width="520px">
-      <el-tabs v-model="importTab" class="import-tabs">
-        <el-tab-pane label="Excel 导入" name="excel">
-          <div class="excel-upload">
-            <el-upload
-              ref="uploadRef"
-              :before-upload="handleExcelUpload"
-              :show-file-list="false"
-              accept=".xlsx,.xls"
-              class="upload-area"
-            >
-              <div class="upload-content">
-                <el-icon class="upload-icon"><Upload /></el-icon>
-                <div class="upload-text">点击或拖拽上传 Excel 文件</div>
-                <div class="upload-hint">支持 .xlsx, .xls 格式</div>
-              </div>
-            </el-upload>
-            <div class="template-download">
-              <el-button type="info" plain @click="downloadTemplate">
-                <el-icon><Download /></el-icon>
-                下载 Excel 模板
-              </el-button>
-            </div>
+    <el-dialog v-model="importVisible" title="批量导入步骤" width="520px">
+      <div class="excel-upload">
+        <el-upload
+          ref="uploadRef"
+          :before-upload="handleExcelUpload"
+          :show-file-list="false"
+          accept=".xlsx,.xls"
+          class="upload-area"
+        >
+          <div class="upload-content">
+            <el-icon class="upload-icon"><Upload /></el-icon>
+            <div class="upload-text">点击或拖拽上传 Excel 文件</div>
+            <div class="upload-hint">支持 .xlsx, .xls 格式</div>
           </div>
-        </el-tab-pane>
-        <el-tab-pane label="单个添加" name="single">
-          <el-form :model="singleStepForm" label-width="90px" class="single-step-form">
-            <el-form-item label="步骤名称" required>
-              <el-input v-model="singleStepForm.name" placeholder="请输入步骤名称" maxlength="100" show-word-limit />
-            </el-form-item>
-            <el-form-item label="描述">
-              <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500" show-word-limit />
-            </el-form-item>
-            <div class="form-row">
-              <el-form-item label="步骤类型">
-                <el-select v-model="singleStepForm.step_type">
-                  <el-option label="串行" value="serial" />
-                  <el-option label="并行" value="parallel" />
-                  <el-option label="任选" value="any_of" />
-                  <el-option label="条件" value="condition" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="超时时间">
-                <el-input-number v-model="singleStepForm.timeout_seconds" :min="30" :max="3600" controls-position="right" />
-              </el-form-item>
-            </div>
-            <el-form-item label="操作人">
-              <el-input v-model="singleStepForm.assignee" placeholder="填写操作人" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleAddSingleStep">
-                <el-icon><Plus /></el-icon>
-                添加步骤
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-      </el-tabs>
+        </el-upload>
+        <div class="template-download">
+          <el-button type="info" plain @click="downloadTemplate">
+            <el-icon><Download /></el-icon>
+            下载 Excel 模板
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="singleAddVisible" title="添加步骤" width="520px">
+      <el-form :model="singleStepForm" label-width="90px" class="single-step-form">
+        <el-form-item label="步骤名称" required>
+          <el-input v-model="singleStepForm.name" placeholder="请输入步骤名称" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500" show-word-limit />
+        </el-form-item>
+        <div class="form-row">
+          <el-form-item label="步骤类型">
+            <el-select v-model="singleStepForm.step_type">
+              <el-option label="串行" value="serial" />
+              <el-option label="并行" value="parallel" />
+              <el-option label="任选" value="any_of" />
+              <el-option label="条件" value="condition" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="超时时间">
+            <el-input-number v-model="singleStepForm.timeout_seconds" :min="30" :max="3600" controls-position="right" />
+          </el-form-item>
+        </div>
+        <el-form-item label="操作人">
+          <el-input v-model="singleStepForm.assignee" placeholder="填写操作人" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="singleAddVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleAddSingleStep">添加步骤</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="deleteVisible" title="确认删除" width="400px">
@@ -291,7 +286,6 @@ const stepsVisible = ref(false)
 const deleteVisible = ref(false)
 const categoryVisible = ref(false)
 const importVisible = ref(false)
-const importTab = ref('excel')
 const editableCategories = ref<CategoryItem[]>([])
 
 const isEditing = ref(false)
@@ -321,17 +315,16 @@ const singleStepForm = reactive({
 })
 
 const singleStepEditIndex = ref<number | null>(null)
+const singleAddVisible = ref(false)
 
 function openBatchImportDialog() {
-  importTab.value = 'excel'
   importVisible.value = true
 }
 
 function openSingleAddDialog() {
-  importTab.value = 'single'
   resetSingleStepForm()
   singleStepEditIndex.value = null
-  importVisible.value = true
+  singleAddVisible.value = true
 }
 
 function resetSingleStepForm() {
@@ -374,7 +367,7 @@ function handleAddSingleStep() {
   }
 
   resetSingleStepForm()
-  importVisible.value = false
+  singleAddVisible.value = false
 }
 
 function moveStep(index: number, direction: number) {
@@ -394,8 +387,7 @@ function openStepEditDialog(index: number) {
   singleStepForm.timeout_seconds = step.timeout_seconds
   singleStepForm.assignee = step.assignee || ''
   singleStepEditIndex.value = index
-  importTab.value = 'single'
-  importVisible.value = true
+  singleAddVisible.value = true
 }
 
 function getCategoryLabel(value: string): string {
