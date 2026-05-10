@@ -44,17 +44,15 @@ const menuConfig: Record<string, MenuItem[]> = {
   admin: [
     { path: '/admin', title: '系统概览', icon: 'DataAnalysis' },
     { path: '/admin/users', title: '用户管理', icon: 'User' },
-    { path: '/admin/templates', title: '模板管理', icon: 'Document' },
     { path: '/admin/drills', title: '全部演练', icon: 'Monitor' },
   ],
   director: [
     { path: '/director', title: '指挥概览', icon: 'DataAnalysis' },
+    { path: '/director/templates', title: '模板管理', icon: 'Document' },
     { path: '/director/create', title: '创建演练', icon: 'Plus' },
-    { path: '/director/messages', title: '消息中心', icon: 'Bell' },
   ],
   executor: [
     { path: '/executor', title: '我的任务', icon: 'Tickets' },
-    { path: '/executor/messages', title: '消息中心', icon: 'Bell' },
   ],
   viewer: [
     { path: '/viewer', title: '演练概览', icon: 'View' },
@@ -110,7 +108,7 @@ const visibleMenus = computed<MenuItem[]>(() => {
 
     &.is-active {
       color: #F1F5F9;
-      background: #334155;
+      background: #55C3D3;
       border-right: 2px solid #0891B2;
     }
   }

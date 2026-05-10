@@ -39,12 +39,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '用户管理', icon: 'User' },
       },
       {
-        path: 'templates',
-        name: 'AdminTemplates',
-        component: () => import('@/views/admin/TemplatesView.vue'),
-        meta: { title: '模板管理', icon: 'Document' },
-      },
-      {
         path: 'drills',
         name: 'AdminDrills',
         component: () => import('@/views/admin/DrillListView.vue'),
@@ -57,13 +51,19 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/director',
     component: () => import('@/components/layout/AppLayout.vue'),
-    meta: { title: '指挥', requiresRole: 'director' },
+    meta: { title: '指挥', requiresRole: ['admin', 'director'] },
     children: [
       {
         path: '',
         name: 'DirectorDashboard',
         component: () => import('@/views/director/DashboardView.vue'),
         meta: { title: '指挥概览', icon: 'DataAnalysis' },
+      },
+      {
+        path: 'templates',
+        name: 'DirectorTemplates',
+        component: () => import('@/views/director/TemplatesView.vue'),
+        meta: { title: '模板管理', icon: 'Document' },
       },
       {
         path: 'create',

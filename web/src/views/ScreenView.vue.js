@@ -1,4 +1,5 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
 import ScreenLayout from '@/components/screen/ScreenLayout.vue';
 import MetricsBar from '@/components/screen/MetricsBar.vue';
 import StatusPanel from '@/components/screen/StatusPanel.vue';
@@ -12,26 +13,59 @@ import dashboardData from '@/mock/data/dashboard.json';
 import instancesData from '@/mock/data/instances.json';
 import stepsData from '@/mock/data/steps.json';
 import notificationsData from '@/mock/data/notifications.json';
+const route = useRoute();
 const refreshTimer = ref();
 const stats = ref(dashboardData.stats);
+// 获取路由参数中的 drillId
+const drillId = computed(() => {
+    const id = route.params.id;
+    if (id === 'all' || !id)
+        return null;
+    return Number(id);
+});
+const currentDrill = computed(() => {
+    if (!drillId.value)
+        return null;
+    return instancesData.find(d => d.id === drillId.value) || null;
+});
 // === KPI ===
-const kpiMetrics = computed(() => [
-    { label: '总演练', value: stats.value.total_drills, icon: 'Monitor' },
-    { label: '活跃', value: stats.value.active_drills, icon: 'VideoPlay' },
-    { label: '成功率', value: `${stats.value.success_rate}%`, icon: 'CircleCheck' },
-    { label: '失败率', value: `${stats.value.failure_rate}%`, icon: 'CircleClose' },
-    { label: '平均耗时', value: `${Math.round(stats.value.avg_step_duration_seconds / 60)}min`, icon: 'Timer' },
-    { label: '团队在线', value: `${stats.value.team_online_count}/${stats.value.team_total_count}`, icon: 'User' },
-]);
-// === 活跃演练 ===
+const kpiMetrics = computed(() => {
+    if (drillId.value && currentDrill.value) {
+        const drill = currentDrill.value;
+        return [
+            { label: '演练名称', value: drill.name, icon: 'Monitor' },
+            { label: '状态', value: getStatusLabel(drill.status), icon: 'VideoPlay' },
+            { label: '进度', value: `${drill.completed_steps}/${drill.total_steps} 步骤`, icon: 'Timer' },
+            { label: '执行人', value: drill.created_by_name, icon: 'User' },
+        ];
+    }
+    return [
+        { label: '总演练', value: stats.value.total_drills, icon: 'Monitor' },
+        { label: '活跃', value: stats.value.active_drills, icon: 'VideoPlay' },
+        { label: '成功率', value: `${stats.value.success_rate}%`, icon: 'CircleCheck' },
+        { label: '失败率', value: `${stats.value.failure_rate}%`, icon: 'CircleClose' },
+        { label: '平均耗时', value: `${Math.round(stats.value.avg_step_duration_seconds / 60)}min`, icon: 'Timer' },
+        { label: '团队在线', value: `${stats.value.team_online_count}/${stats.value.team_total_count}`, icon: 'User' },
+    ];
+});
+// === 活跃演练 (单演练模式只显示当前演练) ===
 const activeDrills = computed(() => {
+    if (drillId.value) {
+        const drill = currentDrill.value;
+        if (drill && (drill.status === 'running' || drill.status === 'paused')) {
+            return [drill];
+        }
+        return [];
+    }
     return instancesData.filter(d => d.status === 'running' || d.status === 'paused');
 });
 // === 步骤状态分布 ===
 const stepStatusData = computed(() => {
-    const steps = stepsData;
+    const relevantSteps = drillId.value
+        ? stepsData.filter(s => s.drill_id === drillId.value)
+        : stepsData;
     const counts = {};
-    steps.forEach(s => {
+    relevantSteps.forEach(s => {
         const status = s.status;
         counts[status] = (counts[status] || 0) + 1;
     });
@@ -52,16 +86,29 @@ const categoryData = computed(() => {
 });
 // === 演练时间线 ===
 const timelineData = computed(() => {
+    const relevantSteps = drillId.value
+        ? stepsData.filter(s => s.drill_id === drillId.value)
+        : stepsData;
+    if (drillId.value) {
+        return [{
+                name: currentDrill.value?.name || `演练 #${drillId.value}`,
+                items: relevantSteps.map(s => ({
+                    name: s.step_name,
+                    startTime: s.started_at || '',
+                    endTime: s.completed_at || '',
+                    status: s.status || 'pending',
+                })),
+            }];
+    }
     const grouped = {};
-    const steps = stepsData;
-    steps.forEach(s => {
-        const drillId = s.drill_id;
-        if (!grouped[drillId])
-            grouped[drillId] = [];
-        grouped[drillId].push(s);
+    relevantSteps.forEach(s => {
+        const id = s.drill_id;
+        if (!grouped[id])
+            grouped[id] = [];
+        grouped[id].push(s);
     });
-    return Object.entries(grouped).map(([drillId, items]) => ({
-        name: `演练 #${drillId}`,
+    return Object.entries(grouped).map(([id, items]) => ({
+        name: `演练 #${id}`,
         items: items.map(s => ({
             name: s.step_name,
             startTime: s.started_at || '',
@@ -70,12 +117,14 @@ const timelineData = computed(() => {
         })),
     }));
 });
-// === 告警流 (丰富数据) ===
+// === 告警流 ===
 const alerts = computed(() => {
     const items = [];
-    // 1. 从 steps 中提取 issue 和 timeout
-    const steps = stepsData;
-    steps.forEach((s, i) => {
+    const relevantSteps = drillId.value
+        ? stepsData.filter(s => s.drill_id === drillId.value)
+        : stepsData;
+    // 1. 从步骤中提取 issue 和 timeout
+    relevantSteps.forEach((s, i) => {
         if (s.status === 'issue') {
             items.push({
                 id: i,
@@ -95,9 +144,13 @@ const alerts = computed(() => {
             });
         }
     });
-    // 2. 从通知中补充
-    const notifs = notificationsData;
-    notifs.forEach((n, i) => {
+    // 2. 从通知中补充 (单演练模式只显示相关通知)
+    let relevantNotifs = notificationsData;
+    if (drillId.value) {
+        const drillName = currentDrill.value?.name || '';
+        relevantNotifs = relevantNotifs.filter(n => n.title === drillName);
+    }
+    relevantNotifs.forEach((n, i) => {
         const type = n.type;
         if (type === 'drill_started') {
             items.push({
@@ -139,6 +192,16 @@ const alerts = computed(() => {
     items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     return items.slice(0, 30);
 });
+function getStatusLabel(status) {
+    const map = {
+        running: '进行中',
+        paused: '已暂停',
+        completed: '已完成',
+        terminated: '已终止',
+        pending: '待开始',
+    };
+    return map[status] || status;
+}
 // 自动刷新
 function refreshData() {
     stats.value = dashboardData.stats;

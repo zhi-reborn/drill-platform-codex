@@ -2,10 +2,38 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">演练概览</h2>
-      <el-button type="primary" @click="viewScreen">
+      <el-button type="primary" @click="showDrillSelector">
         <el-icon><Monitor /></el-icon>
         查看监控大屏
       </el-button>
+      <el-dialog v-model="selectorVisible" title="选择演练" width="500px">
+        <el-select
+          v-model="selectedDrillId"
+          placeholder="请选择演练"
+          filterable
+          style="width: 100%"
+        >
+          <el-option
+            v-for="drill in drillList"
+            :key="drill.id"
+            :label="drill.name"
+            :value="drill.id"
+          >
+            <div class="drill-option">
+              <span>{{ drill.name }}</span>
+              <el-tag size="small" :type="getStatusType(drill.status)">
+                {{ getStatusLabel(drill.status) }}
+              </el-tag>
+            </div>
+          </el-option>
+        </el-select>
+        <template #footer>
+          <el-button @click="selectorVisible = false">取消</el-button>
+          <el-button type="primary" :disabled="!selectedDrillId" @click="viewScreen">
+            查看大屏
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
 
     <div class="page-content">
@@ -33,26 +61,6 @@
           <el-card class="stat-card">
             <div class="stat-label">平均耗时</div>
             <div class="stat-value">{{ formatDuration(dashboardData.stats.avg_step_duration_seconds) }}</div>
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <!-- 图表 -->
-      <el-row :gutter="20" class="charts-row">
-        <el-col :span="12">
-          <el-card class="chart-card">
-            <template #header>
-              <span class="card-title">演练分类统计</span>
-            </template>
-            <BarChart :data="barChartData" height="320px" />
-          </el-card>
-        </el-col>
-        <el-col :span="12">
-          <el-card class="chart-card">
-            <template #header>
-              <span class="card-title">每小时错误数</span>
-            </template>
-            <LineChart :data="lineChartData" height="320px" />
           </el-card>
         </el-col>
       </el-row>
@@ -88,43 +96,56 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Monitor } from '@element-plus/icons-vue'
-import BarChart from '@/components/charts/BarChart.vue'
-import LineChart from '@/components/charts/LineChart.vue'
+import type { DrillInstance } from '@/types'
 import dashboardData from '@/mock/data/dashboard.json'
+import instancesData from '@/mock/data/instances.json'
 
 const router = useRouter()
 
-const barChartData = computed(() => {
-  return dashboardData.by_category.map(item => ({
-    name: getCategoryLabel(item.category),
-    value: item.count,
-    category: item.category,
-  }))
-})
-
-const lineChartData = computed(() => {
-  return dashboardData.hourly_errors.map(item => ({
-    name: item.hour,
-    value: item.count,
-  }))
-})
+const selectorVisible = ref(false)
+const selectedDrillId = ref<number | null>(null)
+const drillList = ref<DrillInstance[]>(instancesData as DrillInstance[])
 
 const recentActivity = computed(() => {
   return dashboardData.recent_activity.slice(0, 5)
 })
 
-function getCategoryLabel(category: string): string {
-  const map: Record<string, string> = {
-    disaster_recovery: '灾备切换',
-    degradation: '服务降级',
-    release: '发布演练',
-    security: '安全事件',
+function getStatusType(status: string): 'success' | 'warning' | 'info' | 'danger' | undefined {
+  const map: Record<string, 'success' | 'warning' | 'info' | 'danger'> = {
+    running: 'success',
+    paused: 'warning',
+    completed: 'info',
+    terminated: 'danger',
   }
-  return map[category] || category
+  return map[status]
+}
+
+function getStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    running: '进行中',
+    paused: '已暂停',
+    completed: '已完成',
+    terminated: '已终止',
+    pending: '待开始',
+  }
+  return map[status] || status
+}
+
+function showDrillSelector() {
+  selectedDrillId.value = null
+  selectorVisible.value = true
+}
+
+function viewScreen() {
+  if (!selectedDrillId.value) {
+    ElMessage.warning('请选择演练')
+    return
+  }
+  router.push(`/screen/${selectedDrillId.value}`)
 }
 
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
-  const map: Record<string, any> = {
+  const map: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
     drill_start: 'primary',
     drill_complete: 'success',
     drill_terminate: 'danger',
@@ -159,10 +180,6 @@ function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins}m ${secs}s`
-}
-
-function viewScreen() {
-  router.push('/screen/100')
 }
 </script>
 
@@ -206,20 +223,6 @@ function viewScreen() {
       }
     }
 
-    .charts-row {
-      margin-bottom: $spacing-base;
-
-      .chart-card {
-        @include card-compact;
-
-        .card-title {
-          font-size: $font-size-base;
-          font-weight: $font-weight-semibold;
-          color: $text-primary;
-        }
-      }
-    }
-
     .table-card {
       @include card-compact;
 
@@ -249,5 +252,12 @@ function viewScreen() {
       }
     }
   }
+}
+
+.drill-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 </style>

@@ -4,14 +4,8 @@
     <div class="login-brand">
       <div class="brand-content">
         <el-icon :size="64" color="#55C3D3"><Monitor /></el-icon>
-        <h1>Drill Platform</h1>
-        <p class="brand-tagline">生产演练流程管理平台</p>
+        <h1>演练流程管理平台</h1>
         <p class="brand-desc">指挥中心大屏 · 流程引擎驱动 · 实时通信同步</p>
-        <div class="brand-features">
-          <div class="feature"><el-icon><CircleCheck /></el-icon> 轻量级状态机引擎</div>
-          <div class="feature"><el-icon><CircleCheck /></el-icon> WebSocket 端到端延迟 &lt; 1s</div>
-          <div class="feature"><el-icon><CircleCheck /></el-icon> 模块化可扩展设计</div>
-        </div>
       </div>
       <div class="brand-bg-pattern"></div>
     </div>
@@ -41,11 +35,11 @@
 
         <!-- DEV 模式 -->
         <div v-else-if="authMode === 'dev'" class="dev-mode">
-          <el-select v-model="selectedUser" filterable placeholder="选择登录用户" size="large" class="user-select">
+          <el-select v-model="selectedUser" filterable placeholder="请选择登录用户" size="large" class="user-select">
             <el-option
               v-for="u in activeUsers"
               :key="u.id"
-              :label="u.id"
+              :label="u.name"
               :value="u.id"
             >
               <div class="user-option">
@@ -57,7 +51,7 @@
           <el-button type="primary" size="large" class="login-btn" @click="handleDevLogin" :loading="loading">
             快捷登录
           </el-button>
-          <div class="link-btn" @click="authMode = 'local'; selectedUser = 0">
+          <div class="link-btn" @click="authMode = 'local'; selectedUser = null">
             切换手动表单登录
           </div>
         </div>
@@ -95,7 +89,7 @@
               </el-button>
             </el-form-item>
           </el-form>
-          <div class="link-btn" @click="authMode = 'dev'; selectedUser = 0">
+          <div class="link-btn" @click="authMode = 'dev'; selectedUser = null">
             切换快捷登录
           </div>
         </div>
@@ -106,7 +100,7 @@
         </div>
       </div>
 
-      <p class="copyright">&copy; 2024 Drill Platform</p>
+      <p class="copyright">&copy; 2026 基础设施部 技术组件</p>
     </div>
   </div>
 </template>
@@ -130,7 +124,7 @@ const remember = ref(false)
 const formRef = ref()
 
 // Dev mode
-const selectedUser = ref(0)
+const selectedUser = ref<number | null>(null)
 const activeUsers = usersData.filter((u) => u.status === 'active') as UserType[]
 
 // Local mode
@@ -160,7 +154,7 @@ const roleDashboards: Record<Role, string> = {
 
 async function handleDevLogin() {
   if (!selectedUser.value) {
-    ElMessage.warning('请选择一个用户')
+    ElMessage.warning('请选择登录用户')
     return
   }
   loading.value = true
@@ -230,7 +224,7 @@ onMounted(() => {
     h1 {
       font-size: 48px;
       font-weight: 700;
-      color: $text-primary;
+      color: #d4d8dd;
       margin-top: $spacing-xl;
       margin-bottom: $spacing-sm;
       letter-spacing: 2px;
@@ -309,7 +303,7 @@ onMounted(() => {
     .login-title {
       font-size: 24px;
       font-weight: 600;
-      color: $text-primary;
+      color: #d4d8dd;
       text-align: center;
       margin-bottom: $spacing-2xl;
     }

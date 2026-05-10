@@ -69,15 +69,7 @@
 
       <!-- 图表和表格 -->
       <el-row :gutter="20" class="charts-row">
-        <el-col :span="12">
-          <el-card class="chart-card">
-            <template #header>
-              <span class="card-title">演练分类统计</span>
-            </template>
-            <BarChart :data="barChartData" height="320px" />
-          </el-card>
-        </el-col>
-        <el-col :span="12">
+        <el-col :span="24">
           <el-card class="table-card">
             <template #header>
               <span class="card-title">最近活动</span>

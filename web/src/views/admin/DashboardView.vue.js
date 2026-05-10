@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import BarChart from '@/components/charts/BarChart.vue';
 import dashboardData from '@/mock/data/dashboard.json';
 const loading = ref(false);
 // 柱状图数据
@@ -319,20 +318,20 @@ const __VLS_40 = {}.ElCol;
 /** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
 // @ts-ignore
 const __VLS_41 = __VLS_asFunctionalComponent(__VLS_40, new __VLS_40({
-    span: (12),
+    span: (24),
 }));
 const __VLS_42 = __VLS_41({
-    span: (12),
+    span: (24),
 }, ...__VLS_functionalComponentArgsRest(__VLS_41));
 __VLS_43.slots.default;
 const __VLS_44 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
 const __VLS_45 = __VLS_asFunctionalComponent(__VLS_44, new __VLS_44({
-    ...{ class: "chart-card" },
+    ...{ class: "table-card" },
 }));
 const __VLS_46 = __VLS_45({
-    ...{ class: "chart-card" },
+    ...{ class: "table-card" },
 }, ...__VLS_functionalComponentArgsRest(__VLS_45));
 __VLS_47.slots.default;
 {
@@ -341,155 +340,117 @@ __VLS_47.slots.default;
         ...{ class: "card-title" },
     });
 }
-/** @type {[typeof BarChart, ]} */ ;
-// @ts-ignore
-const __VLS_48 = __VLS_asFunctionalComponent(BarChart, new BarChart({
-    data: (__VLS_ctx.barChartData),
-    height: "320px",
-}));
-const __VLS_49 = __VLS_48({
-    data: (__VLS_ctx.barChartData),
-    height: "320px",
-}, ...__VLS_functionalComponentArgsRest(__VLS_48));
-var __VLS_47;
-var __VLS_43;
-const __VLS_51 = {}.ElCol;
-/** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
-// @ts-ignore
-const __VLS_52 = __VLS_asFunctionalComponent(__VLS_51, new __VLS_51({
-    span: (12),
-}));
-const __VLS_53 = __VLS_52({
-    span: (12),
-}, ...__VLS_functionalComponentArgsRest(__VLS_52));
-__VLS_54.slots.default;
-const __VLS_55 = {}.ElCard;
-/** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
-// @ts-ignore
-const __VLS_56 = __VLS_asFunctionalComponent(__VLS_55, new __VLS_55({
-    ...{ class: "table-card" },
-}));
-const __VLS_57 = __VLS_56({
-    ...{ class: "table-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_56));
-__VLS_58.slots.default;
-{
-    const { header: __VLS_thisSlot } = __VLS_58.slots;
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "card-title" },
-    });
-}
-const __VLS_59 = {}.ElTable;
+const __VLS_48 = {}.ElTable;
 /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
 // @ts-ignore
-const __VLS_60 = __VLS_asFunctionalComponent(__VLS_59, new __VLS_59({
+const __VLS_49 = __VLS_asFunctionalComponent(__VLS_48, new __VLS_48({
     data: (__VLS_ctx.recentActivity),
     stripe: true,
     ...{ style: {} },
 }));
-const __VLS_61 = __VLS_60({
+const __VLS_50 = __VLS_49({
     data: (__VLS_ctx.recentActivity),
     stripe: true,
     ...{ style: {} },
-}, ...__VLS_functionalComponentArgsRest(__VLS_60));
-__VLS_62.slots.default;
-const __VLS_63 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_49));
+__VLS_51.slots.default;
+const __VLS_52 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_64 = __VLS_asFunctionalComponent(__VLS_63, new __VLS_63({
+const __VLS_53 = __VLS_asFunctionalComponent(__VLS_52, new __VLS_52({
     prop: "type",
     label: "类型",
     width: "120",
 }));
-const __VLS_65 = __VLS_64({
+const __VLS_54 = __VLS_53({
     prop: "type",
     label: "类型",
     width: "120",
-}, ...__VLS_functionalComponentArgsRest(__VLS_64));
-__VLS_66.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_53));
+__VLS_55.slots.default;
 {
-    const { default: __VLS_thisSlot } = __VLS_66.slots;
+    const { default: __VLS_thisSlot } = __VLS_55.slots;
     const [{ row }] = __VLS_getSlotParams(__VLS_thisSlot);
-    const __VLS_67 = {}.ElTag;
+    const __VLS_56 = {}.ElTag;
     /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
     // @ts-ignore
-    const __VLS_68 = __VLS_asFunctionalComponent(__VLS_67, new __VLS_67({
+    const __VLS_57 = __VLS_asFunctionalComponent(__VLS_56, new __VLS_56({
         type: (__VLS_ctx.getActivityTypeTag(row.type)),
         size: "small",
     }));
-    const __VLS_69 = __VLS_68({
+    const __VLS_58 = __VLS_57({
         type: (__VLS_ctx.getActivityTypeTag(row.type)),
         size: "small",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_68));
-    __VLS_70.slots.default;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_57));
+    __VLS_59.slots.default;
     (__VLS_ctx.getActivityLabel(row.type));
-    var __VLS_70;
+    var __VLS_59;
 }
-var __VLS_66;
-const __VLS_71 = {}.ElTableColumn;
+var __VLS_55;
+const __VLS_60 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_72 = __VLS_asFunctionalComponent(__VLS_71, new __VLS_71({
+const __VLS_61 = __VLS_asFunctionalComponent(__VLS_60, new __VLS_60({
     prop: "drill_name",
     label: "演练名称",
     minWidth: "180",
 }));
-const __VLS_73 = __VLS_72({
+const __VLS_62 = __VLS_61({
     prop: "drill_name",
     label: "演练名称",
     minWidth: "180",
-}, ...__VLS_functionalComponentArgsRest(__VLS_72));
+}, ...__VLS_functionalComponentArgsRest(__VLS_61));
 if (__VLS_ctx.rowHasStep) {
-    const __VLS_75 = {}.ElTableColumn;
+    const __VLS_64 = {}.ElTableColumn;
     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
     // @ts-ignore
-    const __VLS_76 = __VLS_asFunctionalComponent(__VLS_75, new __VLS_75({
+    const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
         prop: "step_name",
         label: "步骤",
         minWidth: "150",
     }));
-    const __VLS_77 = __VLS_76({
+    const __VLS_66 = __VLS_65({
         prop: "step_name",
         label: "步骤",
         minWidth: "150",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_76));
+    }, ...__VLS_functionalComponentArgsRest(__VLS_65));
 }
-const __VLS_79 = {}.ElTableColumn;
+const __VLS_68 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_80 = __VLS_asFunctionalComponent(__VLS_79, new __VLS_79({
+const __VLS_69 = __VLS_asFunctionalComponent(__VLS_68, new __VLS_68({
     prop: "operator",
     label: "操作人",
     width: "100",
 }));
-const __VLS_81 = __VLS_80({
+const __VLS_70 = __VLS_69({
     prop: "operator",
     label: "操作人",
     width: "100",
-}, ...__VLS_functionalComponentArgsRest(__VLS_80));
-const __VLS_83 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_69));
+const __VLS_72 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_84 = __VLS_asFunctionalComponent(__VLS_83, new __VLS_83({
+const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
     prop: "created_at",
     label: "时间",
     width: "160",
 }));
-const __VLS_85 = __VLS_84({
+const __VLS_74 = __VLS_73({
     prop: "created_at",
     label: "时间",
     width: "160",
-}, ...__VLS_functionalComponentArgsRest(__VLS_84));
-__VLS_86.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_73));
+__VLS_75.slots.default;
 {
-    const { default: __VLS_thisSlot } = __VLS_86.slots;
+    const { default: __VLS_thisSlot } = __VLS_75.slots;
     const [{ row }] = __VLS_getSlotParams(__VLS_thisSlot);
     (__VLS_ctx.formatTime(row.created_at));
 }
-var __VLS_86;
-var __VLS_62;
-var __VLS_58;
-var __VLS_54;
+var __VLS_75;
+var __VLS_51;
+var __VLS_47;
+var __VLS_43;
 var __VLS_39;
 /** @type {__VLS_StyleScopedClasses['page-container']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-header']} */ ;
@@ -520,17 +481,13 @@ var __VLS_39;
 /** @type {__VLS_StyleScopedClasses['stat-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['stat-value']} */ ;
 /** @type {__VLS_StyleScopedClasses['charts-row']} */ ;
-/** @type {__VLS_StyleScopedClasses['chart-card']} */ ;
-/** @type {__VLS_StyleScopedClasses['card-title']} */ ;
 /** @type {__VLS_StyleScopedClasses['table-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-title']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
-            BarChart: BarChart,
             dashboardData: dashboardData,
-            barChartData: barChartData,
             recentActivity: recentActivity,
             rowHasStep: rowHasStep,
             getActivityTypeTag: getActivityTypeTag,

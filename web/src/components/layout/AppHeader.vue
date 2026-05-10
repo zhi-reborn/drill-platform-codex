@@ -6,18 +6,16 @@
       </el-button>
       <div class="logo">
         <el-icon :size="24" color="#0891B2"><Monitor /></el-icon>
-        <span class="logo-text">Drill Platform</span>
+        <span class="logo-text">演练流程管理平台</span>
       </div>
     </div>
 
     <div class="header-right">
-      <!-- WebSocket status -->
       <div class="ws-status" :class="wsStatus" :title="wsStatusText">
         <span class="status-dot"></span>
       </div>
 
-      <!-- Notifications bell -->
-      <el-popover v-model:visible="showNotifications" placement="bottom-end" :width="360" trigger="click">
+      <el-popover v-model:visible="showNotifications" placement="bottom-end" :width="380" trigger="click">
         <template #reference>
           <div class="notification-bell">
             <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
@@ -29,27 +27,37 @@
         </template>
         <div class="notification-popover">
           <div class="popover-header">
-            <span class="popover-title">通知</span>
-            <el-button text size="small" @click="notifStore.markAllAsRead">全部已读</el-button>
+            <span class="popover-title">消息中心</span>
+            <el-button v-if="notifStore.notifications.length > 0" text size="small" @click="notifStore.markAllAsRead">
+              全部已读
+            </el-button>
           </div>
-          <el-scrollbar max-height="400px">
-            <div v-if="notifStore.recentNotifications.length === 0" class="empty-state">
-              <el-empty description="暂无通知" :image-size="80" />
+          <el-scrollbar max-height="450px">
+            <div v-if="notifStore.notifications.length === 0" class="empty-state">
+              <el-empty description="暂无消息" :image-size="60" />
             </div>
             <div v-else class="notification-list">
               <div
-                v-for="n in notifStore.recentNotifications"
+                v-for="n in notifStore.notifications"
                 :key="n.id"
                 class="notification-item"
                 :class="{ 'is-unread': !n.is_read }"
-                @click="notifStore.markAsRead(n.id)"
+                @click="handleNotificationClick(n)"
               >
                 <div class="notification-content">
-                  <div class="notification-title">{{ n.title }}</div>
-                  <div class="notification-meta">
+                  <div class="notification-header">
                     <span class="notification-type">{{ n.type }}</span>
-                    <span class="notification-time">{{ new Date(n.created_at).toLocaleString('zh-CN') }}</span>
+                    <el-button
+                      class="delete-btn"
+                      text
+                      size="small"
+                      @click.stop="notifStore.deleteNotification(n.id)"
+                    >
+                      <el-icon><Close /></el-icon>
+                    </el-button>
                   </div>
+                  <div class="notification-title">{{ n.title }}</div>
+                  <div class="notification-time">{{ formatTime(n.created_at) }}</div>
                 </div>
               </div>
             </div>
@@ -57,7 +65,6 @@
         </div>
       </el-popover>
 
-      <!-- User dropdown -->
       <el-dropdown trigger="click" @command="handleUserCommand">
         <div class="user-info">
           <el-avatar :size="28" class="user-avatar">
@@ -84,13 +91,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Fold, Expand, Monitor, Bell, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
+import { Fold, Expand, Monitor, Bell, ArrowDown, SwitchButton, Close } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
 import { useWsStore } from '@/stores/ws'
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
+import type { Notification } from '@/types'
 
 interface Props {
   collapsed?: boolean
@@ -127,12 +132,32 @@ function handleUserCommand(command: string) {
     authStore.logout()
   }
 }
+
+function handleNotificationClick(n: Notification) {
+  if (!n.is_read) {
+    notifStore.markAsRead(n.id)
+  }
+}
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  if (hours < 24) return `${hours} 小时前`
+  if (days < 7) return `${days} 天前`
+  return date.toLocaleDateString('zh-CN')
+}
 </script>
 
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
-// 深色顶部栏
 .app-header {
   height: $header-height;
   background: #1E293B;
@@ -218,9 +243,14 @@ function handleUserCommand(command: string) {
       padding: $spacing-sm;
       border-radius: $radius-base;
       cursor: pointer;
+      transition: background 0.2s;
 
       &:hover {
         background: $bg-tertiary;
+
+        .delete-btn {
+          opacity: 1;
+        }
       }
 
       &.is-unread {
@@ -228,21 +258,35 @@ function handleUserCommand(command: string) {
       }
 
       .notification-content {
+        .notification-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: $spacing-xs;
+
+          .notification-type {
+            font-size: $font-size-xs;
+            color: $text-secondary;
+            text-transform: capitalize;
+          }
+
+          .delete-btn {
+            opacity: 0;
+            padding: 2px;
+            transition: opacity 0.2s;
+          }
+        }
+
         .notification-title {
           font-size: $font-size-sm;
           color: $text-primary;
           margin-bottom: $spacing-xs;
+          line-height: 1.4;
         }
 
-        .notification-meta {
-          display: flex;
-          justify-content: space-between;
+        .notification-time {
           font-size: $font-size-xs;
-          color: $text-secondary;
-
-          .notification-type {
-            text-transform: capitalize;
-          }
+          color: $text-tertiary;
         }
       }
     }

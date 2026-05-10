@@ -1,9 +1,5 @@
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <h2 class="page-title">创建演练</h2>
-    </div>
-
     <div class="page-content">
       <el-steps :active="currentStep" finish-status="success" align-center class="create-steps">
         <el-step title="选择模板" />
@@ -231,7 +227,7 @@ loadTemplates()
     }
 
     .step-content {
-      min-height: 320px;
+      min-height: 200px;
       margin-bottom: $spacing-base;
 
       .template-card {

@@ -37,6 +37,19 @@ export const useNotificationStore = defineStore('notifications', () => {
     } catch { /* ignore */ }
   }
 
+  async function deleteNotification(id: number): Promise<void> {
+    try {
+      await notificationApi.delete(id)
+      const index = notifications.value.findIndex(n => n.id === id)
+      if (index !== -1) {
+        if (!notifications.value[index].is_read) {
+          unreadCount.value = Math.max(0, unreadCount.value - 1)
+        }
+        notifications.value.splice(index, 1)
+      }
+    } catch { /* ignore */ }
+  }
+
   function addNotification(n: Notification): void {
     notifications.value.unshift(n)
     if (!n.is_read) unreadCount.value++
@@ -44,6 +57,6 @@ export const useNotificationStore = defineStore('notifications', () => {
 
   return {
     notifications, unreadCount, unreadNotifications, recentNotifications,
-    fetchNotifications, markAsRead, markAllAsRead, addNotification,
+    fetchNotifications, markAsRead, markAllAsRead, deleteNotification, addNotification,
   }
 })

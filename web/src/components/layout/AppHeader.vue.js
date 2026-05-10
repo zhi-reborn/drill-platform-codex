@@ -1,10 +1,8 @@
 import { ref, computed, onMounted } from 'vue';
-import { Fold, Expand, Monitor, Bell, ArrowDown, SwitchButton } from '@element-plus/icons-vue';
+import { Fold, Expand, Monitor, Bell, ArrowDown, SwitchButton, Close } from '@element-plus/icons-vue';
 import { useAuthStore } from '@/stores/auth';
 import { useNotificationStore } from '@/stores/notifications';
 import { useWsStore } from '@/stores/ws';
-import { useRouter } from 'vue-router';
-const router = useRouter();
 const props = withDefaults(defineProps(), {
     collapsed: false
 });
@@ -30,6 +28,28 @@ function handleUserCommand(command) {
         authStore.logout();
     }
 }
+function handleNotificationClick(n) {
+    if (!n.is_read) {
+        notifStore.markAsRead(n.id);
+    }
+}
+function formatTime(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (minutes < 1)
+        return '刚刚';
+    if (minutes < 60)
+        return `${minutes} 分钟前`;
+    if (hours < 24)
+        return `${hours} 小时前`;
+    if (days < 7)
+        return `${days} 天前`;
+    return date.toLocaleDateString('zh-CN');
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_withDefaultsArg = (function (t) { return t; })({
     collapsed: false
@@ -38,6 +58,7 @@ const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['status-dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['delete-btn']} */ ;
 // CSS variable injection 
 // CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.header, __VLS_intrinsicElements.header)({
@@ -135,13 +156,13 @@ const __VLS_28 = {}.ElPopover;
 const __VLS_29 = __VLS_asFunctionalComponent(__VLS_28, new __VLS_28({
     visible: (__VLS_ctx.showNotifications),
     placement: "bottom-end",
-    width: (360),
+    width: (380),
     trigger: "click",
 }));
 const __VLS_30 = __VLS_29({
     visible: (__VLS_ctx.showNotifications),
     placement: "bottom-end",
-    width: (360),
+    width: (380),
     trigger: "click",
 }, ...__VLS_functionalComponentArgsRest(__VLS_29));
 __VLS_31.slots.default;
@@ -202,38 +223,40 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "popover-title" },
 });
-const __VLS_48 = {}.ElButton;
-/** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
-// @ts-ignore
-const __VLS_49 = __VLS_asFunctionalComponent(__VLS_48, new __VLS_48({
-    ...{ 'onClick': {} },
-    text: true,
-    size: "small",
-}));
-const __VLS_50 = __VLS_49({
-    ...{ 'onClick': {} },
-    text: true,
-    size: "small",
-}, ...__VLS_functionalComponentArgsRest(__VLS_49));
-let __VLS_52;
-let __VLS_53;
-let __VLS_54;
-const __VLS_55 = {
-    onClick: (__VLS_ctx.notifStore.markAllAsRead)
-};
-__VLS_51.slots.default;
-var __VLS_51;
+if (__VLS_ctx.notifStore.notifications.length > 0) {
+    const __VLS_48 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_49 = __VLS_asFunctionalComponent(__VLS_48, new __VLS_48({
+        ...{ 'onClick': {} },
+        text: true,
+        size: "small",
+    }));
+    const __VLS_50 = __VLS_49({
+        ...{ 'onClick': {} },
+        text: true,
+        size: "small",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_49));
+    let __VLS_52;
+    let __VLS_53;
+    let __VLS_54;
+    const __VLS_55 = {
+        onClick: (__VLS_ctx.notifStore.markAllAsRead)
+    };
+    __VLS_51.slots.default;
+    var __VLS_51;
+}
 const __VLS_56 = {}.ElScrollbar;
 /** @type {[typeof __VLS_components.ElScrollbar, typeof __VLS_components.elScrollbar, typeof __VLS_components.ElScrollbar, typeof __VLS_components.elScrollbar, ]} */ ;
 // @ts-ignore
 const __VLS_57 = __VLS_asFunctionalComponent(__VLS_56, new __VLS_56({
-    maxHeight: "400px",
+    maxHeight: "450px",
 }));
 const __VLS_58 = __VLS_57({
-    maxHeight: "400px",
+    maxHeight: "450px",
 }, ...__VLS_functionalComponentArgsRest(__VLS_57));
 __VLS_59.slots.default;
-if (__VLS_ctx.notifStore.recentNotifications.length === 0) {
+if (__VLS_ctx.notifStore.notifications.length === 0) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "empty-state" },
     });
@@ -241,24 +264,24 @@ if (__VLS_ctx.notifStore.recentNotifications.length === 0) {
     /** @type {[typeof __VLS_components.ElEmpty, typeof __VLS_components.elEmpty, ]} */ ;
     // @ts-ignore
     const __VLS_61 = __VLS_asFunctionalComponent(__VLS_60, new __VLS_60({
-        description: "暂无通知",
-        imageSize: (80),
+        description: "暂无消息",
+        imageSize: (60),
     }));
     const __VLS_62 = __VLS_61({
-        description: "暂无通知",
-        imageSize: (80),
+        description: "暂无消息",
+        imageSize: (60),
     }, ...__VLS_functionalComponentArgsRest(__VLS_61));
 }
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "notification-list" },
     });
-    for (const [n] of __VLS_getVForSourceType((__VLS_ctx.notifStore.recentNotifications))) {
+    for (const [n] of __VLS_getVForSourceType((__VLS_ctx.notifStore.notifications))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ onClick: (...[$event]) => {
-                    if (!!(__VLS_ctx.notifStore.recentNotifications.length === 0))
+                    if (!!(__VLS_ctx.notifStore.notifications.length === 0))
                         return;
-                    __VLS_ctx.notifStore.markAsRead(n.id);
+                    __VLS_ctx.handleNotificationClick(n);
                 } },
             key: (n.id),
             ...{ class: "notification-item" },
@@ -268,136 +291,175 @@ else {
             ...{ class: "notification-content" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "notification-title" },
-        });
-        (n.title);
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "notification-meta" },
+            ...{ class: "notification-header" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
             ...{ class: "notification-type" },
         });
         (n.type);
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        const __VLS_64 = {}.ElButton;
+        /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+        // @ts-ignore
+        const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
+            ...{ 'onClick': {} },
+            ...{ class: "delete-btn" },
+            text: true,
+            size: "small",
+        }));
+        const __VLS_66 = __VLS_65({
+            ...{ 'onClick': {} },
+            ...{ class: "delete-btn" },
+            text: true,
+            size: "small",
+        }, ...__VLS_functionalComponentArgsRest(__VLS_65));
+        let __VLS_68;
+        let __VLS_69;
+        let __VLS_70;
+        const __VLS_71 = {
+            onClick: (...[$event]) => {
+                if (!!(__VLS_ctx.notifStore.notifications.length === 0))
+                    return;
+                __VLS_ctx.notifStore.deleteNotification(n.id);
+            }
+        };
+        __VLS_67.slots.default;
+        const __VLS_72 = {}.ElIcon;
+        /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
+        // @ts-ignore
+        const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({}));
+        const __VLS_74 = __VLS_73({}, ...__VLS_functionalComponentArgsRest(__VLS_73));
+        __VLS_75.slots.default;
+        const __VLS_76 = {}.Close;
+        /** @type {[typeof __VLS_components.Close, ]} */ ;
+        // @ts-ignore
+        const __VLS_77 = __VLS_asFunctionalComponent(__VLS_76, new __VLS_76({}));
+        const __VLS_78 = __VLS_77({}, ...__VLS_functionalComponentArgsRest(__VLS_77));
+        var __VLS_75;
+        var __VLS_67;
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "notification-title" },
+        });
+        (n.title);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "notification-time" },
         });
-        (new Date(n.created_at).toLocaleString('zh-CN'));
+        (__VLS_ctx.formatTime(n.created_at));
     }
 }
 var __VLS_59;
 var __VLS_31;
-const __VLS_64 = {}.ElDropdown;
+const __VLS_80 = {}.ElDropdown;
 /** @type {[typeof __VLS_components.ElDropdown, typeof __VLS_components.elDropdown, typeof __VLS_components.ElDropdown, typeof __VLS_components.elDropdown, ]} */ ;
 // @ts-ignore
-const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
+const __VLS_81 = __VLS_asFunctionalComponent(__VLS_80, new __VLS_80({
     ...{ 'onCommand': {} },
     trigger: "click",
 }));
-const __VLS_66 = __VLS_65({
+const __VLS_82 = __VLS_81({
     ...{ 'onCommand': {} },
     trigger: "click",
-}, ...__VLS_functionalComponentArgsRest(__VLS_65));
-let __VLS_68;
-let __VLS_69;
-let __VLS_70;
-const __VLS_71 = {
+}, ...__VLS_functionalComponentArgsRest(__VLS_81));
+let __VLS_84;
+let __VLS_85;
+let __VLS_86;
+const __VLS_87 = {
     onCommand: (__VLS_ctx.handleUserCommand)
 };
-__VLS_67.slots.default;
+__VLS_83.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "user-info" },
 });
-const __VLS_72 = {}.ElAvatar;
+const __VLS_88 = {}.ElAvatar;
 /** @type {[typeof __VLS_components.ElAvatar, typeof __VLS_components.elAvatar, typeof __VLS_components.ElAvatar, typeof __VLS_components.elAvatar, ]} */ ;
 // @ts-ignore
-const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
+const __VLS_89 = __VLS_asFunctionalComponent(__VLS_88, new __VLS_88({
     size: (28),
     ...{ class: "user-avatar" },
 }));
-const __VLS_74 = __VLS_73({
+const __VLS_90 = __VLS_89({
     size: (28),
     ...{ class: "user-avatar" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_73));
-__VLS_75.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_89));
+__VLS_91.slots.default;
 (__VLS_ctx.userInitial);
-var __VLS_75;
+var __VLS_91;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "user-name" },
 });
 (__VLS_ctx.userName);
-const __VLS_76 = {}.ElIcon;
+const __VLS_92 = {}.ElIcon;
 /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
 // @ts-ignore
-const __VLS_77 = __VLS_asFunctionalComponent(__VLS_76, new __VLS_76({}));
-const __VLS_78 = __VLS_77({}, ...__VLS_functionalComponentArgsRest(__VLS_77));
-__VLS_79.slots.default;
-const __VLS_80 = {}.ArrowDown;
+const __VLS_93 = __VLS_asFunctionalComponent(__VLS_92, new __VLS_92({}));
+const __VLS_94 = __VLS_93({}, ...__VLS_functionalComponentArgsRest(__VLS_93));
+__VLS_95.slots.default;
+const __VLS_96 = {}.ArrowDown;
 /** @type {[typeof __VLS_components.ArrowDown, ]} */ ;
 // @ts-ignore
-const __VLS_81 = __VLS_asFunctionalComponent(__VLS_80, new __VLS_80({}));
-const __VLS_82 = __VLS_81({}, ...__VLS_functionalComponentArgsRest(__VLS_81));
-var __VLS_79;
+const __VLS_97 = __VLS_asFunctionalComponent(__VLS_96, new __VLS_96({}));
+const __VLS_98 = __VLS_97({}, ...__VLS_functionalComponentArgsRest(__VLS_97));
+var __VLS_95;
 {
-    const { dropdown: __VLS_thisSlot } = __VLS_67.slots;
-    const __VLS_84 = {}.ElDropdownMenu;
+    const { dropdown: __VLS_thisSlot } = __VLS_83.slots;
+    const __VLS_100 = {}.ElDropdownMenu;
     /** @type {[typeof __VLS_components.ElDropdownMenu, typeof __VLS_components.elDropdownMenu, typeof __VLS_components.ElDropdownMenu, typeof __VLS_components.elDropdownMenu, ]} */ ;
-    // @ts-ignore
-    const __VLS_85 = __VLS_asFunctionalComponent(__VLS_84, new __VLS_84({}));
-    const __VLS_86 = __VLS_85({}, ...__VLS_functionalComponentArgsRest(__VLS_85));
-    __VLS_87.slots.default;
-    const __VLS_88 = {}.ElDropdownItem;
-    /** @type {[typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, ]} */ ;
-    // @ts-ignore
-    const __VLS_89 = __VLS_asFunctionalComponent(__VLS_88, new __VLS_88({
-        disabled: true,
-    }));
-    const __VLS_90 = __VLS_89({
-        disabled: true,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_89));
-    __VLS_91.slots.default;
-    const __VLS_92 = {}.ElTag;
-    /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
-    // @ts-ignore
-    const __VLS_93 = __VLS_asFunctionalComponent(__VLS_92, new __VLS_92({
-        size: "small",
-        type: __VLS_ctx.roleType,
-    }));
-    const __VLS_94 = __VLS_93({
-        size: "small",
-        type: __VLS_ctx.roleType,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_93));
-    __VLS_95.slots.default;
-    (__VLS_ctx.roleName);
-    var __VLS_95;
-    var __VLS_91;
-    const __VLS_96 = {}.ElDropdownItem;
-    /** @type {[typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, ]} */ ;
-    // @ts-ignore
-    const __VLS_97 = __VLS_asFunctionalComponent(__VLS_96, new __VLS_96({
-        divided: true,
-        command: "logout",
-    }));
-    const __VLS_98 = __VLS_97({
-        divided: true,
-        command: "logout",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_97));
-    __VLS_99.slots.default;
-    const __VLS_100 = {}.ElIcon;
-    /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
     // @ts-ignore
     const __VLS_101 = __VLS_asFunctionalComponent(__VLS_100, new __VLS_100({}));
     const __VLS_102 = __VLS_101({}, ...__VLS_functionalComponentArgsRest(__VLS_101));
     __VLS_103.slots.default;
-    const __VLS_104 = {}.SwitchButton;
+    const __VLS_104 = {}.ElDropdownItem;
+    /** @type {[typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, ]} */ ;
+    // @ts-ignore
+    const __VLS_105 = __VLS_asFunctionalComponent(__VLS_104, new __VLS_104({
+        disabled: true,
+    }));
+    const __VLS_106 = __VLS_105({
+        disabled: true,
+    }, ...__VLS_functionalComponentArgsRest(__VLS_105));
+    __VLS_107.slots.default;
+    const __VLS_108 = {}.ElTag;
+    /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
+    // @ts-ignore
+    const __VLS_109 = __VLS_asFunctionalComponent(__VLS_108, new __VLS_108({
+        size: "small",
+        type: __VLS_ctx.roleType,
+    }));
+    const __VLS_110 = __VLS_109({
+        size: "small",
+        type: __VLS_ctx.roleType,
+    }, ...__VLS_functionalComponentArgsRest(__VLS_109));
+    __VLS_111.slots.default;
+    (__VLS_ctx.roleName);
+    var __VLS_111;
+    var __VLS_107;
+    const __VLS_112 = {}.ElDropdownItem;
+    /** @type {[typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, typeof __VLS_components.ElDropdownItem, typeof __VLS_components.elDropdownItem, ]} */ ;
+    // @ts-ignore
+    const __VLS_113 = __VLS_asFunctionalComponent(__VLS_112, new __VLS_112({
+        divided: true,
+        command: "logout",
+    }));
+    const __VLS_114 = __VLS_113({
+        divided: true,
+        command: "logout",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_113));
+    __VLS_115.slots.default;
+    const __VLS_116 = {}.ElIcon;
+    /** @type {[typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, typeof __VLS_components.ElIcon, typeof __VLS_components.elIcon, ]} */ ;
+    // @ts-ignore
+    const __VLS_117 = __VLS_asFunctionalComponent(__VLS_116, new __VLS_116({}));
+    const __VLS_118 = __VLS_117({}, ...__VLS_functionalComponentArgsRest(__VLS_117));
+    __VLS_119.slots.default;
+    const __VLS_120 = {}.SwitchButton;
     /** @type {[typeof __VLS_components.SwitchButton, ]} */ ;
     // @ts-ignore
-    const __VLS_105 = __VLS_asFunctionalComponent(__VLS_104, new __VLS_104({}));
-    const __VLS_106 = __VLS_105({}, ...__VLS_functionalComponentArgsRest(__VLS_105));
+    const __VLS_121 = __VLS_asFunctionalComponent(__VLS_120, new __VLS_120({}));
+    const __VLS_122 = __VLS_121({}, ...__VLS_functionalComponentArgsRest(__VLS_121));
+    var __VLS_119;
+    var __VLS_115;
     var __VLS_103;
-    var __VLS_99;
-    var __VLS_87;
 }
-var __VLS_67;
+var __VLS_83;
 /** @type {__VLS_StyleScopedClasses['app-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['header-left']} */ ;
 /** @type {__VLS_StyleScopedClasses['collapse-btn']} */ ;
@@ -415,9 +477,10 @@ var __VLS_67;
 /** @type {__VLS_StyleScopedClasses['notification-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['is-unread']} */ ;
 /** @type {__VLS_StyleScopedClasses['notification-content']} */ ;
-/** @type {__VLS_StyleScopedClasses['notification-title']} */ ;
-/** @type {__VLS_StyleScopedClasses['notification-meta']} */ ;
+/** @type {__VLS_StyleScopedClasses['notification-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['notification-type']} */ ;
+/** @type {__VLS_StyleScopedClasses['delete-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['notification-title']} */ ;
 /** @type {__VLS_StyleScopedClasses['notification-time']} */ ;
 /** @type {__VLS_StyleScopedClasses['user-info']} */ ;
 /** @type {__VLS_StyleScopedClasses['user-avatar']} */ ;
@@ -432,6 +495,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             Bell: Bell,
             ArrowDown: ArrowDown,
             SwitchButton: SwitchButton,
+            Close: Close,
             notifStore: notifStore,
             showNotifications: showNotifications,
             userInitial: userInitial,
@@ -442,6 +506,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             wsStatus: wsStatus,
             wsStatusText: wsStatusText,
             handleUserCommand: handleUserCommand,
+            handleNotificationClick: handleNotificationClick,
+            formatTime: formatTime,
         };
     },
     __typeEmits: {},

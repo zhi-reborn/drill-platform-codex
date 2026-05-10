@@ -1,34 +1,45 @@
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { Monitor } from '@element-plus/icons-vue';
-import BarChart from '@/components/charts/BarChart.vue';
-import LineChart from '@/components/charts/LineChart.vue';
 import dashboardData from '@/mock/data/dashboard.json';
+import instancesData from '@/mock/data/instances.json';
 const router = useRouter();
-const barChartData = computed(() => {
-    return dashboardData.by_category.map(item => ({
-        name: getCategoryLabel(item.category),
-        value: item.count,
-        category: item.category,
-    }));
-});
-const lineChartData = computed(() => {
-    return dashboardData.hourly_errors.map(item => ({
-        name: item.hour,
-        value: item.count,
-    }));
-});
+const selectorVisible = ref(false);
+const selectedDrillId = ref(null);
+const drillList = ref(instancesData);
 const recentActivity = computed(() => {
     return dashboardData.recent_activity.slice(0, 5);
 });
-function getCategoryLabel(category) {
+function getStatusType(status) {
     const map = {
-        disaster_recovery: '灾备切换',
-        degradation: '服务降级',
-        release: '发布演练',
-        security: '安全事件',
+        running: 'success',
+        paused: 'warning',
+        completed: 'info',
+        terminated: 'danger',
     };
-    return map[category] || category;
+    return map[status];
+}
+function getStatusLabel(status) {
+    const map = {
+        running: '进行中',
+        paused: '已暂停',
+        completed: '已完成',
+        terminated: '已终止',
+        pending: '待开始',
+    };
+    return map[status] || status;
+}
+function showDrillSelector() {
+    selectedDrillId.value = null;
+    selectorVisible.value = true;
+}
+function viewScreen() {
+    if (!selectedDrillId.value) {
+        ElMessage.warning('请选择演练');
+        return;
+    }
+    router.push(`/screen/${selectedDrillId.value}`);
 }
 function getActivityTypeTag(type) {
     const map = {
@@ -64,14 +75,10 @@ function formatDuration(seconds) {
     const secs = seconds % 60;
     return `${mins}m ${secs}s`;
 }
-function viewScreen() {
-    router.push('/screen/100');
-}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
-/** @type {__VLS_StyleScopedClasses['card-title']} */ ;
 // CSS variable injection 
 // CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -98,7 +105,7 @@ let __VLS_4;
 let __VLS_5;
 let __VLS_6;
 const __VLS_7 = {
-    onClick: (__VLS_ctx.viewScreen)
+    onClick: (__VLS_ctx.showDrillSelector)
 };
 __VLS_3.slots.default;
 const __VLS_8 = {}.ElIcon;
@@ -114,41 +121,152 @@ const __VLS_13 = __VLS_asFunctionalComponent(__VLS_12, new __VLS_12({}));
 const __VLS_14 = __VLS_13({}, ...__VLS_functionalComponentArgsRest(__VLS_13));
 var __VLS_11;
 var __VLS_3;
+const __VLS_16 = {}.ElDialog;
+/** @type {[typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, ]} */ ;
+// @ts-ignore
+const __VLS_17 = __VLS_asFunctionalComponent(__VLS_16, new __VLS_16({
+    modelValue: (__VLS_ctx.selectorVisible),
+    title: "选择演练",
+    width: "500px",
+}));
+const __VLS_18 = __VLS_17({
+    modelValue: (__VLS_ctx.selectorVisible),
+    title: "选择演练",
+    width: "500px",
+}, ...__VLS_functionalComponentArgsRest(__VLS_17));
+__VLS_19.slots.default;
+const __VLS_20 = {}.ElSelect;
+/** @type {[typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, ]} */ ;
+// @ts-ignore
+const __VLS_21 = __VLS_asFunctionalComponent(__VLS_20, new __VLS_20({
+    modelValue: (__VLS_ctx.selectedDrillId),
+    placeholder: "请选择演练",
+    filterable: true,
+    ...{ style: {} },
+}));
+const __VLS_22 = __VLS_21({
+    modelValue: (__VLS_ctx.selectedDrillId),
+    placeholder: "请选择演练",
+    filterable: true,
+    ...{ style: {} },
+}, ...__VLS_functionalComponentArgsRest(__VLS_21));
+__VLS_23.slots.default;
+for (const [drill] of __VLS_getVForSourceType((__VLS_ctx.drillList))) {
+    const __VLS_24 = {}.ElOption;
+    /** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+    // @ts-ignore
+    const __VLS_25 = __VLS_asFunctionalComponent(__VLS_24, new __VLS_24({
+        key: (drill.id),
+        label: (drill.name),
+        value: (drill.id),
+    }));
+    const __VLS_26 = __VLS_25({
+        key: (drill.id),
+        label: (drill.name),
+        value: (drill.id),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_25));
+    __VLS_27.slots.default;
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "drill-option" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (drill.name);
+    const __VLS_28 = {}.ElTag;
+    /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
+    // @ts-ignore
+    const __VLS_29 = __VLS_asFunctionalComponent(__VLS_28, new __VLS_28({
+        size: "small",
+        type: (__VLS_ctx.getStatusType(drill.status)),
+    }));
+    const __VLS_30 = __VLS_29({
+        size: "small",
+        type: (__VLS_ctx.getStatusType(drill.status)),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_29));
+    __VLS_31.slots.default;
+    (__VLS_ctx.getStatusLabel(drill.status));
+    var __VLS_31;
+    var __VLS_27;
+}
+var __VLS_23;
+{
+    const { footer: __VLS_thisSlot } = __VLS_19.slots;
+    const __VLS_32 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_33 = __VLS_asFunctionalComponent(__VLS_32, new __VLS_32({
+        ...{ 'onClick': {} },
+    }));
+    const __VLS_34 = __VLS_33({
+        ...{ 'onClick': {} },
+    }, ...__VLS_functionalComponentArgsRest(__VLS_33));
+    let __VLS_36;
+    let __VLS_37;
+    let __VLS_38;
+    const __VLS_39 = {
+        onClick: (...[$event]) => {
+            __VLS_ctx.selectorVisible = false;
+        }
+    };
+    __VLS_35.slots.default;
+    var __VLS_35;
+    const __VLS_40 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_41 = __VLS_asFunctionalComponent(__VLS_40, new __VLS_40({
+        ...{ 'onClick': {} },
+        type: "primary",
+        disabled: (!__VLS_ctx.selectedDrillId),
+    }));
+    const __VLS_42 = __VLS_41({
+        ...{ 'onClick': {} },
+        type: "primary",
+        disabled: (!__VLS_ctx.selectedDrillId),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_41));
+    let __VLS_44;
+    let __VLS_45;
+    let __VLS_46;
+    const __VLS_47 = {
+        onClick: (__VLS_ctx.viewScreen)
+    };
+    __VLS_43.slots.default;
+    var __VLS_43;
+}
+var __VLS_19;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "page-content" },
 });
-const __VLS_16 = {}.ElRow;
+const __VLS_48 = {}.ElRow;
 /** @type {[typeof __VLS_components.ElRow, typeof __VLS_components.elRow, typeof __VLS_components.ElRow, typeof __VLS_components.elRow, ]} */ ;
 // @ts-ignore
-const __VLS_17 = __VLS_asFunctionalComponent(__VLS_16, new __VLS_16({
+const __VLS_49 = __VLS_asFunctionalComponent(__VLS_48, new __VLS_48({
     gutter: (20),
     ...{ class: "stats-row" },
 }));
-const __VLS_18 = __VLS_17({
+const __VLS_50 = __VLS_49({
     gutter: (20),
     ...{ class: "stats-row" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_17));
-__VLS_19.slots.default;
-const __VLS_20 = {}.ElCol;
+}, ...__VLS_functionalComponentArgsRest(__VLS_49));
+__VLS_51.slots.default;
+const __VLS_52 = {}.ElCol;
 /** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
 // @ts-ignore
-const __VLS_21 = __VLS_asFunctionalComponent(__VLS_20, new __VLS_20({
+const __VLS_53 = __VLS_asFunctionalComponent(__VLS_52, new __VLS_52({
     span: (6),
 }));
-const __VLS_22 = __VLS_21({
+const __VLS_54 = __VLS_53({
     span: (6),
-}, ...__VLS_functionalComponentArgsRest(__VLS_21));
-__VLS_23.slots.default;
-const __VLS_24 = {}.ElCard;
+}, ...__VLS_functionalComponentArgsRest(__VLS_53));
+__VLS_55.slots.default;
+const __VLS_56 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
-const __VLS_25 = __VLS_asFunctionalComponent(__VLS_24, new __VLS_24({
+const __VLS_57 = __VLS_asFunctionalComponent(__VLS_56, new __VLS_56({
     ...{ class: "stat-card" },
 }));
-const __VLS_26 = __VLS_25({
+const __VLS_58 = __VLS_57({
     ...{ class: "stat-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_25));
-__VLS_27.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_57));
+__VLS_59.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "stat-label" },
 });
@@ -156,28 +274,28 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "stat-value" },
 });
 (__VLS_ctx.dashboardData.stats.total_drills);
-var __VLS_27;
-var __VLS_23;
-const __VLS_28 = {}.ElCol;
+var __VLS_59;
+var __VLS_55;
+const __VLS_60 = {}.ElCol;
 /** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
 // @ts-ignore
-const __VLS_29 = __VLS_asFunctionalComponent(__VLS_28, new __VLS_28({
+const __VLS_61 = __VLS_asFunctionalComponent(__VLS_60, new __VLS_60({
     span: (6),
 }));
-const __VLS_30 = __VLS_29({
+const __VLS_62 = __VLS_61({
     span: (6),
-}, ...__VLS_functionalComponentArgsRest(__VLS_29));
-__VLS_31.slots.default;
-const __VLS_32 = {}.ElCard;
+}, ...__VLS_functionalComponentArgsRest(__VLS_61));
+__VLS_63.slots.default;
+const __VLS_64 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
-const __VLS_33 = __VLS_asFunctionalComponent(__VLS_32, new __VLS_32({
+const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
     ...{ class: "stat-card" },
 }));
-const __VLS_34 = __VLS_33({
+const __VLS_66 = __VLS_65({
     ...{ class: "stat-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_33));
-__VLS_35.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_65));
+__VLS_67.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "stat-label" },
 });
@@ -185,28 +303,28 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "stat-value" },
 });
 (__VLS_ctx.dashboardData.stats.active_drills);
-var __VLS_35;
-var __VLS_31;
-const __VLS_36 = {}.ElCol;
+var __VLS_67;
+var __VLS_63;
+const __VLS_68 = {}.ElCol;
 /** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
 // @ts-ignore
-const __VLS_37 = __VLS_asFunctionalComponent(__VLS_36, new __VLS_36({
+const __VLS_69 = __VLS_asFunctionalComponent(__VLS_68, new __VLS_68({
     span: (6),
 }));
-const __VLS_38 = __VLS_37({
+const __VLS_70 = __VLS_69({
     span: (6),
-}, ...__VLS_functionalComponentArgsRest(__VLS_37));
-__VLS_39.slots.default;
-const __VLS_40 = {}.ElCard;
+}, ...__VLS_functionalComponentArgsRest(__VLS_69));
+__VLS_71.slots.default;
+const __VLS_72 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
-const __VLS_41 = __VLS_asFunctionalComponent(__VLS_40, new __VLS_40({
+const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
     ...{ class: "stat-card" },
 }));
-const __VLS_42 = __VLS_41({
+const __VLS_74 = __VLS_73({
     ...{ class: "stat-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_41));
-__VLS_43.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_73));
+__VLS_75.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "stat-label" },
 });
@@ -214,28 +332,28 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "stat-value success" },
 });
 (__VLS_ctx.dashboardData.stats.success_rate);
-var __VLS_43;
-var __VLS_39;
-const __VLS_44 = {}.ElCol;
+var __VLS_75;
+var __VLS_71;
+const __VLS_76 = {}.ElCol;
 /** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
 // @ts-ignore
-const __VLS_45 = __VLS_asFunctionalComponent(__VLS_44, new __VLS_44({
+const __VLS_77 = __VLS_asFunctionalComponent(__VLS_76, new __VLS_76({
     span: (6),
 }));
-const __VLS_46 = __VLS_45({
+const __VLS_78 = __VLS_77({
     span: (6),
-}, ...__VLS_functionalComponentArgsRest(__VLS_45));
-__VLS_47.slots.default;
-const __VLS_48 = {}.ElCard;
+}, ...__VLS_functionalComponentArgsRest(__VLS_77));
+__VLS_79.slots.default;
+const __VLS_80 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
-const __VLS_49 = __VLS_asFunctionalComponent(__VLS_48, new __VLS_48({
+const __VLS_81 = __VLS_asFunctionalComponent(__VLS_80, new __VLS_80({
     ...{ class: "stat-card" },
 }));
-const __VLS_50 = __VLS_49({
+const __VLS_82 = __VLS_81({
     ...{ class: "stat-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_49));
-__VLS_51.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_81));
+__VLS_83.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "stat-label" },
 });
@@ -243,212 +361,124 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "stat-value" },
 });
 (__VLS_ctx.formatDuration(__VLS_ctx.dashboardData.stats.avg_step_duration_seconds));
+var __VLS_83;
+var __VLS_79;
 var __VLS_51;
-var __VLS_47;
-var __VLS_19;
-const __VLS_52 = {}.ElRow;
-/** @type {[typeof __VLS_components.ElRow, typeof __VLS_components.elRow, typeof __VLS_components.ElRow, typeof __VLS_components.elRow, ]} */ ;
-// @ts-ignore
-const __VLS_53 = __VLS_asFunctionalComponent(__VLS_52, new __VLS_52({
-    gutter: (20),
-    ...{ class: "charts-row" },
-}));
-const __VLS_54 = __VLS_53({
-    gutter: (20),
-    ...{ class: "charts-row" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_53));
-__VLS_55.slots.default;
-const __VLS_56 = {}.ElCol;
-/** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
-// @ts-ignore
-const __VLS_57 = __VLS_asFunctionalComponent(__VLS_56, new __VLS_56({
-    span: (12),
-}));
-const __VLS_58 = __VLS_57({
-    span: (12),
-}, ...__VLS_functionalComponentArgsRest(__VLS_57));
-__VLS_59.slots.default;
-const __VLS_60 = {}.ElCard;
+const __VLS_84 = {}.ElCard;
 /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
 // @ts-ignore
-const __VLS_61 = __VLS_asFunctionalComponent(__VLS_60, new __VLS_60({
-    ...{ class: "chart-card" },
-}));
-const __VLS_62 = __VLS_61({
-    ...{ class: "chart-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_61));
-__VLS_63.slots.default;
-{
-    const { header: __VLS_thisSlot } = __VLS_63.slots;
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "card-title" },
-    });
-}
-/** @type {[typeof BarChart, ]} */ ;
-// @ts-ignore
-const __VLS_64 = __VLS_asFunctionalComponent(BarChart, new BarChart({
-    data: (__VLS_ctx.barChartData),
-    height: "320px",
-}));
-const __VLS_65 = __VLS_64({
-    data: (__VLS_ctx.barChartData),
-    height: "320px",
-}, ...__VLS_functionalComponentArgsRest(__VLS_64));
-var __VLS_63;
-var __VLS_59;
-const __VLS_67 = {}.ElCol;
-/** @type {[typeof __VLS_components.ElCol, typeof __VLS_components.elCol, typeof __VLS_components.ElCol, typeof __VLS_components.elCol, ]} */ ;
-// @ts-ignore
-const __VLS_68 = __VLS_asFunctionalComponent(__VLS_67, new __VLS_67({
-    span: (12),
-}));
-const __VLS_69 = __VLS_68({
-    span: (12),
-}, ...__VLS_functionalComponentArgsRest(__VLS_68));
-__VLS_70.slots.default;
-const __VLS_71 = {}.ElCard;
-/** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
-// @ts-ignore
-const __VLS_72 = __VLS_asFunctionalComponent(__VLS_71, new __VLS_71({
-    ...{ class: "chart-card" },
-}));
-const __VLS_73 = __VLS_72({
-    ...{ class: "chart-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_72));
-__VLS_74.slots.default;
-{
-    const { header: __VLS_thisSlot } = __VLS_74.slots;
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "card-title" },
-    });
-}
-/** @type {[typeof LineChart, ]} */ ;
-// @ts-ignore
-const __VLS_75 = __VLS_asFunctionalComponent(LineChart, new LineChart({
-    data: (__VLS_ctx.lineChartData),
-    height: "320px",
-}));
-const __VLS_76 = __VLS_75({
-    data: (__VLS_ctx.lineChartData),
-    height: "320px",
-}, ...__VLS_functionalComponentArgsRest(__VLS_75));
-var __VLS_74;
-var __VLS_70;
-var __VLS_55;
-const __VLS_78 = {}.ElCard;
-/** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
-// @ts-ignore
-const __VLS_79 = __VLS_asFunctionalComponent(__VLS_78, new __VLS_78({
+const __VLS_85 = __VLS_asFunctionalComponent(__VLS_84, new __VLS_84({
     ...{ class: "table-card" },
 }));
-const __VLS_80 = __VLS_79({
+const __VLS_86 = __VLS_85({
     ...{ class: "table-card" },
-}, ...__VLS_functionalComponentArgsRest(__VLS_79));
-__VLS_81.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_85));
+__VLS_87.slots.default;
 {
-    const { header: __VLS_thisSlot } = __VLS_81.slots;
+    const { header: __VLS_thisSlot } = __VLS_87.slots;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "card-title" },
     });
 }
-const __VLS_82 = {}.ElTable;
+const __VLS_88 = {}.ElTable;
 /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
 // @ts-ignore
-const __VLS_83 = __VLS_asFunctionalComponent(__VLS_82, new __VLS_82({
+const __VLS_89 = __VLS_asFunctionalComponent(__VLS_88, new __VLS_88({
     data: (__VLS_ctx.recentActivity),
     stripe: true,
     ...{ style: {} },
 }));
-const __VLS_84 = __VLS_83({
+const __VLS_90 = __VLS_89({
     data: (__VLS_ctx.recentActivity),
     stripe: true,
     ...{ style: {} },
-}, ...__VLS_functionalComponentArgsRest(__VLS_83));
-__VLS_85.slots.default;
-const __VLS_86 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_89));
+__VLS_91.slots.default;
+const __VLS_92 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_87 = __VLS_asFunctionalComponent(__VLS_86, new __VLS_86({
+const __VLS_93 = __VLS_asFunctionalComponent(__VLS_92, new __VLS_92({
     prop: "type",
     label: "类型",
     width: "120",
 }));
-const __VLS_88 = __VLS_87({
+const __VLS_94 = __VLS_93({
     prop: "type",
     label: "类型",
     width: "120",
-}, ...__VLS_functionalComponentArgsRest(__VLS_87));
-__VLS_89.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_93));
+__VLS_95.slots.default;
 {
-    const { default: __VLS_thisSlot } = __VLS_89.slots;
+    const { default: __VLS_thisSlot } = __VLS_95.slots;
     const [{ row }] = __VLS_getSlotParams(__VLS_thisSlot);
-    const __VLS_90 = {}.ElTag;
+    const __VLS_96 = {}.ElTag;
     /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
     // @ts-ignore
-    const __VLS_91 = __VLS_asFunctionalComponent(__VLS_90, new __VLS_90({
+    const __VLS_97 = __VLS_asFunctionalComponent(__VLS_96, new __VLS_96({
         type: (__VLS_ctx.getActivityTypeTag(row.type)),
         size: "small",
     }));
-    const __VLS_92 = __VLS_91({
+    const __VLS_98 = __VLS_97({
         type: (__VLS_ctx.getActivityTypeTag(row.type)),
         size: "small",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_91));
-    __VLS_93.slots.default;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_97));
+    __VLS_99.slots.default;
     (__VLS_ctx.getActivityLabel(row.type));
-    var __VLS_93;
+    var __VLS_99;
 }
-var __VLS_89;
-const __VLS_94 = {}.ElTableColumn;
+var __VLS_95;
+const __VLS_100 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_95 = __VLS_asFunctionalComponent(__VLS_94, new __VLS_94({
+const __VLS_101 = __VLS_asFunctionalComponent(__VLS_100, new __VLS_100({
     prop: "drill_name",
     label: "演练名称",
     minWidth: "180",
 }));
-const __VLS_96 = __VLS_95({
+const __VLS_102 = __VLS_101({
     prop: "drill_name",
     label: "演练名称",
     minWidth: "180",
-}, ...__VLS_functionalComponentArgsRest(__VLS_95));
-const __VLS_98 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_101));
+const __VLS_104 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_99 = __VLS_asFunctionalComponent(__VLS_98, new __VLS_98({
+const __VLS_105 = __VLS_asFunctionalComponent(__VLS_104, new __VLS_104({
     prop: "operator",
     label: "操作人",
     width: "100",
 }));
-const __VLS_100 = __VLS_99({
+const __VLS_106 = __VLS_105({
     prop: "operator",
     label: "操作人",
     width: "100",
-}, ...__VLS_functionalComponentArgsRest(__VLS_99));
-const __VLS_102 = {}.ElTableColumn;
+}, ...__VLS_functionalComponentArgsRest(__VLS_105));
+const __VLS_108 = {}.ElTableColumn;
 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
-const __VLS_103 = __VLS_asFunctionalComponent(__VLS_102, new __VLS_102({
+const __VLS_109 = __VLS_asFunctionalComponent(__VLS_108, new __VLS_108({
     prop: "created_at",
     label: "时间",
     width: "160",
 }));
-const __VLS_104 = __VLS_103({
+const __VLS_110 = __VLS_109({
     prop: "created_at",
     label: "时间",
     width: "160",
-}, ...__VLS_functionalComponentArgsRest(__VLS_103));
-__VLS_105.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_109));
+__VLS_111.slots.default;
 {
-    const { default: __VLS_thisSlot } = __VLS_105.slots;
+    const { default: __VLS_thisSlot } = __VLS_111.slots;
     const [{ row }] = __VLS_getSlotParams(__VLS_thisSlot);
     (__VLS_ctx.formatTime(row.created_at));
 }
-var __VLS_105;
-var __VLS_85;
-var __VLS_81;
+var __VLS_111;
+var __VLS_91;
+var __VLS_87;
 /** @type {__VLS_StyleScopedClasses['page-container']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-title']} */ ;
+/** @type {__VLS_StyleScopedClasses['drill-option']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-content']} */ ;
 /** @type {__VLS_StyleScopedClasses['stats-row']} */ ;
 /** @type {__VLS_StyleScopedClasses['stat-card']} */ ;
@@ -464,11 +494,6 @@ var __VLS_81;
 /** @type {__VLS_StyleScopedClasses['stat-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['stat-label']} */ ;
 /** @type {__VLS_StyleScopedClasses['stat-value']} */ ;
-/** @type {__VLS_StyleScopedClasses['charts-row']} */ ;
-/** @type {__VLS_StyleScopedClasses['chart-card']} */ ;
-/** @type {__VLS_StyleScopedClasses['card-title']} */ ;
-/** @type {__VLS_StyleScopedClasses['chart-card']} */ ;
-/** @type {__VLS_StyleScopedClasses['card-title']} */ ;
 /** @type {__VLS_StyleScopedClasses['table-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-title']} */ ;
 var __VLS_dollars;
@@ -476,17 +501,19 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             Monitor: Monitor,
-            BarChart: BarChart,
-            LineChart: LineChart,
             dashboardData: dashboardData,
-            barChartData: barChartData,
-            lineChartData: lineChartData,
+            selectorVisible: selectorVisible,
+            selectedDrillId: selectedDrillId,
+            drillList: drillList,
             recentActivity: recentActivity,
+            getStatusType: getStatusType,
+            getStatusLabel: getStatusLabel,
+            showDrillSelector: showDrillSelector,
+            viewScreen: viewScreen,
             getActivityTypeTag: getActivityTypeTag,
             getActivityLabel: getActivityLabel,
             formatTime: formatTime,
             formatDuration: formatDuration,
-            viewScreen: viewScreen,
         };
     },
 });

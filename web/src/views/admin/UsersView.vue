@@ -150,7 +150,7 @@ const columns: TableColumn[] = [
   { prop: 'name', label: '真实姓名', width: 100 },
   { prop: 'role', label: '角色', width: 100, slot: true },
   { prop: 'status', label: '状态', width: 80, slot: true },
-  { prop: 'department', label: '部门', width: 120 },
+  { prop: 'department', label: '部门' },
   { prop: 'phone', label: '手机号', width: 130 },
   { prop: 'last_login_at', label: '最后登录', width: 160, slot: true },
   { prop: 'actions', label: '操作', width: 120, slot: true },

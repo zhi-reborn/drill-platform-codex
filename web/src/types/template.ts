@@ -24,6 +24,7 @@ export interface StepTemplate {
   script?: string
   timeout_seconds: number
   order_index: number
+  assignee?: string
   assignee_role?: string
   pre_check?: string
   rollback_script?: string

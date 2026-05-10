@@ -97,12 +97,6 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "page-container" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "page-header" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2)({
-    ...{ class: "page-title" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "page-content" },
 });
 const __VLS_0 = {}.ElSteps;
@@ -462,8 +456,6 @@ else {
     var __VLS_101;
 }
 /** @type {__VLS_StyleScopedClasses['page-container']} */ ;
-/** @type {__VLS_StyleScopedClasses['page-header']} */ ;
-/** @type {__VLS_StyleScopedClasses['page-title']} */ ;
 /** @type {__VLS_StyleScopedClasses['page-content']} */ ;
 /** @type {__VLS_StyleScopedClasses['create-steps']} */ ;
 /** @type {__VLS_StyleScopedClasses['step-content']} */ ;

@@ -1,8 +1,8 @@
 @use 'variables' as *;
 
 @mixin page-container {
-  padding: $spacing-base;
-  min-height: calc(100vh - $header-height - 48px);
+  padding: 4px;
+  min-height: calc(100vh - $header-height - 88px);
 }
 
 @mixin page-header {
