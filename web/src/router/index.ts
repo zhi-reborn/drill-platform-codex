@@ -12,6 +12,13 @@ export interface RouteMeta {
 }
 
 const routes: RouteRecordRaw[] = [
+  // 首页 - 重定向到登录页
+  {
+    path: '/',
+    name: 'Home',
+    redirect: '/login',
+  },
+
   // 登录
   {
     path: '/login',

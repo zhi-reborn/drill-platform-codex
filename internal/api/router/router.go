@@ -4,6 +4,7 @@ import (
 	"drill-platform/internal/api/handler/auth"
 	"drill-platform/internal/api/handler/display"
 	"drill-platform/internal/api/handler/drill"
+	"drill-platform/internal/api/handler/notification"
 	"drill-platform/internal/api/handler/report"
 	"drill-platform/internal/api/handler/task"
 	"drill-platform/internal/api/handler/template"
@@ -26,6 +27,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	taskHandler := task.NewHandler(services.TaskService)
 	displayHandler := display.NewHandler(services.DisplayService)
 	reportHandler := report.NewHandler(services.ReportService)
+	notificationHandler := notification.NewHandler(services.NotificationService)
 
 	jwtAuth := middleware.JWTAuth(middleware.JWTConfig{Secret: jwtSecret})
 
@@ -62,6 +64,11 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 			v1.GET("/drills/:id/report", reportHandler.GetReport)
 			v1.POST("/drills/:id/report/export", reportHandler.ExportPDF)
+
+			v1.GET("/notifications", notificationHandler.List)
+			v1.POST("/notifications/:id/read", notificationHandler.MarkAsRead)
+			v1.POST("/notifications/read-all", notificationHandler.MarkAllAsRead)
+			v1.DELETE("/notifications/:id", notificationHandler.Delete)
 		}
 	}
 

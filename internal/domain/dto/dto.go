@@ -1,5 +1,7 @@
 package dto
 
+import "drill-platform/internal/domain/entity"
+
 type LoginRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
 	Password string `json:"password" binding:"required,min=6,max=100"`
@@ -107,4 +109,24 @@ type WebSocketMessage struct {
 	DrillID   uint        `json:"drill_id"`
 	Payload   interface{} `json:"payload"`
 	Timestamp int64       `json:"timestamp"`
+}
+
+type NotificationQuery struct {
+	Page       int  `form:"page"`
+	PageSize   int  `form:"page_size"`
+	UnreadOnly bool `form:"unread_only"`
+}
+
+func (q *NotificationQuery) Normalize() {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.PageSize < 1 || q.PageSize > 100 {
+		q.PageSize = 10
+	}
+}
+
+type NotificationListResponse struct {
+	Total int64                    `json:"total"`
+	Items []entity.Notification `json:"items"`
 }
