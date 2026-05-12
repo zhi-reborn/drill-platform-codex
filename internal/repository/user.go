@@ -53,3 +53,9 @@ func (r *UserRepo) Update(user *entity.User) error {
 func (r *UserRepo) Delete(id uint64) error {
 	return DB.Delete(&entity.User{}, id).Error
 }
+
+func (r *UserRepo) ListAll() ([]entity.User, error) {
+	var users []entity.User
+	err := DB.Where("status = 1").Order("role, id").Find(&users).Error
+	return users, err
+}

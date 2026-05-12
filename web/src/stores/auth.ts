@@ -54,14 +54,21 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loginWithCredentials(credentials: LoginCredentials): Promise<void> {
     const response = await authApi.login(credentials)
-    token.value = response.access_token
-    refreshToken.value = response.refresh_token
-    await fetchCurrentUser()
+    token.value = response.token
+    refreshToken.value = response.token
+    user.value = {
+      user_id: response.user_id,
+      username: response.username,
+      name: response.real_name,
+      role: response.role as Role,
+      department: response.department,
+      status: 'active',
+    }
     localStorage.setItem('drill_auth', JSON.stringify({
-      access_token: response.access_token,
-      refresh_token: response.refresh_token,
-      userId: user.value?.id,
+      access_token: response.token,
+      refresh_token: response.token,
     }))
+    localStorage.setItem('drill_user', JSON.stringify(user.value))
   }
 
   async function loginWithUser(userObj: User): Promise<void> {
@@ -80,8 +87,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchCurrentUser(): Promise<void> {
     try {
       const currentUser = await authApi.getCurrentUser()
+      console.log('[Auth] fetchCurrentUser success:', currentUser)
       user.value = currentUser
-    } catch {
+    } catch (err) {
+      console.error('[Auth] fetchCurrentUser failed:', err)
       user.value = null
     }
   }

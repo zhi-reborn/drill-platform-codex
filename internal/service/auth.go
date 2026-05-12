@@ -75,3 +75,7 @@ func (s *AuthService) generateToken(user *entity.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
 }
+
+func (s *AuthService) ListUsers() ([]entity.User, error) {
+	return s.userRepo.ListAll()
+}

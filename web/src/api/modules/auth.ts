@@ -19,7 +19,7 @@ export const authApi = {
 
   getCurrentUser: () => {
     return apiRequest<User>({
-      url: '/api/v1/auth/current',
+      url: '/api/v1/auth/me',
       method: 'GET',
     })
   },
@@ -28,6 +28,20 @@ export const authApi = {
     return apiRequest<TokenResponse>({
       url: '/api/v1/auth/refresh',
       method: 'POST',
+    })
+  },
+
+  devUsers: () => {
+    return apiRequest<Array<{
+      id: number
+      username: string
+      real_name: string
+      role: string
+      department: string
+      status: number
+    }>>({
+      url: '/api/v1/auth/dev-users',
+      method: 'GET',
     })
   },
 }

@@ -44,3 +44,12 @@ func (h *Handler) GetCurrentUser(c *gin.Context) {
 		"role":     middleware.GetRole(c),
 	})
 }
+
+func (h *Handler) ListUsers(c *gin.Context) {
+	users, err := h.authService.ListUsers()
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, users)
+}

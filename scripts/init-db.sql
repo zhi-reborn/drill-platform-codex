@@ -4,7 +4,6 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 创建数据库
 CREATE DATABASE IF NOT EXISTS drill_platform DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE drill_platform;
 
@@ -133,4 +132,10 @@ CREATE TABLE `drill_assignee` (
     KEY `idx_drill_instance_id` (`drill_instance_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练人员分配表';
 
-SET FOREIGN_KEY_CHECKS = 1;
+-- 用户数据 (密码: admin123, bcrypt hash)
+INSERT INTO `user` (`username`, `real_name`, `password_hash`, `role`, `department`, `status`) VALUES
+('admin', '系统管理员', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'admin', '技术部', 1),
+('director1', '张指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1),
+('executor1', '李执行', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'executor', '研发部', 1),
+('viewer1', '王观察', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'viewer', '测试部', 1),
+('director2', '刘指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1);

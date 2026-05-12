@@ -31,13 +31,13 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 	jwtAuth := middleware.JWTAuth(middleware.JWTConfig{Secret: jwtSecret})
 
-	v1 := r.Group("/api/v1")
+v1 := r.Group("/api/v1")
 	{
 		v1.POST("/auth/login", authHandler.Login)
+		v1.GET("/auth/dev-users", authHandler.ListUsers)
 
 		v1.Use(jwtAuth)
 		{
-			v1.POST("/auth/logout", authHandler.Logout)
 			v1.GET("/auth/me", authHandler.GetCurrentUser)
 
 			v1.GET("/templates", templateHandler.List)

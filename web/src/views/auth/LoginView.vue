@@ -37,13 +37,13 @@
         <div v-else-if="authMode === 'dev'" class="dev-mode">
           <el-select v-model="selectedUser" filterable placeholder="请选择登录用户" size="large" class="user-select">
             <el-option
-              v-for="u in activeUsers"
+              v-for="u in devUsers"
               :key="u.id"
-              :label="u.name"
+              :label="u.real_name || u.username"
               :value="u.id"
             >
               <div class="user-option">
-                <span>{{ u.name }} / {{ u.username }}</span>
+                <span>{{ u.real_name || u.username }} / {{ u.username }}</span>
                 <el-tag :size="'small'" :type="roleTagType(u.role) as 'primary' | 'success' | 'warning' | 'info' | 'danger'">{{ roleLabel(u.role) }}</el-tag>
               </div>
             </el-option>
@@ -111,8 +111,8 @@ import { useRouter } from 'vue-router'
 import { User, Lock, Connection, CircleCheck, Monitor } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import type { User as UserType, Role } from '@/types'
-import usersData from '@/mock/data/users.json'
+import axios from 'axios'
+import type { Role } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -123,9 +123,36 @@ const error = ref('')
 const remember = ref(false)
 const formRef = ref()
 
-// Dev mode
+interface DevUser {
+  id: number
+  username: string
+  real_name: string
+  role: string
+  department: string
+}
+
 const selectedUser = ref<number | null>(null)
-const activeUsers = usersData.filter((u) => u.status === 'active') as UserType[]
+const devUsers = ref<DevUser[]>([])
+
+async function fetchDevUsers() {
+  const urls = [
+    'http://localhost:8080/api/v1/auth/dev-users',
+    'http://host.docker.internal:8080/api/v1/auth/dev-users',
+    '/api/v1/auth/dev-users',
+  ]
+  let lastError = null
+  for (const url of urls) {
+    try {
+      const response = await axios.get(url)
+      devUsers.value = response.data.data
+      return
+    } catch (e: unknown) {
+      lastError = e
+      console.warn(`Failed to fetch from ${url}, trying next...`)
+    }
+  }
+  console.error('All fallback URLs exhausted:', lastError)
+}
 
 // Local mode
 const form = reactive({ username: '', password: '' })
@@ -135,13 +162,13 @@ const rules = {
 }
 const canSubmit = computed(() => form.username.length >= 3 && form.password.length >= 6)
 
-function roleLabel(role: Role): string {
-  const map: Record<Role, string> = { admin: '管理员', director: '指挥员', executor: '执行者', viewer: '观察者' }
+function roleLabel(role: string): string {
+  const map: Record<string, string> = { admin: '管理员', director: '指挥员', executor: '执行者', viewer: '观察者' }
   return map[role] || role
 }
 
-function roleTagType(role: Role): string {
-  const map: Record<Role, string> = { admin: 'danger', director: 'warning', executor: 'success', viewer: 'info' }
+function roleTagType(role: string): string {
+  const map: Record<string, string> = { admin: 'danger', director: 'warning', executor: 'success', viewer: 'info' }
   return map[role]
 }
 
@@ -160,10 +187,31 @@ async function handleDevLogin() {
   loading.value = true
   error.value = ''
   try {
-    const user = activeUsers.find(u => u.id === selectedUser.value)!
-    await authStore.loginWithUser(user)
-    ElMessage.success(`欢迎回来，${user.name}`)
-    router.push(roleDashboards[user.role])
+    const user = devUsers.value.find(u => u.id === selectedUser.value)!
+    const { username } = user
+    const baseUrl = 'http://localhost:8080'
+    const response = await axios.post(`${baseUrl}/api/v1/auth/login`, {
+      username,
+      password: 'admin123'
+    })
+    const data = response.data.data
+    authStore.token = data.token
+    authStore.refreshToken = data.token
+    authStore.user = {
+      user_id: data.user_id,
+      username: data.username,
+      name: data.real_name,
+      role: data.role as Role,
+      department: data.department,
+      status: 'active' as const,
+    }
+    localStorage.setItem('drill_auth', JSON.stringify({
+      access_token: data.token,
+      refresh_token: data.token,
+    }))
+    localStorage.setItem('drill_user', JSON.stringify(authStore.user))
+    ElMessage.success(`欢迎回来，${user.real_name || user.username}`)
+    router.push(roleDashboards[user.role as Role] || '/viewer')
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : '登录失败'
   } finally {
@@ -191,10 +239,18 @@ async function handleCasLogin() {
 }
 
 // Restore session on mount
-onMounted(() => {
+onMounted(async () => {
   authStore.restoreSession()
   if (authStore.isAuthenticated && authStore.user) {
-    router.push(roleDashboards[authStore.user.role])
+    router.push(roleDashboards[authStore.user.role as Role] || '/viewer')
+    return
+  }
+  if (authMode.value === 'dev') {
+    try {
+      await fetchDevUsers()
+    } catch (e) {
+      console.error('Failed to load users:', e)
+    }
   }
 })
 </script>

@@ -1,17 +1,18 @@
 import type { Role } from './common'
 
 export interface User {
-  id: number
+  user_id: number
   username: string
-  name: string
-  email: string
-  role: Role
+  real_name?: string
+  name?: string
+  email?: string
+  role: Role | string
   phone?: string
   department?: string
-  status: 'active' | 'disabled' | 'locked'
+  status?: 'active' | 'disabled' | 'locked'
   last_login_at?: string
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface LoginCredentials {
@@ -20,8 +21,10 @@ export interface LoginCredentials {
 }
 
 export interface TokenResponse {
-  access_token: string
-  refresh_token: string
-  expires_in: number
-  token_type: 'Bearer'
+  token: string
+  user_id: number
+  username: string
+  real_name: string
+  role: string
+  department: string
 }

@@ -48,7 +48,6 @@ services:
     restart: "no"
     ports:
       - "8080:8080"
-      - "8081:8081"
     volumes:
       - .:/app
       - /home/brent/go/pkg/mod:/go/pkg/mod
@@ -69,8 +68,9 @@ services:
     container_name: drill-frontend-dev
     restart: "no"
     environment:
-      VITE_API_BASE_URL: http://localhost:8080/api
-      VITE_WS_URL: ws://localhost:8081
+      VITE_API_BASE_URL: /api
+      VITE_BACKEND_URL: http://host.docker.internal:8080
+      VITE_WS_URL: ws://host.docker.internal:8080
       VITE_AUTH_MODE: dev
       VITE_USE_MOCK: "false"
       VITE_APP_TITLE: 生产演练平台 - DEV
