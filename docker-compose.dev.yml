@@ -46,26 +46,12 @@ services:
       dockerfile: Dockerfile-dev
     container_name: drill-backend-dev
     restart: "no"
-    environment:
-      APP_ENV: development
-      APP_PORT: 8080
-      WS_PORT: 8081
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: ${MYSQL_USER:-drill_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-drill_password123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-drill_platform}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      JWT_EXPIRE: ${JWT_EXPIRE:-24h}
     ports:
-      - "8070:8070"
-      - "8071:8071"
+      - "8080:8080"
+      - "8081:8081"
     volumes:
       - .:/app
-      - go_cache:/go/pkg/mod
+      - /home/brent/go/pkg/mod:/go/pkg/mod
     depends_on:
       mysql:
         condition: service_healthy
@@ -83,8 +69,8 @@ services:
     container_name: drill-frontend-dev
     restart: "no"
     environment:
-      VITE_API_BASE_URL: http://localhost:8070/api
-      VITE_WS_URL: ws://localhost:8071
+      VITE_API_BASE_URL: http://localhost:8080/api
+      VITE_WS_URL: ws://localhost:8081
       VITE_AUTH_MODE: dev
       VITE_USE_MOCK: "false"
       VITE_APP_TITLE: 生产演练平台 - DEV

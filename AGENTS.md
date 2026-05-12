@@ -39,7 +39,7 @@ docker-compose -f docker-compose.dev.yml down -v
 
 - 前端界面：http://localhost:5173
 - API 服务：http://localhost:8080
-- WebSocket: ws://localhost:8071
+- WebSocket: ws://localhost:8081
 - MySQL: localhost:3306
 - Redis: localhost:6379
 - 默认账户：`admin` / `admin123`

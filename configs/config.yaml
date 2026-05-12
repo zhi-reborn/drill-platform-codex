@@ -6,16 +6,16 @@ server:
   
 database:
   driver: mysql
-  host: localhost
+  host: mysql
   port: 3306
-  user: root
-  password: "rootpassword123"
+  user: drill_user
+  password: drill_password123
   database: drill_platform
   maxIdleConns: 10
   maxOpenConns: 100
 
 redis:
-  host: localhost
+  host: redis
   port: 6379
   password: ""
   db: 0
