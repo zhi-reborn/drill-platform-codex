@@ -1,0 +1,117 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: drill-mysql-dev
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-drill_platform}
+      MYSQL_USER: ${MYSQL_USER:-drill_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-drill_password123}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./scripts/init-notifications.sql:/docker-entrypoint-initdb.d/notifications.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drill-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: drill-redis-dev
+    restart: "no"
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - drill-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile-dev
+    container_name: drill-backend-dev
+    restart: "no"
+    environment:
+      APP_ENV: development
+      APP_PORT: 8080
+      WS_PORT: 8081
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-drill_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-drill_password123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-drill_platform}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_EXPIRE: ${JWT_EXPIRE:-24h}
+    ports:
+      - "8070:8070"
+      - "8071:8071"
+    volumes:
+      - .:/app
+      - go_cache:/go/pkg/mod
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - drill-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web/Dockerfile-dev
+    container_name: drill-frontend-dev
+    restart: "no"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8070/api
+      VITE_WS_URL: ws://localhost:8071
+      VITE_AUTH_MODE: dev
+      VITE_USE_MOCK: "false"
+      VITE_APP_TITLE: 生产演练平台 - DEV
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - vite_cache:/app/node_modules/.vite
+    depends_on:
+      - backend
+    networks:
+      - drill-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  drill-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  go_cache:
+    driver: local
+  node_modules:
+    driver: local
+  vite_cache:
+    driver: local

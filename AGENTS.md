@@ -12,21 +12,36 @@
 
 ### 开发模式
 
-**重要**：不使用docker，前后端进程必须能够脱离当前终端独立运行。
+**推荐**：使用 docker-compose 进行开发环境联调（WSL 环境）
 
 ```bash
-# 后端开发
-cd cmd/server && nohup go run main.go
+# 首次使用前 - 安装前端依赖（必须）
+cd web && npm install && cd ..
 
-# 前端开发
-cd web && npm install && nohup npm run dev
+# 启动所有服务（源码挂载模式）
+docker-compose -f docker-compose.dev.yml up
+
+# 后台运行
+docker-compose -f docker-compose.dev.yml up -d
+
+# 查看日志
+docker-compose -f docker-compose.dev.yml logs -f
+
+# 停止并清理
+docker-compose -f docker-compose.dev.yml down
+
+# 清理数据卷（重置数据库）
+docker-compose -f docker-compose.dev.yml down -v
 ```
+
 
 ### 访问地址
 
-- 前端界面：http://localhost
+- 前端界面：http://localhost:5173
 - API 服务：http://localhost:8080
-- WebSocket: ws://localhost:8081
+- WebSocket: ws://localhost:8071
+- MySQL: localhost:3306
+- Redis: localhost:6379
 - 默认账户：`admin` / `admin123`
 
 ---

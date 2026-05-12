@@ -1,0 +1,10 @@
+# 后端开发 Dockerfile - 源码挂载模式
+FROM golang:1.23-alpine
+
+RUN apk add --no-cache git make curl
+
+WORKDIR /app
+
+EXPOSE 8080 8081
+
+CMD ["sh", "-c", "go run ./cmd/server/main.go"]

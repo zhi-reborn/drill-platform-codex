@@ -35,6 +35,6 @@ vendor/
 .opencode/
 web/node_modules/
 openspec/
-playwright/
 .worktrees/
 docs/superpowers/
+tests/
