@@ -144,7 +144,9 @@ async function fetchDevUsers() {
   for (const url of urls) {
     try {
       const response = await axios.get(url)
-      devUsers.value = response.data.data
+      // 后端返回格式：{ code: 0, message: 'success', data: { items: [...], total, page, page_size } }
+      const backendData = response.data.data
+      devUsers.value = backendData.items || backendData.list || []
       return
     } catch (e: unknown) {
       lastError = e
@@ -261,7 +263,7 @@ onMounted(async () => {
 .login-page {
   height: 100vh;
   display: flex;
-  overflow: hidden;
+  // 移除 overflow: hidden 以允许下拉框显示
 }
 
 .login-brand {
@@ -426,5 +428,36 @@ onMounted(async () => {
 
 :deep(.el-form-item) {
   margin-bottom: 16px;
+}
+
+// 修复下拉框显示问题
+:deep(.el-select) {
+  width: 100%;
+}
+
+:deep(.el-select__wrapper) {
+  width: 100%;
+}
+
+:deep(.el-popper) {
+  z-index: 9999 !important;
+}
+
+:deep(.el-select-dropdown) {
+  z-index: 9999 !important;
+  background-color: #1A1F2E !important;
+  border: 1px solid #30363D !important;
+}
+
+:deep(.el-select-dropdown__item) {
+  color: #d4d8dd !important;
+  
+  &.hover {
+    background-color: #0D1117 !important;
+  }
+  
+  &.selected {
+    color: #55C3D3 !important;
+  }
 }
 </style>
