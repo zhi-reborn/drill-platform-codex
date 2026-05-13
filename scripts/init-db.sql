@@ -14,6 +14,7 @@ CREATE TABLE `user` (
     `username` VARCHAR(64) NOT NULL COMMENT '用户名',
     `real_name` VARCHAR(64) NOT NULL COMMENT '真实姓名',
     `password_hash` VARCHAR(256) NOT NULL COMMENT '密码哈希 (bcrypt)',
+    `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
     `role` VARCHAR(32) NOT NULL COMMENT '角色：admin/director/executor/viewer',
     `department` VARCHAR(64) DEFAULT NULL COMMENT '部门',
     `phone` VARCHAR(20) DEFAULT NULL COMMENT '手机号',

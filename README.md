@@ -47,23 +47,6 @@ drill-platform/
 ```
 
 
-## 开发模式
-
-### 后端开发
-
-```bash
-cd cmd/server
-nohup go run main.go
-```
-
-### 前端开发
-
-```bash
-cd web
-npm install
-nohup npm run dev
-```
-
 ## 核心设计原则
 
 - **轻量优先**: MVP 阶段自研轻量级状态机引擎，不引入重型工作流引擎

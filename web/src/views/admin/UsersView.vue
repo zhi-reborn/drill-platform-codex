@@ -32,7 +32,7 @@
         :data="filteredUsers"
         :loading="loading"
         pagination
-        :total="filteredUsers.length"
+        :total="total"
       >
         <template #role="{ row }">
           <el-tag :type="getRoleTagType(row.role)" size="small">
@@ -40,8 +40,8 @@
           </el-tag>
         </template>
         <template #status="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
-            {{ row.status === 'active' ? '正常' : '禁用' }}
+          <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+            {{ row.status === 1 ? '正常' : '禁用' }}
           </el-tag>
         </template>
         <template #last_login_at="{ row }">
@@ -49,7 +49,7 @@
         </template>
         <template #actions="{ row }">
           <ActionConfirm
-            v-if="row.status === 'active'"
+            v-if="row.status === 1"
             message="确认要禁用该用户吗？禁用后将无法登录系统。"
             danger
             size="small"
@@ -128,13 +128,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
 import { userApi } from '@/api/modules/user'
-import usersData from '@/mock/data/users.json'
+import type { User } from '@/types'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -142,17 +142,36 @@ const showCreateDialog = ref(false)
 const searchQuery = ref('')
 const formRef = ref<FormInstance>()
 
-const users = ref(usersData)
+const users = ref<User[]>([])
+const total = ref(0)
+
+async function loadUsers() {
+  loading.value = true
+  try {
+    const res = await userApi.getList({ page: 1, page_size: 100 })
+    users.value = res.items || []
+    total.value = res.total || 0
+  } catch (error) {
+    console.error('Failed to load users:', error)
+    ElMessage.error('加载用户列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadUsers()
+})
 
 // 表格列定义
 const columns: TableColumn[] = [
   { prop: 'username', label: '用户名', width: 120 },
-  { prop: 'name', label: '真实姓名', width: 100 },
+  { prop: 'real_name', label: '真实姓名', width: 100 },
   { prop: 'role', label: '角色', width: 100, slot: true },
   { prop: 'status', label: '状态', width: 80, slot: true },
   { prop: 'department', label: '部门' },
   { prop: 'phone', label: '手机号', width: 130 },
-  { prop: 'last_login_at', label: '最后登录', width: 160, slot: true },
+  { prop: 'created_at', label: '创建时间', width: 160 },
   { prop: 'actions', label: '操作', width: 120, slot: true },
 ]
 
@@ -189,8 +208,8 @@ const filteredUsers = computed(() => {
   return users.value.filter(
     (user) =>
       user.username.toLowerCase().includes(query) ||
-      user.name.toLowerCase().includes(query) ||
-      user.department.toLowerCase().includes(query)
+      user.real_name.toLowerCase().includes(query) ||
+      (user.department && user.department.toLowerCase().includes(query))
   )
 })
 
@@ -230,22 +249,22 @@ function handleSearch() {
   // 搜索逻辑已在 computed 中处理
 }
 
-async function handleDisableUser(user: typeof usersData[0]) {
+async function handleDisableUser(user: User) {
   try {
-    await userApi.update(user.id, { status: 'disabled' })
-    user.status = 'disabled'
+    await userApi.update(user.id, { status: 0 as any })
     ElMessage.success('用户已禁用')
+    loadUsers()
   } catch (error) {
     ElMessage.error('操作失败')
     console.error('Failed to disable user:', error)
   }
 }
 
-async function handleEnableUser(user: typeof usersData[0]) {
+async function handleEnableUser(user: User) {
   try {
-    await userApi.update(user.id, { status: 'active' })
-    user.status = 'active'
+    await userApi.update(user.id, { status: 1 as any })
     ElMessage.success('用户已启用')
+    loadUsers()
   } catch (error) {
     ElMessage.error('操作失败')
     console.error('Failed to enable user:', error)
@@ -267,19 +286,11 @@ async function handleCreateUser() {
       phone: createForm.value.phone || undefined,
       department: createForm.value.department || undefined,
       password: createForm.value.password,
-    })
+    } as any)
 
     ElMessage.success('用户创建成功')
     showCreateDialog.value = false
-    // 刷新列表（mock 模式下添加本地数据）
-    users.value.unshift({
-      id: Date.now(),
-      ...createForm.value,
-      status: 'active',
-      last_login_at: '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    loadUsers()
   } catch (error: any) {
     if (error.message && !error.message.includes('validate')) {
       ElMessage.error('创建失败')

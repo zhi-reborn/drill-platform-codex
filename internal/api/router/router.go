@@ -40,6 +40,12 @@ v1 := r.Group("/api/v1")
 		{
 			v1.GET("/auth/me", authHandler.GetCurrentUser)
 
+			v1.GET("/users", authHandler.ListUsers)
+			v1.GET("/users/:id", authHandler.GetUser)
+			v1.POST("/users", middleware.RequireAdmin(), authHandler.CreateUser)
+			v1.PUT("/users/:id", middleware.RequireAdmin(), authHandler.UpdateUser)
+			v1.DELETE("/users/:id", middleware.RequireAdmin(), authHandler.DeleteUser)
+
 			v1.GET("/templates", templateHandler.List)
 			v1.GET("/templates/:id", templateHandler.GetDetail)
 			v1.POST("/templates", middleware.RequireAdmin(), templateHandler.Create)

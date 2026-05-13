@@ -130,3 +130,39 @@ type NotificationListResponse struct {
 	Total int64                    `json:"total"`
 	Items []entity.Notification `json:"items"`
 }
+
+// ========== 用户管理相关 DTO ==========
+
+type CreateUserRequest struct {
+	Username   string `json:"username" binding:"required,min=3,max=50"`
+	Password   string `json:"password" binding:"required,min=6,max=100"`
+	RealName   string `json:"real_name" binding:"required,min=2,max=64"`
+	Email      string `json:"email" binding:"required,email"`
+	Role       string `json:"role" binding:"required,oneof=admin director executor viewer"`
+	Phone      string `json:"phone"`
+	Department string `json:"department"`
+}
+
+type UpdateUserRequest struct {
+	RealName   string `json:"real_name" binding:"min=2,max=64"`
+	Email      string `json:"email" binding:"email"`
+	Role       string `json:"role" binding:"oneof=admin director executor viewer"`
+	Phone      string `json:"phone"`
+	Department string `json:"department"`
+	Status     *int8  `json:"status" binding:"omitempty,oneof=0 1"`
+}
+
+type UserQuery struct {
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+	Role     string `form:"role"`
+}
+
+func (q *UserQuery) Normalize() {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.PageSize < 1 || q.PageSize > 100 {
+		q.PageSize = 20
+	}
+}

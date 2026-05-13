@@ -29,7 +29,10 @@ export const userApi = {
     return apiRequest<User>({
       url: '/api/v1/users',
       method: 'POST',
-      data,
+      data: {
+        ...data,
+        real_name: data.name,
+      },
     })
   },
 

@@ -76,6 +76,96 @@ func (s *AuthService) generateToken(user *entity.User) (string, error) {
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
+var (
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserAlreadyExists = errors.New("user already exists")
+)
+
 func (s *AuthService) ListUsers() ([]entity.User, error) {
 	return s.userRepo.ListAll()
+}
+
+func (s *AuthService) ListUsersPaginated(page, pageSize int, role string) ([]entity.User, int64, error) {
+	return s.userRepo.List(page, pageSize, role)
+}
+
+func (s *AuthService) GetUserByID(id uint64) (*entity.User, error) {
+	user, err := s.userRepo.FindByID(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrUserNotFound
+	}
+	return user, err
+}
+
+func (s *AuthService) CreateUser(req *dto.CreateUserRequest) (*entity.User, error) {
+	existing, _ := s.userRepo.FindByUsername(req.Username)
+	if existing != nil {
+		return nil, ErrUserAlreadyExists
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &entity.User{
+		Username:     req.Username,
+		RealName:     req.RealName,
+		PasswordHash: string(hashedPassword),
+		Role:         req.Role,
+		Email:        req.Email,
+		Phone:        req.Phone,
+		Department:   req.Department,
+		Status:       1,
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) UpdateUser(id uint64, req *dto.UpdateUserRequest) (*entity.User, error) {
+	user, err := s.userRepo.FindByID(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if req.RealName != "" {
+		user.RealName = req.RealName
+	}
+	if req.Email != "" {
+		user.Email = req.Email
+	}
+	if req.Role != "" {
+		user.Role = req.Role
+	}
+	if req.Phone != "" {
+		user.Phone = req.Phone
+	}
+	if req.Department != "" {
+		user.Department = req.Department
+	}
+	if req.Status != nil {
+		user.Status = *req.Status
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) DeleteUser(id uint64) error {
+	_, err := s.userRepo.FindByID(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return s.userRepo.Delete(id)
 }
