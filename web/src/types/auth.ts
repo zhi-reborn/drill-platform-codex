@@ -1,7 +1,8 @@
 import type { Role } from './common'
 
 export interface User {
-  user_id: number
+  id: number
+  user_id?: number
   username: string
   real_name?: string
   name?: string
@@ -9,7 +10,7 @@ export interface User {
   role: Role | string
   phone?: string
   department?: string
-  status?: 'active' | 'disabled' | 'locked'
+  status?: number | 'active' | 'disabled' | 'locked'
   last_login_at?: string
   created_at?: string
   updated_at?: string

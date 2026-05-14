@@ -2,3 +2,6 @@ node_modules
 dist
 *.local
 .cache
+
+# Volar / Vue Language Server
+**/*.vue.js

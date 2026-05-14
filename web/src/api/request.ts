@@ -21,7 +21,15 @@ request.interceptors.request.use(
 )
 
 request.interceptors.response.use(
-  (response: AxiosResponse<ApiResponse>) => response as AxiosResponse,
+  (response: AxiosResponse<ApiResponse>) => {
+    // 解包后端返回的数据
+    const res = response.data
+    if (res.code !== 0) {
+      ElMessage.error(res.message || '请求失败')
+      return Promise.reject(new Error(res.message || '请求失败'))
+    }
+    return res.data as AxiosResponse
+  },
   (error) => {
     const status = error.response?.status
     switch (status) {

@@ -4,7 +4,7 @@ import type { User } from '@/types'
 export const userApi = {
   getList: (params?: { page?: number; page_size?: number; role?: string }) => {
     return apiRequest<{ items: User[]; total: number }>({
-      url: '/api/v1/users',
+      url: '/v1/users',
       method: 'GET',
       params,
     })
@@ -12,7 +12,7 @@ export const userApi = {
 
   getById: (id: number) => {
     return apiRequest<User>({
-      url: `/api/v1/users/${id}`,
+      url: `/v1/users/${id}`,
       method: 'GET',
     })
   },
@@ -27,7 +27,7 @@ export const userApi = {
     department?: string
   }) => {
     return apiRequest<User>({
-      url: '/api/v1/users',
+      url: '/v1/users',
       method: 'POST',
       data: {
         ...data,
@@ -38,7 +38,7 @@ export const userApi = {
 
   update: (id: number, data: Partial<User>) => {
     return apiRequest<User>({
-      url: `/api/v1/users/${id}`,
+      url: `/v1/users/${id}`,
       method: 'PUT',
       data,
     })
@@ -46,14 +46,14 @@ export const userApi = {
 
   delete: (id: number) => {
     return apiRequest<void>({
-      url: `/api/v1/users/${id}`,
+      url: `/v1/users/${id}`,
       method: 'DELETE',
     })
   },
 
   resetPassword: (id: number, newPassword: string) => {
     return apiRequest<void>({
-      url: `/api/v1/users/${id}/reset-password`,
+      url: `/v1/users/${id}/reset-password`,
       method: 'POST',
       data: { password: newPassword },
     })

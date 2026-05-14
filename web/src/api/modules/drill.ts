@@ -4,7 +4,7 @@ import type { DrillInstance, StepInstance, StepLog } from '@/types'
 export const drillApi = {
   getList: (params?: { page?: number; page_size?: number; status?: string }) => {
     return apiRequest<{ items: DrillInstance[]; total: number }>({
-      url: '/api/v1/drills',
+      url: '/v1/drills',
       method: 'GET',
       params,
     })
@@ -12,7 +12,7 @@ export const drillApi = {
 
   getById: (id: number) => {
     return apiRequest<DrillInstance>({
-      url: `/api/v1/drills/${id}`,
+      url: `/v1/drills/${id}`,
       method: 'GET',
     })
   },
@@ -23,7 +23,7 @@ export const drillApi = {
     description: string
   }) => {
     return apiRequest<DrillInstance>({
-      url: '/api/v1/drills',
+      url: '/v1/drills',
       method: 'POST',
       data,
     })
@@ -31,42 +31,42 @@ export const drillApi = {
 
   start: (id: number) => {
     return apiRequest<DrillInstance>({
-      url: `/api/v1/drills/${id}/start`,
+      url: `/v1/drills/${id}/start`,
       method: 'POST',
     })
   },
 
   pause: (id: number) => {
     return apiRequest<DrillInstance>({
-      url: `/api/v1/drills/${id}/pause`,
+      url: `/v1/drills/${id}/pause`,
       method: 'POST',
     })
   },
 
   resume: (id: number) => {
     return apiRequest<DrillInstance>({
-      url: `/api/v1/drills/${id}/resume`,
+      url: `/v1/drills/${id}/resume`,
       method: 'POST',
     })
   },
 
   terminate: (id: number) => {
     return apiRequest<DrillInstance>({
-      url: `/api/v1/drills/${id}/terminate`,
+      url: `/v1/drills/${id}/terminate`,
       method: 'POST',
     })
   },
 
   getSteps: (drillId: number) => {
     return apiRequest<StepInstance[]>({
-      url: `/api/v1/drills/${drillId}/steps`,
+      url: `/v1/drills/${drillId}/steps`,
       method: 'GET',
     })
   },
 
   getStepLogs: (stepId: number) => {
     return apiRequest<StepLog[]>({
-      url: `/api/v1/steps/${stepId}/logs`,
+      url: `/v1/steps/${stepId}/logs`,
       method: 'GET',
     })
   },

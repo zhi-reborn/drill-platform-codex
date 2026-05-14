@@ -4,7 +4,7 @@ import type { LoginCredentials, TokenResponse, User } from '@/types'
 export const authApi = {
   login: (credentials: LoginCredentials) => {
     return apiRequest<TokenResponse>({
-      url: '/api/v1/auth/login',
+      url: '/v1/auth/login',
       method: 'POST',
       data: credentials,
     })
@@ -12,21 +12,21 @@ export const authApi = {
 
   logout: () => {
     return apiRequest<void>({
-      url: '/api/v1/auth/logout',
+      url: '/v1/auth/logout',
       method: 'POST',
     })
   },
 
   getCurrentUser: () => {
     return apiRequest<User>({
-      url: '/api/v1/auth/me',
+      url: '/v1/auth/me',
       method: 'GET',
     })
   },
 
   refreshToken: () => {
     return apiRequest<TokenResponse>({
-      url: '/api/v1/auth/refresh',
+      url: '/v1/auth/refresh',
       method: 'POST',
     })
   },
@@ -40,7 +40,7 @@ export const authApi = {
       department: string
       status: number
     }>>({
-      url: '/api/v1/auth/dev-users',
+      url: '/v1/auth/dev-users',
       method: 'GET',
     })
   },
