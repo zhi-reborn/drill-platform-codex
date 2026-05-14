@@ -107,11 +107,11 @@ func main() {
 		log.Println("Redis连接成功")
 	}
 
-	services := service.NewServices()
-	services.AuthService.SetJWTConfig(cfg.JWT.Secret, cfg.JWT.Expire)
-
 	wsManager := websocket.NewManager()
 	go wsManager.Run()
+
+	services := service.NewServices(wsManager)
+	services.AuthService.SetJWTConfig(cfg.JWT.Secret, cfg.JWT.Expire)
 
 	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret)
 

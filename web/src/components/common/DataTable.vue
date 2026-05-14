@@ -18,13 +18,13 @@
         :min-width="col.minWidth"
         :formatter="col.formatter"
         :sortable="col.sortable"
-        :align="col.align || 'left'"
+        :align="col.align || 'center'"
       >
         <template v-if="col.slot" #default="scope">
           <slot :name="col.prop" :row="scope.row" />
         </template>
       </el-table-column>
-      <el-table-column v-if="$slots.actions" label="操作" width="180" fixed="right" align="center">
+      <el-table-column v-if="$slots.actions" label="操作" width="300" fixed="right" align="center">
         <template #default="scope">
           <slot name="actions" :row="scope.row" />
         </template>

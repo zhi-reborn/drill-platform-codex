@@ -144,9 +144,9 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	RealName   string `json:"real_name" binding:"min=2,max=64"`
-	Email      string `json:"email" binding:"email"`
-	Role       string `json:"role" binding:"oneof=admin director executor viewer"`
+	RealName   string `json:"real_name" binding:"omitempty,min=2,max=64"`
+	Email      string `json:"email" binding:"omitempty,email"`
+	Role       string `json:"role" binding:"omitempty,oneof=admin director executor viewer"`
 	Phone      string `json:"phone"`
 	Department string `json:"department"`
 	Status     *int8  `json:"status" binding:"omitempty,oneof=0 1"`

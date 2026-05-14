@@ -7,13 +7,16 @@ import (
 
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/infrastructure/websocket"
 	"drill-platform/internal/repository"
 )
 
 type DrillService struct {
-	drillRepo    *repository.DrillRepo
-	templateRepo *repository.TemplateRepo
-	stepRepo     *repository.StepRepo
+	drillRepo             *repository.DrillRepo
+	templateRepo          *repository.TemplateRepo
+	stepRepo              *repository.StepRepo
+	wsManager             *websocket.Manager
+	notificationService   *NotificationService
 }
 
 func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.TemplateRepo, stepRepo *repository.StepRepo) *DrillService {
@@ -22,6 +25,14 @@ func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.T
 		templateRepo: templateRepo,
 		stepRepo:     stepRepo,
 	}
+}
+
+func (s *DrillService) SetWebSocketManager(wsManager *websocket.Manager) {
+	s.wsManager = wsManager
+}
+
+func (s *DrillService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
 }
 
 func (s *DrillService) GetList(page, pageSize int, status string) ([]entity.DrillInstance, int64, error) {
@@ -98,22 +109,145 @@ func (s *DrillService) Start(id uint64) error {
 		drill.CurrentStepID = &drill.Steps[0].ID
 	}
 
-	return s.drillRepo.Update(drill)
+	if err := s.drillRepo.Update(drill); err != nil {
+		return err
+	}
+
+	// WebSocket 广播
+	if s.wsManager != nil {
+		payload := websocket.DrillStatusPayload{
+			DrillID:        uint(drill.ID),
+			DrillName:      drill.Name,
+			PreviousStatus: "pending",
+			NewStatus:      "running",
+		}
+		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
+	}
+
+	// 创建通知
+	if s.notificationService != nil {
+		s.notificationService.CreateNotification(&entity.Notification{
+			UserID:   drill.CreatedBy,
+			Type:     "drill_started",
+			Title:    "演练已启动",
+			Content:  drill.Name + " 已开始执行",
+			DrillID:  &drill.ID,
+			IsRead:   false,
+		})
+	}
+
+	return nil
 }
 
 func (s *DrillService) Pause(id uint64) error {
-	return s.drillRepo.UpdateStatus(id, "paused")
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	prevStatus := drill.Status
+	
+	if err := s.drillRepo.UpdateStatus(id, "paused"); err != nil {
+		return err
+	}
+
+	// WebSocket 广播
+	if s.wsManager != nil {
+		payload := websocket.DrillStatusPayload{
+			DrillID:        uint(drill.ID),
+			DrillName:      drill.Name,
+			PreviousStatus: prevStatus,
+			NewStatus:      "paused",
+		}
+		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
+	}
+
+	// 创建通知
+	if s.notificationService != nil {
+		s.notificationService.CreateNotification(&entity.Notification{
+			UserID:   drill.CreatedBy,
+			Type:     "drill_paused",
+			Title:    "演练已暂停",
+			Content:  drill.Name + " 已暂停",
+			DrillID:  &drill.ID,
+			IsRead:   false,
+		})
+	}
+
+	return nil
 }
 
 func (s *DrillService) Resume(id uint64) error {
-	return s.drillRepo.UpdateStatus(id, "running")
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	prevStatus := drill.Status
+	
+	if err := s.drillRepo.UpdateStatus(id, "running"); err != nil {
+		return err
+	}
+
+	// WebSocket 广播
+	if s.wsManager != nil {
+		payload := websocket.DrillStatusPayload{
+			DrillID:        uint(drill.ID),
+			DrillName:      drill.Name,
+			PreviousStatus: prevStatus,
+			NewStatus:      "running",
+		}
+		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
+	}
+
+	// 创建通知
+	if s.notificationService != nil {
+		s.notificationService.CreateNotification(&entity.Notification{
+			UserID:   drill.CreatedBy,
+			Type:     "drill_resumed",
+			Title:    "演练已恢复",
+			Content:  drill.Name + " 已恢复执行",
+			DrillID:  &drill.ID,
+			IsRead:   false,
+		})
+	}
+
+	return nil
 }
 
 func (s *DrillService) Terminate(id uint64) error {
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	prevStatus := drill.Status
+	
 	now := time.Now()
 	repository.DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"status":    "terminated",
 		"end_time":  &now,
 	})
+
+	// WebSocket 广播
+	if s.wsManager != nil {
+		payload := websocket.DrillStatusPayload{
+			DrillID:        uint(drill.ID),
+			DrillName:      drill.Name,
+			PreviousStatus: prevStatus,
+			NewStatus:      "terminated",
+		}
+		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
+	}
+
+	// 创建通知
+	if s.notificationService != nil {
+		s.notificationService.CreateNotification(&entity.Notification{
+			UserID:   drill.CreatedBy,
+			Type:     "drill_terminated",
+			Title:    "演练已终止",
+			Content:  drill.Name + " 已终止",
+			DrillID:  &drill.ID,
+			IsRead:   false,
+		})
+	}
+
 	return nil
 }

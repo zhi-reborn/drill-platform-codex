@@ -38,13 +38,49 @@ app.mount('#app')
 // Initialize WebSocket after mount
 import { useAuthStore } from './stores/auth'
 import { useWebSocket } from './composables/useWebSocket'
+import { useNotificationStore } from './stores/notifications'
+import type { WsMessage } from './websocket/messageTypes'
 
 const authStore = useAuthStore()
+const notifStore = useNotificationStore()
 authStore.restoreSession()
 
 if (authStore.isAuthenticated && authStore.token) {
   const ws = useWebSocket()
   ws.init(authStore.token)
+  
+  // Subscribe to WebSocket events and update notifications
+  ws.subscribe('*', (msg: WsMessage) => {
+    // Map WebSocket events to notification types
+    const eventToNotifType: Record<string, string> = {
+      'drill_started': 'drill_started',
+      'drill_paused': 'drill_paused',
+      'drill_resumed': 'drill_resumed',
+      'drill_completed': 'drill_completed',
+      'drill_terminated': 'drill_terminated',
+      'step_complete': 'step_complete',
+      'step_timeout': 'step_timeout',
+      'task_assigned': 'task_assigned',
+    }
+    
+    const notifType = eventToNotifType[msg.event_type]
+    if (notifType && msg.payload) {
+      const payload = msg.payload as Record<string, any>
+      notifStore.addNotification({
+        id: Date.now(), // temporary ID
+        user_id: authStore.user?.id || 0,
+        type: notifType as any,
+        title: payload.title || '系统通知',
+        content: payload.content || '',
+        drill_id: payload.drill_id,
+        drill_name: payload.drill_name,
+        step_id: payload.step_id,
+        step_name: payload.step_name,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      })
+    }
+  })
 }
 
 // Make ws available globally for header component

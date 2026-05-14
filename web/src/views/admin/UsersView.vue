@@ -48,10 +48,25 @@
           {{ row.last_login_at ? formatTime(row.last_login_at) : '从未登录' }}
         </template>
         <template #actions="{ row }">
+          <el-button
+            type="primary"
+            size="small"
+            @click="handleEditUser(row)"
+          >
+            编辑
+          </el-button>
+          <ActionConfirm
+            message="确认要删除该用户吗？删除后无法恢复。"
+            danger
+            size="small"
+            @confirm="handleDeleteUser(row)"
+          >
+            删除
+          </ActionConfirm>
           <ActionConfirm
             v-if="row.status === 1"
             message="确认要禁用该用户吗？禁用后将无法登录系统。"
-            danger
+            type="warning"
             size="small"
             @confirm="handleDisableUser(row)"
           >
@@ -124,6 +139,55 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑用户抽屉 -->
+    <el-drawer
+      v-model="showEditDrawer"
+      title="编辑用户"
+      size="500px"
+      :close-on-click-modal="false"
+      @close="resetEditForm"
+    >
+      <el-form
+        ref="editFormRef"
+        :model="editForm"
+        :rules="editFormRules"
+        label-width="80px"
+        label-position="top"
+      >
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="editForm.username" disabled />
+        </el-form-item>
+        <el-form-item label="姓名" prop="real_name">
+          <el-input v-model="editForm.real_name" placeholder="请输入真实姓名" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="editForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+        <el-form-item label="角色" prop="role">
+          <el-select v-model="editForm.role" placeholder="请选择角色" style="width: 100%">
+            <el-option label="系统管理员" value="admin" />
+            <el-option label="指挥长" value="director" />
+            <el-option label="执行员" value="executor" />
+            <el-option label="观察员" value="viewer" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="手机号" prop="phone">
+          <el-input v-model="editForm.phone" placeholder="请输入手机号" />
+        </el-form-item>
+        <el-form-item label="部门" prop="department">
+          <el-input v-model="editForm.department" placeholder="请输入部门" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <el-button @click="showEditDrawer = false">取消</el-button>
+          <el-button type="primary" @click="handleUpdateUser" :loading="submitting">
+            确认保存
+          </el-button>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -139,8 +203,11 @@ import type { User } from '@/types'
 const loading = ref(false)
 const submitting = ref(false)
 const showCreateDialog = ref(false)
+const showEditDrawer = ref(false)
 const searchQuery = ref('')
 const formRef = ref<FormInstance>()
+const editFormRef = ref<FormInstance>()
+const editingUserId = ref<number | null>(null)
 
 const users = ref<User[]>([])
 const total = ref(0)
@@ -165,14 +232,13 @@ onMounted(() => {
 
 // 表格列定义
 const columns: TableColumn[] = [
-  { prop: 'username', label: '用户名', width: 120 },
-  { prop: 'real_name', label: '真实姓名', width: 100 },
-  { prop: 'role', label: '角色', width: 100, slot: true },
-  { prop: 'status', label: '状态', width: 80, slot: true },
+  { prop: 'username', label: '用户名', width: 140 },
+  { prop: 'real_name', label: '真实姓名', width: 160 },
+  { prop: 'role', label: '角色', width: 120, slot: true },
+  { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'department', label: '部门' },
-  { prop: 'phone', label: '手机号', width: 130 },
-  { prop: 'created_at', label: '创建时间', width: 160 },
-  { prop: 'actions', label: '操作', width: 120, slot: true },
+  { prop: 'phone', label: '手机号', width: 160 },
+  { prop: 'created_at', label: '创建时间', width: 180 },
 ]
 
 // 创建用户表单
@@ -199,6 +265,29 @@ const formRules: FormRules = {
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码长度至少 6 位', trigger: 'blur' },
   ],
+}
+
+// 编辑用户表单
+const editForm = ref({
+  username: '',
+  real_name: '',
+  email: '',
+  role: '',
+  phone: '',
+  department: '',
+})
+
+// 编辑表单验证规则
+const editFormRules: FormRules = {
+  real_name: [
+    { required: true, message: '请输入姓名', trigger: 'blur' },
+    { min: 2, message: '姓名至少 2 个字符', trigger: 'blur' },
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
 // 过滤后的用户列表
@@ -311,6 +400,72 @@ function resetForm() {
     phone: '',
     department: '',
     password: '',
+  }
+}
+
+// 编辑用户相关函数
+function handleEditUser(user: User) {
+  editingUserId.value = user.id
+  editForm.value = {
+    username: user.username,
+    real_name: user.real_name || '',
+    email: user.email || '',
+    role: user.role,
+    phone: user.phone || '',
+    department: user.department || '',
+  }
+  showEditDrawer.value = true
+}
+
+async function handleUpdateUser() {
+  if (!editFormRef.value || !editingUserId.value) return
+
+  try {
+    await editFormRef.value.validate()
+    submitting.value = true
+
+    await userApi.update(editingUserId.value, {
+      real_name: editForm.value.real_name,
+      email: editForm.value.email,
+      role: editForm.value.role,
+      phone: editForm.value.phone || undefined,
+      department: editForm.value.department || undefined,
+    })
+
+    ElMessage.success('用户信息已更新')
+    showEditDrawer.value = false
+    loadUsers()
+  } catch (error: any) {
+    if (error.message && !error.message.includes('validate')) {
+      ElMessage.error('更新失败')
+      console.error('Failed to update user:', error)
+    }
+  } finally {
+    submitting.value = false
+  }
+}
+
+function resetEditForm() {
+  editFormRef.value?.resetFields()
+  editingUserId.value = null
+  editForm.value = {
+    username: '',
+    real_name: '',
+    email: '',
+    role: '',
+    phone: '',
+    department: '',
+  }
+}
+
+async function handleDeleteUser(user: User) {
+  try {
+    await userApi.delete(user.id)
+    ElMessage.success('用户已删除')
+    loadUsers()
+  } catch (error) {
+    ElMessage.error('删除失败')
+    console.error('Failed to delete user:', error)
   }
 }
 </script>
