@@ -3,7 +3,7 @@ import type { DrillInstance, StepInstance, StepLog } from '@/types'
 
 export const drillApi = {
   getList: (params?: { page?: number; page_size?: number; status?: string }) => {
-    return apiRequest<{ items: DrillInstance[]; total: number }>({
+    return apiRequest<{ list: DrillInstance[]; total: number }>({
       url: '/v1/drills',
       method: 'GET',
       params,
@@ -67,6 +67,13 @@ export const drillApi = {
   getStepLogs: (stepId: number) => {
     return apiRequest<StepLog[]>({
       url: `/v1/steps/${stepId}/logs`,
+      method: 'GET',
+    })
+  },
+
+  getLogs: (drillId: number) => {
+    return apiRequest<any[]>({
+      url: `/v1/drills/${drillId}/logs`,
       method: 'GET',
     })
   },

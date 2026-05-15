@@ -18,7 +18,6 @@ export const templateApi = {
   },
 
   create: (data: {
-    template_id: number
     name: string
     category: string
     description: string
@@ -55,54 +54,6 @@ export const templateApi = {
   publish: (id: number) => {
     return apiRequest<DrillTemplate>({
       url: `/v1/templates/${id}/publish`,
-      method: 'POST',
-    })
-  },
-
-  getById: (id: number) => {
-    return apiRequest<DrillTemplate>({
-      url: `/api/v1/templates/${id}`,
-      method: 'GET',
-    })
-  },
-
-  create: (data: {
-    name: string
-    category: string
-    description: string
-    steps: Array<{
-      name: string
-      description: string
-      step_type: string
-      timeout_seconds: number
-      order_index: number
-    }>
-  }) => {
-    return apiRequest<DrillTemplate>({
-      url: '/api/v1/templates',
-      method: 'POST',
-      data,
-    })
-  },
-
-  update: (id: number, data: Partial<DrillTemplate>) => {
-    return apiRequest<DrillTemplate>({
-      url: `/api/v1/templates/${id}`,
-      method: 'PUT',
-      data,
-    })
-  },
-
-  delete: (id: number) => {
-    return apiRequest<void>({
-      url: `/api/v1/templates/${id}`,
-      method: 'DELETE',
-    })
-  },
-
-  publish: (id: number) => {
-    return apiRequest<DrillTemplate>({
-      url: `/api/v1/templates/${id}/publish`,
       method: 'POST',
     })
   },

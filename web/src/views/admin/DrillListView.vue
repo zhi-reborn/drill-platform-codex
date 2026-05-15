@@ -5,16 +5,19 @@
     </div>
 
     <div class="page-content">
-      <el-radio-group v-model="statusFilter" class="status-filter">
-        <el-radio-button value="">全部</el-radio-button>
-        <el-radio-button value="pending">待启动</el-radio-button>
-        <el-radio-button value="running">执行中</el-radio-button>
-        <el-radio-button value="paused">已暂停</el-radio-button>
-        <el-radio-button value="completed">已完成</el-radio-button>
-        <el-radio-button value="terminated">已终止</el-radio-button>
-      </el-radio-group>
+      <div class="table-header">
+        <el-radio-group v-model="statusFilter" class="status-filter" @change="handleFilterChange">
+          <el-radio-button value="">全部</el-radio-button>
+          <el-radio-button value="pending">待启动</el-radio-button>
+          <el-radio-button value="running">执行中</el-radio-button>
+          <el-radio-button value="paused">已暂停</el-radio-button>
+          <el-radio-button value="completed">已完成</el-radio-button>
+          <el-radio-button value="terminated">已终止</el-radio-button>
+        </el-radio-group>
+        <div class="total-info">共 {{ total }} 条记录</div>
+      </div>
 
-      <el-table :data="filteredInstances" style="width: 100%" class="drills-table">
+      <el-table :data="filteredInstances" style="width: 100%" class="drills-table" v-loading="loading">
         <el-table-column prop="name" label="演练名" min-width="200" />
         <el-table-column prop="template_name" label="模板" width="180" />
         <el-table-column prop="status" label="状态" width="120">
@@ -26,7 +29,7 @@
         <el-table-column label="进度" width="150">
           <template #default="{ row }">
             <el-progress
-              :percentage="Math.round(row.completed_steps / row.total_steps * 100)"
+              :percentage="row.progress_pct || 0"
               :stroke-width="6"
               :status="row.status === 'completed' ? 'success' : undefined"
             />
@@ -45,21 +48,37 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="loadInstances"
+          @size-change="loadInstances"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
-import instancesData from '@/mock/data/instances.json'
+import { drillApi } from '@/api/modules/drill'
 
 const router = useRouter()
 const statusFilter = ref('')
 const instances = ref<DrillInstance[]>([])
+const total = ref(0)
+const loading = ref(false)
+const page = ref(1)
+const pageSize = ref(20)
 
 const filteredInstances = computed(() => {
   if (!statusFilter.value) {
@@ -79,12 +98,16 @@ function formatTime(dateStr: string): string {
 }
 
 async function loadInstances() {
+  loading.value = true
   try {
-    instances.value = instancesData as DrillInstance[]
-    ElMessage.success('演练列表加载成功')
-  } catch (error) {
-    ElMessage.error('加载演练列表失败')
+    const data = await drillApi.getList({ page: page.value, page_size: pageSize.value, status: statusFilter.value || undefined })
+    instances.value = data.list || []
+    total.value = data.total || 0
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载演练列表失败')
     console.error('Failed to load instances:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -92,7 +115,14 @@ function viewDetail(instance: DrillInstance) {
   router.push(`/director/monitor/${instance.id}`)
 }
 
-loadInstances()
+function handleFilterChange() {
+  page.value = 1
+  loadInstances()
+}
+
+onMounted(() => {
+  loadInstances()
+})
 </script>
 
 <style scoped lang="scss">
@@ -116,8 +146,27 @@ loadInstances()
   .page-content {
     @include page-content;
 
-    .status-filter {
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: $spacing-base;
+
+      .status-filter {
+        flex: 1;
+      }
+
+      .total-info {
+        font-size: $font-size-sm;
+        color: $text-secondary;
+        margin-left: $spacing-md;
+      }
+    }
+
+    .table-pagination {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: $spacing-base;
     }
 
     .drills-table {

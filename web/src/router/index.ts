@@ -84,12 +84,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/director/MonitorView.vue'),
         meta: { title: '实时监控', icon: 'VideoCamera' },
       },
-      {
-        path: 'messages',
-        name: 'DirectorMessages',
-        component: () => import('@/views/MessagesView.vue'),
-        meta: { title: '消息中心', icon: 'Bell', hidden: true },
-      },
     ],
   },
 
@@ -111,12 +105,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/executor/TaskDetailView.vue'),
         meta: { title: '任务详情', icon: 'EditPen', hidden: true },
       },
-      {
-        path: 'messages',
-        name: 'ExecutorMessages',
-        component: () => import('@/views/MessagesView.vue'),
-        meta: { title: '消息中心', icon: 'Bell', hidden: true },
-      },
     ],
   },
 
@@ -137,6 +125,20 @@ const routes: RouteRecordRaw[] = [
         name: 'ViewerDrillDetail',
         component: () => import('@/views/viewer/DrillDetailView.vue'),
         meta: { title: '演练详情', icon: 'Document', hidden: true },
+      },
+    ],
+  },
+
+  {
+    path: '/messages',
+    component: () => import('@/components/layout/AppLayout.vue'),
+    meta: { title: '消息中心', requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'Messages',
+        component: () => import('@/views/MessagesView.vue'),
+        meta: { title: '消息中心', icon: 'Bell' },
       },
     ],
   },

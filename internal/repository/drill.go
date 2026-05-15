@@ -52,3 +52,13 @@ func (r *DrillRepo) GetCurrentStepID(id uint64) (*uint64, error) {
 	}
 	return drill.CurrentStepID, nil
 }
+
+func (r *DrillRepo) CreateLog(log *entity.DrillInstanceLog) error {
+	return DB.Create(log).Error
+}
+
+func (r *DrillRepo) GetLogs(drillID uint64) ([]entity.DrillInstanceLog, error) {
+	var logs []entity.DrillInstanceLog
+	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC").Find(&logs).Error
+	return logs, err
+}

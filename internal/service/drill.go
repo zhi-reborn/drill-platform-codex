@@ -43,6 +43,10 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 	return s.drillRepo.FindByID(id)
 }
 
+func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
+	return s.stepRepo.FindStepsByDrillID(id)
+}
+
 func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*entity.DrillInstance, error) {
 	template, err := s.templateRepo.FindByID(req.TemplateID)
 	if err != nil {
@@ -113,6 +117,23 @@ func (s *DrillService) Start(id uint64) error {
 		return err
 	}
 
+	// 查询操作人姓名
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
+	// 创建演练日志
+	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
+		DrillInstanceID: id,
+		Action:          "start",
+		OperatorID:      drill.CreatedBy,
+		OperatorName:    operatorName,
+		Content:         "演练已启动",
+	})
+
 	// WebSocket 广播
 	if s.wsManager != nil {
 		payload := websocket.DrillStatusPayload{
@@ -144,11 +165,31 @@ func (s *DrillService) Pause(id uint64) error {
 	if err != nil {
 		return err
 	}
+	if drill.Status != "running" {
+		return errors.New("只有运行中的演练才能暂停")
+	}
 	prevStatus := drill.Status
 	
 	if err := s.drillRepo.UpdateStatus(id, "paused"); err != nil {
 		return err
 	}
+
+	// 查询操作人姓名
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
+	// 创建演练日志
+	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
+		DrillInstanceID: id,
+		Action:          "pause",
+		OperatorID:      drill.CreatedBy,
+		OperatorName:    operatorName,
+		Content:         "演练已暂停",
+	})
 
 	// WebSocket 广播
 	if s.wsManager != nil {
@@ -181,11 +222,31 @@ func (s *DrillService) Resume(id uint64) error {
 	if err != nil {
 		return err
 	}
+	if drill.Status != "paused" {
+		return errors.New("只有已暂停的演练才能继续")
+	}
 	prevStatus := drill.Status
 	
 	if err := s.drillRepo.UpdateStatus(id, "running"); err != nil {
 		return err
 	}
+
+	// 查询操作人姓名
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
+	// 创建演练日志
+	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
+		DrillInstanceID: id,
+		Action:          "resume",
+		OperatorID:      drill.CreatedBy,
+		OperatorName:    operatorName,
+		Content:         "演练已恢复执行",
+	})
 
 	// WebSocket 广播
 	if s.wsManager != nil {
@@ -218,12 +279,35 @@ func (s *DrillService) Terminate(id uint64) error {
 	if err != nil {
 		return err
 	}
+	if drill.Status == "completed" {
+		return errors.New("已完成的演练不能终止")
+	}
+	if drill.Status == "terminated" {
+		return errors.New("演练已终止，无法重复操作")
+	}
 	prevStatus := drill.Status
 	
 	now := time.Now()
 	repository.DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"status":    "terminated",
 		"end_time":  &now,
+	})
+
+	// 查询操作人姓名
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
+	// 创建演练日志
+	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
+		DrillInstanceID: id,
+		Action:          "terminate",
+		OperatorID:      drill.CreatedBy,
+		OperatorName:    operatorName,
+		Content:         "演练已终止",
 	})
 
 	// WebSocket 广播
@@ -250,4 +334,8 @@ func (s *DrillService) Terminate(id uint64) error {
 	}
 
 	return nil
+}
+
+func (s *DrillService) GetLogs(id uint64) ([]entity.DrillInstanceLog, error) {
+	return s.drillRepo.GetLogs(id)
 }

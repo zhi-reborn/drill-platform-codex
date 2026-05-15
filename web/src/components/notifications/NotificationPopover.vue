@@ -49,7 +49,7 @@
             </div>
           </div>
 
-          <div v-if="hasMore" class="popover-footer">
+          <div class="popover-footer">
             <el-button text size="small" @click="handleViewAll">
               查看全部消息
             </el-button>
@@ -90,7 +90,6 @@ onMounted(async () => {
 
 const notifications = computed(() => notifStore.notifications.slice(0, 10))
 const unreadCount = computed(() => notifStore.unreadCount)
-const hasMore = computed(() => notifStore.notifications.length > 10)
 
 function getTypeLabel(type: string): string {
   return NOTIFICATION_TYPE_LABELS[type as NotificationType] || type
@@ -126,8 +125,7 @@ function handleDelete(id: number) {
 }
 
 function handleViewAll() {
-  const role = authStore.role
-  router.push(`/${role}/messages`)
+  router.push('/messages')
 }
 </script>
 

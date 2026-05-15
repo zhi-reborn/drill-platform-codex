@@ -13,7 +13,8 @@ class WebSocketClient {
   public status: 'connecting' | 'connected' | 'disconnected' = 'disconnected'
 
   connect(token: string) {
-    this.url = `${import.meta.env.VITE_WS_URL}?token=${token}`
+    // 默认连接到 tasks 通道（个人通知）
+    this.url = `/ws/tasks?token=${token}&t=${Date.now()}`
     this.connectWs()
   }
 

@@ -10,10 +10,10 @@
       <el-card class="info-card">
         <div class="progress-section">
           <span class="progress-label">
-            进度：{{ instance.completed_steps }} / {{ instance.total_steps }}
+            进度：{{ completedSteps }} / {{ totalSteps }}
           </span>
           <el-progress
-            :percentage="Math.round(instance.completed_steps / instance.total_steps * 100)"
+            :percentage="progressPercentage"
             :stroke-width="10"
             :status="instance.status === 'completed' ? 'success' : undefined"
           />
@@ -22,7 +22,9 @@
 
       <!-- 控制按钮 -->
       <div class="control-section">
+        <!-- 运行中：显示暂停、终止 -->
         <ActionConfirm
+          v-if="canPause"
           title="暂停演练"
           message="确定要暂停当前演练吗？"
           type="warning"
@@ -31,7 +33,9 @@
           <el-icon><VideoPause /></el-icon>
           暂停
         </ActionConfirm>
+        <!-- 已暂停：显示继续 -->
         <ActionConfirm
+          v-if="canResume"
           title="继续演练"
           message="确定要继续执行演练吗？"
           type="primary"
@@ -40,7 +44,20 @@
           <el-icon><VideoPlay /></el-icon>
           继续
         </ActionConfirm>
+        <!-- 待启动：显示开始 -->
         <ActionConfirm
+          v-if="canStart"
+          title="开始演练"
+          message="确定要开始当前演练吗？"
+          type="success"
+          @confirm="handleStart"
+        >
+          <el-icon><VideoPlay /></el-icon>
+          开始
+        </ActionConfirm>
+        <!-- 终止按钮：运行中/已暂停/待启动 可终止 -->
+        <ActionConfirm
+          v-if="canTerminate"
           title="终止演练"
           message="确定要终止当前演练吗？此操作不可恢复！"
           danger
@@ -49,6 +66,11 @@
           <el-icon><VideoCamera /></el-icon>
           终止
         </ActionConfirm>
+        <!-- 已完成/已终止：显示返回 -->
+        <el-button v-if="isFinished" @click="router.back()">
+          <el-icon><Back /></el-icon>
+          返回
+        </el-button>
       </div>
 
       <!-- 步骤列表 -->
@@ -57,14 +79,13 @@
           <span class="card-title">步骤列表</span>
         </template>
         <el-table :data="drillSteps" style="width: 100%">
-          <el-table-column prop="order_index" label="序号" width="80" />
-          <el-table-column prop="step_name" label="步骤名" min-width="200" />
+          <el-table-column prop="seq" label="序号" width="80" />
+          <el-table-column prop="name" label="步骤名" min-width="200" />
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
               <DrillStatusBadge :status="row.status" type="step" />
             </template>
           </el-table-column>
-          <el-table-column prop="assignee_name" label="执行人" width="120" />
           <el-table-column label="耗时" width="120">
             <template #default="{ row }">
               {{ calculateDuration(row) }}
@@ -90,7 +111,7 @@
                 <el-tag :type="getLogTypeTag(log.action)" size="small">
                   {{ getLogActionLabel(log.action) }}
                 </el-tag>
-                <span class="log-step">步骤：{{ log.step_name }}</span>
+                <span v-if="log.step_name" class="log-step">步骤：{{ log.step_name }}</span>
                 <span v-if="log.operator" class="log-operator">操作人：{{ log.operator }}</span>
               </div>
               <p v-if="log.remark" class="log-remark">{{ log.remark }}</p>
@@ -109,62 +130,70 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPause, VideoPlay, VideoCamera } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
-import instancesData from '@/mock/data/instances.json'
-import stepsData from '@/mock/data/steps.json'
+import { drillApi } from '@/api/modules/drill'
 
 const route = useRoute()
 const router = useRouter()
 
 const instance = ref<DrillInstance | null>(null)
 const steps = ref<StepInstance[]>([])
+const logs = ref<any[]>([])
 
 const drillId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? parseInt(id, 10) : 0
 })
 
+// API 返回的 steps 已经属于当前 drill
 const drillSteps = computed(() => {
-  return steps.value.filter(s => s.drill_id === drillId.value).sort((a, b) => a.order_index - b.order_index)
+  return steps.value.sort((a, b) => a.seq - b.seq)
 })
 
-// 模拟日志数据（实际应从 API 获取）
+const completedSteps = computed(() => {
+  return steps.value.filter(s => s.status === 'completed').length
+})
+
+const totalSteps = computed(() => {
+  return steps.value.length || 1
+})
+
+const progressPercentage = computed(() => {
+  return Math.round((completedSteps.value / totalSteps.value) * 100)
+})
+
+// 按钮互斥逻辑
+const canPause = computed(() => instance.value?.status === 'running')
+const canResume = computed(() => instance.value?.status === 'paused')
+const canStart = computed(() => instance.value?.status === 'pending')
+const canTerminate = computed(() => {
+  const status = instance.value?.status
+  return status === 'pending' || status === 'running' || status === 'paused'
+})
+const isFinished = computed(() => {
+  const status = instance.value?.status
+  return status === 'completed' || status === 'terminated'
+})
+
+// 使用 API 返回的真实日志
 const drillLogs = computed(() => {
-  const logs: any[] = []
-  drillSteps.value.forEach((step, index) => {
-    if (step.started_at) {
-      logs.push({
-        id: `log-${step.id}-start`,
-        action: 'step_start',
-        step_name: step.step_name,
-        operator: step.assignee_name,
-        created_at: step.started_at,
-        remark: `开始执行步骤`,
-      })
-    }
-    if (step.completed_at) {
-      logs.push({
-        id: `log-${step.id}-complete`,
-        action: 'step_complete',
-        step_name: step.step_name,
-        operator: step.assignee_name,
-        created_at: step.completed_at,
-        remark: step.result_json ? `执行结果：${step.result_json}` : '步骤执行完成',
-      })
-    }
-  })
-  return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return logs.value.map(log => ({
+    ...log,
+    step_name: null,
+    operator: log.operator_name,
+    remark: log.content,
+  }))
 })
 
 function calculateDuration(step: StepInstance): string {
-  if (!step.started_at || !step.completed_at) {
+  if (!step.start_time || !step.end_time) {
     return '-'
   }
-  const start = new Date(step.started_at).getTime()
-  const end = new Date(step.completed_at).getTime()
+  const start = new Date(step.start_time).getTime()
+  const end = new Date(step.end_time).getTime()
   const diff = Math.floor((end - start) / 1000)
   if (diff < 60) {
     return `${diff}s`
@@ -187,6 +216,10 @@ function formatTime(dateStr: string): string {
 
 function getLogTypeTag(action: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
   const map: Record<string, any> = {
+    start: 'primary',
+    pause: 'warning',
+    resume: 'primary',
+    terminate: 'danger',
     step_start: 'primary',
     step_complete: 'success',
     step_issue: 'danger',
@@ -198,6 +231,10 @@ function getLogTypeTag(action: string): 'primary' | 'success' | 'warning' | 'dan
 
 function getLogActionLabel(action: string): string {
   const map: Record<string, string> = {
+    start: '演练启动',
+    pause: '演练暂停',
+    resume: '演练恢复',
+    terminate: '演练终止',
     step_start: '步骤开始',
     step_complete: '步骤完成',
     step_issue: '步骤异常',
@@ -209,8 +246,15 @@ function getLogActionLabel(action: string): string {
 
 async function loadDrillData() {
   try {
-    instance.value = instancesData.find(i => i.id === drillId.value) as DrillInstance || null
-    steps.value = stepsData as StepInstance[]
+    // 调用真实 API
+    instance.value = await drillApi.getById(drillId.value)
+    const stepsData = await drillApi.getSteps(drillId.value)
+    steps.value = stepsData
+    
+    // 加载演练日志
+    const logsData = await drillApi.getLogs(drillId.value)
+    logs.value = logsData
+    
     if (!instance.value) {
       ElMessage.error('演练不存在')
       router.back()
@@ -221,17 +265,44 @@ async function loadDrillData() {
   }
 }
 
-function handlePause() {
-  ElMessage.success('演练已暂停')
+async function handlePause() {
+  try {
+    await drillApi.pause(drillId.value)
+    ElMessage.success('演练已暂停')
+    loadDrillData() // 刷新数据
+  } catch (error) {
+    ElMessage.error('暂停失败')
+  }
 }
 
-function handleResume() {
-  ElMessage.success('演练已继续')
+async function handleResume() {
+  try {
+    await drillApi.resume(drillId.value)
+    ElMessage.success('演练已继续')
+    loadDrillData() // 刷新数据
+  } catch (error) {
+    ElMessage.error('继续失败')
+  }
 }
 
-function handleTerminate() {
-  ElMessage.success('演练已终止')
-  router.push('/director/dashboard')
+async function handleStart() {
+  try {
+    await drillApi.start(drillId.value)
+    ElMessage.success('演练已启动')
+    loadDrillData() // 刷新数据
+  } catch (error) {
+    ElMessage.error('启动失败')
+  }
+}
+
+async function handleTerminate() {
+  try {
+    await drillApi.terminate(drillId.value)
+    ElMessage.success('演练已终止')
+    router.push('/director')
+  } catch (error) {
+    ElMessage.error('终止失败')
+  }
 }
 
 onMounted(() => {

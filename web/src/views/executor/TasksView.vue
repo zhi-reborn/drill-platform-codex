@@ -209,8 +209,8 @@ import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons
 import type { Task, DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
-import tasksData from '@/mock/data/tasks.json'
-import instancesData from '@/mock/data/instances.json'
+import { taskApi } from '@/api/modules/task'
+import { drillApi } from '@/api/modules/drill'
 
 const router = useRouter()
 
@@ -239,8 +239,8 @@ const activeDrillsWithTasks = computed(() => {
         id: drill.id,
         name: drill.name,
         drillStatus: drill.status,
-        completedSteps: drill.completed_steps,
-        totalSteps: drill.total_steps,
+        completedSteps: drill.progress_pct,
+        totalSteps: 100,
         myTasksCount: drillTasks.length,
         pendingTasksCount: drillTasks.filter(t => t.status === 'pending' || t.status === 'assigned').length,
       }
@@ -260,16 +260,7 @@ const filteredTasks = computed(() => {
   return result
 })
 
-const recentActivity = computed(() => {
-  // 如果有选中的演练，只显示该演练的活动
-  if (selectedDrillId.value) {
-    const drill = instances.value.find(i => i.id === selectedDrillId.value)
-    if (drill) {
-      return (tasksData as any[]).filter((a: any) => a.drill_name === drill.name).slice(0, 5)
-    }
-  }
-  return []
-})
+const recentActivity = ref<any[]>([])
 
 const getStatusClass = (status: string) => {
   const classMap: Record<string, string> = {
@@ -282,9 +273,15 @@ const getStatusClass = (status: string) => {
 
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
   const map: Record<string, any> = {
+    start: 'primary',
+    pause: 'warning',
+    resume: 'primary',
+    terminate: 'danger',
     drill_start: 'primary',
     drill_complete: 'success',
     drill_terminate: 'danger',
+    drill_pause: 'warning',
+    drill_resume: 'primary',
     step_start: 'info',
     step_complete: 'success',
   }
@@ -293,9 +290,15 @@ function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | '
 
 function getActivityLabel(type: string): string {
   const map: Record<string, string> = {
+    start: '演练启动',
+    pause: '演练暂停',
+    resume: '演练恢复',
+    terminate: '演练终止',
     drill_start: '演练开始',
     drill_complete: '演练完成',
     drill_terminate: '演练终止',
+    drill_pause: '演练暂停',
+    drill_resume: '演练恢复',
     step_start: '步骤开始',
     step_complete: '步骤完成',
   }
@@ -360,8 +363,33 @@ function viewScreen(drillId: number) {
 async function loadTasks() {
   loading.value = true
   try {
-    tasks.value = tasksData as Task[]
-    instances.value = instancesData as DrillInstance[]
+    // 加载我的任务
+    tasks.value = await taskApi.getMyTasks()
+    
+    // 加载演练列表
+    const drillResult = await drillApi.getList({ page: 1, page_size: 50 })
+    instances.value = drillResult.list
+    
+    // 加载最近活动（从演练日志）
+    const allLogs: any[] = []
+    for (const drill of instances.value.slice(0, 10)) {
+      try {
+        const logs = await drillApi.getLogs(drill.id)
+        logs.forEach((log: any) => {
+          allLogs.push({
+            type: log.action,
+            drill_name: drill.name,
+            operator: log.operator_name || '系统',
+            created_at: log.created_at,
+          })
+        })
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    recentActivity.value = allLogs
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
   } catch (error) {
     ElMessage.error('加载任务失败')
     console.error('Failed to load tasks:', error)

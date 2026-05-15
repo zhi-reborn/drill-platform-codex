@@ -39,7 +39,7 @@ func (h *Handler) List(c *gin.Context) {
 func (h *Handler) GetDetail(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.BadRequest(c, "无效的演练ID")
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
 
@@ -52,16 +52,32 @@ func (h *Handler) GetDetail(c *gin.Context) {
 	response.Success(c, drill)
 }
 
+func (h *Handler) GetSteps(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
+
+	steps, err := h.drillService.GetSteps(id)
+	if err != nil {
+		response.InternalError(c, "获取步骤列表失败")
+		return
+	}
+
+	response.Success(c, steps)
+}
+
 func (h *Handler) Create(c *gin.Context) {
 	var req dto.CreateDrillRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "参数错误: "+err.Error())
+		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
 
 	drill, err := h.drillService.Create(&req, middleware.GetUserID(c))
 	if err != nil {
-		response.InternalError(c, "创建演练失败: "+err.Error())
+		response.InternalError(c, "创建演练失败："+err.Error())
 		return
 	}
 
@@ -71,7 +87,7 @@ func (h *Handler) Create(c *gin.Context) {
 func (h *Handler) Start(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.BadRequest(c, "无效的演练ID")
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
 
@@ -86,12 +102,12 @@ func (h *Handler) Start(c *gin.Context) {
 func (h *Handler) Pause(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.BadRequest(c, "无效的演练ID")
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
 
 	if err := h.drillService.Pause(id); err != nil {
-		response.InternalError(c, "暂停失败")
+		response.BadRequest(c, err.Error())
 		return
 	}
 
@@ -101,12 +117,12 @@ func (h *Handler) Pause(c *gin.Context) {
 func (h *Handler) Resume(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.BadRequest(c, "无效的演练ID")
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
 
 	if err := h.drillService.Resume(id); err != nil {
-		response.InternalError(c, "恢复失败")
+		response.BadRequest(c, err.Error())
 		return
 	}
 
@@ -116,14 +132,30 @@ func (h *Handler) Resume(c *gin.Context) {
 func (h *Handler) Terminate(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.BadRequest(c, "无效的演练ID")
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
 
 	if err := h.drillService.Terminate(id); err != nil {
-		response.InternalError(c, "终止失败")
+		response.BadRequest(c, err.Error())
 		return
 	}
 
 	response.SuccessWithMessage(c, "演练已终止", nil)
+}
+
+func (h *Handler) GetLogs(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
+
+	logs, err := h.drillService.GetLogs(id)
+	if err != nil {
+		response.InternalError(c, "获取日志失败")
+		return
+	}
+
+	response.Success(c, logs)
 }

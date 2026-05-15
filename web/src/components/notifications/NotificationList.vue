@@ -177,9 +177,12 @@ watch(() => props.total, () => {
 
   .notification-content {
     font-size: $font-size-sm;
-    color: $text-secondary;
+    color: $text-primary;
     line-height: 1.6;
     margin-bottom: $spacing-sm;
+    padding: $spacing-xs;
+    background: $bg-tertiary;
+    border-radius: $radius-base;
   }
 
   .notification-drill {

@@ -53,7 +53,7 @@
               </div>
               <div class="drill-progress">
                 <el-progress
-                  :percentage="Math.round(drill.completed_steps / drill.total_steps * 100)"
+                  :percentage="drill.progress_pct"
                   :stroke-width="8"
                 />
               </div>
@@ -105,52 +105,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Monitor, ArrowRight } from '@element-plus/icons-vue'
-import type { DrillInstance } from '@/types'
+import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
-import instancesData from '@/mock/data/instances.json'
-import stepsData from '@/mock/data/steps.json'
-import dashboardData from '@/mock/data/dashboard.json'
+import { drillApi } from '@/api/modules/drill'
 
 const router = useRouter()
 
 const stats = ref({
-  todayDrills: dashboardData.stats.today_completed,
-  activeDrills: dashboardData.stats.active_drills,
-  successRate: dashboardData.stats.success_rate,
-  myTemplates: 3,
+  todayDrills: 0,
+  activeDrills: 0,
+  successRate: 0,
+  myTemplates: 0,
 })
 
 const instances = ref<DrillInstance[]>([])
+const stepsMap = ref<Map<number, StepInstance[]>>(new Map())
+const recentActivities = ref<any[]>([])
 
 const activeDrills = computed(() => {
   return instances.value.filter(i => i.status === 'running' || i.status === 'paused')
 })
 
-const recentActivities = computed(() => {
-  return dashboardData.recent_activity.slice(0, 5)
-})
-
 function getCurrentStepName(drillId: number): string {
-  const drillSteps = stepsData.filter(s => s.drill_id === drillId && s.status === 'running')
-  if (drillSteps.length > 0) {
-    return drillSteps[0].step_name
+  const drillSteps = stepsMap.value.get(drillId) || []
+  const runningStep = drillSteps.find(s => s.status === 'running')
+  if (runningStep) {
+    return runningStep.name
   }
-  const pendingSteps = stepsData.filter(s => s.drill_id === drillId && s.status === 'pending')
-  if (pendingSteps.length > 0) {
-    return pendingSteps[0].step_name
+  const pendingStep = drillSteps.find(s => s.status === 'pending')
+  if (pendingStep) {
+    return pendingStep.name
   }
   return '无'
 }
 
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
   const map: Record<string, any> = {
+    start: 'primary',
+    pause: 'warning',
+    resume: 'primary',
+    terminate: 'danger',
     drill_start: 'primary',
     drill_complete: 'success',
     drill_terminate: 'danger',
+    drill_pause: 'warning',
+    drill_resume: 'primary',
     step_start: 'info',
     step_complete: 'success',
   }
@@ -159,9 +162,15 @@ function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | '
 
 function getActivityLabel(type: string): string {
   const map: Record<string, string> = {
+    start: '演练启动',
+    pause: '演练暂停',
+    resume: '演练恢复',
+    terminate: '演练终止',
     drill_start: '演练开始',
     drill_complete: '演练完成',
     drill_terminate: '演练终止',
+    drill_pause: '演练暂停',
+    drill_resume: '演练恢复',
     step_start: '步骤开始',
     step_complete: '步骤完成',
   }
@@ -178,12 +187,56 @@ function formatTime(dateStr: string): string {
   })
 }
 
-async function loadInstances() {
+async function loadDashboard() {
   try {
-    instances.value = instancesData as DrillInstance[]
+    // 加载演练列表
+    const result = await drillApi.getList({ page: 1, page_size: 50 })
+    instances.value = result.list
+    
+    // 计算统计数据
+    const today = new Date().toISOString().split('T')[0]
+    stats.value.todayDrills = instances.value.filter(d => d.created_at.startsWith(today)).length
+    stats.value.activeDrills = activeDrills.value.length
+    const completed = instances.value.filter(i => i.status === 'completed').length
+    stats.value.successRate = instances.value.length > 0 
+      ? Math.round((completed / instances.value.length) * 100) 
+      : 0
+    stats.value.myTemplates = 0 // TODO: 需要模板 API
+    
+    // 加载每个演练的步骤
+    for (const drill of activeDrills.value) {
+      try {
+        const steps = await drillApi.getSteps(drill.id)
+        stepsMap.value.set(drill.id, steps)
+      } catch (e) {
+        console.error(`Failed to load steps for drill ${drill.id}`, e)
+      }
+    }
+    
+    // 加载演练日志作为最近活动
+    const allLogs: any[] = []
+    for (const drill of instances.value.slice(0, 10)) {
+      try {
+        const logs = await drillApi.getLogs(drill.id)
+        logs.forEach((log: any) => {
+          allLogs.push({
+            type: log.action,
+            drill_name: drill.name,
+            operator: log.operator_name || '系统',
+            created_at: log.created_at,
+          })
+        })
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    // 按时间排序，取最新 5 条
+    recentActivities.value = allLogs
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
   } catch (error) {
     ElMessage.error('加载数据失败')
-    console.error('Failed to load instances:', error)
+    console.error('Failed to load dashboard:', error)
   }
 }
 
@@ -195,7 +248,9 @@ function viewScreen(drillId: number) {
   router.push(`/screen/${drillId}`)
 }
 
-loadInstances()
+onMounted(() => {
+  loadDashboard()
+})
 </script>
 
 <style scoped lang="scss">

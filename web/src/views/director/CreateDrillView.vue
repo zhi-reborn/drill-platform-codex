@@ -188,7 +188,7 @@ async function confirmCreate() {
   }
   try {
     ElMessage.success('演练创建成功')
-    router.push('/director/dashboard')
+    router.push('/director')
   } catch (error) {
     ElMessage.error('创建失败')
     console.error('Failed to create drill:', error)

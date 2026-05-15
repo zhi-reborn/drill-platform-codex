@@ -11,17 +11,17 @@
           <div class="progress-bar">
             <div
               class="progress-fill"
-              :style="{ width: `${(drill.completed_steps / drill.total_steps) * 100}%` }"
+              :style="{ width: `${drill.progress_pct}%` }"
             ></div>
           </div>
-          <span class="progress-text">{{ drill.completed_steps }}/{{ drill.total_steps }}</span>
+          <span class="progress-text">{{ drill.progress_pct }}%</span>
         </div>
         <div class="card-footer">
           <span class="assignee" v-if="drill.created_by_name">
             <el-icon><User /></el-icon>
             {{ drill.created_by_name }}
           </span>
-          <span class="template">{{ drill.template_name }}</span>
+          <span class="template">{{ drill.template?.name || drill.template_name }}</span>
         </div>
       </div>
     </div>

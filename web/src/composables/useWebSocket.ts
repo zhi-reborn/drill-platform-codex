@@ -1,7 +1,6 @@
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 import type { WsMessage } from '@/websocket/messageTypes'
 import { wsClient } from '@/websocket'
-import { useAuthStore } from '@/stores/auth'
 
 export function useWebSocket() {
   const connectionStatus = ref<'connecting' | 'connected' | 'disconnected'>('disconnected')
@@ -20,8 +19,6 @@ export function useWebSocket() {
       connectionStatus.value = (msg.payload as { status: string }).status as 'connecting' | 'connected' | 'disconnected'
     })
   }
-
-  onBeforeUnmount(() => { /* don't disconnect globally */ })
 
   return { connectionStatus, subscribe, unsubscribe, init }
 }

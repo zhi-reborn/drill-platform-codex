@@ -55,12 +55,13 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://host.docker.internal:8080',
+        target: 'http://backend:8080',
         changeOrigin: true,
       },
       '/ws': {
-        target: process.env.VITE_BACKEND_URL || 'ws://host.docker.internal:8080',
+        target: 'ws://backend:8080',
         ws: true,
+        changeOrigin: true,
       },
     },
   },
