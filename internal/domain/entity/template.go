@@ -2,6 +2,21 @@ package entity
 
 import "time"
 
+// TemplateCategory 模板分类
+type TemplateCategory struct {
+	ID        uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Value     string    `gorm:"type:varchar(50);not null;uniqueIndex:uk_value;column:value" json:"value"`
+	Label     string    `gorm:"type:varchar(50);not null;column:label" json:"label"`
+	SortOrder int       `gorm:"type:int;not null;default:0;column:sort_order;index:idx_sort" json:"sort_order"`
+	TagType   string    `gorm:"type:varchar(20);not null;default:info;column:tag_type" json:"tag_type"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (TemplateCategory) TableName() string {
+	return "drill_template_category"
+}
+
 // DrillTemplate 演练模板
 type DrillTemplate struct {
 	ID          uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`

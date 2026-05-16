@@ -2,8 +2,8 @@ import { apiRequest } from '../request'
 import type { DrillTemplate } from '@/types'
 
 export const templateApi = {
-  getList: (params?: { category?: string }) => {
-    return apiRequest<DrillTemplate[]>({
+  getList: (params?: { category?: string; page?: number; page_size?: number }) => {
+    return apiRequest<{ list: DrillTemplate[]; total: number }>({
       url: '/v1/templates',
       method: 'GET',
       params,
@@ -20,13 +20,15 @@ export const templateApi = {
   create: (data: {
     name: string
     category: string
-    description: string
-    steps: Array<{
+    description?: string
+    steps?: Array<{
       name: string
-      description: string
+      seq: number
       step_type: string
-      timeout_seconds: number
-      order_index: number
+      timeout_minutes?: number
+      guide_content?: string
+      is_blocking?: number
+      default_assignee_role?: string
     }>
   }) => {
     return apiRequest<DrillTemplate>({
@@ -36,8 +38,12 @@ export const templateApi = {
     })
   },
 
-  update: (id: number, data: Partial<DrillTemplate>) => {
-    return apiRequest<DrillTemplate>({
+  update: (id: number, data: {
+    name: string
+    category: string
+    description?: string
+  }) => {
+    return apiRequest<void>({
       url: `/v1/templates/${id}`,
       method: 'PUT',
       data,
@@ -51,10 +57,59 @@ export const templateApi = {
     })
   },
 
-  publish: (id: number) => {
+  clone: (id: number) => {
     return apiRequest<DrillTemplate>({
+      url: `/v1/templates/${id}/clone`,
+      method: 'POST',
+    })
+  },
+
+  getCategories: () => {
+    return apiRequest<Array<{
+      id: number
+      value: string
+      label: string
+      sort_order: number
+      tag_type: string
+    }>>({
+      url: '/v1/template-categories',
+      method: 'GET',
+    })
+  },
+
+  saveCategories: (categories: Array<{
+    id?: number
+    value: string
+    label: string
+    tag_type: string
+  }>) => {
+    return apiRequest<void>({
+      url: '/v1/template-categories',
+      method: 'POST',
+      data: categories,
+    })
+  },
+
+  publish: (id: number) => {
+    return apiRequest<void>({
       url: `/v1/templates/${id}/publish`,
       method: 'POST',
+    })
+  },
+
+  updateSteps: (id: number, steps: Array<{
+    name: string
+    seq: number
+    step_type: string
+    timeout_minutes?: number
+    guide_content?: string
+    is_blocking?: number
+    default_assignee_role?: string
+  }>) => {
+    return apiRequest<void>({
+      url: `/v1/templates/${id}/steps`,
+      method: 'PUT',
+      data: { steps },
     })
   },
 }

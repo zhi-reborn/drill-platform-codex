@@ -47,24 +47,49 @@
             {{ formatTime(row.updated_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" @click="openEditDialog(row)">编辑</el-button>
             <el-button text type="primary" @click="openStepsDialog(row)">编辑步骤</el-button>
+            <el-button 
+              v-if="row.status !== 'published'" 
+              text 
+              type="success" 
+              @click="handlePublish(row)"
+            >
+              发布
+            </el-button>
+            <el-tag v-else type="success" size="small" style="margin-right: 8px;">已发布</el-tag>
             <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="categoryVisible" title="分类管理" width="500px">
+    <el-dialog v-model="categoryVisible" title="分类管理" width="600px">
       <div class="category-list">
-        <div v-for="(cat, index) in editableCategories" :key="cat.value" class="category-item">
-          <el-tag :type="cat.tagType" size="small" style="min-width: 80px; text-align: center;">
-            {{ cat.label }}
-          </el-tag>
-          <el-input v-model="cat.label" size="small" class="category-input" placeholder="分类名称" />
-          <el-button-group>
+        <div v-for="(cat, index) in editableCategories" :key="cat.value || index" class="category-item">
+          <div class="category-row">
+            <div class="category-field">
+              <label>编码</label>
+              <el-input v-model="cat.value" size="small" placeholder="英文标识，如 database" :disabled="cat.id !== undefined" />
+            </div>
+            <div class="category-field">
+              <label>名称</label>
+              <el-input v-model="cat.label" size="small" placeholder="中文名称，如 数据库" />
+            </div>
+            <div class="category-field">
+              <label>标签类型</label>
+              <el-select v-model="cat.tagType" size="small" style="width: 100px">
+                <el-option label="默认" value="info" />
+                <el-option label="主要" value="primary" />
+                <el-option label="成功" value="success" />
+                <el-option label="警告" value="warning" />
+                <el-option label="危险" value="danger" />
+              </el-select>
+            </div>
+          </div>
+          <div class="category-actions">
             <el-button size="small" :disabled="index === 0" @click="moveCategory(index, -1)">
               <el-icon><ArrowUp /></el-icon>
             </el-button>
@@ -74,7 +99,7 @@
             <el-button size="small" type="danger" @click="removeCategory(index)">
               <el-icon><Delete /></el-icon>
             </el-button>
-          </el-button-group>
+          </div>
         </div>
       </div>
       <div class="add-category">
@@ -140,12 +165,7 @@
                 {{ getStepTypeLabel(row.step_type) }}
               </template>
             </el-table-column>
-            <el-table-column prop="timeout_seconds" label="超时(秒)" width="90" align="center" />
-            <el-table-column prop="assignee" label="操作人" width="100" show-overflow-tooltip>
-              <template #default="{ row }">
-                {{ row.assignee || '-' }}
-              </template>
-            </el-table-column>
+            <el-table-column prop="timeout_minutes" label="超时 (分)" width="80" align="center" />
             <el-table-column label="操作" width="160" align="center" fixed="right">
               <template #default="{ $index }">
                 <el-button-group size="small">
@@ -231,12 +251,10 @@
             </el-select>
           </el-form-item>
           <el-form-item label="超时时间">
-            <el-input-number v-model="singleStepForm.timeout_seconds" :min="30" :max="3600" controls-position="right" />
+            <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="60" controls-position="right" />
+            <span style="margin-left: 10px; color: var(--el-text-color-secondary); font-size: 12px;">分钟</span>
           </el-form-item>
         </div>
-        <el-form-item label="操作人">
-          <el-input v-model="singleStepForm.assignee" placeholder="填写操作人" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="singleAddVisible = false">取消</el-button>
@@ -255,13 +273,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Plus, Delete, Setting, Upload, Download, Top, Bottom, Edit } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillTemplate, StepTemplate, TemplateCategory, StepType } from '@/types'
-import templatesData from '@/mock/data/templates.json'
+import { templateApi } from '@/api/modules/template'
 
 interface CategoryItem {
   value: string
@@ -276,6 +294,9 @@ const defaultCategories: CategoryItem[] = [
   { value: 'degradation', label: '服务降级', tagType: 'warning' },
   { value: 'release', label: '发布演练', tagType: 'success' },
   { value: 'security', label: '安全事件', tagType: 'danger' },
+  { value: 'database', label: '数据库', tagType: 'info' },
+  { value: 'cache', label: '缓存', tagType: 'info' },
+  { value: 'mq', label: '消息队列', tagType: 'info' },
 ]
 
 const activeCategory = ref('all')
@@ -310,8 +331,7 @@ const singleStepForm = reactive({
   name: '',
   description: '',
   step_type: 'serial' as StepType,
-  timeout_seconds: 300,
-  assignee: '',
+  timeout_minutes: 5,
 })
 
 const singleStepEditIndex = ref<number | null>(null)
@@ -331,8 +351,7 @@ function resetSingleStepForm() {
   singleStepForm.name = ''
   singleStepForm.description = ''
   singleStepForm.step_type = 'serial'
-  singleStepForm.timeout_seconds = 300
-  singleStepForm.assignee = ''
+  singleStepForm.timeout_minutes = 5
 }
 
 function handleAddSingleStep() {
@@ -347,8 +366,7 @@ function handleAddSingleStep() {
     step.name = singleStepForm.name.trim()
     step.description = singleStepForm.description.trim()
     step.step_type = singleStepForm.step_type as StepType
-    step.timeout_seconds = singleStepForm.timeout_seconds
-    step.assignee = singleStepForm.assignee.trim()
+    step.timeout_minutes = singleStepForm.timeout_minutes
     ElMessage.success('步骤已更新')
   } else {
     // 新增模式
@@ -358,8 +376,7 @@ function handleAddSingleStep() {
       name: singleStepForm.name.trim(),
       description: singleStepForm.description.trim(),
       step_type: singleStepForm.step_type as StepType,
-      timeout_seconds: singleStepForm.timeout_seconds,
-      assignee: singleStepForm.assignee.trim(),
+      timeout_minutes: singleStepForm.timeout_minutes,
       order_index: editingSteps.value.length + 1,
       created_at: new Date().toISOString(),
     })
@@ -384,8 +401,7 @@ function openStepEditDialog(index: number) {
   singleStepForm.name = step.name
   singleStepForm.description = step.description || ''
   singleStepForm.step_type = step.step_type as StepType
-  singleStepForm.timeout_seconds = step.timeout_seconds
-  singleStepForm.assignee = step.assignee || ''
+  singleStepForm.timeout_minutes = step.timeout_minutes || 5
   singleStepEditIndex.value = index
   singleAddVisible.value = true
 }
@@ -419,10 +435,37 @@ function formatTime(dateStr: string): string {
   })
 }
 
-function loadTemplates() {
-  templates.value = JSON.parse(JSON.stringify(templatesData)) as DrillTemplate[]
-  ElMessage.success('模板加载成功')
+async function loadTemplates() {
+  try {
+    const params: any = { page: 1, page_size: 100 }
+    if (activeCategory.value !== 'all') {
+      params.category = activeCategory.value
+    }
+    const result = await templateApi.getList(params)
+    templates.value = result.list || []
+  } catch (error) {
+    ElMessage.error('加载模板列表失败')
+    console.error('Failed to load templates:', error)
+  }
 }
+
+async function loadCategories() {
+  try {
+    const result = await templateApi.getCategories()
+    categories.value = result.map(c => ({
+      value: c.value,
+      label: c.label,
+      tagType: c.tag_type as any,
+    }))
+  } catch (error) {
+    console.error('Failed to load categories:', error)
+  }
+}
+
+onMounted(() => {
+  loadCategories()
+  loadTemplates()
+})
 
 function openCategoryDialog() {
   editableCategories.value = JSON.parse(JSON.stringify(categories.value))
@@ -430,17 +473,17 @@ function openCategoryDialog() {
 }
 
 function addCategory() {
-  const newValue = `custom_${Date.now()}` as TemplateCategory
   editableCategories.value.push({
-    value: newValue,
-    label: '新分类',
+    value: '',
+    label: '',
     tagType: 'info',
   })
 }
 
 function removeCategory(index: number) {
   const cat = editableCategories.value[index]
-  if (templates.value.some(t => t.category === cat.value)) {
+  // 如果分类已有 ID（已存在于数据库），检查是否有模板使用
+  if (cat.id !== undefined && templates.value.some(t => t.category === cat.value)) {
     ElMessage.warning('该分类下有模板，请先移除或转移模板')
     return
   }
@@ -455,21 +498,67 @@ function moveCategory(index: number, direction: number) {
   editableCategories.value[newIndex] = temp
 }
 
-function handleSaveCategories() {
-  const labels = editableCategories.value.map(c => c.label)
-  if (new Set(labels).size !== labels.length) {
-    ElMessage.warning('分类名称不能重复')
-    return
-  }
+async function handleSaveCategories() {
+  // 验证编码（value）不能为空
   for (const cat of editableCategories.value) {
-    if (!cat.label.trim()) {
+    if (!cat.value || !cat.value.trim()) {
+      ElMessage.warning('分类编码不能为空')
+      return
+    }
+    // 验证编码格式（只允许字母、数字、下划线）
+    if (!/^[a-z][a-z0-9_]*$/.test(cat.value)) {
+      ElMessage.warning('分类编码必须以字母开头，只能包含小写字母、数字和下划线')
+      return
+    }
+  }
+  
+  // 验证名称不能为空
+  for (const cat of editableCategories.value) {
+    if (!cat.label || !cat.label.trim()) {
       ElMessage.warning('分类名称不能为空')
       return
     }
   }
-  categories.value = JSON.parse(JSON.stringify(editableCategories.value))
-  ElMessage.success('分类已保存')
-  categoryVisible.value = false
+  
+  // 验证编码不能重复
+  const valueCount: Record<string, number> = {}
+  for (const cat of editableCategories.value) {
+    valueCount[cat.value] = (valueCount[cat.value] || 0) + 1
+  }
+  for (const [value, count] of Object.entries(valueCount)) {
+    if (count > 1) {
+      ElMessage.warning(`分类编码 "${value}" 重复`)
+      return
+    }
+  }
+  
+  // 验证名称不能重复
+  const labelCount: Record<string, number> = {}
+  for (const cat of editableCategories.value) {
+    labelCount[cat.label] = (labelCount[cat.label] || 0) + 1
+  }
+  for (const [label, count] of Object.entries(labelCount)) {
+    if (count > 1) {
+      ElMessage.warning(`分类名称 "${label}" 重复`)
+      return
+    }
+  }
+  
+  try {
+    // 保存所有分类，由后端处理排序和删除
+    await templateApi.saveCategories(editableCategories.value.map(c => ({
+      value: c.value.trim(),
+      label: c.label.trim(),
+      tag_type: c.tagType,
+    })))
+    // 重新加载分类
+    await loadCategories()
+    ElMessage.success('分类已保存')
+    categoryVisible.value = false
+  } catch (error) {
+    ElMessage.error('保存分类失败')
+    console.error('Save categories error:', error)
+  }
 }
 
 function openCreateDialog() {
@@ -490,7 +579,7 @@ function openEditDialog(template: DrillTemplate) {
   formVisible.value = true
 }
 
-function handleSave() {
+async function handleSave() {
   if (!form.name.trim()) {
     ElMessage.warning('请输入模板名称')
     return
@@ -500,36 +589,29 @@ function handleSave() {
     return
   }
 
-  if (isEditing.value && editingId.value) {
-    const idx = templates.value.findIndex(t => t.id === editingId.value)
-    if (idx !== -1) {
-      templates.value[idx] = {
-        ...templates.value[idx],
+  try {
+    if (isEditing.value && editingId.value) {
+      await templateApi.update(editingId.value, {
         name: form.name,
         category: form.category,
         description: form.description,
-        updated_at: new Date().toISOString(),
-      }
+      })
       ElMessage.success('模板已更新')
+      loadTemplates()
+    } else {
+      await templateApi.create({
+        name: form.name,
+        category: form.category,
+        description: form.description,
+      })
+      ElMessage.success('模板已创建')
+      loadTemplates()
     }
-  } else {
-    const newTemplate: DrillTemplate = {
-      id: Math.max(...templates.value.map(t => t.id), 0) + 1,
-      name: form.name,
-      category: form.category,
-      description: form.description,
-      version: '1.0.0',
-      status: 'draft',
-      created_by: authStore.user?.id || 1,
-      created_by_name: authStore.userName || '当前用户',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      steps: [],
-    }
-    templates.value.push(newTemplate)
-    ElMessage.success('模板已创建')
+    formVisible.value = false
+  } catch (error) {
+    ElMessage.error(isEditing.value ? '更新失败' : '创建失败')
+    console.error('Template save error:', error)
   }
-  formVisible.value = false
 }
 
 function openStepsDialog(template: DrillTemplate) {
@@ -544,22 +626,34 @@ function removeStep(index: number) {
   editingSteps.value.forEach((s: StepTemplate, i: number) => { s.order_index = i + 1 })
 }
 
-function handleSaveSteps() {
-  const template = templates.value.find(t => t.id === editingTemplateId.value)
-  if (template) {
-    template.steps = editingSteps.value
-    template.updated_at = new Date().toISOString()
+async function handleSaveSteps() {
+  try {
+    await templateApi.updateSteps(editingTemplateId.value!, editingSteps.value.map((s, index) => ({
+      name: s.name,
+      seq: index + 1,
+      step_type: s.step_type,
+      timeout_minutes: s.timeout_minutes || 5,
+    })))
     ElMessage.success('步骤已保存')
+    stepsVisible.value = false
+    loadTemplates()
+  } catch (error) {
+    ElMessage.error('保存步骤失败')
+    console.error('Save steps error:', error)
   }
-  stepsVisible.value = false
 }
 
 function downloadTemplate() {
-  const header = ['步骤名称', '描述', '步骤类型', '超时时间(秒)', '操作人']
+  const header = ['步骤名称', '描述', '步骤类型', '超时时间 (秒)', '说明']
+  const data = [
+    header,
+    ['检查数据库状态', '检查主库是否正常运行', 'serial', '300', '步骤类型可选值：serial(串行), parallel(并行), any_of(任选), condition(条件)'],
+    ['切换从库', '将从库提升为主库', 'parallel', '600', '超时时间单位：秒，范围 30-3600'],
+  ]
   const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet([header])
+  const ws = XLSX.utils.aoa_to_sheet(data)
   const colWidths = [
-    { wch: 20 }, { wch: 30 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
+    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 50 }
   ]
   ws['!cols'] = colWidths
   XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
@@ -592,7 +686,6 @@ function handleExcelUpload(file: File) {
         const description = String(row[1] || '').trim()
         const stepTypeRaw = String(row[2] || '').trim()
         const timeoutSeconds = parseInt(String(row[3] || '300')) || 300
-        const assignee = String(row[4] || '').trim()
 
         if (!name) {
           errors.push(`第${rowNum}行：步骤名称不能为空`)
@@ -611,8 +704,7 @@ function handleExcelUpload(file: File) {
           name,
           description,
           step_type: stepType as any,
-          timeout_seconds: Math.min(3600, Math.max(30, timeoutSeconds)),
-          assignee,
+          timeout_minutes: Math.floor(Math.min(60, Math.max(1, timeoutSeconds / 60))),
           order_index: editingSteps.value.length + steps.length + 1,
           created_at: new Date().toISOString(),
         })
@@ -620,13 +712,16 @@ function handleExcelUpload(file: File) {
 
       if (errors.length > 0) {
         ElMessage.warning(errors.join('\n'))
+        return false
       }
 
       if (steps.length > 0) {
         editingSteps.value.push(...steps)
         ElMessage.success(`成功导入 ${steps.length} 个步骤`)
+        importVisible.value = false // 导入成功后关闭弹框
       } else if (errors.length === 0) {
         ElMessage.warning('未找到有效数据')
+        return false
       }
     } catch {
       ElMessage.error('Excel 文件解析失败')
@@ -641,13 +736,33 @@ function handleDelete(template: DrillTemplate) {
   deleteVisible.value = true
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (deleteTarget.value) {
-    templates.value = templates.value.filter(t => t.id !== deleteTarget.value!.id)
-    ElMessage.success('模板已删除')
+    try {
+      await templateApi.delete(deleteTarget.value.id)
+      ElMessage.success('模板已删除')
+      loadTemplates()
+    } catch (error) {
+      ElMessage.error('删除失败')
+      console.error('Template delete error:', error)
+    } finally {
+      deleteVisible.value = false
+      deleteTarget.value = null
+    }
   }
   deleteVisible.value = false
   deleteTarget.value = null
+}
+
+async function handlePublish(template: DrillTemplate) {
+  try {
+    await templateApi.publish(template.id)
+    ElMessage.success('模板已发布')
+    loadTemplates()
+  } catch (error) {
+    ElMessage.error('发布失败')
+    console.error('Template publish error:', error)
+  }
 }
 
 loadTemplates()
@@ -688,15 +803,36 @@ loadTemplates()
 .category-list {
   .category-item {
     display: flex;
-    align-items: center;
-    gap: $spacing-base;
+    align-items: flex-start;
+    gap: $spacing-sm;
     padding: $spacing-sm;
     margin-bottom: $spacing-sm;
     background: $bg-tertiary;
     border-radius: $radius-base;
 
-    .category-input {
+    .category-row {
       flex: 1;
+      display: flex;
+      gap: $spacing-sm;
+      align-items: center;
+
+      .category-field {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        label {
+          font-size: $font-size-xs;
+          color: $text-secondary;
+        }
+      }
+    }
+
+    .category-actions {
+      display: flex;
+      gap: 4px;
+      padding-top: 20px;
     }
   }
 }

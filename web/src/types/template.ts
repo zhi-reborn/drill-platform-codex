@@ -19,13 +19,11 @@ export interface StepTemplate {
   id: number
   template_id: number
   name: string
-  description: string
+  description?: string
   step_type: StepType
   script?: string
-  timeout_seconds: number
+  timeout_minutes?: number
   order_index: number
-  assignee?: string
-  assignee_role?: string
   pre_check?: string
   rollback_script?: string
   created_at: string

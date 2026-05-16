@@ -50,6 +50,9 @@ func (r *TemplateRepo) UpdateSteps(templateID uint64, steps []entity.StepTemplat
 		}
 		for i := range steps {
 			steps[i].DrillTemplateID = templateID
+			if steps[i].PreStepIDs == "" {
+				steps[i].PreStepIDs = "[]"
+			}
 		}
 		return tx.Create(&steps).Error
 	})
@@ -92,4 +95,53 @@ func (r *TemplateRepo) Clone(id uint64) (*entity.DrillTemplate, error) {
 		return nil
 	})
 	return newTemplate, err
+}
+
+func (r *TemplateRepo) GetCategories() ([]entity.TemplateCategory, error) {
+	var categories []entity.TemplateCategory
+	err := DB.Order("sort_order ASC").Find(&categories).Error
+	return categories, err
+}
+
+func (r *TemplateRepo) SaveCategories(categories []entity.TemplateCategory) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		// 收集传入分类的 value 列表
+		valueMap := make(map[string]bool)
+		for i := range categories {
+			categories[i].SortOrder = i + 1
+			valueMap[categories[i].Value] = true
+		}
+		
+		// 删除不在传入列表中的分类
+		var values []string
+		for v := range valueMap {
+			values = append(values, v)
+		}
+		if err := tx.Where("value NOT IN ?", values).Delete(&entity.TemplateCategory{}).Error; err != nil {
+			return err
+		}
+		
+		// 更新或创建传入的分类
+		for i := range categories {
+			var existing entity.TemplateCategory
+			result := tx.Where("value = ?", categories[i].Value).First(&existing)
+			
+			if result.Error == nil {
+				// 已存在，更新
+				existing.Label = categories[i].Label
+				existing.TagType = categories[i].TagType
+				existing.SortOrder = categories[i].SortOrder
+				if err := tx.Save(&existing).Error; err != nil {
+					return err
+				}
+			} else {
+				// 不存在，创建
+				if err := tx.Create(&categories[i]).Error; err != nil {
+					return err
+				}
+			}
+		}
+		
+		return nil
+	})
 }
