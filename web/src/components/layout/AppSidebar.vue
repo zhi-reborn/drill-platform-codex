@@ -50,6 +50,7 @@ const menuConfig: Record<string, MenuItem[]> = {
     { path: '/director', title: '指挥概览', icon: 'DataAnalysis' },
     { path: '/director/templates', title: '模板管理', icon: 'Document' },
     { path: '/director/create', title: '创建演练', icon: 'Plus' },
+    { path: '/director/drills', title: '演练实例', icon: 'Monitor' },
   ],
   executor: [
     { path: '/executor', title: '我的任务', icon: 'Tickets' },

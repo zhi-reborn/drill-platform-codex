@@ -79,14 +79,28 @@
           <span class="card-title">步骤列表</span>
         </template>
         <el-table :data="drillSteps" style="width: 100%">
-          <el-table-column prop="seq" label="序号" width="80" />
-          <el-table-column prop="name" label="步骤名" min-width="200" />
-          <el-table-column prop="status" label="状态" width="120">
+          <el-table-column prop="seq" label="序号" width="60" align="center" />
+          <el-table-column prop="name" label="步骤名" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="step_type" label="类型" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="100" align="center">
             <template #default="{ row }">
               <DrillStatusBadge :status="row.status" type="step" />
             </template>
           </el-table-column>
-          <el-table-column label="耗时" width="120">
+          <el-table-column prop="default_assignee_role" label="执行角色" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
+                {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="executor_team" label="执行团队" width="120" align="center" show-overflow-tooltip />
+          <el-table-column prop="timeout_minutes" label="超时 (分)" width="80" align="center" />
+          <el-table-column label="耗时" width="100" align="center">
             <template #default="{ row }">
               {{ calculateDuration(row) }}
             </template>
@@ -233,7 +247,7 @@ function getLogActionLabel(action: string): string {
   const map: Record<string, string> = {
     start: '演练启动',
     pause: '演练暂停',
-    resume: '演练恢复',
+    resume: '演练继续',
     terminate: '演练终止',
     step_start: '步骤开始',
     step_complete: '步骤完成',
@@ -242,6 +256,26 @@ function getLogActionLabel(action: string): string {
     force_complete: '强制完成',
   }
   return map[action] || action
+}
+
+function getStepTypeLabel(stepType: string): string {
+  const map: Record<string, string> = {
+    serial: '串行',
+    parallel: '并行',
+    any_of: '任选',
+    condition: '条件',
+  }
+  return map[stepType] || stepType
+}
+
+function getStepTypeTag(stepType: string): 'primary' | 'success' | 'warning' | 'info' {
+  const map: Record<string, any> = {
+    serial: 'primary',
+    parallel: 'success',
+    any_of: 'warning',
+    condition: 'info',
+  }
+  return map[stepType] || 'info'
 }
 
 async function loadDrillData() {

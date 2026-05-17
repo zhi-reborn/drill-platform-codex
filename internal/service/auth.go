@@ -89,6 +89,10 @@ func (s *AuthService) ListUsersPaginated(page, pageSize int, role string) ([]ent
 	return s.userRepo.List(page, pageSize, role)
 }
 
+func (s *AuthService) GetDepartments() ([]string, error) {
+	return s.userRepo.GetDistinctDepartments()
+}
+
 func (s *AuthService) GetUserByID(id uint64) (*entity.User, error) {
 	user, err := s.userRepo.FindByID(id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {

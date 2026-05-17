@@ -130,8 +130,8 @@ function handleLoadMore(page: number) {
         }
 
         &.disconnected {
-          background: $color-danger-bg;
-          color: $color-danger;
+          background: $color-error-bg;
+          color: $color-error;
         }
 
         &.connecting {

@@ -36,8 +36,8 @@
         <el-table-column prop="version" label="版本" width="100" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'published' ? 'success' : 'info'" size="small">
-              {{ row.status === 'published' ? '已发布' : '草稿' }}
+            <el-tag :type="(row.status_label || row.status) === 'enabled' || row.status === 2 ? 'success' : 'info'" size="small">
+              {{ (row.status_label || row.status) === 'enabled' || row.status === 2 ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -52,14 +52,12 @@
             <el-button text type="primary" @click="openEditDialog(row)">编辑</el-button>
             <el-button text type="primary" @click="openStepsDialog(row)">编辑步骤</el-button>
             <el-button 
-              v-if="row.status !== 'published'" 
               text 
-              type="success" 
-              @click="handlePublish(row)"
+              :type="(row.status_label || row.status) === 'enabled' || row.status === 2 ? 'warning' : 'success'" 
+              @click="handleToggleStatus(row)"
             >
-              发布
+              {{ (row.status_label || row.status) === 'enabled' || row.status === 2 ? '禁用' : '启用' }}
             </el-button>
-            <el-tag v-else type="success" size="small" style="margin-right: 8px;">已发布</el-tag>
             <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -134,7 +132,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="stepsVisible" :title="`编辑步骤 - ${editingTemplateName}`" size="900px">
+    <el-drawer v-model="stepsVisible" :title="`编辑步骤 - ${editingTemplateName}`" size="1200px">
       <template #header>
         <div class="steps-drawer-header">
           <span>编辑步骤 - {{ editingTemplateName }}</span>
@@ -166,6 +164,16 @@
               </template>
             </el-table-column>
             <el-table-column prop="timeout_minutes" label="超时 (分)" width="80" align="center" />
+            <el-table-column prop="default_assignee_role" label="执行角色" width="100" align="center">
+              <template #default="{ row }">
+                {{ row.default_assignee_role ? (row.default_assignee_role === 'director' ? '指挥组' : '执行组') : '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="executor_team" label="执行团队" width="120" align="center" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.executor_team || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="160" align="center" fixed="right">
               <template #default="{ $index }">
                 <el-button-group size="small">
@@ -242,7 +250,7 @@
           <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500" show-word-limit />
         </el-form-item>
         <div class="form-row">
-          <el-form-item label="步骤类型">
+          <el-form-item label="步骤类型" class="inline-form-item">
             <el-select v-model="singleStepForm.step_type">
               <el-option label="串行" value="serial" />
               <el-option label="并行" value="parallel" />
@@ -250,9 +258,26 @@
               <el-option label="条件" value="condition" />
             </el-select>
           </el-form-item>
-          <el-form-item label="超时时间">
+        </div>
+        <div class="form-row">
+          <el-form-item label="超时时间" class="inline-form-item">
             <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="60" controls-position="right" />
-            <span style="margin-left: 10px; color: var(--el-text-color-secondary); font-size: 12px;">分钟</span>
+            <span class="unit-label">分钟</span>
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="执行角色" class="inline-form-item">
+            <el-select v-model="singleStepForm.default_assignee_role" clearable placeholder="可留空">
+              <el-option label="指挥组" value="director" />
+              <el-option label="执行组" value="executor" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="执行团队" class="inline-form-item">
+            <el-select v-model="singleStepForm.executor_team" clearable placeholder="选择团队" filterable allow-create>
+              <el-option v-for="dept in departmentOptions" :key="dept" :label="dept" :value="dept" />
+            </el-select>
           </el-form-item>
         </div>
       </el-form>
@@ -280,6 +305,7 @@ import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillTemplate, StepTemplate, TemplateCategory, StepType } from '@/types'
 import { templateApi } from '@/api/modules/template'
+import { userApi } from '@/api'
 
 interface CategoryItem {
   value: string
@@ -332,7 +358,20 @@ const singleStepForm = reactive({
   description: '',
   step_type: 'serial' as StepType,
   timeout_minutes: 5,
+  default_assignee_role: 'executor',
+  executor_team: '',
 })
+
+const departmentOptions = ref<string[]>([])
+
+async function loadDepartments() {
+  try {
+    const depts = await userApi.getDepartments()
+    departmentOptions.value = depts
+  } catch (error) {
+    console.error('Failed to load departments:', error)
+  }
+}
 
 const singleStepEditIndex = ref<number | null>(null)
 const singleAddVisible = ref(false)
@@ -352,6 +391,8 @@ function resetSingleStepForm() {
   singleStepForm.description = ''
   singleStepForm.step_type = 'serial'
   singleStepForm.timeout_minutes = 5
+  singleStepForm.default_assignee_role = 'executor'
+  singleStepForm.executor_team = ''
 }
 
 function handleAddSingleStep() {
@@ -367,6 +408,8 @@ function handleAddSingleStep() {
     step.description = singleStepForm.description.trim()
     step.step_type = singleStepForm.step_type as StepType
     step.timeout_minutes = singleStepForm.timeout_minutes
+    step.default_assignee_role = singleStepForm.default_assignee_role
+    step.executor_team = singleStepForm.executor_team
     ElMessage.success('步骤已更新')
   } else {
     // 新增模式
@@ -377,6 +420,8 @@ function handleAddSingleStep() {
       description: singleStepForm.description.trim(),
       step_type: singleStepForm.step_type as StepType,
       timeout_minutes: singleStepForm.timeout_minutes,
+      default_assignee_role: singleStepForm.default_assignee_role,
+      executor_team: singleStepForm.executor_team,
       order_index: editingSteps.value.length + 1,
       created_at: new Date().toISOString(),
     })
@@ -402,6 +447,8 @@ function openStepEditDialog(index: number) {
   singleStepForm.description = step.description || ''
   singleStepForm.step_type = step.step_type as StepType
   singleStepForm.timeout_minutes = step.timeout_minutes || 5
+  singleStepForm.default_assignee_role = step.default_assignee_role || ''
+  singleStepForm.executor_team = step.executor_team || ''
   singleStepEditIndex.value = index
   singleAddVisible.value = true
 }
@@ -465,6 +512,7 @@ async function loadCategories() {
 onMounted(() => {
   loadCategories()
   loadTemplates()
+  loadDepartments()
 })
 
 function openCategoryDialog() {
@@ -617,7 +665,12 @@ async function handleSave() {
 function openStepsDialog(template: DrillTemplate) {
   editingTemplateId.value = template.id
   editingTemplateName.value = template.name
-  editingSteps.value = JSON.parse(JSON.stringify(template.steps || []))
+  const steps = JSON.parse(JSON.stringify(template.steps || []))
+  // 映射后端 guide_content 到前端 description
+  steps.forEach((s: StepTemplate) => {
+    s.description = s.guide_content || s.description || ''
+  })
+  editingSteps.value = steps
   stepsVisible.value = true
 }
 
@@ -633,6 +686,9 @@ async function handleSaveSteps() {
       seq: index + 1,
       step_type: s.step_type,
       timeout_minutes: s.timeout_minutes || 5,
+      guide_content: s.description || s.guide_content || '',
+      default_assignee_role: s.default_assignee_role || '',
+      executor_team: s.executor_team || '',
     })))
     ElMessage.success('步骤已保存')
     stepsVisible.value = false
@@ -644,16 +700,16 @@ async function handleSaveSteps() {
 }
 
 function downloadTemplate() {
-  const header = ['步骤名称', '描述', '步骤类型', '超时时间 (秒)', '说明']
+  const header = ['步骤名称', '描述', '步骤类型', '超时时间 (秒)', '执行角色', '执行团队', '说明']
   const data = [
     header,
-    ['检查数据库状态', '检查主库是否正常运行', 'serial', '300', '步骤类型可选值：serial(串行), parallel(并行), any_of(任选), condition(条件)'],
-    ['切换从库', '将从库提升为主库', 'parallel', '600', '超时时间单位：秒，范围 30-3600'],
+    ['检查数据库状态', '检查主库是否正常运行', 'serial', '300', 'executor', '技术部', '步骤类型可选值：serial(串行), parallel(并行), any_of(任选), condition(条件)'],
+    ['切换从库', '将从库提升为主库', 'parallel', '600', 'director', '运维部', '超时时间单位：秒，范围 30-3600'],
   ]
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
   const colWidths = [
-    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 50 }
+    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 50 }
   ]
   ws['!cols'] = colWidths
   XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
@@ -686,6 +742,8 @@ function handleExcelUpload(file: File) {
         const description = String(row[1] || '').trim()
         const stepTypeRaw = String(row[2] || '').trim()
         const timeoutSeconds = parseInt(String(row[3] || '300')) || 300
+        const assigneeRoleRaw = String(row[4] || '').trim()
+        const executorTeam = String(row[5] || '').trim()
 
         if (!name) {
           errors.push(`第${rowNum}行：步骤名称不能为空`)
@@ -698,6 +756,13 @@ function handleExcelUpload(file: File) {
         }
         const stepType = stepTypeMap[stepTypeRaw] || 'serial'
 
+        // 解析执行角色
+        const assigneeRoleMap: Record<string, string> = {
+          '指挥组': 'director', '执行组': 'executor',
+          'director': 'director', 'executor': 'executor',
+        }
+        const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
+
         steps.push({
           id: Date.now() + Math.random(),
           template_id: editingTemplateId.value || 0,
@@ -705,6 +770,8 @@ function handleExcelUpload(file: File) {
           description,
           step_type: stepType as any,
           timeout_minutes: Math.floor(Math.min(60, Math.max(1, timeoutSeconds / 60))),
+          default_assignee_role: assigneeRole,
+          executor_team: executorTeam,
           order_index: editingSteps.value.length + steps.length + 1,
           created_at: new Date().toISOString(),
         })
@@ -754,14 +821,14 @@ async function confirmDelete() {
   deleteTarget.value = null
 }
 
-async function handlePublish(template: DrillTemplate) {
+async function handleToggleStatus(template: DrillTemplate) {
   try {
-    await templateApi.publish(template.id)
-    ElMessage.success('模板已发布')
+    await templateApi.toggleStatus(template.id)
+    ElMessage.success('状态已更新')
     loadTemplates()
   } catch (error) {
-    ElMessage.error('发布失败')
-    console.error('Template publish error:', error)
+    ElMessage.error('操作失败')
+    console.error('Template toggle status error:', error)
   }
 }
 
@@ -927,10 +994,16 @@ loadTemplates()
 .single-step-form {
   .form-row {
     display: flex;
-    gap: $spacing-base;
+    gap: 16px;
+  }
 
-    .el-form-item {
-      flex: 1;
+  .inline-form-item {
+    flex: 1;
+
+    .unit-label {
+      margin-left: 8px;
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
     }
   }
 }

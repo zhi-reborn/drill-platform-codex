@@ -23,7 +23,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 	authHandler := auth.NewHandler(services.AuthService)
 	templateHandler := template.NewHandler(services.TemplateService)
-	drillHandler := drill.NewHandler(services.DrillService)
+	drillHandler := drill.NewHandler(services.DrillService, services.AuthService)
 	taskHandler := task.NewHandler(services.TaskService)
 	displayHandler := display.NewHandler(services.DisplayService)
 	reportHandler := report.NewHandler(services.ReportService)
@@ -41,6 +41,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.GET("/auth/me", authHandler.GetCurrentUser)
 
 			v1.GET("/users", authHandler.ListUsers)
+			v1.GET("/departments", authHandler.GetDepartments)
 			v1.GET("/users/:id", authHandler.GetUser)
 			v1.POST("/users", middleware.RequireAdmin(), authHandler.CreateUser)
 			v1.PUT("/users/:id", middleware.RequireAdmin(), authHandler.UpdateUser)
@@ -52,7 +53,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.PUT("/templates/:id", middleware.RequireDirectorOrAbove(), templateHandler.Update)
 			v1.DELETE("/templates/:id", middleware.RequireDirectorOrAbove(), templateHandler.Delete)
 			v1.POST("/templates/:id/clone", middleware.RequireDirectorOrAbove(), templateHandler.Clone)
-			v1.POST("/templates/:id/publish", middleware.RequireDirectorOrAbove(), templateHandler.Publish)
+			v1.POST("/templates/:id/toggle-status", middleware.RequireDirectorOrAbove(), templateHandler.ToggleStatus)
 			v1.PUT("/templates/:id/steps", middleware.RequireDirectorOrAbove(), templateHandler.UpdateSteps)
 			v1.GET("/template-categories", templateHandler.GetCategories)
 			v1.POST("/template-categories", middleware.RequireDirectorOrAbove(), templateHandler.SaveCategories)
@@ -66,6 +67,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.POST("/drills/:id/pause", middleware.RequireDirectorOrAbove(), drillHandler.Pause)
 			v1.POST("/drills/:id/resume", middleware.RequireDirectorOrAbove(), drillHandler.Resume)
 			v1.POST("/drills/:id/terminate", middleware.RequireDirectorOrAbove(), drillHandler.Terminate)
+			v1.DELETE("/drills/:id", middleware.RequireDirectorOrAbove(), drillHandler.Delete)
 
 			v1.GET("/tasks/my", taskHandler.GetMyTasks)
 			v1.GET("/tasks/:stepId", taskHandler.GetDetail)

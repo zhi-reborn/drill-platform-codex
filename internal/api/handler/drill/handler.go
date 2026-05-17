@@ -12,10 +12,14 @@ import (
 
 type Handler struct {
 	drillService *service.DrillService
+	userService  *service.AuthService
 }
 
-func NewHandler(drillService *service.DrillService) *Handler {
-	return &Handler{drillService: drillService}
+func NewHandler(drillService *service.DrillService, authService *service.AuthService) *Handler {
+	return &Handler{
+		drillService: drillService,
+		userService:  authService,
+	}
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -31,6 +35,15 @@ func (h *Handler) List(c *gin.Context) {
 	if err != nil {
 		response.InternalError(c, "获取演练列表失败")
 		return
+	}
+
+	for i := range drills {
+		if user, err := h.drillService.GetUserByID(drills[i].CreatedBy); err == nil {
+			drills[i].CreatedByName = user.RealName
+		}
+		if drills[i].Template.ID != 0 {
+			drills[i].TemplateName = drills[i].Template.Name
+		}
 	}
 
 	response.SuccessPage(c, drills, total, q.Page, q.PageSize)
@@ -158,4 +171,19 @@ func (h *Handler) GetLogs(c *gin.Context) {
 	}
 
 	response.Success(c, logs)
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
+
+	if err := h.drillService.Delete(id); err != nil {
+		response.InternalError(c, "删除演练失败："+err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "演练已删除", nil)
 }

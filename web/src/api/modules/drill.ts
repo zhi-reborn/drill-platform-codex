@@ -77,4 +77,11 @@ export const drillApi = {
       method: 'GET',
     })
   },
+
+  delete: (id: number) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${id}`,
+      method: 'DELETE',
+    })
+  },
 }

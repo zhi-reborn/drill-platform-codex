@@ -90,9 +90,9 @@ export const templateApi = {
     })
   },
 
-  publish: (id: number) => {
+  toggleStatus: (id: number) => {
     return apiRequest<void>({
-      url: `/v1/templates/${id}/publish`,
+      url: `/v1/templates/${id}/toggle-status`,
       method: 'POST',
     })
   },
@@ -105,6 +105,7 @@ export const templateApi = {
     guide_content?: string
     is_blocking?: number
     default_assignee_role?: string
+    executor_team?: string
   }>) => {
     return apiRequest<void>({
       url: `/v1/templates/${id}/steps`,

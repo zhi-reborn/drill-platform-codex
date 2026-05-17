@@ -59,3 +59,13 @@ func (r *UserRepo) ListAll() ([]entity.User, error) {
 	err := DB.Where("status = 1").Order("role, id").Find(&users).Error
 	return users, err
 }
+
+func (r *UserRepo) GetDistinctDepartments() ([]string, error) {
+	var departments []string
+	err := DB.Model(&entity.User{}).
+		Where("department IS NOT NULL AND department != ''").
+		Distinct("department").
+		Order("department").
+		Pluck("department", &departments).Error
+	return departments, err
+}

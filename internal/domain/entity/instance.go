@@ -14,6 +14,8 @@ type DrillInstance struct {
 	CurrentStepID *uint64    `gorm:"type:bigint unsigned;column:current_step_id" json:"current_step_id"`
 	ProgressPct   int        `gorm:"type:int;not null;default:0;column:progress_pct" json:"progress_pct"`
 	CreatedBy     uint64     `gorm:"type:bigint unsigned;not null;column:created_by" json:"created_by"`
+	CreatedByName string     `gorm:"-" json:"created_by_name"`
+	TemplateName  string     `gorm:"-" json:"template_name"`
 	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime;index:idx_created_at" json:"created_at"`
 	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 
@@ -40,12 +42,16 @@ type StepInstance struct {
 	TimeoutAt       *time.Time `gorm:"column:timeout_at" json:"timeout_at"`
 	Remark          string     `gorm:"type:text;column:remark" json:"remark"`
 	IssueDesc       string     `gorm:"type:text;column:issue_desc" json:"issue_desc"`
+	StepType        string     `gorm:"type:varchar(32);column:step_type" json:"step_type"`
+	TimeoutMinutes  int        `gorm:"type:int;default:5;column:timeout_minutes" json:"timeout_minutes"`
+	DefaultAssigneeRole string `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
+	ExecutorTeam    string     `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
 	CreatedAt       time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillInstance DrillInstance `gorm:"foreignKey:DrillInstanceID;references:ID" json:"drill_instance,omitempty"`
-	Logs          []StepInstanceLog `gorm:"foreignKey:StepInstanceID;constraint:OnDelete:CASCADE" json:"logs,omitempty"`
+	Logs          []DrillInstanceLog `gorm:"foreignKey:StepInstanceID;constraint:OnDelete:CASCADE" json:"logs,omitempty"`
 }
 
 func (StepInstance) TableName() string {
-	return "step_instance"
+	return "drill_instance_step"
 }

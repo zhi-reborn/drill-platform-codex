@@ -24,6 +24,7 @@ type DrillTemplate struct {
 	Category    string    `gorm:"type:varchar(64);not null;column:category;index:idx_category" json:"category"`
 	Description string    `gorm:"type:text;column:description" json:"description"`
 	Status      int8      `gorm:"type:tinyint;not null;default:1;column:status" json:"status"`
+	StatusLabel string    `gorm:"-" json:"status_label"`
 	CreatedBy   uint64    `gorm:"type:bigint unsigned;not null;column:created_by" json:"created_by"`
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
@@ -48,11 +49,12 @@ type StepTemplate struct {
 	GuideContent       string    `gorm:"type:text;column:guide_content" json:"guide_content"`
 	IsBlocking         int8      `gorm:"type:tinyint;not null;default:1;column:is_blocking" json:"is_blocking"`
 	DefaultAssigneeRole string   `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
+	ExecutorTeam       string   `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
 	CreatedAt          time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillTemplate DrillTemplate `gorm:"foreignKey:DrillTemplateID;references:ID" json:"drill_template,omitempty"`
 }
 
 func (StepTemplate) TableName() string {
-	return "step_template"
+	return "drill_template_step"
 }

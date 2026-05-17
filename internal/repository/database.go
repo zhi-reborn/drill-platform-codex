@@ -72,7 +72,7 @@ func AutoMigrate() error {
 		&entity.StepTemplate{},
 		&entity.DrillInstance{},
 		&entity.StepInstance{},
-		&entity.StepInstanceLog{},
+		&entity.DrillInstanceLog{},
 		&entity.DrillAssignee{},
 	)
 }

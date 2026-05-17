@@ -25,7 +25,7 @@ func (r *TemplateRepo) List(page, pageSize int, category string) ([]entity.Drill
 	var templates []entity.DrillTemplate
 	var total int64
 
-	query := DB.Model(&entity.DrillTemplate{})
+	query := DB.Model(&entity.DrillTemplate{}).Preload("Steps")
 	if category != "" {
 		query = query.Where("category = ?", category)
 	}
@@ -47,6 +47,9 @@ func (r *TemplateRepo) UpdateSteps(templateID uint64, steps []entity.StepTemplat
 	return DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("drill_template_id = ?", templateID).Delete(&entity.StepTemplate{}).Error; err != nil {
 			return err
+		}
+		if len(steps) == 0 {
+			return nil
 		}
 		for i := range steps {
 			steps[i].DrillTemplateID = templateID

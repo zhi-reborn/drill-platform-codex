@@ -2,6 +2,7 @@ package repository
 
 import (
 	"drill-platform/internal/domain/entity"
+	"gorm.io/gorm"
 )
 
 type DrillRepo struct{}
@@ -12,7 +13,7 @@ func NewDrillRepo() *DrillRepo {
 
 func (r *DrillRepo) FindByID(id uint64) (*entity.DrillInstance, error) {
 	var drill entity.DrillInstance
-	err := DB.Preload("Template").Preload("Steps").First(&drill, id).Error
+	err := DB.Where("id = ?", id).Preload("Template").Preload("Steps").First(&drill).Error
 	if err != nil {
 		return nil, err
 	}
@@ -61,4 +62,45 @@ func (r *DrillRepo) GetLogs(drillID uint64) ([]entity.DrillInstanceLog, error) {
 	var logs []entity.DrillInstanceLog
 	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC").Find(&logs).Error
 	return logs, err
+}
+
+func (r *DrillRepo) Delete(id uint64) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		// 获取所有步骤实例 ID
+		var stepIDs []uint64
+		if err := tx.Where("drill_instance_id = ?", id).
+			Model(&entity.StepInstance{}).
+			Pluck("id", &stepIDs).Error; err != nil {
+			return err
+		}
+
+		// 删除步骤日志（step_instance_id 不为空的记录）
+		if len(stepIDs) > 0 {
+			if err := tx.Where("drill_instance_id = ? AND step_instance_id IN ?", id, stepIDs).
+				Delete(&entity.DrillInstanceLog{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// 删除演练日志
+		if err := tx.Where("drill_instance_id = ?", id).
+			Delete(&entity.DrillInstanceLog{}).Error; err != nil {
+			return err
+		}
+
+		// 删除人员分配
+		if err := tx.Where("drill_instance_id = ?", id).
+			Delete(&entity.DrillAssignee{}).Error; err != nil {
+			return err
+		}
+
+		// 删除步骤实例
+		if err := tx.Where("drill_instance_id = ?", id).
+			Delete(&entity.StepInstance{}).Error; err != nil {
+			return err
+		}
+
+		// 删除演练实例
+		return tx.Delete(&entity.DrillInstance{}, id).Error
+	})
 }

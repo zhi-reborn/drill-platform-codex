@@ -26,7 +26,7 @@ func NewServices(wsManager *websocket.Manager) *Services {
 	s := &Services{
 		AuthService:       NewAuthService(userRepo),
 		TemplateService:   NewTemplateService(templateRepo),
-		DrillService:      NewDrillService(drillRepo, templateRepo, stepRepo),
+		DrillService:      NewDrillService(drillRepo, templateRepo, stepRepo, userRepo),
 		TaskService:       NewTaskService(stepRepo),
 		DisplayService:    NewDisplayService(drillRepo, stepRepo),
 		ReportService:     NewReportService(drillRepo, stepRepo),

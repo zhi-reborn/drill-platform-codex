@@ -67,6 +67,15 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	})
 }
 
+func (h *Handler) GetDepartments(c *gin.Context) {
+	departments, err := h.authService.GetDepartments()
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, departments)
+}
+
 func (h *Handler) GetUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {

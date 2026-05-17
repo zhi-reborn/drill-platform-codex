@@ -4,7 +4,6 @@ import (
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/repository"
-	"errors"
 )
 
 type TemplateService struct {
@@ -41,6 +40,7 @@ func (s *TemplateService) Create(req *dto.CreateTemplateRequest, createdBy uint6
 			GuideContent:        stepReq.GuideContent,
 			IsBlocking:          stepReq.IsBlocking,
 			DefaultAssigneeRole: stepReq.DefaultAssigneeRole,
+			ExecutorTeam:        stepReq.ExecutorTeam,
 		}
 		if len(stepReq.PreStepIDs) > 0 {
 			step.PreStepIDs = "[]"
@@ -80,17 +80,18 @@ func (s *TemplateService) SaveCategories(categories []entity.TemplateCategory) e
 	return s.templateRepo.SaveCategories(categories)
 }
 
-func (s *TemplateService) Publish(id uint64) error {
+func (s *TemplateService) ToggleStatus(id uint64) error {
 	template, err := s.templateRepo.FindByID(id)
 	if err != nil {
 		return err
 	}
 
-	if len(template.Steps) == 0 {
-		return errors.New("模板必须包含至少一个步骤才能发布")
+	// 切换状态：0=禁用，2=启用
+	if template.Status == 2 {
+		template.Status = 0
+	} else {
+		template.Status = 2
 	}
-
-	template.Status = 2
 	return s.templateRepo.Update(template)
 }
 
@@ -110,6 +111,7 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 			GuideContent:        stepReq.GuideContent,
 			IsBlocking:          stepReq.IsBlocking,
 			DefaultAssigneeRole: stepReq.DefaultAssigneeRole,
+			ExecutorTeam:        stepReq.ExecutorTeam,
 		}
 		newSteps = append(newSteps, step)
 	}

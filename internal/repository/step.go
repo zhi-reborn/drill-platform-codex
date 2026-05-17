@@ -33,6 +33,6 @@ func (r *StepRepo) UpdateStatus(id uint64, status, remark string) error {
 	return DB.Model(&entity.StepInstance{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *StepRepo) CreateLogs(logs []entity.StepInstanceLog) error {
+func (r *StepRepo) CreateLogs(logs []entity.DrillInstanceLog) error {
 	return DB.Create(&logs).Error
 }

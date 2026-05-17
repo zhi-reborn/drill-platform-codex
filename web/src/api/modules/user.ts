@@ -58,4 +58,11 @@ export const userApi = {
       data: { password: newPassword },
     })
   },
+
+  getDepartments: () => {
+    return apiRequest<string[]>({
+      url: '/v1/departments',
+      method: 'GET',
+    })
+  },
 }

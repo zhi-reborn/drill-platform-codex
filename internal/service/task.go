@@ -57,11 +57,12 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 		"remark":         remark,
 	})
 
-	repository.DB.Create(&entity.StepInstanceLog{
-		StepInstanceID: stepID,
-		Action:         "complete",
-		OperatorID:     operatorID,
-		Content:        remark,
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: step.DrillInstanceID,
+		StepInstanceID:  &stepID,
+		Action:          "complete",
+		OperatorID:      operatorID,
+		Content:         remark,
 	})
 
 	// WebSocket 广播
@@ -103,11 +104,12 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 		"issue_desc": issueDesc,
 	})
 
-	repository.DB.Create(&entity.StepInstanceLog{
-		StepInstanceID: stepID,
-		Action:         "issue",
-		OperatorID:     operatorID,
-		Content:        issueDesc,
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: step.DrillInstanceID,
+		StepInstanceID:  &stepID,
+		Action:          "issue",
+		OperatorID:      operatorID,
+		Content:         issueDesc,
 	})
 
 	// WebSocket 广播

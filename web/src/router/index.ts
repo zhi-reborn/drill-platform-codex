@@ -79,6 +79,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '创建演练', icon: 'Plus' },
       },
       {
+        path: 'drills',
+        name: 'DirectorDrills',
+        component: () => import('@/views/director/DrillsView.vue'),
+        meta: { title: '演练实例', icon: 'Monitor' },
+      },
+      {
         path: 'monitor/:id(\\d+)',
         name: 'DirectorMonitor',
         component: () => import('@/views/director/MonitorView.vue'),

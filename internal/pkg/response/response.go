@@ -42,10 +42,10 @@ func SuccessPage(c *gin.Context, data interface{}, total int64, page, pageSize i
 		Code:    CodeSuccess,
 		Message: "success",
 		Data: map[string]interface{}{
-			"list":     data,
-			"total":    total,
-			"page":     page,
-			"pageSize": pageSize,
+			"list":      data,
+			"total":     total,
+			"page":      page,
+			"page_size": pageSize,
 		},
 	})
 }

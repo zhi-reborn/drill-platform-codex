@@ -15,15 +15,17 @@ type DrillService struct {
 	drillRepo             *repository.DrillRepo
 	templateRepo          *repository.TemplateRepo
 	stepRepo              *repository.StepRepo
+	userRepo              *repository.UserRepo
 	wsManager             *websocket.Manager
 	notificationService   *NotificationService
 }
 
-func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.TemplateRepo, stepRepo *repository.StepRepo) *DrillService {
+func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.TemplateRepo, stepRepo *repository.StepRepo, userRepo *repository.UserRepo) *DrillService {
 	return &DrillService{
 		drillRepo:    drillRepo,
 		templateRepo: templateRepo,
 		stepRepo:     stepRepo,
+		userRepo:     userRepo,
 	}
 }
 
@@ -37,6 +39,10 @@ func (s *DrillService) SetNotificationService(ns *NotificationService) {
 
 func (s *DrillService) GetList(page, pageSize int, status string) ([]entity.DrillInstance, int64, error) {
 	return s.drillRepo.List(page, pageSize, status)
+}
+
+func (s *DrillService) GetUserByID(id uint64) (*entity.User, error) {
+	return s.userRepo.FindByID(id)
 }
 
 func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
@@ -53,7 +59,7 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		return nil, errors.New("模板不存在")
 	}
 
-	if template.Status != 1 {
+	if template.Status == 0 {
 		return nil, errors.New("模板已禁用，无法创建演练")
 	}
 
@@ -84,12 +90,16 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		}
 
 		step := entity.StepInstance{
-			DrillInstanceID: drill.ID,
-			StepTemplateID:  stepTpl.ID,
-			Name:            stepTpl.Name,
-			Seq:             stepTpl.Seq,
-			Status:          "pending",
-			AssigneeIDs:     assigneeIDs,
+			DrillInstanceID:     drill.ID,
+			StepTemplateID:      stepTpl.ID,
+			Name:                stepTpl.Name,
+			Seq:                 stepTpl.Seq,
+			Status:              "pending",
+			AssigneeIDs:         assigneeIDs,
+			StepType:            stepTpl.StepType,
+			TimeoutMinutes:      stepTpl.TimeoutMinutes,
+			DefaultAssigneeRole: stepTpl.DefaultAssigneeRole,
+			ExecutorTeam:        stepTpl.ExecutorTeam,
 		}
 		repository.DB.Create(&step)
 	}
@@ -338,4 +348,8 @@ func (s *DrillService) Terminate(id uint64) error {
 
 func (s *DrillService) GetLogs(id uint64) ([]entity.DrillInstanceLog, error) {
 	return s.drillRepo.GetLogs(id)
+}
+
+func (s *DrillService) Delete(id uint64) error {
+	return s.drillRepo.Delete(id)
 }

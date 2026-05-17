@@ -34,7 +34,22 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
+	for i := range templates {
+		templates[i].StatusLabel = statusToLabel(templates[i].Status)
+	}
+
 	response.SuccessPage(c, templates, total, q.Page, q.PageSize)
+}
+
+func statusToLabel(status int8) string {
+	switch status {
+	case 0:
+		return "disabled"
+	case 2:
+		return "enabled"
+	default:
+		return "disabled"
+	}
 }
 
 func (h *Handler) GetDetail(c *gin.Context) {
@@ -146,19 +161,19 @@ func (h *Handler) SaveCategories(c *gin.Context) {
 	response.SuccessWithMessage(c, "保存成功", nil)
 }
 
-func (h *Handler) Publish(c *gin.Context) {
+func (h *Handler) ToggleStatus(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "无效的模板 ID")
 		return
 	}
 
-	if err := h.templateService.Publish(id); err != nil {
-		response.InternalError(c, "发布模板失败："+err.Error())
+	if err := h.templateService.ToggleStatus(id); err != nil {
+		response.InternalError(c, "切换状态失败："+err.Error())
 		return
 	}
 
-	response.SuccessWithMessage(c, "模板已发布", nil)
+	response.SuccessWithMessage(c, "状态已更新", nil)
 }
 
 type UpdateStepsRequest struct {
@@ -169,7 +184,8 @@ type UpdateStepsRequest struct {
 		GuideContent        string  `json:"guide_content"`
 		IsBlocking          int8    `json:"is_blocking"`
 		DefaultAssigneeRole string  `json:"default_assignee_role"`
-	} `json:"steps" binding:"required,min=1,dive"`
+		ExecutorTeam        string  `json:"executor_team"`
+	} `json:"steps" binding:"required,dive"`
 }
 
 func (h *Handler) UpdateSteps(c *gin.Context) {
@@ -195,6 +211,7 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 			GuideContent:        s.GuideContent,
 			IsBlocking:          s.IsBlocking,
 			DefaultAssigneeRole: s.DefaultAssigneeRole,
+			ExecutorTeam:        s.ExecutorTeam,
 		})
 	}
 

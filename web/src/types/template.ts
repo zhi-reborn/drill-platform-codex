@@ -26,6 +26,9 @@ export interface StepTemplate {
   order_index: number
   pre_check?: string
   rollback_script?: string
+  guide_content?: string
+  default_assignee_role?: string
+  executor_team?: string
   created_at: string
 }
 
@@ -39,6 +42,7 @@ export interface DrillTemplate {
   created_by_name: string
   steps: StepTemplate[]
   status: 'draft' | 'published' | 'archived'
+  status_label?: string
   created_at: string
   updated_at: string
 }

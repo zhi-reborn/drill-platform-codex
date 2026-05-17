@@ -49,7 +49,8 @@ type StepTemplateRequest struct {
 	PreStepIDs          []int64 `json:"pre_step_ids"`
 	GuideContent        string  `json:"guide_content"`
 	IsBlocking          int8    `json:"is_blocking"`
-	DefaultAssigneeRole string `json:"default_assignee_role"`
+	DefaultAssigneeRole string  `json:"default_assignee_role"`
+	ExecutorTeam        string  `json:"executor_team"`
 }
 
 type UpdateDrillStatusRequest struct {

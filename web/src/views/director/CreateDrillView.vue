@@ -102,7 +102,8 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { DrillTemplate } from '@/types'
-import templatesData from '@/mock/data/templates.json'
+import { templateApi } from '@/api/modules/template'
+import { drillApi } from '@/api/modules/drill'
 
 const router = useRouter()
 
@@ -125,7 +126,9 @@ const rules: FormRules = {
 
 async function loadTemplates() {
   try {
-    templates.value = templatesData as DrillTemplate[]
+    const result = await templateApi.getList({ page: 1, page_size: 100 })
+    // 只显示已启用的模板（status=2 或 status_label='enabled'）
+    templates.value = (result.list || []).filter(t => t.status === 2 || t.status_label === 'enabled')
   } catch (error) {
     ElMessage.error('加载模板失败')
     console.error('Failed to load templates:', error)
@@ -187,8 +190,13 @@ async function confirmCreate() {
     return
   }
   try {
+    await drillApi.create({
+      template_id: selectedTemplate.value.id,
+      name: form.name.trim(),
+      description: form.description?.trim() || '',
+    })
     ElMessage.success('演练创建成功')
-    router.push('/director')
+    router.push('/director/drills')
   } catch (error) {
     ElMessage.error('创建失败')
     console.error('Failed to create drill:', error)
