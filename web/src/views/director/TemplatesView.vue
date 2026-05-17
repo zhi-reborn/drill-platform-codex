@@ -66,7 +66,7 @@
 
     <el-dialog v-model="categoryVisible" title="分类管理" width="600px">
       <div class="category-list">
-        <div v-for="(cat, index) in editableCategories" :key="cat.value || index" class="category-item">
+        <div v-for="(cat, index) in editableCategories" :key="index" class="category-item">
           <div class="category-row">
             <div class="category-field">
               <label>编码</label>
@@ -554,8 +554,8 @@ async function handleSaveCategories() {
       return
     }
     // 验证编码格式（只允许字母、数字、下划线）
-    if (!/^[a-z][a-z0-9_]*$/.test(cat.value)) {
-      ElMessage.warning('分类编码必须以字母开头，只能包含小写字母、数字和下划线')
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(cat.value)) {
+      ElMessage.warning('分类编码必须以字母开头，只能包含字母、数字和下划线')
       return
     }
   }

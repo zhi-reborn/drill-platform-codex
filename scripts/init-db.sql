@@ -176,10 +176,10 @@ CREATE TABLE `notification` (
 
 -- 用户数据 (密码：admin123, bcrypt hash)
 INSERT INTO `user` (`username`, `real_name`, `password_hash`, `role`, `department`, `status`) VALUES
-('admin', '系统管理员', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'admin', '技术部', 1),
-('director1', '张指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1),
-('executor1', '李执行', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'executor', '研发部', 1),
-('viewer1', '王观察', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'viewer', '测试部', 1),
-('director2', '刘指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1);
+('admin', '系统管理员', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'admin', '技术部', 1),
+('director1', '张指挥', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'director', '运维部', 1),
+('executor1', '李执行', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'executor', '研发部', 1),
+('viewer1', '王观察', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'viewer', '测试部', 1),
+('director2', '刘指挥', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'director', '运维部', 1);
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -49,6 +49,10 @@ func (s *AuthService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 		return nil, errors.New("账户已被禁用")
 	}
 
+	if user.Status != 1 {
+		return nil, errors.New("账户已被禁用")
+	}
+
 	token, err := s.generateToken(user)
 	if err != nil {
 		return nil, err
