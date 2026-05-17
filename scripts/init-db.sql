@@ -1,5 +1,5 @@
 -- 演练平台数据库初始化脚本
--- 基于《生产演练流程管理系统_总体设计文档_v1.0》
+-- 基于最新生产环境表结构
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -25,6 +25,21 @@ CREATE TABLE `user` (
     KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
+-- 模板分类表
+DROP TABLE IF EXISTS `drill_template_category`;
+CREATE TABLE `drill_template_category` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `value` VARCHAR(50) NOT NULL COMMENT '分类值（英文标识）',
+    `label` VARCHAR(50) NOT NULL COMMENT '分类名称（中文显示）',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序顺序',
+    `tag_type` VARCHAR(20) NOT NULL DEFAULT 'info' COMMENT '标签类型：primary|success|warning|danger|info',
+    `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_value` (`value`),
+    KEY `idx_sort` (`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模板分类表';
+
 -- 演练模板表
 DROP TABLE IF EXISTS `drill_template`;
 CREATE TABLE `drill_template` (
@@ -43,8 +58,8 @@ CREATE TABLE `drill_template` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练模板表';
 
 -- 步骤模板表
-DROP TABLE IF EXISTS `step_template`;
-CREATE TABLE `step_template` (
+DROP TABLE IF EXISTS `drill_template_step`;
+CREATE TABLE `drill_template_step` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_template_id` BIGINT UNSIGNED NOT NULL COMMENT '所属模板 ID',
     `name` VARCHAR(128) NOT NULL COMMENT '步骤名称',
@@ -55,6 +70,7 @@ CREATE TABLE `step_template` (
     `guide_content` TEXT COMMENT '操作指引',
     `is_blocking` TINYINT NOT NULL DEFAULT 1 COMMENT '是否阻塞：0-非阻塞，1-阻塞',
     `default_assignee_role` VARCHAR(64) DEFAULT NULL COMMENT '默认分配角色',
+    `executor_team` VARCHAR(64) DEFAULT NULL COMMENT '执行团队',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_drill_template_id` (`drill_template_id`),
@@ -83,8 +99,8 @@ CREATE TABLE `drill_instance` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练实例表';
 
 -- 步骤实例表
-DROP TABLE IF EXISTS `step_instance`;
-CREATE TABLE `step_instance` (
+DROP TABLE IF EXISTS `drill_instance_step`;
+CREATE TABLE `drill_instance_step` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_instance_id` BIGINT UNSIGNED NOT NULL COMMENT '所属演练 ID',
     `step_template_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID',
@@ -98,26 +114,32 @@ CREATE TABLE `step_instance` (
     `timeout_at` DATETIME DEFAULT NULL COMMENT '超时截止时间',
     `remark` TEXT COMMENT '完成备注',
     `issue_desc` TEXT COMMENT '问题描述',
+    `step_type` VARCHAR(32) DEFAULT NULL COMMENT '步骤类型',
+    `timeout_minutes` INT DEFAULT 5 COMMENT '超时时间 (分钟)',
+    `default_assignee_role` VARCHAR(64) DEFAULT NULL COMMENT '默认分配角色',
+    `executor_team` VARCHAR(64) DEFAULT NULL COMMENT '执行团队',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_drill_step` (`drill_instance_id`, `status`),
     CONSTRAINT `fk_step_instance_drill` FOREIGN KEY (`drill_instance_id`) REFERENCES `drill_instance` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤实例表';
 
--- 步骤操作日志表
-DROP TABLE IF EXISTS `step_instance_log`;
-CREATE TABLE `step_instance_log` (
+-- 演练操作日志表
+DROP TABLE IF EXISTS `drill_instance_step_log`;
+CREATE TABLE `drill_instance_step_log` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `step_instance_id` BIGINT UNSIGNED NOT NULL COMMENT '步骤实例 ID',
+    `drill_instance_id` BIGINT UNSIGNED NOT NULL,
+    `step_instance_id` BIGINT UNSIGNED DEFAULT NULL,
     `action` VARCHAR(32) NOT NULL COMMENT '操作类型：complete/issue/force_complete/skip',
     `operator_id` BIGINT UNSIGNED NOT NULL COMMENT '操作人 ID',
     `operator_name` VARCHAR(64) NOT NULL COMMENT '操作人姓名',
     `content` TEXT COMMENT '操作内容/备注',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_step_instance` (`step_instance_id`),
-    CONSTRAINT `fk_step_log_step` FOREIGN KEY (`step_instance_id`) REFERENCES `step_instance` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤操作日志表';
+    KEY `idx_drill_instance` (`drill_instance_id`),
+    KEY `idx_created_at` (`created_at`),
+    KEY `idx_step_instance` (`step_instance_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练操作日志表';
 
 -- 演练人员分配表
 DROP TABLE IF EXISTS `drill_assignee`;
@@ -133,10 +155,31 @@ CREATE TABLE `drill_assignee` (
     KEY `idx_drill_instance_id` (`drill_instance_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练人员分配表';
 
--- 用户数据 (密码: admin123, bcrypt hash)
+-- 通知表
+DROP TABLE IF EXISTS `notification`;
+CREATE TABLE `notification` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
+    `type` VARCHAR(50) NOT NULL COMMENT '通知类型',
+    `title` VARCHAR(200) NOT NULL COMMENT '通知标题',
+    `content` TEXT COMMENT '通知内容',
+    `drill_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联演练 ID',
+    `drill_name` VARCHAR(200) DEFAULT NULL COMMENT '演练名称',
+    `step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联步骤 ID',
+    `step_name` VARCHAR(200) DEFAULT NULL COMMENT '步骤名称',
+    `is_read` TINYINT NOT NULL DEFAULT 0 COMMENT '是否已读：0-未读，1-已读',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_created` (`user_id`, `created_at`),
+    KEY `idx_user_unread` (`user_id`, `is_read`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知表';
+
+-- 用户数据 (密码：admin123, bcrypt hash)
 INSERT INTO `user` (`username`, `real_name`, `password_hash`, `role`, `department`, `status`) VALUES
 ('admin', '系统管理员', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'admin', '技术部', 1),
 ('director1', '张指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1),
 ('executor1', '李执行', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'executor', '研发部', 1),
 ('viewer1', '王观察', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'viewer', '测试部', 1),
 ('director2', '刘指挥', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.7G9mJ0x8lZ3L3v.ZLe', 'director', '运维部', 1);
+
+SET FOREIGN_KEY_CHECKS = 1;

@@ -65,34 +65,6 @@ drill-platform/
 
 **重要**: `internal/` 目录遵循 Go 私有包约定，不可被外部模块引用。
 
----
-
-## 开发约束与规范
-
-### 核心设计原则
-
-1. **轻量优先**: MVP 阶段用自研轻量状态机引擎，不引入重型 BPMN 引擎
-2. **实时优先**: WebSocket 端到端延迟 < 1s，状态变更秒级同步
-3. **扩展优先**: 模块化设计，后续可接入监控指标/故障注入
-
-### 技术选型约束
-
-| 层级 | 技术 | 版本 | 说明 |
-|------|------|------|------|
-| 后端 | Go | 1.23+ | 不可降级 |
-| ORM | GORM | v2 | 不用 gopkg.in 旧版 |
-| WebSocket | Gorilla | - | 不用标准库 websocket |
-| 前端 | Vue | 3.4+ | 组合式 API，不用 Options API |
-| UI 库 | Element Plus | 2.5+ | 不用 Element UI (Vue2) |
-| 图表 | ECharts | 5.4+ | 不用 Chart.js |
-
-### 禁止行为
-
-- ❌ 用 `as any` / `@ts-ignore` / `@ts-expect-error` 绕过类型检查
-- ❌ 引入重型工作流引擎 (Flowable/Camunda)
-- ❌ 前端用 Options API (必须用 Composition API)
-- ❌ 提交时包含 `.env` 文件 (已在 .gitignore)
-
 
 ---
 
@@ -126,6 +98,46 @@ openspec instructions <artifact-id> --change "<name>"
 
 ---
 
-## 相关文档
+## 用户偏好与工作习惯
 
-- [总体设计文档](docs/生产演练流程管理系统_总体设计文档_v1.0.md)
+### 开发模式偏好
+
+1. **联调优先**：前后端修改后必须立即测试验证
+   - 后端修改 → `docker restart drill-backend-dev`
+   - 前端修改 → 刷新浏览器验证
+   - 数据库修改 → 直接执行 SQL 验证
+
+2. **快速迭代**：MVP 阶段以功能可用为优先，代码可后续优化
+
+3. **验证驱动**：修改后必须通过 API 测试或页面验证才能交付
+
+### 数据库规范
+
+1. **表命名**：统一使用 `drill_模块 _实体_子实体` 格式
+   - `drill_template` - 演练模板
+   - `drill_template_step` - 模板步骤
+   - `drill_instance` - 演练实例
+   - `drill_instance_step` - 实例步骤
+   - `drill_instance_step_log` - 统一日志表（演练 + 步骤）
+
+2. **级联删除**：删除主表时必须同步删除关联表
+   - 删除演练 → 删除日志、人员分配、步骤实例
+
+3. **字段扩展**：步骤相关表需要从模板继承字段
+   - `step_type`, `timeout_minutes`, `default_assignee_role`, `executor_team`
+
+### 代码风格
+
+1. **简洁优先**：避免冗余按钮和功能
+   - 功能重复的按钮只保留一个（如查看/监控）
+   - 操作列宽度根据按钮数量调整
+
+2. **注释精简**：只保留必要的注释
+   - 复杂逻辑需要注释说明
+   - 自解释的代码不需要注释
+
+3. **错误处理**：区分不同类型的错误
+   - 参数错误 → 400
+   - 资源不存在 → 404
+   - 服务器错误 → 500
+
