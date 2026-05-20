@@ -59,7 +59,7 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 	}
 
 	if err := h.taskService.CompleteStep(stepID, middleware.GetUserID(c), req.Remark); err != nil {
-		response.InternalError(c, "完成任务失败")
+		response.InternalError(c, err.Error())
 		return
 	}
 

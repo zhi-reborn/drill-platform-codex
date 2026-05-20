@@ -215,7 +215,13 @@ async function handleDevLogin() {
     ElMessage.success(`欢迎回来，${user.real_name || user.username}`)
     router.push(roleDashboards[user.role as Role] || '/viewer')
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : '登录失败'
+    if (axios.isAxiosError(e) && e.response?.data?.message) {
+      error.value = e.response.data.message === '密码错误'
+        ? '该用户密码不是 admin123，请切换到手动表单登录'
+        : e.response.data.message
+    } else {
+      error.value = '登录失败'
+    }
   } finally {
     loading.value = false
   }
@@ -224,13 +230,20 @@ async function handleDevLogin() {
 async function handleLocalLogin() {
   loading.value = true
   error.value = ''
+  form.password = ''  // 清空密码框
   try {
     await authStore.loginWithCredentials(form)
     ElMessage.success('登录成功')
     const user = authStore.user
     router.push(user ? roleDashboards[user.role] : '/viewer')
   } catch (e: unknown) {
-    error.value = '用户名或密码错误'
+    if (axios.isAxiosError(e) && e.response?.data?.message) {
+      error.value = e.response.data.message
+    } else if (e instanceof Error) {
+      error.value = e.message
+    } else {
+      error.value = '登录失败'
+    }
   } finally {
     loading.value = false
   }

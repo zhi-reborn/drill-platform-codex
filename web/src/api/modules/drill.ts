@@ -1,27 +1,37 @@
 import { apiRequest } from '../request'
-import type { DrillInstance, StepInstance, StepLog } from '@/types'
+import type { DrillInstance, StepInstance } from '@/types/instance'
 
 export const drillApi = {
   getList: (params?: { page?: number; page_size?: number; status?: string }) => {
-    return apiRequest<{ list: DrillInstance[]; total: number }>({
+    return apiRequest<{ list: DrillInstance[]; total: number; page: number; page_size: number }>({
       url: '/v1/drills',
       method: 'GET',
-      params,
+      params: params as any,
     })
   },
 
-  getById: (id: number) => {
+  getDetail: (id: number) => {
     return apiRequest<DrillInstance>({
       url: `/v1/drills/${id}`,
       method: 'GET',
     })
   },
 
-  create: (data: {
-    template_id: number
-    name: string
-    description: string
-  }) => {
+  getSteps: (id: number) => {
+    return apiRequest<StepInstance[]>({
+      url: `/v1/drills/${id}/steps`,
+      method: 'GET',
+    })
+  },
+
+  getLogs: (id: number) => {
+    return apiRequest<any[]>({
+      url: `/v1/drills/${id}/logs`,
+      method: 'GET',
+    })
+  },
+
+  create: (data: { template_id: number; name: string }) => {
     return apiRequest<DrillInstance>({
       url: '/v1/drills',
       method: 'POST',
@@ -30,51 +40,30 @@ export const drillApi = {
   },
 
   start: (id: number) => {
-    return apiRequest<DrillInstance>({
+    return apiRequest<void>({
       url: `/v1/drills/${id}/start`,
       method: 'POST',
     })
   },
 
   pause: (id: number) => {
-    return apiRequest<DrillInstance>({
+    return apiRequest<void>({
       url: `/v1/drills/${id}/pause`,
       method: 'POST',
     })
   },
 
   resume: (id: number) => {
-    return apiRequest<DrillInstance>({
+    return apiRequest<void>({
       url: `/v1/drills/${id}/resume`,
       method: 'POST',
     })
   },
 
   terminate: (id: number) => {
-    return apiRequest<DrillInstance>({
+    return apiRequest<void>({
       url: `/v1/drills/${id}/terminate`,
       method: 'POST',
-    })
-  },
-
-  getSteps: (drillId: number) => {
-    return apiRequest<StepInstance[]>({
-      url: `/v1/drills/${drillId}/steps`,
-      method: 'GET',
-    })
-  },
-
-  getStepLogs: (stepId: number) => {
-    return apiRequest<StepLog[]>({
-      url: `/v1/steps/${stepId}/logs`,
-      method: 'GET',
-    })
-  },
-
-  getLogs: (drillId: number) => {
-    return apiRequest<any[]>({
-      url: `/v1/drills/${drillId}/logs`,
-      method: 'GET',
     })
   },
 

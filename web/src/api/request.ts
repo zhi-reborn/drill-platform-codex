@@ -34,8 +34,11 @@ request.interceptors.response.use(
     const status = error.response?.status
     switch (status) {
       case 401:
-        localStorage.removeItem('drill_auth')
-        window.location.href = '/login'
+        // 不要对登录 API 的 401 执行跳转（已在登录页面）
+        if (!error.config?.url?.includes('/auth/login')) {
+          localStorage.removeItem('drill_auth')
+          window.location.href = '/login'
+        }
         break
       case 403:
         ElMessage.error('没有权限执行此操作')
@@ -43,8 +46,6 @@ request.interceptors.response.use(
       case 500:
         ElMessage.error('服务器错误')
         break
-      default:
-        ElMessage.error(error.response?.data?.message || '请求失败')
     }
     return Promise.reject(error)
   }

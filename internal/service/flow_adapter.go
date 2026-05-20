@@ -1,0 +1,674 @@
+package service
+
+import (
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/flowengine"
+	"drill-platform/internal/repository"
+
+	"github.com/gin-gonic/gin"
+)
+
+type drillContext struct {
+	ID         uint64
+	Name       string
+	Status     string
+	TemplateID uint64
+}
+
+type DrillFlowAdapter struct {
+	templateRepo   *repository.TemplateRepo
+	drillRepo      *repository.DrillRepo
+	stepRepo       *repository.StepRepo
+	notificationRepo *repository.NotificationRepo
+	userRepo       *repository.UserRepo
+	wsManager      *websocket.Manager
+	notificationService *NotificationService
+
+	mu       sync.RWMutex
+	contexts map[int64]drillContext
+}
+
+func NewDrillFlowAdapter(
+	templateRepo *repository.TemplateRepo,
+	drillRepo *repository.DrillRepo,
+	stepRepo *repository.StepRepo,
+	notificationRepo *repository.NotificationRepo,
+	userRepo *repository.UserRepo,
+	wsManager *websocket.Manager,
+	notificationService *NotificationService,
+) *DrillFlowAdapter {
+	return &DrillFlowAdapter{
+		templateRepo:      templateRepo,
+		drillRepo:         drillRepo,
+		stepRepo:          stepRepo,
+		notificationRepo:  notificationRepo,
+		userRepo:          userRepo,
+		wsManager:         wsManager,
+		notificationService: notificationService,
+		contexts:          make(map[int64]drillContext),
+	}
+}
+
+func (a *DrillFlowAdapter) RegisterDrillContext(flowInstID int64, ctx drillContext) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.contexts[flowInstID] = ctx
+}
+
+func (a *DrillFlowAdapter) GetDrillContext(flowInstID int64) *drillContext {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if ctx, ok := a.contexts[flowInstID]; ok {
+		return &ctx
+	}
+	return nil
+}
+
+func (a *DrillFlowAdapter) GetStepDef(flowDefID, stepDefID int64) (*flowengine.StepDef, error) {
+	a.mu.RLock()
+	ctx, ok := a.contexts[flowDefID]
+	a.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("drill context not found: flowDefID=%d", flowDefID)
+	}
+
+	template, err := a.templateRepo.FindByID(ctx.TemplateID)
+	if err != nil || template == nil {
+		return nil, fmt.Errorf("template not found: %d", ctx.TemplateID)
+	}
+	for _, st := range template.Steps {
+		if int64(st.ID) == stepDefID {
+			var preStepIDs []int64
+			if st.PreStepIDs != "" && st.PreStepIDs != "null" {
+				var uintIDs []uint64
+				if err := json.Unmarshal([]byte(st.PreStepIDs), &uintIDs); err == nil {
+					for _, uid := range uintIDs {
+						preStepIDs = append(preStepIDs, int64(uid))
+					}
+				}
+			}
+			return &flowengine.StepDef{
+				ID:                  int64(st.ID),
+				Name:                st.Name,
+				Seq:                 st.Seq,
+				StepType:            flowengine.StepType(st.StepType),
+				TimeoutMinutes:      st.TimeoutMinutes,
+				PreStepIDs:          preStepIDs,
+				GuideContent:        st.GuideContent,
+				IsBlocking:          st.IsBlocking == 1,
+				DefaultAssigneeRole: st.DefaultAssigneeRole,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("step not found: flowDefID=%d, stepDefID=%d", flowDefID, stepDefID)
+}
+
+func (a *DrillFlowAdapter) GetAllStepDefs(flowDefID int64) ([]*flowengine.StepDef, error) {
+	a.mu.RLock()
+	ctx, ok := a.contexts[flowDefID]
+	a.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("drill context not found: flowDefID=%d", flowDefID)
+	}
+
+	template, err := a.templateRepo.FindByID(ctx.TemplateID)
+	if err != nil || template == nil {
+		return nil, fmt.Errorf("template not found: %d", ctx.TemplateID)
+	}
+
+	var defs []*flowengine.StepDef
+	for _, st := range template.Steps {
+		var preStepIDs []int64
+		if st.PreStepIDs != "" && st.PreStepIDs != "null" {
+			var uintIDs []uint64
+			if err := json.Unmarshal([]byte(st.PreStepIDs), &uintIDs); err == nil {
+				for _, uid := range uintIDs {
+					preStepIDs = append(preStepIDs, int64(uid))
+				}
+			}
+		}
+		defs = append(defs, &flowengine.StepDef{
+			ID:                  int64(st.ID),
+			Name:                st.Name,
+			Seq:                 st.Seq,
+			StepType:            flowengine.StepType(st.StepType),
+			TimeoutMinutes:      st.TimeoutMinutes,
+			PreStepIDs:          preStepIDs,
+			GuideContent:        st.GuideContent,
+			IsBlocking:          st.IsBlocking == 1,
+			DefaultAssigneeRole: st.DefaultAssigneeRole,
+		})
+	}
+	return defs, nil
+}
+
+func (a *DrillFlowAdapter) GetCurrentStepStatus(flowInstID, stepDefID int64) (*flowengine.StepInst, error) {
+	var stepInst entity.StepInstance
+	err := repository.DB.
+		Where("drill_instance_id = ? AND step_template_id = ?", uint64(flowInstID), uint64(stepDefID)).
+		First(&stepInst).Error
+	if err != nil {
+		return nil, err
+	}
+
+	var assigneeIDs []int64
+	if stepInst.AssigneeIDs != "" && stepInst.AssigneeIDs != "[]" {
+		var uintIDs []uint64
+		if err := json.Unmarshal([]byte(stepInst.AssigneeIDs), &uintIDs); err == nil {
+			for _, uid := range uintIDs {
+				assigneeIDs = append(assigneeIDs, int64(uid))
+			}
+		}
+	}
+
+	return &flowengine.StepInst{
+		StepDefID:   int64(stepInst.StepTemplateID),
+		Name:        stepInst.Name,
+		Seq:         stepInst.Seq,
+		Status:      flowengine.StepStatus(stepInst.Status),
+		AssigneeIDs: assigneeIDs,
+		StartTime:   stepInst.StartTime,
+		EndTime:     stepInst.EndTime,
+		TimeoutAt:   stepInst.TimeoutAt,
+	}, nil
+}
+
+func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newStatus flowengine.FlowStatus) {
+	drillID := uint64(flowInstID)
+
+	updates := map[string]interface{}{"status": string(newStatus)}
+	now := time.Now()
+
+	switch newStatus {
+	case flowengine.FlowStatusRunning:
+		updates["start_time"] = now
+	case flowengine.FlowStatusCompleted:
+		updates["end_time"] = now
+		updates["progress_pct"] = 100
+	case flowengine.FlowStatusTerminated, flowengine.FlowStatusIssue:
+		updates["end_time"] = now
+	}
+
+	repository.DB.Model(&entity.DrillInstance{}).Where("id = ?", drillID).Updates(updates)
+
+	ctx := a.GetDrillContext(flowInstID)
+	drillName := ""
+	if ctx != nil {
+		drillName = ctx.Name
+		a.contexts[flowInstID] = drillContext{ID: ctx.ID, Name: ctx.Name, Status: string(newStatus), TemplateID: ctx.TemplateID}
+	}
+
+	if a.wsManager != nil {
+		a.wsManager.SendDrillStatus(uint(drillID), websocket.DrillStatusPayload{
+			DrillID:        uint(drillID),
+			DrillName:      drillName,
+			PreviousStatus: string(oldStatus),
+			NewStatus:      string(newStatus),
+		})
+	}
+
+	if a.notificationService != nil {
+		var title, content string
+		switch newStatus {
+		case flowengine.FlowStatusCompleted:
+			title, content = "演练已完成", drillName+" 已完成所有步骤"
+		case flowengine.FlowStatusTerminated:
+			title, content = "演练已终止", drillName+" 已被终止"
+		case flowengine.FlowStatusIssue:
+			title, content = "演练异常", drillName+" 出现异常步骤"
+		}
+		if title != "" {
+			a.notificationService.CreateNotification(&entity.Notification{
+				UserID:   drillID,
+				Type:     entity.NotificationType(title),
+				Title:    title,
+				Content:  content,
+				DrillID:  &drillID,
+				DrillName: &drillName,
+				IsRead:   false,
+			})
+		}
+	}
+}
+
+func (a *DrillFlowAdapter) OnStepStatusChanged(stepInstID int64, oldStatus, newStatus flowengine.StepStatus) {
+}
+
+func (a *DrillFlowAdapter) OnStepStarted(stepInstID int64, timeoutAt time.Time) {
+}
+
+func (a *DrillFlowAdapter) OnStepCompleted(stepInstID int64, operatorID int64, remark string) {
+}
+
+func (a *DrillFlowAdapter) OnStepIssue(stepInstID int64, operatorID int64, issueDesc string) {
+}
+
+func (a *DrillFlowAdapter) LogAction(stepInstID int64, action string, operatorID int64, content string) {
+	ctx := a.GetDrillContext(0)
+	drillID := uint64(0)
+	if ctx != nil {
+		drillID = ctx.ID
+	}
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		Action:          action,
+		OperatorID:      uint64(operatorID),
+		Content:         content,
+	})
+}
+
+func (a *DrillFlowAdapter) SetupEventSubscriptions(engine *flowengine.Engine) {
+	stepStartCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepStart, stepStartCh)
+	go func() {
+		for evt := range stepStartCh {
+			a.handleStepStart(evt)
+		}
+	}()
+
+	stepCompleteCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepComplete, stepCompleteCh)
+	go func() {
+		for evt := range stepCompleteCh {
+			a.handleStepComplete(evt)
+		}
+	}()
+
+	stepTimeoutCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepTimeout, stepTimeoutCh)
+	go func() {
+		for evt := range stepTimeoutCh {
+			a.handleStepTimeout(evt)
+		}
+	}()
+
+	stepIssueCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepIssue, stepIssueCh)
+	go func() {
+		for evt := range stepIssueCh {
+			a.handleStepIssue(evt)
+		}
+	}()
+
+	flowCompleteCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventFlowComplete, flowCompleteCh)
+	go func() {
+		for evt := range flowCompleteCh {
+			a.handleFlowComplete(evt)
+		}
+	}()
+}
+
+func (a *DrillFlowAdapter) findStepInstance(drillID uint64, stepDefID int64) (*entity.StepInstance, error) {
+	var stepInst entity.StepInstance
+	err := repository.DB.
+		Where("drill_instance_id = ? AND step_template_id = ?", drillID, uint64(stepDefID)).
+		First(&stepInst).Error
+	if err != nil {
+		return nil, fmt.Errorf("step instance not found: drillID=%d, stepDefID=%d", drillID, stepDefID)
+	}
+	return &stepInst, nil
+}
+
+func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	stepDefID := evt.StepDefID
+	payload := evt.Payload.(map[string]interface{})
+	var timeoutAt *time.Time
+	if ta, ok := payload["timeout_at"]; ok {
+		switch v := ta.(type) {
+		case time.Time:
+			if !v.IsZero() {
+				timeoutAt = &v
+			}
+		case *time.Time:
+			if v != nil && !v.IsZero() {
+				timeoutAt = v
+			}
+		}
+	}
+
+	stepInst, err := a.findStepInstance(drillID, stepDefID)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	updates := map[string]interface{}{
+		"status":     string(flowengine.StepStatusRunning),
+		"start_time": now,
+	}
+	if timeoutAt != nil && !timeoutAt.IsZero() {
+		updates["timeout_at"] = timeoutAt
+	}
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(updates)
+
+	ctx := a.GetDrillContext(evt.FlowInstID)
+	drillName := ""
+	if ctx != nil {
+		drillName = ctx.Name
+	}
+
+	_ = gin.H{}
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:       uint(drillID),
+			StepID:        uint(stepInst.ID),
+			StepName:      stepInst.Name,
+			PreviousStatus: string(flowengine.StepStatusPending),
+			NewStatus:     string(flowengine.StepStatusRunning),
+		})
+	}
+
+	var assigneeIDs []uint64
+	if stepInst.AssigneeIDs != "" && stepInst.AssigneeIDs != "[]" && stepInst.AssigneeIDs != "null" {
+		_ = json.Unmarshal([]byte(stepInst.AssigneeIDs), &assigneeIDs)
+	}
+
+	for _, userID := range assigneeIDs {
+		var deadline int64
+		if timeoutAt != nil && !timeoutAt.IsZero() {
+			deadline = timeoutAt.Unix()
+		}
+		if a.wsManager != nil {
+			a.wsManager.SendTaskUpdate(uint(userID), websocket.TaskAssignPayload{
+				UserID:    uint(userID),
+				DrillID:   uint(drillID),
+				StepID:    uint(stepInst.ID),
+				StepName:  stepInst.Name,
+				DrillName: drillName,
+				Deadline:  deadline,
+				Action:    "assigned",
+			})
+		}
+		stepIDUint := uint64(stepInst.ID)
+		stepNamePtr := &stepInst.Name
+		drillNamePtr := &drillName
+		if a.notificationService != nil {
+			a.notificationService.CreateNotification(&entity.Notification{
+				UserID:    userID,
+				Type:      entity.NotificationTypeTaskAssigned,
+				Title:     "任务已分配",
+				Content:   fmt.Sprintf("[%s] 需要你执行：%s", drillName, stepInst.Name),
+				DrillID:   &stepIDUint,
+				DrillName: drillNamePtr,
+				StepID:    &stepIDUint,
+				StepName:  stepNamePtr,
+				IsRead:    false,
+			})
+		}
+	}
+}
+
+func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	stepDefID := evt.StepDefID
+	payload := evt.Payload.(map[string]interface{})
+	operatorID := payload["operator_id"].(int64)
+
+	stepInst, err := a.findStepInstance(drillID, stepDefID)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(map[string]interface{}{
+		"status":          string(flowengine.StepStatusCompleted),
+		"actual_operator": operatorID,
+		"end_time":        &now,
+	})
+
+	drill := a.GetDrillContext(evt.FlowInstID)
+	drillName := ""
+	if drill != nil {
+		drillName = drill.Name
+	}
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:       uint(drillID),
+			StepID:        uint(stepInst.ID),
+			StepName:      stepInst.Name,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:     string(flowengine.StepStatusCompleted),
+		})
+	}
+
+	logDrillID := drillID
+	logStepID := stepInst.ID
+	logContent := ""
+	if remark, ok := payload["remark"].(string); ok {
+		logContent = remark
+	}
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: logDrillID,
+		StepInstanceID:  &logStepID,
+		Action:          "complete",
+		OperatorID:      uint64(operatorID),
+		Content:         logContent,
+	})
+
+	stepIDUint := stepInst.ID
+	stepNamePtr := &stepInst.Name
+	if a.notificationService != nil {
+		a.notificationService.CreateNotification(&entity.Notification{
+			UserID:    uint64(operatorID),
+			Type:      entity.NotificationTypeStepComplete,
+			Title:     "步骤已完成",
+			Content:   fmt.Sprintf("[%s] 的步骤 [%s] 已完成", drillName, stepInst.Name),
+			DrillID:   &logDrillID,
+			DrillName: &drillName,
+			StepID:    &stepIDUint,
+			StepName:  stepNamePtr,
+			IsRead:    false,
+		})
+	}
+}
+
+func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	stepDefID := evt.StepDefID
+
+	stepInst, err := a.findStepInstance(drillID, stepDefID)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(map[string]interface{}{
+		"status":   string(flowengine.StepStatusTimeout),
+		"end_time": &now,
+	})
+
+	ctx := a.GetDrillContext(evt.FlowInstID)
+	drillName := ""
+	if ctx != nil {
+		drillName = ctx.Name
+	}
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:       uint(drillID),
+			StepID:        uint(stepInst.ID),
+			StepName:      stepInst.Name,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:     string(flowengine.StepStatusTimeout),
+		})
+	}
+
+	var assigneeIDs []uint64
+	if stepInst.AssigneeIDs != "" && stepInst.AssigneeIDs != "[]" {
+		_ = json.Unmarshal([]byte(stepInst.AssigneeIDs), &assigneeIDs)
+	}
+
+	for _, userID := range assigneeIDs {
+		drillIDForNotif := drillID
+		stepIDForNotif := stepInst.ID
+		if a.notificationService != nil {
+			a.notificationService.CreateNotification(&entity.Notification{
+				UserID:   userID,
+				Type:     entity.NotificationTypeStepTimeout,
+				Title:    "步骤超时",
+				Content:  fmt.Sprintf("[%s] 的步骤 [%s] 已超时", drillName, stepInst.Name),
+				DrillID:  &drillIDForNotif,
+				StepID:   &stepIDForNotif,
+				IsRead:   false,
+			})
+		}
+	}
+}
+
+func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	stepDefID := evt.StepDefID
+	payload := evt.Payload.(map[string]interface{})
+	operatorID := payload["operator_id"].(int64)
+
+	stepInst, err := a.findStepInstance(drillID, stepDefID)
+	if err != nil {
+		return
+	}
+
+	ctx := a.GetDrillContext(evt.FlowInstID)
+	drillName := ""
+	if ctx != nil {
+		drillName = ctx.Name
+	}
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:       uint(drillID),
+			StepID:        uint(stepInst.ID),
+			StepName:      stepInst.Name,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:     string(flowengine.StepStatusIssue),
+		})
+	}
+
+	drillIDForLog := drillID
+	stepIDForLog := stepInst.ID
+	issueDesc := ""
+	if desc, ok := payload["issue_desc"].(string); ok {
+		issueDesc = desc
+	}
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillIDForLog,
+		StepInstanceID:  &stepIDForLog,
+		Action:          "issue",
+		OperatorID:      uint64(operatorID),
+		Content:         issueDesc,
+	})
+
+	if a.notificationService != nil {
+		a.notificationService.CreateNotification(&entity.Notification{
+			UserID:   uint64(operatorID),
+			Type:     entity.NotificationTypeStepTimeout,
+			Title:    "步骤异常上报",
+			Content:  fmt.Sprintf("[%s] 的步骤 [%s] 已上报异常", drillName, stepInst.Name),
+			DrillID:  &drillIDForLog,
+			IsRead:   false,
+		})
+	}
+}
+
+func (a *DrillFlowAdapter) handleFlowComplete(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	ctx := a.GetDrillContext(evt.FlowInstID)
+	drillName := ""
+	if ctx != nil {
+		drillName = ctx.Name
+	}
+
+	if a.notificationService != nil {
+		a.notificationService.CreateNotification(&entity.Notification{
+			UserID:   drillID,
+			Type:     entity.NotificationTypeDrillCompleted,
+			Title:    "演练已全部完成",
+			Content:  fmt.Sprintf("[%s] 所有步骤已完成", drillName),
+			DrillID:  &drillID,
+			IsRead:   false,
+		})
+	}
+}
+
+func parseAssigneeIDsFromTemplate(assigneeIDsJSON string) []int64 {
+	if assigneeIDsJSON == "" || assigneeIDsJSON == "[]" || assigneeIDsJSON == "null" {
+		return nil
+	}
+	var uintIDs []uint64
+	if err := json.Unmarshal([]byte(assigneeIDsJSON), &uintIDs); err != nil {
+		return nil
+	}
+	ids := make([]int64, len(uintIDs))
+	for i, uid := range uintIDs {
+		ids[i] = int64(uid)
+	}
+	return ids
+}
+
+func parseAssigneeIDsFromInstance(assigneeIDsJSON string) []int64 {
+	if assigneeIDsJSON == "" || assigneeIDsJSON == "[]" || assigneeIDsJSON == "null" {
+		return nil
+	}
+	var uintIDs []uint64
+	if err := json.Unmarshal([]byte(assigneeIDsJSON), &uintIDs); err != nil {
+		return nil
+	}
+	ids := make([]int64, len(uintIDs))
+	for i, uid := range uintIDs {
+		ids[i] = int64(uid)
+	}
+	return ids
+}
+
+func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *flowengine.FlowDef {
+	flowDef := &flowengine.FlowDef{
+		ID:   int64(template.ID),
+		Name: template.Name,
+	}
+	for _, st := range template.Steps {
+		var preStepIDs []int64
+		if st.PreStepIDs != "" && st.PreStepIDs != "null" {
+			var uintIDs []uint64
+			if err := json.Unmarshal([]byte(st.PreStepIDs), &uintIDs); err == nil {
+				for _, uid := range uintIDs {
+					preStepIDs = append(preStepIDs, int64(uid))
+				}
+			}
+		}
+		flowDef.Steps = append(flowDef.Steps, &flowengine.StepDef{
+			ID:                  int64(st.ID),
+			Name:                st.Name,
+			Seq:                 st.Seq,
+			StepType:            flowengine.StepType(st.StepType),
+			TimeoutMinutes:      st.TimeoutMinutes,
+			PreStepIDs:          preStepIDs,
+			GuideContent:        st.GuideContent,
+			IsBlocking:          st.IsBlocking == 1,
+			DefaultAssigneeRole: st.DefaultAssigneeRole,
+		})
+	}
+	return flowDef
+}
+
+func (a *DrillFlowAdapter) BuildAssignees(drillID uint64) map[int64][]int64 {
+	var steps []entity.StepInstance
+	repository.DB.Where("drill_instance_id = ?", drillID).Find(&steps)
+
+	assignees := make(map[int64][]int64)
+	for _, step := range steps {
+		stepDefID := int64(step.StepTemplateID)
+		ids := parseAssigneeIDsFromInstance(step.AssigneeIDs)
+		if len(ids) > 0 {
+			assignees[stepDefID] = ids
+		}
+	}
+	return assignees
+}

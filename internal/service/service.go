@@ -2,6 +2,7 @@ package service
 
 import (
 	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 )
 
@@ -22,6 +23,23 @@ func NewServices(wsManager *websocket.Manager) *Services {
 	drillRepo := repository.NewDrillRepo()
 	stepRepo := repository.NewStepRepo()
 	notificationRepo := repository.NewNotificationRepo()
+	notificationService := NewNotificationService(notificationRepo)
+
+	engine := flowengine.NewEngine()
+
+	adapter := NewDrillFlowAdapter(
+		templateRepo,
+		drillRepo,
+		stepRepo,
+		notificationRepo,
+		userRepo,
+		wsManager,
+		notificationService,
+	)
+
+	engine.SetCallbacks(adapter)
+	engine.SetStepLoader(adapter)
+	adapter.SetupEventSubscriptions(engine)
 
 	s := &Services{
 		AuthService:       NewAuthService(userRepo),
@@ -30,15 +48,20 @@ func NewServices(wsManager *websocket.Manager) *Services {
 		TaskService:       NewTaskService(stepRepo),
 		DisplayService:    NewDisplayService(drillRepo, stepRepo),
 		ReportService:     NewReportService(drillRepo, stepRepo),
-		NotificationService: NewNotificationService(notificationRepo),
+		NotificationService: notificationService,
 		wsManager:         wsManager,
 	}
 
-	// 注入 WebSocket Manager 到需要广播的服务
+	s.DrillService.SetEngine(engine, adapter)
+	s.TaskService.SetDrillService(s.DrillService)
+	s.TaskService.SetUserRepo(userRepo)
+
 	s.DrillService.SetWebSocketManager(wsManager)
 	s.TaskService.SetWebSocketManager(wsManager)
 	s.DrillService.SetNotificationService(s.NotificationService)
 	s.TaskService.SetNotificationService(s.NotificationService)
+
+	engine.GetTimeoutScheduler().Start()
 
 	return s
 }

@@ -12,7 +12,7 @@ func NewStepRepo() *StepRepo {
 
 func (r *StepRepo) FindByID(id uint64) (*entity.StepInstance, error) {
 	var step entity.StepInstance
-	err := DB.Preload("Logs").First(&step, id).Error
+	err := DB.Preload("DrillInstance").Preload("Logs").First(&step, id).Error
 	if err != nil {
 		return nil, err
 	}

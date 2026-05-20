@@ -27,7 +27,16 @@ func (h *Handler) Login(c *gin.Context) {
 
 	res, err := h.authService.Login(&req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		switch err.Error() {
+		case "用户名不存在":
+			response.Unauthorized(c, "用户名不存在")
+		case "密码错误":
+			response.Unauthorized(c, "密码错误")
+		case "账户已被禁用":
+			response.Forbidden(c, "账户已被禁用")
+		default:
+			response.InternalError(c, err.Error())
+		}
 		return
 	}
 
@@ -155,4 +164,31 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 		return
 	}
 	response.Success(c, nil)
+}
+
+func (h *Handler) ResetPassword(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的用户ID")
+		return
+	}
+
+	var req struct {
+		Password string `json:"password" binding:"required,min=6"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "密码不能为空且至少 6 个字符")
+		return
+	}
+
+	if err := h.authService.ResetPassword(id, req.Password); err != nil {
+		if err == service.ErrUserNotFound {
+			response.NotFound(c, "用户不存在")
+			return
+		}
+		response.InternalError(c, err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "密码已重置为: "+req.Password, nil)
 }

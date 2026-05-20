@@ -145,28 +145,34 @@
           <el-col v-for="task in filteredTasks" :key="task.id" :xs="24" :sm="12" :lg="8" :xl="6">
             <div class="task-card" :class="getStatusClass(task.status)">
               <div class="task-card-header">
-                <div class="task-step-name">{{ task.step_name }}</div>
+                <div class="task-step-name">{{ task.name }}</div>
                 <DrillStatusBadge :status="task.status" type="step" />
               </div>
 
               <div class="task-card-body">
-                <div class="task-description">{{ task.step_description }}</div>
+                <div v-if="task.executor_team" class="task-meta">
+                  <el-tag size="small" type="info">{{ task.executor_team }}</el-tag>
+                </div>
 
                 <div class="task-meta">
-                  <div v-if="task.deadline" class="task-deadline">
+                  <div v-if="task.timeout_at" class="task-deadline">
                     <el-icon><Clock /></el-icon>
-                    <span>截止：{{ formatDeadline(task.deadline) }}</span>
-                  </div>
-                  <div class="task-assignee">
-                    <el-icon><User /></el-icon>
-                    <span>{{ task.assigned_to_name }}</span>
+                    <span>截止：{{ formatDeadline(task.timeout_at) }}</span>
                   </div>
                 </div>
               </div>
 
               <div class="task-card-footer">
                 <el-button
-                  v-if="task.status === 'pending' || task.status === 'assigned'"
+                  v-if="task.status === 'pending'"
+                  type="info"
+                  class="action-btn"
+                  disabled
+                >
+                  等待中
+                </el-button>
+                <el-button
+                  v-else-if="task.status === 'running'"
                   type="primary"
                   class="action-btn"
                   @click="goToTaskDetail(task.id)"
@@ -174,15 +180,7 @@
                   开始执行
                 </el-button>
                 <el-button
-                  v-else-if="task.status === 'in_progress'"
-                  type="primary"
-                  class="action-btn"
-                  @click="goToTaskDetail(task.id)"
-                >
-                  继续
-                </el-button>
-                <el-button
-                  v-else-if="task.status === 'issued'"
+                  v-else-if="task.status === 'issue'"
                   type="warning"
                   class="action-btn"
                   @click="goToTaskDetail(task.id)"
@@ -202,11 +200,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import type { Task, DrillInstance } from '@/types'
+import type { StepInstance } from '@/types/task'
+import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
 import { taskApi } from '@/api/modules/task'
@@ -215,7 +214,7 @@ import { drillApi } from '@/api/modules/drill'
 const router = useRouter()
 
 const loading = ref(false)
-const tasks = ref<Task[]>([])
+const tasks = ref<StepInstance[]>([])
 const instances = ref<DrillInstance[]>([])
 const filterStatus = ref<string>('')
 
@@ -225,8 +224,8 @@ const currentDrill = ref<DrillInstance | null>(null)
 
 // 统计
 const myTasksCount = computed(() => tasks.value.length)
-const pendingTasksCount = computed(() => tasks.value.filter(t => t.status === 'pending' || t.status === 'assigned').length)
-const inProgressTasksCount = computed(() => tasks.value.filter(t => t.status === 'in_progress').length)
+const pendingTasksCount = computed(() => tasks.value.filter(t => t.status === 'pending').length)
+const inProgressTasksCount = computed(() => tasks.value.filter(t => t.status === 'running').length)
 const completedTasksCount = computed(() => tasks.value.filter(t => t.status === 'completed').length)
 
 // 活跃演练（带任务统计）
@@ -234,7 +233,7 @@ const activeDrillsWithTasks = computed(() => {
   return instances.value
     .filter(i => i.status === 'running' || i.status === 'paused')
     .map(drill => {
-      const drillTasks = tasks.value.filter(t => t.drill_id === drill.id)
+      const drillTasks = tasks.value.filter(t => t.drill_instance_id === drill.id)
       return {
         id: drill.id,
         name: drill.name,
@@ -242,18 +241,16 @@ const activeDrillsWithTasks = computed(() => {
         completedSteps: drill.progress_pct,
         totalSteps: 100,
         myTasksCount: drillTasks.length,
-        pendingTasksCount: drillTasks.filter(t => t.status === 'pending' || t.status === 'assigned').length,
+        pendingTasksCount: drillTasks.filter(t => t.status === 'pending' || t.status === 'running').length,
       }
     })
 })
 
 const filteredTasks = computed(() => {
   let result = tasks.value
-  // 只显示当前选中演练的任务
   if (selectedDrillId.value) {
-    result = result.filter(t => t.drill_id === selectedDrillId.value)
+    result = result.filter(t => t.drill_instance_id === selectedDrillId.value)
   }
-  // 再应用状态筛选
   if (filterStatus.value) {
     result = result.filter(t => t.status === filterStatus.value)
   }
@@ -264,9 +261,10 @@ const recentActivity = ref<any[]>([])
 
 const getStatusClass = (status: string) => {
   const classMap: Record<string, string> = {
-    in_progress: 'status-in-progress',
-    issued: 'status-issued',
+    running: 'status-in-progress',
+    issue: 'status-issued',
     completed: 'status-completed',
+    timeout: 'status-issued',
   }
   return classMap[status] || ''
 }
@@ -320,11 +318,15 @@ function formatDeadline(d: string): string {
   const date = new Date(d)
   const now = new Date()
   const diff = date.getTime() - now.getTime()
-  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const mins = Math.floor(diff / (1000 * 60))
 
-  if (hours < 0) {
+  if (mins < 0) {
     return '已过期'
   }
+  if (mins < 60) {
+    return `${mins}分钟`
+  }
+  const hours = Math.floor(mins / 60)
   if (hours < 1) {
     return '1 小时内'
   }

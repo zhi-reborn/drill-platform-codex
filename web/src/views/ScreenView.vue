@@ -1,234 +1,245 @@
 <template>
-  <ScreenLayout>
-    <div class="screen-content">
-      <!-- 加载状态 -->
-      <div v-if="loading" class="loading-overlay">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <p class="loading-text">正在加载演练数据...</p>
-        </div>
-      </div>
+  <div class="screen-wrapper">
+    <!-- 科技背景层 -->
+    <div class="particle-grid"></div>
+    <div class="scan-line"></div>
+    <div class="ambient-glow"></div>
 
-      <!-- 错误状态 -->
-      <div v-else-if="error" class="error-overlay">
-        <el-icon class="error-icon"><CircleClose /></el-icon>
-        <p class="error-text">{{ error }}</p>
+    <!-- 加载状态 -->
+    <div v-if="loading" class="overlay-state">
+      <div class="loader">
+        <div class="loader-ring"></div>
+        <p class="loader-text">正在连接演练数据...</p>
+      </div>
+    </div>
+
+    <!-- 错误状态 -->
+    <div v-else-if="error" class="overlay-state error">
+      <div class="error-content">
+        <el-icon :size="48"><CircleClose /></el-icon>
+        <p>{{ error }}</p>
         <el-button type="primary" @click="handleRetry">重试</el-button>
       </div>
-
-      <!-- 主内容 -->
-      <template v-else-if="currentDrill">
-        <!-- 顶部标题栏 -->
-        <div class="screen-header">
-          <div class="header-left">
-            <h1 class="drill-title">{{ currentDrill.name }}</h1>
-            <DrillStatusBadge :status="currentDrill.status" type="drill" />
-          </div>
-          <div class="header-right">
-            <div class="time-display">
-              <el-icon><Clock /></el-icon>
-              <span>{{ currentTime }}</span>
-            </div>
-            <el-button class="fullscreen-btn" @click="toggleFullscreen">
-              <el-icon><FullScreen /></el-icon>
-              全屏
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 核心指标栏 -->
-        <div class="metrics-bar">
-          <div class="metric-card">
-            <div class="metric-icon" :class="getMetricClass(0)">
-              <el-icon><Monitor /></el-icon>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">状态</span>
-              <span class="metric-value">{{ getStatusLabel(currentDrill.status) }}</span>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon" :class="getMetricClass(1)">
-              <el-icon><Timer /></el-icon>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">进度</span>
-              <span class="metric-value">{{ currentDrill.completed_steps }} / {{ currentDrill.total_steps }}</span>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon" :class="getMetricClass(2)">
-              <el-icon><TrendCharts /></el-icon>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">成功率</span>
-              <span class="metric-value">{{ successRate }}%</span>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon" :class="getMetricClass(3)">
-              <el-icon><User /></el-icon>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">创建人</span>
-              <span class="metric-value">{{ currentDrill.created_by_name }}</span>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-icon" :class="getMetricClass(4)">
-              <el-icon><Calendar /></el-icon>
-            </div>
-            <div class="metric-content">
-              <span class="metric-label">开始时间</span>
-              <span class="metric-value">{{ formatTime(currentDrill.started_at) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 主体内容区 -->
-        <div class="screen-body">
-          <!-- 左侧：步骤执行面板 -->
-          <div class="left-panel">
-            <div class="panel-header">
-              <el-icon><List /></el-icon>
-              <span>步骤执行</span>
-            </div>
-            <div class="steps-list">
-              <div
-                v-for="step in drillSteps"
-                :key="step.id"
-                class="step-item"
-                :class="['step-' + step.status, { 'active': step.status === 'running' }]"
-              >
-                <div class="step-indicator">
-                  <el-icon v-if="step.status === 'completed'"><CircleCheck /></el-icon>
-                  <el-icon v-else-if="step.status === 'running'"><Loading /></el-icon>
-                  <el-icon v-else-if="step.status === 'issue'"><CircleClose /></el-icon>
-                  <el-icon v-else><CircleCheck /></el-icon>
-                </div>
-                <div class="step-content">
-                  <div class="step-name">{{ step.step_name }}</div>
-                  <div class="step-meta">
-                    <span class="step-assignee" v-if="step.assignee_name">
-                      <el-icon><User /></el-icon>
-                      {{ step.assignee_name }}
-                    </span>
-                    <span class="step-duration" v-if="step.started_at">
-                      {{ calculateDuration(step) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="step-status-badge" :class="'badge-' + step.status">
-                  {{ getStepStatusLabel(step.status) }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 中间：可视化图表区 -->
-          <div class="center-panel">
-            <!-- 进度环图 -->
-            <div class="chart-card progress-chart">
-              <div class="chart-header">
-                <el-icon><DataLine /></el-icon>
-                <span>执行进度</span>
-              </div>
-              <div class="chart-body">
-                <GaugeChart
-                  :data="{
-                    name: '进度',
-                    value: Math.round(currentDrill.completed_steps / currentDrill.total_steps * 100),
-                    max: 100
-                  }"
-                  height="280px"
-                />
-              </div>
-            </div>
-
-            <!-- 步骤状态分布 -->
-            <div class="chart-card status-chart">
-              <div class="chart-header">
-                <el-icon><PieChart /></el-icon>
-                <span>步骤状态分布</span>
-              </div>
-              <div class="chart-body">
-                <PieChartComponent :data="stepStatusData" height="220px" />
-              </div>
-            </div>
-          </div>
-
-          <!-- 右侧：时间线与日志 -->
-          <div class="right-panel">
-            <div class="panel-header">
-              <el-icon><Connection /></el-icon>
-              <span>执行时间线</span>
-            </div>
-            <div class="timeline-container">
-              <div class="timeline">
-                <div
-                  v-for="(step, index) in drillSteps"
-                  :key="step.id"
-                  class="timeline-item"
-                  :class="['timeline-' + step.status, { 'active': step.status === 'running' }]"
-                >
-                  <div class="timeline-dot">
-                    <el-icon v-if="step.status === 'completed'"><CircleCheck /></el-icon>
-                    <el-icon v-else-if="step.status === 'running'"><Loading /></el-icon>
-                    <el-icon v-else-if="step.status === 'issue'"><CircleClose /></el-icon>
-                    <el-icon v-else><CircleCheck /></el-icon>
-                  </div>
-                  <div class="timeline-content">
-                    <div class="timeline-step-name">{{ step.step_name }}</div>
-                    <div class="timeline-time">
-                      {{ formatTime(step.started_at) }}
-                      <span v-if="step.completed_at" class="timeline-end-time">
-                        → {{ formatTime(step.completed_at) }}
-                      </span>
-                    </div>
-                    <div class="timeline-duration" v-if="step.started_at && step.completed_at">
-                      耗时：{{ calculateDuration(step) }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 告警列表 -->
-            <div class="alerts-section" v-if="alerts.length > 0">
-              <div class="panel-header">
-                <el-icon><Warning /></el-icon>
-                <span>告警事件</span>
-              </div>
-              <div class="alerts-list">
-                <div
-                  v-for="alert in alerts"
-                  :key="alert.id"
-                  class="alert-item"
-                  :class="'alert-' + alert.level"
-                >
-                  <el-icon class="alert-icon"><Warning /></el-icon>
-                  <div class="alert-content">
-                    <div class="alert-message">{{ alert.message }}</div>
-                    <div class="alert-time">{{ formatTime(alert.created_at) }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 底部进度条 -->
-        <div class="bottom-progress">
-          <el-progress
-            :percentage="Math.round(currentDrill.completed_steps / currentDrill.total_steps * 100)"
-            :stroke-width="4"
-            :show-text="false"
-            :status="currentDrill.status === 'completed' ? 'success' : undefined"
-          />
-        </div>
-      </template>
     </div>
-  </ScreenLayout>
+
+    <!-- 主内容 -->
+    <div v-else-if="currentDrill" class="screen-content">
+      <!-- 顶部标题栏 -->
+      <header class="screen-header cyber-border-bottom">
+        <div class="header-left">
+          <div class="title-glow"></div>
+          <h1 class="drill-title">{{ currentDrill.name }}</h1>
+          <span class="drill-status-tag" :class="'status-' + (currentDrill.status || '')">
+            {{ getStatusLabel(currentDrill.status || '') }}
+          </span>
+        </div>
+        <div class="header-right">
+          <div class="time-display">
+            <Clock :size="14" />
+            <span class="time-value">{{ currentTime }}</span>
+          </div>
+          <button class="cyber-btn" @click="toggleFullscreen" title="全屏切换">
+            <FullScreen :size="16" />
+          </button>
+        </div>
+      </header>
+
+      <!-- 核心指标栏 -->
+      <section class="metrics-bar">
+        <!-- 核心指标组 -->
+        <div class="metric-group primary-metrics">
+          <div class="metric-card core-metric running">
+            <div class="metric-corners"></div>
+            <div class="metric-icon-box">
+              <Timer :size="14" />
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">执行中</span>
+              <span class="metric-value" :data-value="drillSteps.filter(s => s.status === 'running').length">
+                {{ drillSteps.filter(s => s.status === 'running').length }}
+              </span>
+            </div>
+          </div>
+          <div class="metric-card core-metric completed">
+            <div class="metric-corners"></div>
+            <div class="metric-icon-box">
+              <CircleCheck :size="14" />
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">已完成</span>
+              <span class="metric-value">
+                {{ drillSteps.filter(s => s.status === 'completed').length }}<span class="metric-total">/{{ drillSteps.length }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="metric-card core-metric rate">
+            <div class="metric-corners"></div>
+            <div class="metric-icon-box">
+              <DataLine :size="14" />
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">成功率</span>
+              <span class="metric-value" :class="successRate === 100 ? 'success' : successRate > 0 ? 'warning' : ''">{{ successRate }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 分隔线 -->
+        <div class="metric-divider"></div>
+
+        <!-- 次要指标组 -->
+        <div class="metric-group secondary-metrics">
+          <div class="metric-card mini-metric">
+            <div class="metric-icon-box">
+              <User :size="12" />
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">创建人</span>
+              <span class="metric-value">{{ currentDrill.created_by_name || '-' }}</span>
+            </div>
+          </div>
+          <div class="metric-card mini-metric">
+            <div class="metric-icon-box">
+              <Calendar :size="12" />
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">开始</span>
+              <span class="metric-value">{{ currentDrill.start_time ? formatTime(currentDrill.start_time) : '-' }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 主体内容区 -->
+      <main class="screen-body">
+        <!-- 左侧：步骤执行面板 -->
+        <aside class="left-panel cyber-panel">
+          <div class="panel-header">
+            <List :size="12" />
+            <span>步骤执行面板</span>
+          </div>
+          <div class="steps-list">
+            <div
+              v-for="step in drillSteps"
+              :key="step.id"
+              class="step-item"
+              :class="['step-' + step.status, { 'active-step': step.status === 'running' }]"
+            >
+              <div class="step-indicator">
+                <component :is="getStepStatusIcon(step.status)" :size="14" />
+              </div>
+              <div class="step-body">
+                <div class="step-name">{{ step.name }}</div>
+                <div class="step-meta">
+                  <span v-if="step.executor_team" class="step-team">{{ step.executor_team }}</span>
+                  <span v-if="step.start_time" class="step-duration">{{ calculateDuration(step) }}</span>
+                </div>
+              </div>
+              <span class="step-badge" :class="'badge-' + step.status">
+                {{ getStepStatusLabel(step.status) }}
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 中间：进度仪表盘 -->
+        <section class="center-panel">
+          <div class="gauge-container cyber-card">
+            <div class="panel-header">
+              <DataLine :size="12" />
+              <span>执行进度</span>
+            </div>
+            <div class="gauge-chart">
+              <svg viewBox="0 0 200 200" class="gauge-svg">
+                <defs>
+                  <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00d4ff" />
+                    <stop offset="100%" stop-color="#00e88a" />
+                  </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
+                </defs>
+                <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="8" />
+                <circle
+                  cx="100" cy="100" r="80"
+                  fill="none"
+                  stroke="url(#gaugeGradient)"
+                  stroke-width="8"
+                  stroke-linecap="round"
+                  :stroke-dasharray="503"
+                  :stroke-dashoffset="503 - (503 * progressPercent / 100)"
+                  transform="rotate(-90 100 100)"
+                  filter="url(#glow)"
+                  class="gauge-progress"
+                />
+                <text x="100" y="95" text-anchor="middle" fill="#f8fafc" font-size="32" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">
+                  {{ progressPercent }}%
+                </text>
+                <text x="100" y="115" text-anchor="middle" fill="rgba(148, 163, 184, 0.5)" font-size="9" font-family="sans-serif" letter-spacing="2">
+                  PROGRESS
+                </text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="status-bars cyber-card">
+            <div class="panel-header">
+              <PieChart :size="14" />
+              <span>状态分布</span>
+            </div>
+            <div class="bars-container">
+              <div v-for="(item, idx) in stepStatusData" :key="item.name" class="status-bar-row">
+                <span class="bar-label">{{ item.name }}</span>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill"
+                    :class="'bar-' + getBarColorClass(item.name)"
+                    :style="{ width: Math.max((item.value / drillSteps.length) * 100, 3) + '%' }"
+                  />
+                </div>
+                <span class="bar-value">{{ item.value }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 右侧：时间线与日志 -->
+        <aside class="right-panel cyber-panel">
+          <div class="panel-header">
+            <Connection :size="14" />
+            <span>执行日志</span>
+          </div>
+          <div class="logs-list">
+            <div
+              v-for="(log, idx) in drillLogs"
+              :key="log.ID || idx"
+              class="log-item"
+              :class="'log-' + (log.action || '')"
+            >
+              <div class="log-dot" />
+              <div class="log-content">
+                <div class="log-action">{{ formatLogAction(log.action) }}</div>
+                <div class="log-detail" v-if="log.content">{{ log.content }}</div>
+                <div class="log-time">{{ formatTime(log.CreatedAt) }}</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+
+      <!-- 底部进度条 -->
+      <footer class="bottom-bar cyber-border-top">
+        <div class="bottom-progress-track">
+          <div class="bottom-progress-fill" :style="{ width: progressPercent + '%' }" />
+        </div>
+      </footer>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -237,137 +248,89 @@ import { useRoute } from 'vue-router'
 import {
   Clock,
   FullScreen,
-  Monitor,
-  Timer,
-  TrendCharts,
   User,
   Calendar,
   List,
   DataLine,
   PieChart,
-  Warning,
   CircleCheck,
   CircleClose,
   Loading,
   Connection,
+  Timer,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import ScreenLayout from '@/components/screen/ScreenLayout.vue'
-import GaugeChart from '@/components/charts/GaugeChart.vue'
-import PieChartComponent from '@/components/charts/PieChart.vue'
-import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
-import type { DrillInstance, StepInstance } from '@/types'
-import instancesData from '@/mock/data/instances.json'
-import stepsData from '@/mock/data/steps.json'
-import notificationsData from '@/mock/data/notifications.json'
+import type { StepInstance } from '@/types'
+import { drillApi } from '@/api/modules/drill'
 
 const route = useRoute()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const currentTime = ref(new Date().toLocaleString('zh-CN'))
+let ws: WebSocket | null = null
+let refreshTimer: number | null = null
 
-// 获取演练 ID
 const drillId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? parseInt(id, 10) : null
 })
 
-// 当前演练
-const currentDrill = ref<DrillInstance | null>(null)
+const currentDrill = ref<any>(null)
+const drillSteps = ref<StepInstance[]>([])
 
-// 演练步骤
-const drillSteps = computed(() => {
-  if (!drillId.value) return []
-  return (stepsData as StepInstance[])
-    .filter(s => s.drill_id === drillId.value)
-    .sort((a, b) => a.order_index - b.order_index)
-})
-
-// 成功率
-const successRate = computed(() => {
+const progressPercent = computed(() => {
   if (drillSteps.value.length === 0) return 0
   const completed = drillSteps.value.filter(s => s.status === 'completed').length
   return Math.round((completed / drillSteps.value.length) * 100)
 })
 
-// 步骤状态分布
+function formatLogAction(action: string): string {
+  const map: Record<string, string> = {
+    complete: '步骤完成',
+    issue: '异常上报',
+    start: '步骤启动',
+    timeout: '步骤超时',
+    skip: '步骤跳过',
+    force_complete: '强制完成',
+  }
+  return map[action] || action
+}
+
+function getBarColorClass(name: string): string {
+  const map: Record<string, string> = {
+    '已完成': 'completed',
+    '执行中': 'running',
+    '待执行': 'pending',
+    '超时': 'timeout',
+    '异常': 'issue',
+    '已跳过': 'skipped',
+  }
+  return map[name] || 'pending'
+}
+
 const stepStatusData = computed(() => {
   const counts: Record<string, number> = {}
   drillSteps.value.forEach(step => {
     counts[step.status] = (counts[step.status] || 0) + 1
   })
-  return Object.entries(counts).map(([name, value]) => ({ name, value }))
-})
-
-// 告警列表
-const alerts = computed(() => {
-  const items: Array<{
-    id: number
-    level: 'info' | 'warning' | 'error'
-    message: string
-    created_at: string
-  }> = []
-
-  // 从步骤中提取异常和超时
-  drillSteps.value.forEach((step, i) => {
-    if (step.status === 'issue') {
-      items.push({
-        id: i,
-        level: 'error',
-        message: `步骤「${step.step_name}」异常${step.error_message ? `: ${step.error_message}` : ''}`,
-        created_at: step.started_at || new Date().toISOString(),
-      })
-    }
-    if (step.status === 'timeout') {
-      items.push({
-        id: i + 1000,
-        level: 'warning',
-        message: `步骤「${step.step_name}」超时`,
-        created_at: step.started_at || new Date().toISOString(),
-      })
-    }
-  })
-
-  // 从通知中补充
-  if (currentDrill.value) {
-    const relevantNotifs = (notificationsData as Array<Record<string, unknown>>).filter(
-      n => n.title === currentDrill.value?.name
-    )
-    relevantNotifs.forEach((n, i) => {
-      const type = n.type as string
-      if (type === 'drill_started') {
-        items.push({
-          id: i + 2000,
-          level: 'info',
-          message: `演练「${n.title}」已启动`,
-          created_at: n.created_at as string,
-        })
-      }
-      if (type === 'drill_paused') {
-        items.push({
-          id: i + 4000,
-          level: 'warning',
-          message: `演练「${n.title}」已暂停`,
-          created_at: n.created_at as string,
-        })
-      }
-      if (type === 'drill_terminated') {
-        items.push({
-          id: i + 5000,
-          level: 'error',
-          message: `演练「${n.title}」已终止`,
-          created_at: n.created_at as string,
-        })
-      }
-    })
+  const statusMap: Record<string, string> = {
+    pending: '待执行',
+    running: '执行中',
+    completed: '已完成',
+    timeout: '超时',
+    issue: '异常',
+    skipped: '已跳过',
   }
-
-  items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-  return items.slice(0, 20)
+  return Object.entries(counts).map(([key, value]) => ({
+    name: statusMap[key] || key,
+    value,
+  }))
 })
 
-// 时间更新
+const drillLogs = ref<any[]>([])
+
 let timeTimer: number
+
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN', {
     year: 'numeric',
@@ -380,7 +343,6 @@ function updateTime() {
   })
 }
 
-// 加载数据
 async function loadData() {
   if (!drillId.value) {
     error.value = '无效的演练 ID'
@@ -388,46 +350,41 @@ async function loadData() {
     return
   }
 
-  loading.value = true
-  error.value = null
-
   try {
-    // 模拟 API 调用延迟
-    await new Promise(resolve => setTimeout(resolve, 300))
-
-    const drill = (instancesData as DrillInstance[]).find(d => d.id === drillId.value)
-    if (!drill) {
-      error.value = '演练不存在'
-      return
-    }
-
+    const drill = await drillApi.getDetail(drillId.value)
     currentDrill.value = drill
-  } catch (err) {
-    error.value = '加载数据失败'
+
+    const steps = await drillApi.getSteps(drillId.value)
+    drillSteps.value = steps.sort((a: StepInstance, b: StepInstance) => a.seq - b.seq)
+
+    const logs = await drillApi.getLogs(drillId.value)
+    drillLogs.value = logs.slice(0, 30)
+
+    loading.value = false
+    error.value = null
+
+    connectWebSocket()
+  } catch (err: any) {
+    error.value = err.message || '加载数据失败'
     console.error('Failed to load drill data:', err)
-  } finally {
     loading.value = false
   }
 }
 
-function handleRetry() {
-  loadData()
-}
-
 function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    running: '进行中',
+    running: '执行中',
     paused: '已暂停',
     completed: '已完成',
     terminated: '已终止',
-    pending: '待开始',
+    pending: '待启动',
   }
   return map[status] || status
 }
 
 function getStepStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    pending: '待开始',
+    pending: '待执行',
     running: '执行中',
     completed: '已完成',
     timeout: '超时',
@@ -437,41 +394,73 @@ function getStepStatusLabel(status: string): string {
   return map[status] || status
 }
 
-function calculateDuration(step: StepInstance): string {
-  if (!step.started_at) return '-'
-  if (!step.completed_at) {
-    const start = new Date(step.started_at).getTime()
-    const now = Date.now()
-    const diff = Math.floor((now - start) / 1000)
-    return formatDuration(diff)
+function getStepStatusIcon(status: string) {
+  switch (status) {
+    case 'completed': return CircleCheck
+    case 'running': return Loading
+    case 'issue': return CircleClose
+    case 'timeout': return CircleClose
+    default: return CircleCheck
   }
-  const start = new Date(step.started_at).getTime()
-  const end = new Date(step.completed_at).getTime()
-  const diff = Math.floor((end - start) / 1000)
-  return formatDuration(diff)
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}m ${secs}s`
+function calculateDuration(step: StepInstance): string {
+  if (!step.start_time) return '-'
+  const start = new Date(step.start_time).getTime()
+  const end = step.end_time ? new Date(step.end_time).getTime() : Date.now()
+  const diff = Math.floor((end - start) / 1000)
+  const mins = Math.floor(diff / 60)
+  const secs = diff % 60
+  return mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`
 }
 
 function formatTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '-'
+  if (!dateStr) return '--:--'
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
+  return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
   })
 }
 
-function getMetricClass(index: number): string {
-  const classes = ['metric-primary', 'metric-success', 'metric-info', 'metric-warning', 'metric-info']
-  return classes[index] || ''
+function connectWebSocket() {
+  if (ws) {
+    ws.close()
+  }
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}`
+  
+  ws = new WebSocket(wsUrl)
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.type === 'step_change' || data.type === 'drill_status') {
+        loadData()
+      }
+    } catch (e) {
+      console.warn('WebSocket message parse error:', e)
+    }
+  }
+  ws.onerror = () => {
+    console.warn('WebSocket error, falling back to polling')
+    startFallbackPolling()
+  }
+  ws.onclose = () => {
+    if (currentDrill.value?.status === 'running') {
+      startFallbackPolling()
+    }
+  }
+}
+
+function startFallbackPolling() {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = window.setInterval(() => {
+    if (currentDrill.value?.status === 'running') {
+      loadData()
+    }
+  }, 3000)
 }
 
 function toggleFullscreen() {
@@ -482,128 +471,256 @@ function toggleFullscreen() {
   }
 }
 
-// 生命周期
+function handleRetry() {
+  loadData()
+}
+
 onMounted(() => {
   loadData()
   updateTime()
   timeTimer = window.setInterval(updateTime, 1000)
+})
 
-  // 模拟实时数据刷新
-  const refreshTimer = window.setInterval(() => {
-    if (currentDrill.value && currentDrill.value.status === 'running') {
-      // 实际项目中应从 API 获取最新数据
-      console.log('Refreshing drill data...')
-    }
-  }, 5000)
-
-  onBeforeUnmount(() => {
-    clearInterval(timeTimer)
-    clearInterval(refreshTimer)
-  })
+onBeforeUnmount(() => {
+  clearInterval(timeTimer)
+  if (refreshTimer) clearInterval(refreshTimer)
+  if (ws) {
+    ws.close()
+    ws = null
+  }
 })
 </script>
 
 <style lang="scss" scoped>
-@use '@/styles/variables' as *;
+// ===== 核心变量 =====
+$bg-deep: #020617;
+$bg-surface: rgba(8, 18, 35, 0.7);
+$bg-glass: rgba(15, 25, 45, 0.5);
+$bg-card: rgba(10, 20, 40, 0.8);
 
-// 深色主题变量
-$bg-primary: #0d1117;
-$bg-secondary: #161b22;
-$bg-tertiary: #21262d;
-$bg-card: #1c2128;
-$border-color: #30363d;
-$text-primary: #f0f6fc;
-$text-secondary: #8b949e;
-$text-tertiary: #484f58;
-$color-success: #2ea043;
-$color-warning: #d29922;
-$color-error: #da3633;
-$color-info: #58a6ff;
-$color-running: #238636;
+$border-subtle: rgba(0, 180, 255, 0.1);
+$border-active: rgba(0, 212, 255, 0.35);
 
-.screen-content {
+$text-primary: #f8fafc;
+$text-secondary: rgba(148, 163, 184, 0.8);
+$text-muted: rgba(100, 120, 150, 0.6);
+
+$cyan: #00d4ff;
+$cyan-dim: rgba(0, 212, 255, 0.15);
+$green: #00e88a;
+$green-dim: rgba(0, 232, 138, 0.15);
+$red: #ff3b5c;
+$red-dim: rgba(255, 59, 92, 0.15);
+$yellow: #ffaa00;
+$yellow-dim: rgba(255, 170, 0, 0.15);
+$purple: #a855f7;
+$purple-dim: rgba(168, 85, 247, 0.15);
+
+.screen-wrapper {
   width: 100vw;
   height: 100vh;
-  background: $bg-primary;
+  background: $bg-deep;
   color: $text-primary;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-// 加载/错误状态
-.loading-overlay,
-.error-overlay {
+// ===== 背景层 =====
+.particle-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0, 180, 255, 0.08) 1px, transparent 0);
+  background-size: 40px 40px;
+  z-index: 0;
+  animation: gridFloat 60s linear infinite;
+}
+
+@keyframes gridFloat {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(40px); }
+}
+
+.scan-line {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
+  animation: scanMove 8s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes scanMove {
+  0%, 100% { top: 0; opacity: 0; }
+  5%, 95% { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+.ambient-glow {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80vw;
+  height: 60vh;
+  background: radial-gradient(ellipse, rgba(0, 100, 200, 0.06) 0%, transparent 70%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+// ===== 通用状态 =====
+.overlay-state {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $bg-primary;
   z-index: 100;
+  background: $bg-deep;
+
+  &.error .error-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: $text-secondary;
+
+    .el-icon { color: $red; }
+
+    p { font-size: 14px; }
+
+    .el-button {
+      background: transparent;
+      border: 1px solid $cyan;
+      color: $cyan;
+      &:hover { background: $cyan-dim; }
+    }
+  }
 }
 
-.loading-spinner {
+.loader {
   text-align: center;
 
-  .spinner {
+  .loader-ring {
     width: 48px;
     height: 48px;
-    border: 3px solid $bg-tertiary;
-    border-top-color: $color-info;
+    margin: 0 auto 16px;
+    border: 2px solid $border-subtle;
+    border-top-color: $cyan;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin: 0 auto 16px;
   }
 
-  .loading-text {
+  .loader-text {
     color: $text-secondary;
-    font-size: 14px;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
   }
 }
 
-.error-overlay {
+@keyframes spin { to { transform: rotate(360deg); } }
+
+// ===== 主内容 =====
+.screen-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
   flex-direction: column;
-  gap: 16px;
-
-  .error-icon {
-    font-size: 48px;
-    color: $color-error;
-  }
-
-  .error-text {
-    color: $text-secondary;
-    font-size: 14px;
-  }
+  height: 100vh;
+  animation: fadeIn 0.6s ease-out;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-// 顶部标题栏
+// ===== Header =====
 .screen-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background: $bg-secondary;
-  border-bottom: 1px solid $border-color;
+  padding: 8px 16px;
+  background: rgba(5, 12, 25, 0.8);
+  border-bottom: 1px solid $border-subtle;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, $border-active, transparent);
+  }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
+
+    .title-glow {
+      width: 3px;
+      height: 16px;
+      background: linear-gradient(180deg, $cyan, transparent);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
 
     .drill-title {
-      font-size: 20px;
-      font-weight: 600;
-      color: $text-primary;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
       margin: 0;
+      color: $text-primary;
     }
+
+    .drill-status-tag {
+      padding: 3px 10px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+
+      &.status-running {
+        background: $green-dim;
+        color: $green;
+        border: 1px solid rgba(0, 232, 138, 0.3);
+        animation: pulseGlow 3s ease-in-out infinite;
+      }
+      &.status-pending {
+        background: $yellow-dim;
+        color: $yellow;
+        border: 1px solid rgba(255, 170, 0, 0.3);
+      }
+      &.status-completed {
+        background: $green-dim;
+        color: $green;
+        border: 1px solid rgba(0, 232, 138, 0.4);
+      }
+      &.status-paused {
+        background: $yellow-dim;
+        color: $yellow;
+        border: 1px solid rgba(255, 170, 0, 0.3);
+      }
+      &.status-terminated {
+        background: $red-dim;
+        color: $red;
+        border: 1px solid rgba(255, 59, 92, 0.3);
+      }
+    }
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 4px rgba(0, 232, 138, 0.2); }
+    50% { box-shadow: 0 0 12px rgba(0, 232, 138, 0.3); }
   }
 
   .header-right {
@@ -614,174 +731,266 @@ $color-running: #238636;
     .time-display {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       color: $text-secondary;
-      font-size: 14px;
-
-      .el-icon {
-        font-size: 16px;
-      }
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
-    .fullscreen-btn {
-      background: $bg-tertiary;
-      border-color: $border-color;
-      color: $text-primary;
+    .cyber-btn {
+      background: transparent;
+      border: 1px solid $border-subtle;
+      color: $text-secondary;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
 
       &:hover {
-        background: $bg-card;
-        border-color: $color-info;
+        border-color: $cyan;
+        color: $cyan;
+        box-shadow: 0 0 8px rgba(0, 212, 255, 0.15);
       }
     }
   }
 }
 
-// 指标栏
+// ===== Metrics =====
 .metrics-bar {
-  display: flex;
-  gap: 12px;
-  padding: 16px 24px;
-  background: $bg-secondary;
-  border-bottom: 1px solid $border-color;
-}
-
-.metric-card {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 8px 16px;
+  background: rgba(5, 12, 25, 0.5);
+  border-bottom: 1px solid $border-subtle;
+}
+
+.metric-group {
+  display: flex;
+  gap: 10px;
+
+  &.primary-metrics { flex: 1; }
+  &.secondary-metrics { gap: 8px; }
+}
+
+.metric-divider {
+  width: 1px;
+  height: 32px;
+  background: linear-gradient(180deg, transparent, $border-active, transparent);
+}
+
+.metric-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
   background: $bg-card;
-  border-radius: 8px;
-  border: 1px solid $border-color;
+  border-radius: 6px;
+  border: 1px solid $border-subtle;
+  transition: all 0.3s;
 
-  .metric-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
+  &:hover {
+    border-color: $border-active;
+  }
 
-    &.metric-primary {
-      background: rgba(88, 166, 255, 0.15);
-      color: $color-info;
+  .metric-corners {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 6px;
+
+    &::before, &::after {
+      content: '';
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-color: $cyan;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
 
-    &.metric-success {
-      background: rgba(46, 160, 67, 0.15);
-      color: $color-success;
+    &::before {
+      top: -1px;
+      left: -1px;
+      border-top: 2px solid;
+      border-left: 2px solid;
     }
 
-    &.metric-warning {
-      background: rgba(210, 153, 34, 0.15);
-      color: $color-warning;
-    }
-
-    &.metric-info {
-      background: rgba(88, 166, 255, 0.1);
-      color: $color-info;
+    &::after {
+      bottom: -1px;
+      right: -1px;
+      border-bottom: 2px solid;
+      border-right: 2px solid;
     }
   }
 
-  .metric-content {
+  &:hover .metric-corners::before,
+  &:hover .metric-corners::after {
+    opacity: 0.6;
+  }
+
+  &.core-metric {
+    flex: 1;
+    padding: 6px 8px;
+
+    .metric-value {
+      font-size: 16px;
+    }
+
+    &.running .metric-icon-box { background: $cyan-dim; color: $cyan; }
+    &.completed .metric-icon-box { background: $green-dim; color: $green; }
+    &.rate .metric-icon-box { background: $purple-dim; color: $purple; }
+  }
+
+  &.mini-metric {
+    .metric-icon-box {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: rgba(0, 180, 255, 0.06);
+      color: $text-secondary;
+    }
+
+    .metric-label { font-size: 10px; }
+    .metric-value { font-size: 12px; }
+  }
+
+  .metric-icon-box {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(0, 180, 255, 0.08);
+    color: $cyan;
+  }
+
+  .metric-body {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 
     .metric-label {
-      font-size: 12px;
-      color: $text-secondary;
+      font-size: 10px;
+      color: $text-muted;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      line-height: 1;
       margin-bottom: 4px;
     }
 
     .metric-value {
-      font-size: 18px;
-      font-weight: 600;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'SF Mono', 'Fira Code', monospace;
       color: $text-primary;
+      line-height: 1;
+
+      .metric-total {
+        font-weight: 400;
+        color: $text-secondary;
+        font-size: 0.75em;
+      }
+
+      &.success { color: $green; }
+      &.warning { color: $yellow; }
     }
   }
 }
 
-// 主体内容区
+// ===== Body =====
 .screen-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 320px 1fr 360px;
-  gap: 16px;
-  padding: 16px;
+  grid-template-columns: 260px 1fr 280px;
+  gap: 10px;
+  padding: 10px;
   overflow: hidden;
 }
 
-// 左侧面板
-.left-panel,
-.right-panel {
-  background: $bg-secondary;
-  border-radius: 12px;
-  border: 1px solid $border-color;
+.cyber-panel {
+  background: $bg-surface;
+  border-radius: 8px;
+  border: 1px solid $border-subtle;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: $bg-tertiary;
-  border-bottom: 1px solid $border-color;
-  font-size: 14px;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 180, 255, 0.03);
+  border-bottom: 1px solid $border-subtle;
+  font-size: 10px;
   font-weight: 600;
-  color: $text-primary;
+  color: $text-secondary;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  flex-shrink: 0;
 
-  .el-icon {
-    font-size: 16px;
-  }
+  svg { color: $cyan; }
 }
 
+// Steps
 .steps-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: $border-subtle; border-radius: 2px; }
 }
 
 .step-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  margin-bottom: 8px;
-  background: $bg-card;
-  border-radius: 8px;
-  border: 1px solid $border-color;
-  transition: all 0.2s;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.25s;
 
-  &.active {
-    border-color: $color-running;
-    background: rgba(35, 134, 54, 0.1);
-  }
+  &.active-step {
+    border-color: rgba(0, 232, 138, 0.25);
+    background: rgba(0, 232, 138, 0.04);
 
-  .step-indicator {
-    font-size: 20px;
-    flex-shrink: 0;
-
-    .el-icon {
-      &.is-loading {
-        animation: spin 1s linear infinite;
-      }
+    .step-indicator svg {
+      animation: spin 1s linear infinite;
+      color: $green;
     }
   }
 
-  .step-content {
+  .step-indicator {
+    flex-shrink: 0;
+    color: $text-muted;
+
+    .step-completed & { color: $green; }
+    .step-issue &, .step-timeout & { color: $red; }
+  }
+
+  .step-body {
     flex: 1;
     min-width: 0;
 
     .step-name {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 500;
       color: $text-primary;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -789,330 +998,232 @@ $color-running: #238636;
 
     .step-meta {
       display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 12px;
-      color: $text-secondary;
+      gap: 8px;
+      font-size: 10px;
+      color: $text-muted;
 
-      .step-assignee,
-      .step-duration {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-
-        .el-icon {
-          font-size: 12px;
-        }
+      .step-team {
+        background: $cyan-dim;
+        padding: 1px 5px;
+        border-radius: 2px;
+        color: $cyan;
       }
     }
   }
 
-  .step-status-badge {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 500;
+  .step-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
 
-    &.badge-pending {
-      background: rgba(139, 148, 158, 0.15);
-      color: $text-secondary;
-    }
-
-    &.badge-running {
-      background: rgba(35, 134, 54, 0.2);
-      color: $color-running;
-    }
-
-    &.badge-completed {
-      background: rgba(46, 160, 67, 0.2);
-      color: $color-success;
-    }
-
-    &.badge-issue,
-    &.badge-timeout {
-      background: rgba(218, 54, 51, 0.2);
-      color: $color-error;
-    }
-
-    &.badge-skipped {
-      background: rgba(88, 166, 255, 0.15);
-      color: $color-info;
-    }
+    &.badge-completed { background: $green-dim; color: $green; }
+    &.badge-running { background: $cyan-dim; color: $cyan; }
+    &.badge-pending { background: rgba(255, 255, 255, 0.03); color: $text-muted; }
+    &.badge-issue, &.badge-timeout { background: $red-dim; color: $red; }
+    &.badge-skipped { background: $purple-dim; color: $purple; }
   }
 }
 
-// 中间图表区
+// Center
 .center-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
+  gap: 12px;
+  overflow: hidden;
 }
 
-.chart-card {
-  background: $bg-secondary;
-  border-radius: 12px;
-  border: 1px solid $border-color;
+.cyber-card {
+  background: $bg-surface;
+  border-radius: 8px;
+  border: 1px solid $border-subtle;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
 
-  &.progress-chart {
-    flex: 1;
-    min-height: 320px;
-  }
-
-  &.status-chart {
-    flex: 1;
-    min-height: 280px;
-  }
-
-  .chart-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: $bg-tertiary;
-    border-bottom: 1px solid $border-color;
-    font-size: 14px;
-    font-weight: 600;
-    color: $text-primary;
-
-    .el-icon {
-      font-size: 16px;
-    }
-  }
-
-  .chart-body {
-    flex: 1;
-    padding: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+  &.gauge-container { flex: 1.3; }
+  &.status-bars { flex: 0.7; }
 }
 
-// 右侧面板
-.right-panel {
-  .timeline-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-  }
-
-  .alerts-section {
-    border-top: 1px solid $border-color;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-}
-
-.timeline {
-  position: relative;
-  padding-left: 24px;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: 8px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: $border-color;
-  }
-}
-
-.timeline-item {
-  position: relative;
-  padding-bottom: 20px;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: -20px;
-    top: 4px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: $bg-card;
-    border: 2px solid $border-color;
-    z-index: 1;
-  }
-
-  &.timeline-completed::before {
-    background: $color-success;
-    border-color: $color-success;
-  }
-
-  &.timeline-running::before {
-    background: $color-running;
-    border-color: $color-running;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  &.timeline-issue::before {
-    background: $color-error;
-    border-color: $color-error;
-  }
-
-  &.active {
-    .timeline-content {
-      background: rgba(35, 134, 54, 0.1);
-    }
-  }
-
-  .timeline-dot {
-    position: absolute;
-    left: -16px;
-    top: 4px;
-    width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    color: $bg-primary;
-    z-index: 2;
-
-    .el-icon.is-loading {
-      animation: spin 1s linear infinite;
-    }
-  }
-
-  .timeline-content {
-    padding: 10px 12px;
-    background: $bg-card;
-    border-radius: 8px;
-    border: 1px solid $border-color;
-
-    .timeline-step-name {
-      font-size: 13px;
-      font-weight: 500;
-      color: $text-primary;
-      margin-bottom: 6px;
-    }
-
-    .timeline-time {
-      font-size: 12px;
-      color: $text-secondary;
-
-      .timeline-end-time {
-        color: $text-tertiary;
-      }
-    }
-
-    .timeline-duration {
-      font-size: 11px;
-      color: $text-tertiary;
-      margin-top: 4px;
-    }
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(35, 134, 54, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(35, 134, 54, 0);
-  }
-}
-
-.alerts-list {
+.gauge-chart {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px;
 }
 
-.alert-item {
+.gauge-svg {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+}
+
+.gauge-progress {
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bars-container {
+  flex: 1;
+  padding: 12px;
   display: flex;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  background: $bg-card;
-  border-radius: 8px;
-  border: 1px solid $border-color;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  &.alert-error {
-    border-color: rgba($color-error, 0.3);
-    background: rgba($color-error, 0.1);
-  }
+.status-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 
-  &.alert-warning {
-    border-color: rgba($color-warning, 0.3);
-    background: rgba($color-warning, 0.1);
-  }
-
-  &.alert-info {
-    border-color: rgba($color-info, 0.3);
-    background: rgba($color-info, 0.1);
-  }
-
-  .alert-icon {
-    font-size: 18px;
+  .bar-label {
+    font-size: 11px;
+    color: $text-secondary;
+    width: 42px;
     flex-shrink: 0;
-
-    &.alert-error {
-      color: $color-error;
-    }
-
-    &.alert-warning {
-      color: $color-warning;
-    }
-
-    &.alert-info {
-      color: $color-info;
-    }
   }
 
-  .alert-content {
+  .bar-track {
     flex: 1;
-    min-width: 0;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+    overflow: hidden;
+  }
 
-    .alert-message {
-      font-size: 13px;
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &.bar-completed { background: linear-gradient(90deg, $green, rgba(0, 232, 138, 0.5)); box-shadow: 0 0 6px rgba(0, 232, 138, 0.3); }
+    &.bar-running { background: linear-gradient(90deg, $cyan, rgba(0, 212, 255, 0.5)); box-shadow: 0 0 6px rgba(0, 212, 255, 0.3); }
+    &.bar-pending { background: rgba(255, 255, 255, 0.1); }
+    &.bar-issue, &.bar-timeout { background: linear-gradient(90deg, $red, rgba(255, 59, 92, 0.5)); box-shadow: 0 0 6px rgba(255, 59, 92, 0.3); }
+    &.bar-skipped { background: linear-gradient(90deg, $purple, rgba(168, 85, 247, 0.5)); }
+  }
+
+  .bar-value {
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'SF Mono', monospace;
+    color: $text-primary;
+    width: 16px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+}
+
+// Right: Logs
+.logs-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: $border-subtle; border-radius: 2px; }
+}
+
+.log-item {
+  position: relative;
+  padding: 0 0 10px 16px;
+
+  &:last-child { padding-bottom: 0; }
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 8px;
+    bottom: 0;
+    width: 1px;
+    background: $border-subtle;
+  }
+
+  &:last-child::before { display: none; }
+
+  .log-dot {
+    position: absolute;
+    left: 1px;
+    top: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: $text-muted;
+    box-shadow: 0 0 4px rgba(0, 212, 255, 0.2);
+  }
+
+  &.log-complete .log-dot { background: $green; box-shadow: 0 0 6px rgba(0, 232, 138, 0.4); }
+  &.log-issue .log-dot { background: $red; box-shadow: 0 0 6px rgba(255, 59, 92, 0.4); animation: pulseDot 1.5s ease-in-out infinite; }
+  &.log-start .log-dot { background: $cyan; }
+
+  @keyframes pulseDot {
+    0%, 100% { box-shadow: 0 0 4px rgba(255, 59, 92, 0.3); }
+    50% { box-shadow: 0 0 10px rgba(255, 59, 92, 0.5); }
+  }
+
+  .log-content {
+    .log-action {
+      font-size: 12px;
+      font-weight: 500;
       color: $text-primary;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
-    .alert-time {
+    .log-detail {
       font-size: 11px;
-      color: $text-tertiary;
+      color: $text-secondary;
+      margin-bottom: 2px;
+    }
+
+    .log-time {
+      font-size: 10px;
+      font-family: 'SF Mono', monospace;
+      color: $text-muted;
     }
   }
 }
 
-// 底部进度条
-.bottom-progress {
-  padding: 0 24px;
-  background: $bg-secondary;
-  border-top: 1px solid $border-color;
+// Bottom bar
+.bottom-bar {
+  position: relative;
+  padding: 0;
+  background: rgba(5, 12, 25, 0.8);
+  border-top: 1px solid $border-subtle;
+  flex-shrink: 0;
 
-  :deep(.el-progress) {
-    .el-progress__bar {
-      background-color: $bg-tertiary;
-    }
-
-    .el-progress__indicator {
-      color: $text-primary;
-    }
+  &::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 15%;
+    right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, $border-active, transparent);
   }
 }
 
-// 滚动条样式
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.bottom-progress-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
 }
 
-::-webkit-scrollbar-track {
-  background: $bg-tertiary;
-  border-radius: 4px;
+.bottom-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, $cyan, $green);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: progressGlow 3s ease-in-out infinite;
 }
 
-::-webkit-scrollbar-thumb {
-  background: $border-color;
-  border-radius: 4px;
-
-  &:hover {
-    background: $text-tertiary;
-  }
+@keyframes progressGlow {
+  0%, 100% { box-shadow: 0 0 6px rgba(0, 212, 255, 0.2); }
+  50% { box-shadow: 0 0 14px rgba(0, 212, 255, 0.4); }
 }
 </style>

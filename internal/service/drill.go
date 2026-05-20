@@ -8,6 +8,7 @@ import (
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 )
 
@@ -16,6 +17,8 @@ type DrillService struct {
 	templateRepo          *repository.TemplateRepo
 	stepRepo              *repository.StepRepo
 	userRepo              *repository.UserRepo
+	engine                *flowengine.Engine
+	adapter               *DrillFlowAdapter
 	wsManager             *websocket.Manager
 	notificationService   *NotificationService
 }
@@ -27,6 +30,11 @@ func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.T
 		stepRepo:     stepRepo,
 		userRepo:     userRepo,
 	}
+}
+
+func (s *DrillService) SetEngine(engine *flowengine.Engine, adapter *DrillFlowAdapter) {
+	s.engine = engine
+	s.adapter = adapter
 }
 
 func (s *DrillService) SetWebSocketManager(wsManager *websocket.Manager) {
@@ -116,58 +124,36 @@ func (s *DrillService) Start(id uint64) error {
 		return errors.New("只有待启动状态的演练才能开始")
 	}
 
-	now := time.Now()
-	drill.Status = "running"
-	drill.StartTime = &now
-	if len(drill.Steps) > 0 {
-		drill.CurrentStepID = &drill.Steps[0].ID
+	if s.engine == nil {
+		return errors.New("流程引擎未初始化")
 	}
 
-	if err := s.drillRepo.Update(drill); err != nil {
+	template, err := s.templateRepo.FindByID(drill.TemplateID)
+	if err != nil || template == nil {
+		return errors.New("关联模板不存在")
+	}
+
+	if len(template.Steps) == 0 {
+		return errors.New("模板没有步骤，无法启动")
+	}
+
+	s.adapter.RegisterDrillContext(int64(drill.ID), drillContext{
+		ID:         drill.ID,
+		Name:       drill.Name,
+		Status:     "running",
+		TemplateID: drill.TemplateID,
+	})
+
+	flowDef := s.adapter.BuildFlowDef(template)
+	flowDef.ID = int64(drill.ID)
+	assignees := s.adapter.BuildAssignees(drill.ID)
+
+	_, err = s.engine.CreateInstance(flowDef, assignees, int64(drill.CreatedBy))
+	if err != nil {
 		return err
 	}
 
-	// 查询操作人姓名
-	var user entity.User
-	operatorName := ""
-	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
-	if user.ID > 0 {
-		operatorName = user.RealName
-	}
-
-	// 创建演练日志
-	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
-		DrillInstanceID: id,
-		Action:          "start",
-		OperatorID:      drill.CreatedBy,
-		OperatorName:    operatorName,
-		Content:         "演练已启动",
-	})
-
-	// WebSocket 广播
-	if s.wsManager != nil {
-		payload := websocket.DrillStatusPayload{
-			DrillID:        uint(drill.ID),
-			DrillName:      drill.Name,
-			PreviousStatus: "pending",
-			NewStatus:      "running",
-		}
-		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
-	}
-
-	// 创建通知
-	if s.notificationService != nil {
-		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   drill.CreatedBy,
-			Type:     "drill_started",
-			Title:    "演练已启动",
-			Content:  drill.Name + " 已开始执行",
-			DrillID:  &drill.ID,
-			IsRead:   false,
-		})
-	}
-
-	return nil
+	return s.engine.Start(int64(drill.ID))
 }
 
 func (s *DrillService) Pause(id uint64) error {

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"drill-platform/internal/domain/entity"
@@ -10,12 +12,22 @@ import (
 
 type TaskService struct {
 	stepRepo              *repository.StepRepo
+	drillService          *DrillService
 	wsManager             *websocket.Manager
 	notificationService   *NotificationService
+	userRepo              *repository.UserRepo
 }
 
 func NewTaskService(stepRepo *repository.StepRepo) *TaskService {
 	return &TaskService{stepRepo: stepRepo}
+}
+
+func (s *TaskService) SetUserRepo(repo *repository.UserRepo) {
+	s.userRepo = repo
+}
+
+func (s *TaskService) SetDrillService(ds *DrillService) {
+	s.drillService = ds
 }
 
 func (s *TaskService) SetWebSocketManager(wsManager *websocket.Manager) {
@@ -24,6 +36,32 @@ func (s *TaskService) SetWebSocketManager(wsManager *websocket.Manager) {
 
 func (s *TaskService) SetNotificationService(ns *NotificationService) {
 	s.notificationService = ns
+}
+
+func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*entity.StepInstance, error) {
+	step, err := s.stepRepo.FindByID(stepID)
+	if err != nil {
+		return nil, errors.New("任务不存在")
+	}
+
+	if s.userRepo == nil {
+		return step, nil
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	if user.Role == "admin" || user.Role == "director" {
+		return step, nil
+	}
+
+	if step.ExecutorTeam != "" && user.Department != step.ExecutorTeam {
+		return nil, fmt.Errorf("您所在部门 [%s] 不在该任务的执行组 [%s] 内，无法操作", user.Department, step.ExecutorTeam)
+	}
+
+	return step, nil
 }
 
 func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
@@ -40,7 +78,7 @@ func (s *TaskService) GetTaskDetail(stepID uint64) (*entity.StepInstance, error)
 }
 
 func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark string) error {
-	step, err := s.stepRepo.FindByID(stepID)
+	step, err := s.checkExecutorPermission(stepID, operatorID)
 	if err != nil {
 		return err
 	}
@@ -48,7 +86,15 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 		return nil
 	}
 
-	prevStatus := step.Status
+	if s.drillService != nil && s.drillService.engine != nil {
+		return s.drillService.engine.CompleteStep(
+			int64(step.DrillInstanceID),
+			int64(step.StepTemplateID),
+			int64(operatorID),
+			remark,
+		)
+	}
+
 	now := time.Now()
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepID).Updates(map[string]interface{}{
 		"status":         "completed",
@@ -65,23 +111,20 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 		Content:         remark,
 	})
 
-	// WebSocket 广播
 	if s.wsManager != nil {
-		payload := websocket.StepChangePayload{
+		s.wsManager.SendStepChange(uint(step.DrillInstanceID), websocket.StepChangePayload{
 			DrillID:        uint(step.DrillInstanceID),
 			StepID:         uint(stepID),
 			StepName:       step.Name,
-			PreviousStatus: prevStatus,
+			PreviousStatus: "running",
 			NewStatus:      "completed",
-		}
-		s.wsManager.SendStepChange(uint(step.DrillInstanceID), payload)
+		})
 	}
 
-	// 创建通知
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
 			UserID:   operatorID,
-			Type:     "step_complete",
+			Type:     entity.NotificationTypeStepComplete,
 			Title:    "步骤已完成",
 			Content:  step.Name + " 已完成",
 			DrillID:  &step.DrillInstanceID,
@@ -94,9 +137,18 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 }
 
 func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc string) error {
-	step, err := s.stepRepo.FindByID(stepID)
+	step, err := s.checkExecutorPermission(stepID, operatorID)
 	if err != nil {
 		return err
+	}
+
+	if s.drillService != nil && s.drillService.engine != nil {
+		return s.drillService.engine.ReportIssue(
+			int64(step.DrillInstanceID),
+			int64(step.StepTemplateID),
+			int64(operatorID),
+			issueDesc,
+		)
 	}
 
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepID).Updates(map[string]interface{}{
@@ -112,23 +164,20 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 		Content:         issueDesc,
 	})
 
-	// WebSocket 广播
 	if s.wsManager != nil {
-		payload := websocket.StepChangePayload{
+		s.wsManager.SendStepChange(uint(step.DrillInstanceID), websocket.StepChangePayload{
 			DrillID:        uint(step.DrillInstanceID),
 			StepID:         uint(stepID),
 			StepName:       step.Name,
 			PreviousStatus: step.Status,
 			NewStatus:      "issue",
-		}
-		s.wsManager.SendStepChange(uint(step.DrillInstanceID), payload)
+		})
 	}
 
-	// 创建通知
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
 			UserID:   step.DrillInstance.CreatedBy,
-			Type:     "step_timeout",
+			Type:     entity.NotificationTypeStepTimeout,
 			Title:    "步骤异常上报",
 			Content:  step.Name + " 上报异常：" + issueDesc,
 			DrillID:  &step.DrillInstanceID,

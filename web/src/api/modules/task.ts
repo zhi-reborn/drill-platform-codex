@@ -1,32 +1,39 @@
 import { apiRequest } from '../request'
-import type { Task, TaskAction } from '@/types'
+import type { StepInstance } from '@/types/instance'
 
 export const taskApi = {
-  getMyTasks: (params?: { status?: string }) => {
-    return apiRequest<Task[]>({
+  getMyTasks: () => {
+    return apiRequest<StepInstance[]>({
       url: '/v1/tasks/my',
       method: 'GET',
-      params,
     })
   },
 
   getById: (id: number) => {
-    return apiRequest<Task>({
+    return apiRequest<StepInstance>({
       url: `/v1/tasks/${id}`,
       method: 'GET',
     })
   },
 
-  executeAction: (id: number, action: TaskAction) => {
-    return apiRequest<Task>({
-      url: `/v1/tasks/${id}/action`,
+  complete: (id: number, remark: string) => {
+    return apiRequest({
+      url: `/v1/tasks/${id}/complete`,
       method: 'POST',
-      data: action,
+      data: { remark },
+    })
+  },
+
+  reportIssue: (id: number, issueDesc: string) => {
+    return apiRequest({
+      url: `/v1/tasks/${id}/issue`,
+      method: 'POST',
+      data: { issue_desc: issueDesc },
     })
   },
 
   assign: (taskId: number, userId: number) => {
-    return apiRequest<Task>({
+    return apiRequest<StepInstance>({
       url: `/v1/tasks/${taskId}/assign`,
       method: 'POST',
       data: { user_id: userId },

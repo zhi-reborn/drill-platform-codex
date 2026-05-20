@@ -57,27 +57,20 @@ export interface StepInstance {
   name: string
   seq: number
   status: StepStatus
-  assignee_ids?: string
-  actual_operator?: number
-  start_time?: string
-  end_time?: string
-  timeout_at?: string
-  remark?: string
-  issue_desc?: string
+  assignee_ids: string
+  actual_operator: number | null
+  start_time: string | null
+  end_time: string | null
+  timeout_at: string | null
+  remark: string
+  issue_desc: string
+  step_type: string
+  timeout_minutes: number
+  default_assignee_role: string
+  executor_team: string
   created_at: string
+  drill_instance?: DrillInstance
   logs?: StepInstanceLog[]
-  drill_id?: number
-  template_step_id?: number
-  step_name?: string
-  step_type?: string
-  assignee_id?: number
-  assignee_name?: string
-  result_json?: string
-  error_message?: string
-  started_at?: string
-  completed_at?: string
-  timeout_seconds?: number
-  order_index?: number
 }
 
 export interface StepLog {

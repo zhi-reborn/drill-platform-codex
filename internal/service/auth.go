@@ -35,14 +35,21 @@ func (s *AuthService) SetJWTConfig(secret string, expireHours int) {
 func (s *AuthService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 	user, err := s.userRepo.FindByUsername(req.Username)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("用户名或密码错误")
+		return nil, errors.New("用户名不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, errors.New("用户名或密码错误")
+		return nil, errors.New("密码错误")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		return nil, errors.New("密码错误")
 	}
 
 	if user.Status != 1 {
@@ -164,7 +171,25 @@ func (s *AuthService) UpdateUser(id uint64, req *dto.UpdateUserRequest) (*entity
 	if err := s.userRepo.Update(user); err != nil {
 		return nil, err
 	}
-	return user, nil
+	return s.userRepo.FindByID(id)
+}
+
+func (s *AuthService) ResetPassword(id uint64, newPassword string) error {
+	user, err := s.userRepo.FindByID(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = string(hashedPassword)
+	return s.userRepo.Update(user)
 }
 
 func (s *AuthService) DeleteUser(id uint64) error {

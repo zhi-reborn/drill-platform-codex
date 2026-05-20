@@ -38,3 +38,4 @@ openspec/
 .worktrees/
 docs/superpowers/
 tests/
+.tokensave

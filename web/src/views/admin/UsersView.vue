@@ -49,6 +49,13 @@
         </template>
         <template #actions="{ row }">
           <el-button
+            type="warning"
+            size="small"
+            @click="handleResetPassword(row)"
+          >
+            重置密码
+          </el-button>
+          <el-button
             type="primary"
             size="small"
             @click="handleEditUser(row)"
@@ -140,6 +147,34 @@
       </template>
     </el-dialog>
 
+    <!-- 重置密码对话框 -->
+    <el-dialog
+      v-model="showResetPasswordDialog"
+      title="重置用户密码"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <el-form @submit.prevent>
+        <el-form-item label="用户名">
+          <el-input :model-value="resetPasswordUser?.username" disabled />
+        </el-form-item>
+        <el-form-item label="重置密码" prop="newPassword">
+          <el-input
+            v-model="newPassword"
+            type="password"
+            placeholder="请输入新密码"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showResetPasswordDialog = false">取消</el-button>
+        <el-button type="primary" @click="submitResetPassword" :loading="submitting">
+          确认重置
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 编辑用户抽屉 -->
     <el-drawer
       v-model="showEditDrawer"
@@ -223,6 +258,42 @@ async function loadUsers() {
     ElMessage.error('加载用户列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+const showResetPasswordDialog = ref(false)
+const resetPasswordUser = ref<User | null>(null)
+const newPassword = ref('')
+
+function handleResetPassword(user: User) {
+  resetPasswordUser.value = user
+  newPassword.value = ''
+  showResetPasswordDialog.value = true
+}
+
+async function submitResetPassword() {
+  if (!resetPasswordUser.value || !newPassword.value) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  if (newPassword.value.length < 6) {
+    ElMessage.warning('密码长度至少 6 位')
+    return
+  }
+  submitting.value = true
+  try {
+    await userApi.resetPassword(resetPasswordUser.value.id, newPassword.value)
+    ElMessage.success('密码已重置为: ' + newPassword.value)
+    showResetPasswordDialog.value = false
+  } catch (error: any) {
+    if (error.response?.data?.message) {
+      ElMessage.error(error.response.data.message)
+    } else {
+      ElMessage.error('重置密码失败')
+    }
+    console.error('Failed to reset password:', error)
+  } finally {
+    submitting.value = false
   }
 }
 
