@@ -43,7 +43,7 @@ export interface DrillInstance {
 }
 
 export function getCompletedSteps(steps: StepInstance[]): number {
-  return steps.filter(s => s.status === 'completed').length
+  return steps.filter(s => s.status === 'completed' || s.status === 'skipped').length
 }
 
 export function getTotalSteps(steps: StepInstance[]): number {

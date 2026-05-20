@@ -82,6 +82,14 @@ export const drillApi = {
     })
   },
 
+  completeStep: (drillId: number, stepId: number, remark?: string) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/complete`,
+      method: 'POST',
+      data: { step_id: stepId, remark },
+    })
+  },
+
   forceCompleteStep: (drillId: number, stepId: number, remark?: string) => {
     return apiRequest<void>({
       url: `/v1/drills/${drillId}/steps/force-complete`,

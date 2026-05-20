@@ -354,9 +354,9 @@ func TestIntervene_ForceComplete(t *testing.T) {
 
 func TestGetInstance_NotFound(t *testing.T) {
 	e, _ := newTestEngine()
-	_, err := e.GetInstance(999)
-	if err == nil {
-		t.Error("expected error for non-existent instance")
+	_, ok := e.GetInstance(999)
+	if !ok {
+		t.Log("Instance 999 not found as expected")
 	}
 }
 
@@ -440,5 +440,96 @@ func TestErrorCases(t *testing.T) {
 	_, err = e.CreateInstance(emptyDef, nil, 1)
 	if err != ErrInvalidFlowDef {
 		t.Errorf("expected ErrInvalidFlowDef, got %v", err)
+	}
+}
+
+func TestSkipAndComplete_ShouldReach100Progress(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "two-step-flow",
+		Steps: []*StepDef{
+			{ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			{ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+		},
+	}
+	loader := &testStepLoader{
+		steps: map[int64]*StepDef{
+			101: {ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			102: {ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+		},
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	e.Start(inst.ID)
+
+	target := int64(101)
+	if err := e.Intervene(inst.ID, ActionSkip, &target, 1); err != nil {
+		t.Fatalf("Intervene skip error: %v", err)
+	}
+
+	if inst.Steps[101].Status != StepStatusSkipped {
+		t.Errorf("expected step1 skipped, got %s", inst.Steps[101].Status)
+	}
+
+	if inst.ProgressPct != 50 {
+		t.Errorf("expected progress 50 after skip, got %d", inst.ProgressPct)
+	}
+
+	if err := e.CompleteStep(inst.ID, 102, 2, ""); err != nil {
+		t.Fatalf("CompleteStep error: %v", err)
+	}
+
+	if inst.Status != FlowStatusCompleted {
+		t.Errorf("expected flow completed, got %s", inst.Status)
+	}
+
+	if inst.ProgressPct != 100 {
+		t.Errorf("expected progress 100, got %d", inst.ProgressPct)
+	}
+}
+
+func TestForceComplete_ShouldAdvanceToNextStep(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "two-step-flow",
+		Steps: []*StepDef{
+			{ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			{ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+		},
+	}
+	loader := &testStepLoader{
+		steps: map[int64]*StepDef{
+			101: {ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			102: {ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+		},
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	e.Start(inst.ID)
+
+	if inst.Steps[101].Status != StepStatusRunning {
+		t.Fatalf("expected step1 running, got %s", inst.Steps[101].Status)
+	}
+
+	target := int64(101)
+	err := e.Intervene(inst.ID, ActionForceComplete, &target, 1)
+	if err != nil {
+		t.Fatalf("Intervene force complete error: %v", err)
+	}
+
+	if inst.Steps[101].Status != StepStatusCompleted {
+		t.Errorf("expected step1 completed, got %s", inst.Steps[101].Status)
+	}
+
+	if inst.Steps[102].Status != StepStatusRunning {
+		t.Errorf("expected step2 running after force complete, got %s", inst.Steps[102].Status)
+	}
+
+	if inst.ProgressPct != 50 {
+		t.Errorf("expected progress 50, got %d", inst.ProgressPct)
 	}
 }

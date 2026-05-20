@@ -60,7 +60,7 @@ func (r *DrillRepo) CreateLog(log *entity.DrillInstanceLog) error {
 
 func (r *DrillRepo) GetLogs(drillID uint64) ([]entity.DrillInstanceLog, error) {
 	var logs []entity.DrillInstanceLog
-	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC").Find(&logs).Error
+	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC, id DESC").Find(&logs).Error
 	return logs, err
 }
 

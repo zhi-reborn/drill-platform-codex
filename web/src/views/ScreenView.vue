@@ -68,7 +68,7 @@
             <div class="metric-body">
               <span class="metric-label">已完成</span>
               <span class="metric-value">
-                {{ drillSteps.filter(s => s.status === 'completed').length }}<span class="metric-total">/{{ drillSteps.length }}</span>
+                {{ completedCount }}<span class="metric-total">/{{ drillSteps.length }}</span>
               </span>
             </div>
           </div>
@@ -278,10 +278,11 @@ const drillId = computed(() => {
 const currentDrill = ref<any>(null)
 const drillSteps = ref<StepInstance[]>([])
 
+const completedCount = computed(() => drillSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length)
+
 const progressPercent = computed(() => {
   if (drillSteps.value.length === 0) return 0
-  const completed = drillSteps.value.filter(s => s.status === 'completed').length
-  return Math.round((completed / drillSteps.value.length) * 100)
+  return Math.round((completedCount.value / drillSteps.value.length) * 100)
 })
 
 function formatLogAction(action: string): string {

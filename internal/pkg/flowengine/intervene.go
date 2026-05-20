@@ -47,6 +47,12 @@ func (e *Engine) handlePause(inst *FlowInst) error {
 		return ErrInvalidStatus
 	}
 
+	for _, si := range inst.Steps {
+		if si.Status == StepStatusRunning {
+			e.timeoutScheduler.Unregister(inst.ID, si.StepDefID)
+		}
+	}
+
 	oldStatus := inst.Status
 	inst.Status = FlowStatusPaused
 
@@ -61,6 +67,16 @@ func (e *Engine) handlePause(inst *FlowInst) error {
 func (e *Engine) handleResume(inst *FlowInst) error {
 	if inst.Status != FlowStatusPaused {
 		return ErrInvalidStatus
+	}
+
+	loader := e.getStepLoader()
+	for _, si := range inst.Steps {
+		if si.Status == StepStatusRunning {
+			stepDef, _ := loader.GetStepDef(inst.FlowDefID, si.StepDefID)
+			if stepDef != nil && stepDef.TimeoutMinutes > 0 && si.TimeoutAt != nil {
+				e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, *si.TimeoutAt)
+			}
+		}
 	}
 
 	oldStatus := inst.Status
@@ -93,7 +109,7 @@ func (e *Engine) handleTerminate(inst *FlowInst) error {
 }
 
 func (e *Engine) handleSkip(inst *FlowInst, stepDefID int64, operatorID int64) error {
-	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue && inst.Status != FlowStatusPaused {
+	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue {
 		return ErrInstanceNotRunning
 	}
 
@@ -124,7 +140,7 @@ func (e *Engine) handleSkip(inst *FlowInst, stepDefID int64, operatorID int64) e
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusSkipped)
-		cbs.LogAction(si.ID, "skip", operatorID, "director skipped")
+		cbs.LogAction(si.ID, "skip", operatorID, "指挥员跳过步骤")
 	}
 
 	e.eventBus.emit(EventStepSkip, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
@@ -139,13 +155,15 @@ func (e *Engine) handleSkip(inst *FlowInst, stepDefID int64, operatorID int64) e
 		}
 	}
 
-	e.advanceSerialSteps(inst, stepDefID)
+	// 推进流程（根据步骤类型自动选择对应的推进逻辑）
+	e.handleStepCompletion(inst, stepDefID)
+	e.updateProgress(inst)
 
 	return nil
 }
 
 func (e *Engine) handleForceComplete(inst *FlowInst, stepDefID int64, operatorID int64) error {
-	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue && inst.Status != FlowStatusPaused {
+	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue {
 		return ErrInstanceNotRunning
 	}
 
@@ -191,7 +209,7 @@ func (e *Engine) handleForceComplete(inst *FlowInst, stepDefID int64, operatorID
 }
 
 func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID int64) error {
-	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue && inst.Status != FlowStatusPaused {
+	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue {
 		return ErrInstanceNotRunning
 	}
 
@@ -221,13 +239,15 @@ func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID in
 	startTime := now
 	si.StartTime = &startTime
 
-	if !e.timeoutScheduler.IsRegistered(inst.ID, stepDefID) {
-		e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, now.Add(time.Duration(stepDef.TimeoutMinutes)*time.Minute))
+	if stepDef != nil && stepDef.TimeoutMinutes > 0 && e.timeoutScheduler != nil {
+		if !e.timeoutScheduler.IsRegistered(inst.ID, stepDefID) {
+			e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, now.Add(time.Duration(stepDef.TimeoutMinutes)*time.Minute))
+		}
 	}
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusRunning)
-		cbs.LogAction(si.ID, "resume_task", operatorID, "director resumed task")
+		cbs.LogAction(si.ID, "resume_task", operatorID, "指挥员重新派发任务")
 	}
 
 	e.eventBus.emit(EventStepStart, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
@@ -245,4 +265,74 @@ func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID in
 	e.updateProgress(inst)
 
 	return nil
+}
+
+func (e *Engine) DirectorCompleteStep(instanceID int64, stepDefID int64, operatorID int64) error {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return ErrInstanceNotFound
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	si, exists := inst.Steps[stepDefID]
+	if !exists {
+		return ErrStepNotFound
+	}
+
+	if si.Status != StepStatusRunning {
+		return ErrInvalidStatus
+	}
+
+	now := time.Now()
+	oldStatus := si.Status
+	si.Status = StepStatusCompleted
+	si.ActualOperator = &operatorID
+	si.EndTime = &now
+
+	inst.CurrentStepIDs = e.removeFromCurrentSteps(inst.CurrentStepIDs, stepDefID)
+	e.timeoutScheduler.Unregister(inst.ID, stepDefID)
+
+	if cbs := e.getCallbacks(); cbs != nil {
+		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusCompleted)
+		cbs.LogAction(si.ID, "director_complete", operatorID, "指挥组完成任务")
+	}
+
+	e.handleStepCompletion(inst, stepDefID)
+	e.updateProgress(inst)
+
+	return nil
+}
+
+// DirectorSkipStep 指挥员跳过步骤（外部 API 调用入口）
+func (e *Engine) DirectorSkipStep(instanceID int64, stepDefID int64, operatorID int64) error {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return ErrInstanceNotFound
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	return e.handleSkip(inst, stepDefID, operatorID)
+}
+
+// DirectorForceComplete 指挥员强制完成步骤（外部 API 调用入口）
+func (e *Engine) DirectorForceComplete(instanceID int64, stepDefID int64, operatorID int64) error {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return ErrInstanceNotFound
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	return e.handleForceComplete(inst, stepDefID, operatorID)
 }

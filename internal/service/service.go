@@ -61,7 +61,7 @@ func NewServices(wsManager *websocket.Manager) *Services {
 	s.DrillService.SetNotificationService(s.NotificationService)
 	s.TaskService.SetNotificationService(s.NotificationService)
 
-	engine.GetTimeoutScheduler().Start()
+	engine.TimeoutScheduler().Start()
 
 	return s
 }

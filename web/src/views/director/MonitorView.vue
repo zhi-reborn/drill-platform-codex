@@ -93,6 +93,7 @@
                 message="将步骤状态重置为运行中并重新计时超时，是否继续？"
                 type="warning"
                 @confirm="handleResumeTask(step)"
+                :disabled="instance?.status === 'paused'"
               >
                 <el-icon><RefreshRight /></el-icon>
                 重新派发
@@ -102,6 +103,7 @@
                 message="跳过此步骤后，该步骤将标记为已跳过，是否继续？"
                 type="warning"
                 @confirm="handleSkipStep(step)"
+                :disabled="instance?.status === 'paused'"
               >
                 <el-icon><DArrowRight /></el-icon>
                 跳过
@@ -110,6 +112,7 @@
                 :title="`强制完成：${step.name}`"
                 message="强制将此步骤标记为完成，是否继续？"
                 @confirm="handleForceComplete(step)"
+                :disabled="instance?.status === 'paused'"
               >
                 <el-icon><CircleCheck /></el-icon>
                 强制完成
@@ -160,10 +163,22 @@
             </div>
             <div class="step-actions">
               <ActionConfirm
+                v-if="step.default_assignee_role === 'director'"
+                :title="`完成任务：${step.name}`"
+                message="确认已完成此步骤？"
+                type="success"
+                @confirm="handleDirectorComplete(step)"
+                :disabled="instance?.status === 'paused'"
+              >
+                <el-icon><CircleCheckFilled /></el-icon>
+                完成任务
+              </ActionConfirm>
+              <ActionConfirm
                 :title="`跳过步骤：${step.name}`"
                 message="跳过此步骤后，该步骤将标记为已跳过，是否继续？"
                 type="warning"
                 @confirm="handleSkipStep(step)"
+                :disabled="instance?.status === 'paused'"
               >
                 <el-icon><DArrowRight /></el-icon>
                 跳过
@@ -172,6 +187,7 @@
                 :title="`强制完成：${step.name}`"
                 message="强制将此步骤标记为完成，是否继续？"
                 @confirm="handleForceComplete(step)"
+                :disabled="instance?.status === 'paused'"
               >
                 <el-icon><CircleCheck /></el-icon>
                 强制完成
@@ -252,7 +268,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -275,7 +291,7 @@ const drillSteps = computed(() => {
 })
 
 const completedSteps = computed(() => {
-  return steps.value.filter(s => s.status === 'completed').length
+  return steps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
 })
 
 const totalSteps = computed(() => {
@@ -355,7 +371,11 @@ function getLogTypeTag(action: string): 'primary' | 'success' | 'warning' | 'dan
     step_complete: 'success',
     step_issue: 'danger',
     step_skip: 'info',
+    step_timeout: 'danger',
     force_complete: 'warning',
+    resume_task: 'primary',
+    timeout: 'danger',
+    skip: 'info',
   }
   return map[action] || 'info'
 }
@@ -365,12 +385,19 @@ function getLogActionLabel(action: string): string {
     start: '演练启动',
     pause: '演练暂停',
     resume: '演练继续',
+    complete: '演练完成',
     terminate: '演练终止',
     step_start: '步骤开始',
     step_complete: '步骤完成',
     step_issue: '步骤异常',
     step_skip: '步骤跳过',
+    step_timeout: '步骤超时',
     force_complete: '强制完成',
+    resume_task: '重新派发',
+    timeout: '系统超时',
+    skip: '手动跳过',
+    director_complete: '指挥组完成任务',
+    step_complete_director: '指挥组完成任务',
   }
   return map[action] || action
 }
@@ -494,11 +521,20 @@ async function handleResumeTask(step: StepInstance) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
 }
+
+async function handleDirectorComplete(step: StepInstance) {
+  try {
+    await drillApi.completeStep(drillId.value, step.step_template_id, '指挥组完成任务')
+    ElMessage.success('步骤已完成')
+    loadDrillData()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '操作失败')
+  }
 }
 
 async function handleForceComplete(step: StepInstance) {
   try {
-    await drillApi.forceCompleteStep(drillId.value, step.id, `指挥组强制完成步骤：${step.name}`)
+    await drillApi.forceCompleteStep(drillId.value, step.step_template_id, `指挥组强制完成步骤：${step.name}`)
     ElMessage.success(`步骤「${step.name}」已强制完成`)
     loadDrillData()
   } catch (error) {
@@ -770,5 +806,4 @@ onMounted(() => {
       padding: $spacing-base;
     }
   }
-}
 </style>

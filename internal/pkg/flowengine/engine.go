@@ -42,7 +42,7 @@ func (e *Engine) GetEventBus() *EventBus {
 	return e.eventBus
 }
 
-func (e *Engine) GetTimeoutScheduler() *TimeoutScheduler {
+func (e *Engine) TimeoutScheduler() *TimeoutScheduler {
 	return e.timeoutScheduler
 }
 
@@ -130,24 +130,21 @@ func (e *Engine) Start(instanceID int64) error {
 	return nil
 }
 
-func (e *Engine) GetInstance(instanceID int64) (*FlowInst, error) {
+func (e *Engine) GetInstance(instanceID int64) (*FlowInst, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	inst, ok := e.instances[instanceID]
 	if !ok {
-		return nil, ErrInstanceNotFound
+		return nil, false
 	}
+	return inst, true
+}
 
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-
-	cp := *inst
-	cp.Steps = make(map[int64]*StepInst, len(inst.Steps))
-	for k, v := range inst.Steps {
-		stepCopy := *v
-		cp.Steps[k] = &stepCopy
-	}
-	return &cp, nil
+func (e *Engine) GetInstanceForMutate(instanceID int64) (*FlowInst, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	inst, ok := e.instances[instanceID]
+	return inst, ok
 }
 
 func (e *Engine) activateInitialSteps(inst *FlowInst) {

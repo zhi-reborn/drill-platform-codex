@@ -41,6 +41,58 @@ func (s *DrillService) Engine() *flowengine.Engine {
 	return s.engine
 }
 
+func (s *DrillService) Recover(id uint64) error {
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+
+	template, err := s.templateRepo.FindByID(drill.TemplateID)
+	if err != nil || template == nil {
+		return errors.New("关联模板不存在")
+	}
+
+	flowDef := s.adapter.BuildFlowDef(template)
+	flowDef.ID = int64(drill.ID)
+	assignees := s.adapter.BuildAssignees(drill.ID)
+
+	inst, err := s.engine.CreateInstance(flowDef, assignees, int64(drill.CreatedBy))
+	if err != nil {
+		return err
+	}
+	inst.Status = flowengine.FlowStatus(drill.Status)
+
+	// 同步内存中步骤实例的 ID 到数据库 ID
+	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
+
+	steps, err := s.stepRepo.FindStepsByDrillID(id)
+	if err != nil {
+		return err
+	}
+
+	for _, step := range steps {
+		si, exists := inst.Steps[int64(step.StepTemplateID)]
+		if exists {
+			si.Status = flowengine.StepStatus(step.Status)
+			si.StartTime = step.StartTime
+			si.EndTime = step.EndTime
+			si.TimeoutAt = step.TimeoutAt
+			si.Remark = step.Remark
+			si.IssueDesc = step.IssueDesc
+			if step.ActualOperator != nil {
+				op := int64(*step.ActualOperator)
+				si.ActualOperator = &op
+			}
+
+			if step.Status == "running" && step.TimeoutAt != nil {
+				s.engine.TimeoutScheduler().Register(int64(drill.ID), int64(step.StepTemplateID), int64(step.ID), *step.TimeoutAt)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (s *DrillService) SetWebSocketManager(wsManager *websocket.Manager) {
 	s.wsManager = wsManager
 }
@@ -170,6 +222,9 @@ func (s *DrillService) Start(id uint64) error {
 	if err != nil {
 		return err
 	}
+
+	// 同步内存中步骤实例的 ID 到数据库 ID
+	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
 
 	// 查询操作人姓名
 	var user entity.User
