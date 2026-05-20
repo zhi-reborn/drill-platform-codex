@@ -130,7 +130,7 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 			DrillID:  &step.DrillInstanceID,
 			StepID:   &stepID,
 			IsRead:   false,
-		})
+		}, operatorID)
 	}
 
 	return nil

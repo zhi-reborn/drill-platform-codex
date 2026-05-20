@@ -281,7 +281,7 @@ function getStepTypeTag(stepType: string): 'primary' | 'success' | 'warning' | '
 async function loadDrillData() {
   try {
     // 调用真实 API
-    instance.value = await drillApi.getById(drillId.value)
+    instance.value = await drillApi.getDetail(drillId.value)
     const stepsData = await drillApi.getSteps(drillId.value)
     steps.value = stepsData
     

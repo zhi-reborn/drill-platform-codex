@@ -21,6 +21,10 @@
           <el-icon><Check /></el-icon>
           全部标为已读
         </el-button>
+        <el-button @click="handleDeleteRead" :disabled="readCount === 0">
+          <el-icon><Delete /></el-icon>
+          删除已读消息
+        </el-button>
       </div>
     </div>
 
@@ -29,6 +33,7 @@
         :notifications="filteredNotifications"
         :loading="loading"
         @read="handleMarkAsRead"
+        @delete="handleDeleteSingle"
       />
     </div>
   </div>
@@ -36,8 +41,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Check, Connection } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Check, Connection, Delete } from '@element-plus/icons-vue'
 import { useNotificationStore } from '@/stores/notifications'
 import { useAuthStore } from '@/stores/auth'
 import { useWsStore } from '@/stores/ws'
@@ -61,6 +66,7 @@ const filteredNotifications = computed(() => {
 })
 
 const unreadCount = computed(() => notifStore.unreadCount)
+const readCount = computed(() => allNotifications.value.filter(n => n.is_read).length)
 
 const wsStatusText = computed(() => wsStore.statusText)
 const wsStatus = computed(() => wsStore.status)
@@ -90,6 +96,32 @@ function handleMarkAsRead(notification: Notification) {
 function handleMarkAllAsRead() {
   notifStore.markAllAsRead()
   ElMessage.success('已全部标为已读')
+}
+
+function handleDeleteSingle(notification: Notification) {
+  notifStore.deleteNotification(notification.id)
+  ElMessage.success('已删除')
+}
+
+async function handleDeleteRead() {
+  if (readCount.value === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除 ${readCount.value} 条已读消息吗？此操作不可撤销。`,
+      '删除已读消息',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    // 批量删除已读消息
+    const readMessages = allNotifications.value.filter(n => n.is_read)
+    await Promise.all(readMessages.map(n => notifStore.deleteNotification(n.id)))
+    ElMessage.success(`已删除 ${readMessages.length} 条消息`)
+  } catch {
+    // 用户取消
+  }
 }
 
 function handleLoadMore(page: number) {

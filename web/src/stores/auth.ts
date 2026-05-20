@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
   const role = computed(() => user.value?.role ?? '' as Role)
   const userName = computed(() => user.value?.name ?? '未登录')
   const userInitial = computed(() => user.value?.name?.charAt(0) ?? '?')
+  const userDept = computed(() => user.value?.department ?? '')
   const roleName = computed(() => {
     const labels: Record<Role, string> = {
       admin: '管理员',
@@ -125,7 +126,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     token, refreshToken, user, isAuthenticated,
-    role, userName, userInitial, roleName, roleType,
+    role, userName, userInitial, userDept, roleName, roleType,
     hasRole, hasPermission,
     loginWithCredentials, loginWithUser, casLogin,
     fetchCurrentUser, logout, restoreSession,

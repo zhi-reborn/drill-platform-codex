@@ -34,14 +34,20 @@ docker-compose -f docker-compose.dev.yml down
 docker-compose -f docker-compose.dev.yml down -v
 ```
 
+## 核心规则
 
-### 访问地址
+1. **查询图谱优先于读取文件**
+   - 理解代码结构 → `tokensave_search` / `tokensave_context`
+   - 修改前评估 → `tokensave_callers` / `tokensave_impact`
+   - 找测试 → `tokensave_test_mapping`
 
-- 前端界面：http://localhost:5173
-- API 服务：http://localhost:8080
-- MySQL: localhost:3306
-- Redis: localhost:6379
-- 默认账户：`admin` / `admin123`
+2. **不要全量扫描**
+   - 禁止用 `grep`/`find` 大规模搜索——先用图谱过滤
+   - 禁止 `cat` 读整个文件——用 `tokensave_node` 获取特定符号
+
+3. **跨模块调用注意**
+   - monorepo 中改一个模块时，先用 `tokensave_impact` 检查其他模块
+   - 特别关注 `shared/` 目录的变更影响面
 
 ---
 

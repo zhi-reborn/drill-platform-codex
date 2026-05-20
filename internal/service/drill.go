@@ -91,9 +91,23 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 
 	for _, stepTpl := range template.Steps {
 		assigneeIDs := "[]"
-		if userIDs, ok := req.Assignees[stepTpl.ID]; ok {
+		// 优先使用手动指定的 assignees
+		if userIDs, ok := req.Assignees[stepTpl.ID]; ok && len(userIDs) > 0 {
 			if bytes, _ := json.Marshal(userIDs); bytes != nil {
 				assigneeIDs = string(bytes)
+			}
+		} else if stepTpl.ExecutorTeam != "" {
+			// 按执行组部门自动分配：查找该部门下所有活跃用户
+			var deptUsers []entity.User
+			repository.DB.Where("department = ? AND status = 1", stepTpl.ExecutorTeam).Find(&deptUsers)
+			if len(deptUsers) > 0 {
+				userIDs := make([]uint64, len(deptUsers))
+				for i, u := range deptUsers {
+					userIDs[i] = u.ID
+				}
+				if bytes, _ := json.Marshal(userIDs); bytes != nil {
+					assigneeIDs = string(bytes)
+				}
 			}
 		}
 
@@ -153,6 +167,34 @@ func (s *DrillService) Start(id uint64) error {
 		return err
 	}
 
+	// 查询操作人姓名
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", drill.CreatedBy).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
+	// 创建演练日志
+	s.drillRepo.CreateLog(&entity.DrillInstanceLog{
+		DrillInstanceID: drill.ID,
+		Action:          "start",
+		OperatorID:      drill.CreatedBy,
+		OperatorName:    operatorName,
+		Content:         "演练已启动",
+	})
+
+	// WebSocket 广播
+	if s.wsManager != nil {
+		payload := websocket.DrillStatusPayload{
+			DrillID:        uint(drill.ID),
+			DrillName:      drill.Name,
+			PreviousStatus: "pending",
+			NewStatus:      "running",
+		}
+		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
+	}
+
 	return s.engine.Start(int64(drill.ID))
 }
 
@@ -198,7 +240,7 @@ func (s *DrillService) Pause(id uint64) error {
 		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
 	}
 
-	// 创建通知
+	// 创建通知（自己操作不通知自己）
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
 			UserID:   drill.CreatedBy,
@@ -207,7 +249,7 @@ func (s *DrillService) Pause(id uint64) error {
 			Content:  drill.Name + " 已暂停",
 			DrillID:  &drill.ID,
 			IsRead:   false,
-		})
+		}, drill.CreatedBy)
 	}
 
 	return nil
@@ -264,7 +306,7 @@ func (s *DrillService) Resume(id uint64) error {
 			Content:  drill.Name + " 已恢复执行",
 			DrillID:  &drill.ID,
 			IsRead:   false,
-		})
+		}, drill.CreatedBy)
 	}
 
 	return nil
@@ -326,7 +368,7 @@ func (s *DrillService) Terminate(id uint64) error {
 			Content:  drill.Name + " 已终止",
 			DrillID:  &drill.ID,
 			IsRead:   false,
-		})
+		}, drill.CreatedBy)
 	}
 
 	return nil

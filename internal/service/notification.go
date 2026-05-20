@@ -58,6 +58,9 @@ func (s *NotificationService) Delete(userID, id uint64) error {
 	return s.notificationRepo.Delete(notification.ID)
 }
 
-func (s *NotificationService) CreateNotification(notification *entity.Notification) error {
+func (s *NotificationService) CreateNotification(notification *entity.Notification, operatorIDs ...uint64) error {
+	if len(operatorIDs) > 0 && notification.UserID == operatorIDs[0] {
+		return nil
+	}
 	return s.notificationRepo.Create(notification)
 }

@@ -14,7 +14,17 @@
           <el-tag :type="getTypeTag(notification.type)" size="small">
             {{ getTypeLabel(notification.type) }}
           </el-tag>
-          <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
+          <div class="notification-header-right">
+            <el-button
+              class="delete-btn"
+              text
+              size="small"
+              @click.stop="handleDelete(notification)"
+            >
+              <el-icon><Delete /></el-icon>
+            </el-button>
+            <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
+          </div>
         </div>
         <div class="notification-title">{{ notification.title }}</div>
         <div class="notification-content">{{ notification.content }}</div>
@@ -41,7 +51,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Document } from '@element-plus/icons-vue'
+import { Document, Delete } from '@element-plus/icons-vue'
 import { NOTIFICATION_TYPE_LABELS, type NotificationType } from '@/types/notification'
 import type { Notification } from '@/types'
 import EmptyBox from '@/components/common/EmptyBox.vue'
@@ -64,6 +74,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   loadMore: [page: number]
   'read': [notification: Notification]
+  'delete': [notification: Notification]
 }>()
 
 const currentPage = ref(1)
@@ -112,6 +123,10 @@ function handleClick(notification: Notification) {
   emit('read', notification)
 }
 
+function handleDelete(notification: Notification) {
+  emit('delete', notification)
+}
+
 function handlePageChange(page: number) {
   emit('loadMore', page)
 }
@@ -149,6 +164,10 @@ watch(() => props.total, () => {
   &:hover {
     border-color: $color-primary;
     box-shadow: $shadow-sm;
+
+    .delete-btn {
+      opacity: 1;
+    }
   }
 
   &.unread {
@@ -161,6 +180,23 @@ watch(() => props.total, () => {
     justify-content: space-between;
     align-items: center;
     margin-bottom: $spacing-xs;
+
+    .notification-header-right {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+
+      .delete-btn {
+        opacity: 0;
+        padding: 2px;
+        transition: opacity 0.2s;
+        color: $text-tertiary;
+
+        &:hover {
+          color: $color-error;
+        }
+      }
+    }
 
     .notification-time {
       font-size: $font-size-xs;

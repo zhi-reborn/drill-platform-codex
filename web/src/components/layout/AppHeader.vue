@@ -23,6 +23,7 @@
             {{ userInitial }}
           </el-avatar>
           <span class="user-name">{{ userName }}</span>
+          <span v-if="userDept" class="user-dept">{{ userDept }}</span>
           <el-icon><ArrowDown /></el-icon>
         </div>
         <template #dropdown>
@@ -63,6 +64,7 @@ const wsStore = useWsStore()
 
 const userInitial = computed(() => authStore.userInitial)
 const userName = computed(() => authStore.userName)
+const userDept = computed(() => authStore.userDept)
 const roleName = computed(() => authStore.roleName)
 const roleType = computed(() => authStore.roleType)
 const wsStatus = computed(() => wsStore.status)
@@ -154,6 +156,14 @@ function handleUserCommand(command: string) {
   .user-name {
     font-size: $font-size-sm;
     color: #F1F5F9;
+  }
+
+  .user-dept {
+    font-size: 11px;
+    color: #94A3B8;
+    background: #334155;
+    padding: 1px 6px;
+    border-radius: 4px;
   }
 }
 

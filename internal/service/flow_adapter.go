@@ -468,7 +468,7 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 			StepID:    &stepIDUint,
 			StepName:  stepNamePtr,
 			IsRead:    false,
-		})
+		}, uint64(operatorID))
 	}
 }
 
@@ -574,7 +574,7 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 			Content:  fmt.Sprintf("[%s] 的步骤 [%s] 已上报异常", drillName, stepInst.Name),
 			DrillID:  &drillIDForLog,
 			IsRead:   false,
-		})
+		}, uint64(operatorID))
 	}
 }
 
