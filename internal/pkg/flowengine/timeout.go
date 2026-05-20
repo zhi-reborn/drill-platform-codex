@@ -70,6 +70,14 @@ func (ts *TimeoutScheduler) Unregister(flowInstID, stepDefID int64) {
 	delete(ts.entries, key)
 }
 
+func (ts *TimeoutScheduler) IsRegistered(flowInstID, stepDefID int64) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	key := ts.key(flowInstID, stepDefID)
+	_, ok := ts.entries[key]
+	return ok
+}
+
 func (ts *TimeoutScheduler) scanLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()

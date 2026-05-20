@@ -44,6 +44,7 @@ const (
 	ActionTerminate    InterveneAction = "terminate"
 	ActionSkip         InterveneAction = "skip"
 	ActionForceComplete InterveneAction = "force_complete"
+	ActionResumeTask   InterveneAction = "resume_task"
 )
 
 type EventType string

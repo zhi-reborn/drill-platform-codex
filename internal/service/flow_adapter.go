@@ -494,6 +494,15 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 		"end_time": &now,
 	})
 
+	// 写操作日志
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		StepInstanceID:  &stepInst.ID,
+		Action:          "timeout",
+		Content:         fmt.Sprintf("[%s] 步骤已超时", stepInst.Name),
+		CreatedAt:       now,
+	})
+
 	ctx := a.GetDrillContext(evt.FlowInstID)
 	drillName := ""
 	if ctx != nil {

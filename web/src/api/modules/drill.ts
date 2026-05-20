@@ -90,6 +90,14 @@ export const drillApi = {
     })
   },
 
+  resumeTask: (drillId: number, stepId: number, remark?: string) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/resume-task`,
+      method: 'POST',
+      data: { step_id: stepId, remark },
+    })
+  },
+
   assignStep: (drillId: number, stepId: number, userIds: number[]) => {
     return apiRequest<void>({
       url: `/v1/drills/${drillId}/steps/assign`,

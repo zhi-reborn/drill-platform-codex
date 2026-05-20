@@ -32,6 +32,11 @@ func (e *Engine) Intervene(instanceID int64, action InterveneAction, targetStepI
 			return ErrStepNotFound
 		}
 		return e.handleForceComplete(inst, *targetStepID, operatorID)
+	case ActionResumeTask:
+		if targetStepID == nil {
+			return ErrStepNotFound
+		}
+		return e.handleResumeTask(inst, *targetStepID, operatorID)
 	default:
 		return ErrInvalidStatus
 	}
@@ -180,6 +185,63 @@ func (e *Engine) handleForceComplete(inst *FlowInst, stepDefID int64, operatorID
 	}
 
 	e.handleStepCompletion(inst, stepDefID)
+	e.updateProgress(inst)
+
+	return nil
+}
+
+func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID int64) error {
+	if inst.Status != FlowStatusRunning && inst.Status != FlowStatusIssue && inst.Status != FlowStatusPaused {
+		return ErrInstanceNotRunning
+	}
+
+	si, exists := inst.Steps[stepDefID]
+	if !exists {
+		return ErrStepNotFound
+	}
+
+	if si.Status != StepStatusTimeout && si.Status != StepStatusIssue {
+		return ErrInvalidStatus
+	}
+
+	oldStatus := si.Status
+	si.Status = StepStatusRunning
+	si.ActualOperator = nil
+	si.EndTime = nil
+	si.TimeoutAt = nil
+	si.IssueDesc = ""
+	si.Remark = ""
+
+	loader := e.getStepLoader()
+	var stepDef *StepDef
+	if loader != nil {
+		stepDef, _ = loader.GetStepDef(inst.FlowDefID, stepDefID)
+	}
+	now := time.Now()
+	startTime := now
+	si.StartTime = &startTime
+
+	if !e.timeoutScheduler.IsRegistered(inst.ID, stepDefID) {
+		e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, now.Add(time.Duration(stepDef.TimeoutMinutes)*time.Minute))
+	}
+
+	if cbs := e.getCallbacks(); cbs != nil {
+		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusRunning)
+		cbs.LogAction(si.ID, "resume_task", operatorID, "director resumed task")
+	}
+
+	e.eventBus.emit(EventStepStart, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
+		"operator_id": operatorID,
+		"reason":      "director_resume",
+	})
+
+	if inst.Status == FlowStatusIssue {
+		inst.Status = FlowStatusRunning
+		if cbs := e.getCallbacks(); cbs != nil {
+			cbs.OnFlowStatusChanged(inst.ID, FlowStatusIssue, FlowStatusRunning)
+		}
+	}
+
 	e.updateProgress(inst)
 
 	return nil

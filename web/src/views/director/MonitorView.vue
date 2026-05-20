@@ -76,16 +76,47 @@
           </div>
         </template>
         <div class="issue-list">
-          <el-alert
-            v-for="step in issueSteps"
-            :key="step.id"
-            :title="step.name"
-            :description="getIssueDescription(step)"
-            :type="step.status === 'timeout' ? 'warning' : 'error'"
-            :closable="false"
-            show-icon
-            class="issue-item"
-          />
+        <el-alert
+          v-for="step in issueSteps"
+          :key="step.id"
+          :title="step.name"
+          :description="getIssueDescription(step)"
+          :type="step.status === 'timeout' ? 'warning' : 'error'"
+          :closable="false"
+          show-icon
+          class="issue-item"
+        >
+          <template #default>
+            <div class="issue-actions">
+              <ActionConfirm
+                :title="`重新派发：${step.name}`"
+                message="将步骤状态重置为运行中并重新计时超时，是否继续？"
+                type="warning"
+                @confirm="handleResumeTask(step)"
+              >
+                <el-icon><RefreshRight /></el-icon>
+                重新派发
+              </ActionConfirm>
+              <ActionConfirm
+                :title="`跳过步骤：${step.name}`"
+                message="跳过此步骤后，该步骤将标记为已跳过，是否继续？"
+                type="warning"
+                @confirm="handleSkipStep(step)"
+              >
+                <el-icon><DArrowRight /></el-icon>
+                跳过
+              </ActionConfirm>
+              <ActionConfirm
+                :title="`强制完成：${step.name}`"
+                message="强制将此步骤标记为完成，是否继续？"
+                @confirm="handleForceComplete(step)"
+              >
+                <el-icon><CircleCheck /></el-icon>
+                强制完成
+              </ActionConfirm>
+            </div>
+          </template>
+        </el-alert>
         </div>
       </el-card>
 
@@ -115,8 +146,8 @@
                     {{ step.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
                   </el-tag>
                 </el-descriptions-item>
-                <el-descriptions-item v-if="step.assignee_names && step.assignee_names.length > 0" label="执行人">
-                  {{ step.assignee_names.join(', ') }}
+                <el-descriptions-item v-if="step.assignee_names" label="执行人">
+                  {{ step.assignee_names }}
                 </el-descriptions-item>
                 <el-descriptions-item v-if="step.timeout_minutes" label="超时">
                   {{ step.timeout_minutes }} 分钟
@@ -221,7 +252,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -446,12 +477,23 @@ async function handleTerminate() {
 
 async function handleSkipStep(step: StepInstance) {
   try {
-    await drillApi.skipStep(drillId.value, step.id, `指挥组跳过步骤：${step.name}`)
-    ElMessage.success(`步骤「${step.name}」已跳过`)
+    await drillApi.skipStep(drillId.value, step.step_template_id, 'director skipped')
+    ElMessage.success('步骤已跳过')
     loadDrillData()
-  } catch (error) {
-    ElMessage.error('跳过失败')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '操作失败')
   }
+}
+
+async function handleResumeTask(step: StepInstance) {
+  try {
+    await drillApi.resumeTask(drillId.value, step.step_template_id)
+    ElMessage.success('任务已重新派发')
+    loadDrillData()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '操作失败')
+  }
+}
 }
 
 async function handleForceComplete(step: StepInstance) {
@@ -565,14 +607,29 @@ onMounted(() => {
       }
     }
 
-    .issue-list {
-      display: flex;
-      flex-direction: column;
-      gap: $spacing-xs;
+  .issue-list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-sm;
 
-      .issue-item {
-        margin-bottom: 0;
+    .issue-item {
+      :deep(.el-alert__content) {
+        padding-right: $spacing-sm;
       }
+
+      .issue-actions {
+        display: flex;
+        gap: $spacing-sm;
+        margin-top: $spacing-sm;
+
+        :deep(.el-button) {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+      }
+    }
+  }
     }
   }
 
@@ -618,7 +675,7 @@ onMounted(() => {
           margin-bottom: $spacing-xs;
 
           .step-seq {
-            color: $primary-color;
+            color: $color-primary;
             margin-right: $spacing-xs;
           }
         }

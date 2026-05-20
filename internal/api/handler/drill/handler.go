@@ -2,6 +2,7 @@ package drill
 
 import (
 	"encoding/json"
+	"fmt"
 	"drill-platform/internal/api/middleware"
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/domain/entity"
@@ -292,21 +293,79 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
-
 	var req struct {
 		StepID  uint64   `json:"step_id" binding:"required"`
 		UserIDs []uint64 `json:"user_ids" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "参数错误："+err.Error())
+		response.BadRequest(c, "参数错误：" + err.Error())
 		return
 	}
-
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", middleware.GetUserID(c)).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
 	if bytes, err := json.Marshal(req.UserIDs); err == nil {
 		repository.DB.Model(&entity.StepInstance{}).
 			Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
 			Update("assignee_ids", string(bytes))
+		now := time.Now()
+		repository.DB.Create(&entity.DrillInstanceLog{
+			DrillInstanceID: id,
+			Action:          "assign",
+			OperatorID:      middleware.GetUserID(c),
+			OperatorName:    operatorName,
+			Content:         fmt.Sprintf("重新指派执行人: %v", req.UserIDs),
+			CreatedAt:       now,
+		})
+	}
+	response.SuccessWithMessage(c, "执行人已更新", nil)
+}
+
+func (h *Handler) ResumeTask(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
 	}
 
-	response.SuccessWithMessage(c, "执行人已更新", nil)
+	var req struct {
+		StepID uint64 `json:"step_id" binding:"required"`
+		Remark string `json:"remark"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误：" + err.Error())
+		return
+	}
+
+	if h.drillService.Engine() == nil {
+		response.InternalError(c, "流程引擎未初始化")
+		return
+	}
+
+	stepDefID := int64(req.StepID)
+	if err := h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c))); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", middleware.GetUserID(c)).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+	now := time.Now()
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: id,
+		Action:          "resume_task",
+		OperatorID:      middleware.GetUserID(c),
+		OperatorName:    operatorName,
+		Content:         req.Remark,
+		CreatedAt:       now,
+	})
+
+	response.SuccessWithMessage(c, "任务已重新派发", nil)
 }
