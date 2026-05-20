@@ -103,13 +103,10 @@ const stepId = computed(() => {
 })
 
 const assignedNames = computed(() => {
-  if (!task.value || !task.value.assignee_ids) return ''
-  try {
-    const ids: number[] = JSON.parse(task.value.assignee_ids)
-    return ids.join(', ')
-  } catch {
-    return ''
-  }
+  if (!task.value) return '未分配'
+  if (task.value.assignee_names) return task.value.assignee_names
+  if (task.value.executor_team) return task.value.executor_team
+  return '未分配'
 })
 
 function formatDeadline(dateStr: string): string {

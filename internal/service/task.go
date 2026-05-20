@@ -103,11 +103,19 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 		"remark":         remark,
 	})
 
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", operatorID).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: step.DrillInstanceID,
 		StepInstanceID:  &stepID,
 		Action:          "complete",
 		OperatorID:      operatorID,
+		OperatorName:    operatorName,
 		Content:         remark,
 	})
 
@@ -156,11 +164,19 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 		"issue_desc": issueDesc,
 	})
 
+	var user entity.User
+	operatorName := ""
+	repository.DB.Model(&entity.User{}).Where("id = ?", operatorID).First(&user)
+	if user.ID > 0 {
+		operatorName = user.RealName
+	}
+
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: step.DrillInstanceID,
 		StepInstanceID:  &stepID,
 		Action:          "issue",
 		OperatorID:      operatorID,
+		OperatorName:    operatorName,
 		Content:         issueDesc,
 	})
 

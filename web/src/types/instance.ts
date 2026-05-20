@@ -58,6 +58,7 @@ export interface StepInstance {
   seq: number
   status: StepStatus
   assignee_ids: string
+  assignee_names?: string
   actual_operator: number | null
   start_time: string | null
   end_time: string | null

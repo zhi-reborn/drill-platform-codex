@@ -37,6 +37,7 @@ type StepInstance struct {
 	Status          string     `gorm:"type:varchar(32);not null;default:pending;column:status;index:idx_drill_step" json:"status"`
 	AssigneeIDs     string     `gorm:"type:json;not null;column:assignee_ids" json:"assignee_ids"`
 	ActualOperator  *uint64    `gorm:"type:bigint unsigned;column:actual_operator" json:"actual_operator"`
+	AssigneeNames   string     `gorm:"-" json:"assignee_names"`
 	StartTime       *time.Time `gorm:"column:start_time" json:"start_time"`
 	EndTime         *time.Time `gorm:"column:end_time" json:"end_time"`
 	TimeoutAt       *time.Time `gorm:"column:timeout_at" json:"timeout_at"`

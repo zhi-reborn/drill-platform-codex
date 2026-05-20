@@ -2,7 +2,9 @@ package task
 
 import (
 	"drill-platform/internal/api/middleware"
+	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/pkg/response"
+	"drill-platform/internal/repository"
 	"drill-platform/internal/service"
 	"strconv"
 
@@ -25,6 +27,7 @@ func (h *Handler) GetMyTasks(c *gin.Context) {
 		return
 	}
 
+	tasks = repository.EnrichAssigneeNames(tasks)
 	response.Success(c, tasks)
 }
 
@@ -41,6 +44,9 @@ func (h *Handler) GetDetail(c *gin.Context) {
 		return
 	}
 
+	if task != nil {
+		repository.EnrichAssigneeNames([]entity.StepInstance{*task})
+	}
 	response.Success(c, task)
 }
 

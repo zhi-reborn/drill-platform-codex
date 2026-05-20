@@ -1,77 +1,154 @@
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <h2 class="page-title">{{ instance?.name || '演练监控' }}</h2>
-      <DrillStatusBadge v-if="instance" :status="instance.status" type="drill" />
-    </div>
+    <div v-if="instance" class="page-main">
+      <!-- 顶部：演练信息 + 控制 -->
+      <el-card class="header-card">
+        <div class="header-content">
+          <div class="header-left">
+            <h2 class="drill-name">{{ instance.name }}</h2>
+            <DrillStatusBadge :status="instance.status" type="drill" class="status-badge" />
+          </div>
+          <div class="header-right">
+            <div class="progress-wrap">
+              <span class="progress-label">进度 {{ progressPercentage }}%</span>
+              <el-progress
+                :percentage="progressPercentage"
+                :stroke-width="8"
+                :status="instance.status === 'completed' ? 'success' : undefined"
+              />
+            </div>
+            <div class="control-buttons">
+              <ActionConfirm
+                v-if="canStart"
+                title="开始演练"
+                message="确定要开始当前演练吗？"
+                type="success"
+                @confirm="handleStart"
+              >
+                <el-icon><VideoPlay /></el-icon>
+                开始
+              </ActionConfirm>
+              <ActionConfirm
+                v-if="canPause"
+                title="暂停演练"
+                message="确定要暂停当前演练吗？"
+                type="warning"
+                @confirm="handlePause"
+              >
+                <el-icon><VideoPause /></el-icon>
+                暂停
+              </ActionConfirm>
+              <ActionConfirm
+                v-if="canResume"
+                title="继续演练"
+                message="确定要继续执行演练吗？"
+                type="primary"
+                @confirm="handleResume"
+              >
+                <el-icon><VideoPlay /></el-icon>
+                继续
+              </ActionConfirm>
+              <ActionConfirm
+                v-if="canTerminate"
+                title="终止演练"
+                message="确定要终止当前演练吗？此操作不可恢复！"
+                danger
+                @confirm="handleTerminate"
+              >
+                <el-icon><VideoCamera /></el-icon>
+                终止
+              </ActionConfirm>
+              <el-button v-if="isFinished" @click="router.back()">
+                <el-icon><Back /></el-icon>
+                返回
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </el-card>
 
-    <div v-if="instance" class="page-content">
-      <!-- 顶部信息 -->
-      <el-card class="info-card">
-        <div class="progress-section">
-          <span class="progress-label">
-            进度：{{ completedSteps }} / {{ totalSteps }}
-          </span>
-          <el-progress
-            :percentage="progressPercentage"
-            :stroke-width="10"
-            :status="instance.status === 'completed' ? 'success' : undefined"
+      <!-- 异常/超时步骤 -->
+      <el-card v-if="issueSteps.length > 0" class="issue-card" shadow="never">
+        <template #header>
+          <div class="issue-header">
+            <el-icon class="issue-icon"><Warning /></el-icon>
+            <span class="issue-title">异常/超时 ({{ issueSteps.length }})</span>
+          </div>
+        </template>
+        <div class="issue-list">
+          <el-alert
+            v-for="step in issueSteps"
+            :key="step.id"
+            :title="step.name"
+            :description="getIssueDescription(step)"
+            :type="step.status === 'timeout' ? 'warning' : 'error'"
+            :closable="false"
+            show-icon
+            class="issue-item"
           />
         </div>
       </el-card>
 
-      <!-- 控制按钮 -->
-      <div class="control-section">
-        <!-- 运行中：显示暂停、终止 -->
-        <ActionConfirm
-          v-if="canPause"
-          title="暂停演练"
-          message="确定要暂停当前演练吗？"
-          type="warning"
-          @confirm="handlePause"
-        >
-          <el-icon><VideoPause /></el-icon>
-          暂停
-        </ActionConfirm>
-        <!-- 已暂停：显示继续 -->
-        <ActionConfirm
-          v-if="canResume"
-          title="继续演练"
-          message="确定要继续执行演练吗？"
-          type="primary"
-          @confirm="handleResume"
-        >
-          <el-icon><VideoPlay /></el-icon>
-          继续
-        </ActionConfirm>
-        <!-- 待启动：显示开始 -->
-        <ActionConfirm
-          v-if="canStart"
-          title="开始演练"
-          message="确定要开始当前演练吗？"
-          type="success"
-          @confirm="handleStart"
-        >
-          <el-icon><VideoPlay /></el-icon>
-          开始
-        </ActionConfirm>
-        <!-- 终止按钮：运行中/已暂停/待启动 可终止 -->
-        <ActionConfirm
-          v-if="canTerminate"
-          title="终止演练"
-          message="确定要终止当前演练吗？此操作不可恢复！"
-          danger
-          @confirm="handleTerminate"
-        >
-          <el-icon><VideoCamera /></el-icon>
-          终止
-        </ActionConfirm>
-        <!-- 已完成/已终止：显示返回 -->
-        <el-button v-if="isFinished" @click="router.back()">
-          <el-icon><Back /></el-icon>
-          返回
-        </el-button>
-      </div>
+      <!-- 当前步骤 (running) -->
+      <el-card v-if="runningSteps.length > 0" class="running-card">
+        <template #header>
+          <div class="running-header">
+            <el-icon class="running-icon"><VideoCamera /></el-icon>
+            <span class="running-title">当前步骤 ({{ runningSteps.length }})</span>
+          </div>
+        </template>
+        <div class="running-grid">
+          <el-card
+            v-for="step in runningSteps"
+            :key="step.id"
+            class="step-card"
+            shadow="hover"
+          >
+            <div class="step-info">
+              <div class="step-name">
+                <span class="step-seq">#{{ step.seq }}</span>
+                {{ step.name }}
+              </div>
+              <el-descriptions :column="1" size="small" class="step-meta">
+                <el-descriptions-item label="执行角色">
+                  <el-tag size="small" :type="step.default_assignee_role === 'director' ? 'warning' : 'primary'">
+                    {{ step.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item v-if="step.assignee_names && step.assignee_names.length > 0" label="执行人">
+                  {{ step.assignee_names.join(', ') }}
+                </el-descriptions-item>
+                <el-descriptions-item v-if="step.timeout_minutes" label="超时">
+                  {{ step.timeout_minutes }} 分钟
+                  <span v-if="step.timeout_at" class="timeout-countdown">({{ getCountdown(step.timeout_at) }})</span>
+                </el-descriptions-item>
+                <el-descriptions-item v-if="step.executor_team" label="团队">
+                  {{ step.executor_team }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </div>
+            <div class="step-actions">
+              <ActionConfirm
+                :title="`跳过步骤：${step.name}`"
+                message="跳过此步骤后，该步骤将标记为已跳过，是否继续？"
+                type="warning"
+                @confirm="handleSkipStep(step)"
+              >
+                <el-icon><DArrowRight /></el-icon>
+                跳过
+              </ActionConfirm>
+              <ActionConfirm
+                :title="`强制完成：${step.name}`"
+                message="强制将此步骤标记为完成，是否继续？"
+                @confirm="handleForceComplete(step)"
+              >
+                <el-icon><CircleCheck /></el-icon>
+                强制完成
+              </ActionConfirm>
+            </div>
+          </el-card>
+        </div>
+      </el-card>
 
       <!-- 步骤列表 -->
       <el-card class="steps-card">
@@ -144,7 +221,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { VideoPause, VideoPlay, VideoCamera, Back } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -162,7 +239,6 @@ const drillId = computed(() => {
   return typeof id === 'string' ? parseInt(id, 10) : 0
 })
 
-// API 返回的 steps 已经属于当前 drill
 const drillSteps = computed(() => {
   return steps.value.sort((a, b) => a.seq - b.seq)
 })
@@ -179,7 +255,18 @@ const progressPercentage = computed(() => {
   return Math.round((completedSteps.value / totalSteps.value) * 100)
 })
 
-// 按钮互斥逻辑
+const runningSteps = computed(() => {
+  return steps.value
+    .filter(s => s.status === 'running')
+    .sort((a, b) => a.seq - b.seq)
+})
+
+const issueSteps = computed(() => {
+  return steps.value
+    .filter(s => s.status === 'timeout' || s.status === 'issue')
+    .sort((a, b) => a.seq - b.seq)
+})
+
 const canPause = computed(() => instance.value?.status === 'running')
 const canResume = computed(() => instance.value?.status === 'paused')
 const canStart = computed(() => instance.value?.status === 'pending')
@@ -192,7 +279,6 @@ const isFinished = computed(() => {
   return status === 'completed' || status === 'terminated'
 })
 
-// 使用 API 返回的真实日志
 const drillLogs = computed(() => {
   return logs.value.map(log => ({
     ...log,
@@ -278,17 +364,36 @@ function getStepTypeTag(stepType: string): 'primary' | 'success' | 'warning' | '
   return map[stepType] || 'info'
 }
 
+function getIssueDescription(step: StepInstance): string {
+  if (step.status === 'timeout') {
+    return `步骤已超时（限制 ${step.timeout_minutes || '?'} 分钟）`
+  }
+  if (step.status === 'issue') {
+    return '步骤执行异常，需要处理'
+  }
+  return ''
+}
+
+function getCountdown(timeoutAt: string): string {
+  if (!timeoutAt) return ''
+  const now = Date.now()
+  const target = new Date(timeoutAt).getTime()
+  const diff = Math.max(0, Math.floor((target - now) / 1000))
+  if (diff <= 0) return '已超时'
+  const mins = Math.floor(diff / 60)
+  const secs = diff % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
 async function loadDrillData() {
   try {
-    // 调用真实 API
     instance.value = await drillApi.getDetail(drillId.value)
     const stepsData = await drillApi.getSteps(drillId.value)
     steps.value = stepsData
-    
-    // 加载演练日志
+
     const logsData = await drillApi.getLogs(drillId.value)
     logs.value = logsData
-    
+
     if (!instance.value) {
       ElMessage.error('演练不存在')
       router.back()
@@ -303,7 +408,7 @@ async function handlePause() {
   try {
     await drillApi.pause(drillId.value)
     ElMessage.success('演练已暂停')
-    loadDrillData() // 刷新数据
+    loadDrillData()
   } catch (error) {
     ElMessage.error('暂停失败')
   }
@@ -313,7 +418,7 @@ async function handleResume() {
   try {
     await drillApi.resume(drillId.value)
     ElMessage.success('演练已继续')
-    loadDrillData() // 刷新数据
+    loadDrillData()
   } catch (error) {
     ElMessage.error('继续失败')
   }
@@ -323,7 +428,7 @@ async function handleStart() {
   try {
     await drillApi.start(drillId.value)
     ElMessage.success('演练已启动')
-    loadDrillData() // 刷新数据
+    loadDrillData()
   } catch (error) {
     ElMessage.error('启动失败')
   }
@@ -339,6 +444,26 @@ async function handleTerminate() {
   }
 }
 
+async function handleSkipStep(step: StepInstance) {
+  try {
+    await drillApi.skipStep(drillId.value, step.id, `指挥组跳过步骤：${step.name}`)
+    ElMessage.success(`步骤「${step.name}」已跳过`)
+    loadDrillData()
+  } catch (error) {
+    ElMessage.error('跳过失败')
+  }
+}
+
+async function handleForceComplete(step: StepInstance) {
+  try {
+    await drillApi.forceCompleteStep(drillId.value, step.id, `指挥组强制完成步骤：${step.name}`)
+    ElMessage.success(`步骤「${step.name}」已强制完成`)
+    loadDrillData()
+  } catch (error) {
+    ElMessage.error('强制完成失败')
+  }
+}
+
 onMounted(() => {
   loadDrillData()
 })
@@ -351,103 +476,241 @@ onMounted(() => {
 .page-container {
   @include page-container;
 
-  .page-header {
-    @include page-header;
-
-    .page-title {
-      font-size: $font-size-xl;
-      font-weight: $font-weight-bold;
-      color: $text-primary;
-      margin: 0;
-    }
+  .page-main {
+    @include page-content;
   }
 
-  .page-content {
-    @include page-content;
+  .header-card {
+    @include card-compact;
+    margin-bottom: $spacing-base;
 
-    .info-card {
-      @include card-compact;
-      margin-bottom: $spacing-base;
+    :deep(.el-card__body) {
+      padding: $spacing-base;
+    }
 
-      .progress-section {
-        .progress-label {
-          display: block;
-          font-size: $font-size-sm;
-          color: $text-secondary;
-          margin-bottom: $spacing-sm;
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: $spacing-base;
+      flex-wrap: wrap;
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: $spacing-sm;
+
+        .drill-name {
+          font-size: $font-size-xl;
+          font-weight: $font-weight-bold;
+          color: $text-primary;
+          margin: 0;
+        }
+      }
+
+      .header-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: $spacing-sm;
+
+        .progress-wrap {
+          min-width: 240px;
+
+          .progress-label {
+            display: block;
+            font-size: $font-size-xs;
+            color: $text-secondary;
+            margin-bottom: 4px;
+          }
+        }
+
+        .control-buttons {
+          display: flex;
+          gap: $spacing-xs;
+          flex-wrap: wrap;
+
+          :deep(.el-button) {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
         }
       }
     }
+  }
 
-    .control-section {
+  .issue-card {
+    margin-bottom: $spacing-base;
+    border-color: rgba(245, 108, 108, 0.3);
+
+    :deep(.el-card__body) {
+      padding: $spacing-sm;
+    }
+
+    .issue-header {
       display: flex;
-      gap: $spacing-sm;
-      margin-bottom: $spacing-base;
+      align-items: center;
+      gap: $spacing-xs;
 
-      :deep(.el-button) {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+      .issue-icon {
+        color: #f56c6c;
+        font-size: $font-size-base;
+      }
+
+      .issue-title {
+        font-size: $font-size-base;
+        font-weight: $font-weight-semibold;
+        color: #f56c6c;
       }
     }
 
-    .steps-card,
-    .logs-card {
-      @include card-compact;
-      margin-bottom: $spacing-base;
+    .issue-list {
+      display: flex;
+      flex-direction: column;
+      gap: $spacing-xs;
 
-      .card-title {
+      .issue-item {
+        margin-bottom: 0;
+      }
+    }
+  }
+
+  .running-card {
+    @include card-compact;
+    margin-bottom: $spacing-base;
+
+    .running-header {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+
+      .running-icon {
+        color: #67c23a;
+        font-size: $font-size-base;
+      }
+
+      .running-title {
         font-size: $font-size-base;
         font-weight: $font-weight-semibold;
         color: $text-primary;
       }
+    }
 
-      :deep(.el-table) {
-        background: $bg-secondary;
-        color: $text-primary;
+    .running-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: $spacing-base;
+    }
 
-        .el-table__header th {
-          background: $bg-tertiary;
-          color: $text-secondary;
+    .step-card {
+      :deep(.el-card__body) {
+        padding: $spacing-sm;
+      }
+
+      .step-info {
+        margin-bottom: $spacing-sm;
+
+        .step-name {
+          font-size: $font-size-base;
+          font-weight: $font-weight-semibold;
+          color: $text-primary;
+          margin-bottom: $spacing-xs;
+
+          .step-seq {
+            color: $primary-color;
+            margin-right: $spacing-xs;
+          }
         }
 
-        .el-table__row td {
-          background: $bg-secondary;
-          border-color: $border-color-light;
-        }
+        .step-meta {
+          :deep(.el-descriptions__label) {
+            font-size: $font-size-xs;
+            color: $text-tertiary;
+          }
 
-        .el-table__row--striped td {
-          background: rgba(26, 31, 46, 0.5);
+          :deep(.el-descriptions__content) {
+            font-size: $font-size-xs;
+            color: $text-secondary;
+          }
+
+          .timeout-countdown {
+            color: #e6a23c;
+            font-weight: $font-weight-semibold;
+          }
+        }
+      }
+
+      .step-actions {
+        display: flex;
+        gap: $spacing-xs;
+
+        :deep(.el-button) {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex: 1;
         }
       }
     }
+  }
 
-    .logs-card {
-      .log-content {
-        display: flex;
-        align-items: center;
-        gap: $spacing-sm;
-        flex-wrap: wrap;
-        font-size: $font-size-sm;
+  .steps-card,
+  .logs-card {
+    @include card-compact;
+    margin-bottom: $spacing-base;
 
-        .log-step,
-        .log-operator {
-          color: $text-secondary;
-        }
+    .card-title {
+      font-size: $font-size-base;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+    }
+
+    :deep(.el-table) {
+      background: $bg-secondary;
+      color: $text-primary;
+
+      .el-table__header th {
+        background: $bg-tertiary;
+        color: $text-secondary;
       }
 
-      .log-remark {
-        margin-top: $spacing-xs;
-        font-size: $font-size-sm;
-        color: $text-tertiary;
-        line-height: 1.6;
+      .el-table__row td {
+        background: $bg-secondary;
+        border-color: $border-color-light;
       }
 
-      .empty-tip {
-        text-align: center;
-        color: $text-tertiary;
-        padding: $spacing-base;
+      .el-table__row--striped td {
+        background: rgba(26, 31, 46, 0.5);
       }
+    }
+  }
+
+  .logs-card {
+    .log-content {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      flex-wrap: wrap;
+      font-size: $font-size-sm;
+
+      .log-step,
+      .log-operator {
+        color: $text-secondary;
+      }
+    }
+
+    .log-remark {
+      margin-top: $spacing-xs;
+      font-size: $font-size-sm;
+      color: $text-tertiary;
+      line-height: 1.6;
+    }
+
+    .empty-tip {
+      text-align: center;
+      color: $text-tertiary;
+      padding: $spacing-base;
     }
   }
 }

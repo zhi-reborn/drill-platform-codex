@@ -37,6 +37,10 @@ func (s *DrillService) SetEngine(engine *flowengine.Engine, adapter *DrillFlowAd
 	s.adapter = adapter
 }
 
+func (s *DrillService) Engine() *flowengine.Engine {
+	return s.engine
+}
+
 func (s *DrillService) SetWebSocketManager(wsManager *websocket.Manager) {
 	s.wsManager = wsManager
 }

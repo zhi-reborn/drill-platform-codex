@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"drill-platform/internal/domain/entity"
 )
 
@@ -35,4 +36,29 @@ func (r *StepRepo) UpdateStatus(id uint64, status, remark string) error {
 
 func (r *StepRepo) CreateLogs(logs []entity.DrillInstanceLog) error {
 	return DB.Create(&logs).Error
+}
+
+func EnrichAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
+	for i := range steps {
+		if steps[i].AssigneeIDs != "" && steps[i].AssigneeIDs != "[]" {
+			var ids []uint64
+			if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil && len(ids) > 0 {
+				var names []string
+				DB.Model(&entity.User{}).Where("id IN ?", ids).Pluck("real_name", &names)
+				steps[i].AssigneeNames = namesStr(names)
+			}
+		}
+	}
+	return steps
+}
+
+func namesStr(names []string) string {
+	result := ""
+	for i, n := range names {
+		if i > 0 {
+			result += ", "
+		}
+		result += n
+	}
+	return result
 }

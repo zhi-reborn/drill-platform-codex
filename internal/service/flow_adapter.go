@@ -447,11 +447,18 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 	if remark, ok := payload["remark"].(string); ok {
 		logContent = remark
 	}
+	var operatorName string
+	if a.userRepo != nil {
+		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
+			operatorName = u.RealName
+		}
+	}
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: logDrillID,
 		StepInstanceID:  &logStepID,
 		Action:          "complete",
 		OperatorID:      uint64(operatorID),
+		OperatorName:    operatorName,
 		Content:         logContent,
 	})
 
@@ -558,11 +565,18 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 	if desc, ok := payload["issue_desc"].(string); ok {
 		issueDesc = desc
 	}
+	var operatorName string
+	if a.userRepo != nil {
+		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
+			operatorName = u.RealName
+		}
+	}
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: drillIDForLog,
 		StepInstanceID:  &stepIDForLog,
 		Action:          "issue",
 		OperatorID:      uint64(operatorID),
+		OperatorName:    operatorName,
 		Content:         issueDesc,
 	})
 

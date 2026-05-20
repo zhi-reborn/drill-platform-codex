@@ -73,4 +73,28 @@ export const drillApi = {
       method: 'DELETE',
     })
   },
+
+  skipStep: (drillId: number, stepId: number, remark?: string) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/skip`,
+      method: 'POST',
+      data: { step_id: stepId, remark },
+    })
+  },
+
+  forceCompleteStep: (drillId: number, stepId: number, remark?: string) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/force-complete`,
+      method: 'POST',
+      data: { step_id: stepId, remark },
+    })
+  },
+
+  assignStep: (drillId: number, stepId: number, userIds: number[]) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/assign`,
+      method: 'POST',
+      data: { step_id: stepId, user_ids: userIds },
+    })
+  },
 }
