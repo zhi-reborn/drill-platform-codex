@@ -40,6 +40,7 @@ const breadcrumbs = computed(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: $bg-deep;
 }
 
 .app-main {
@@ -47,20 +48,13 @@ const breadcrumbs = computed(() => {
   padding-top: $header-height;
   transition: margin-left 0.3s ease;
   min-height: calc(100vh - $header-height);
-  background: #F8FAFC;
+  background: $bg-deep;
 }
 
 .app-breadcrumb {
   padding: $spacing-sm $spacing-base;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
-
-  :deep(.el-breadcrumb__inner) {
-    color: #64748B;
-  }
-  :deep(.el-breadcrumb__inner.is-link:hover) {
-    color: #0891B2;
-  }
+  background: $bg-primary;
+  border-bottom: 1px solid $border-color-light;
 }
 
 .app-content {
