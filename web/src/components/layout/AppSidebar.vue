@@ -25,59 +25,38 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import type { Role } from '@/types'
+import { getVisibleMenus } from '@/config/menu'
 
 defineProps<{ collapsed: boolean }>()
 
 const route = useRoute()
 const authStore = useAuthStore()
+
 const activeMenu = computed(() => {
-  const path = route.path
+  const { path } = route
   if (path.startsWith('/director/monitor/')) return path
   if (path.startsWith('/executor/tasks/')) return path
+  if (path.startsWith('/viewer/drills/')) return path
   return path
 })
 
-interface MenuItem { path: string; title: string; icon: string; requiresRole?: Role | Role[]; children?: MenuItem[] }
-
-const menuConfig: Record<string, MenuItem[]> = {
-  admin: [
-    { path: '/admin', title: '系统概览', icon: 'DataAnalysis' },
-    { path: '/admin/users', title: '用户管理', icon: 'User' },
-    { path: '/admin/drills', title: '全部演练', icon: 'Monitor' },
-  ],
-  director: [
-    { path: '/director', title: '指挥概览', icon: 'DataAnalysis' },
-    { path: '/director/templates', title: '模板管理', icon: 'Document' },
-    { path: '/director/create', title: '创建演练', icon: 'Plus' },
-    { path: '/director/drills', title: '演练实例', icon: 'Monitor' },
-  ],
-  executor: [
-    { path: '/executor', title: '我的任务', icon: 'Tickets' },
-  ],
-  viewer: [
-    { path: '/viewer', title: '演练概览', icon: 'View' },
-  ],
-}
-
-const visibleMenus = computed<MenuItem[]>(() => {
-  const role = authStore.role as string
-  return menuConfig[role] ?? menuConfig.viewer
+const visibleMenus = computed(() => {
+  const role = authStore.role
+  return getVisibleMenus(role)
 })
 </script>
 
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
-// 深色侧边栏
 .app-sidebar {
   width: $sidebar-width;
   height: calc(100vh - $header-height);
   position: fixed;
   left: 0;
   top: $header-height;
-  background: #1E293B;
-  border-right: 1px solid #334155;
+  background: $bg-secondary;
+  border-right: 1px solid $border-color;
   z-index: $z-index-sidebar;
   transition: width 0.3s ease;
   overflow: hidden;
@@ -93,34 +72,6 @@ const visibleMenus = computed<MenuItem[]>(() => {
 
   :deep(.el-menu) {
     background: transparent;
-  }
-
-  :deep(.el-menu-item),
-  :deep(.el-sub-menu__title) {
-    height: 40px;
-    min-height: 40px;
-    color: #94A3B8;
-    font-size: $font-size-sm;
-
-    &:hover {
-      color: #F1F5F9;
-      background: #334155;
-    }
-
-    &.is-active {
-      color: #F1F5F9;
-      background: #55C3D3;
-      border-right: 2px solid #0891B2;
-    }
-  }
-
-  :deep(.el-sub-menu__title) {
-    height: 40px;
-    min-height: 40px;
-  }
-
-  :deep(.el-icon) {
-    color: inherit;
   }
 }
 </style>
