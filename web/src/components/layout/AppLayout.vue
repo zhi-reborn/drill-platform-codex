@@ -40,7 +40,7 @@ const breadcrumbs = computed(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: $bg-deep;
+  background: $bg-primary;
 }
 
 .app-main {
@@ -48,12 +48,12 @@ const breadcrumbs = computed(() => {
   padding-top: $header-height;
   transition: margin-left 0.3s ease;
   min-height: calc(100vh - $header-height);
-  background: $bg-deep;
+  background: $bg-primary;
 }
 
 .app-breadcrumb {
   padding: $spacing-sm $spacing-base;
-  background: $bg-primary;
+  background: $bg-secondary;
   border-bottom: 1px solid $border-color-light;
 }
 

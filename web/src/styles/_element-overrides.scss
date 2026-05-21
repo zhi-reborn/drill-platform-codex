@@ -1,17 +1,17 @@
 @use 'variables' as *;
 
-// === Element Plus 暗色主题 CSS 变量 ===
+// === Element Plus 浅色主题 CSS 变量 ===
 :root {
   --el-color-primary: #{$color-accent};
   --el-color-primary-dark-2: #{$color-accent-hover};
-  --el-color-primary-light-3: #{$color-accent-hover};
+  --el-color-primary-light-3: #{$color-accent-light};
   --el-color-success: #{$color-success};
   --el-color-warning: #{$color-warning};
   --el-color-danger: #{$color-error};
   --el-color-info: #{$color-info};
 
-  --el-bg-color: #{$bg-primary};
-  --el-bg-color-page: #{$bg-deep};
+  --el-bg-color: #{$bg-secondary};
+  --el-bg-color-page: #{$bg-primary};
   --el-bg-color-overlay: #{$bg-secondary};
 
   --el-text-color-primary: #{$text-primary};
@@ -22,7 +22,7 @@
 
   --el-border-color: #{$border-color};
   --el-border-color-light: #{$border-color-light};
-  --el-border-color-darker: #475569;
+  --el-border-color-darker: #CBD5E1;
 
   --el-border-radius-base: #{$radius-base};
   --el-border-radius-small: #{$radius-sm};
@@ -34,8 +34,6 @@
   --el-fill-color-blank: #{$bg-secondary};
   --el-fill-color: #{$bg-tertiary};
   --el-fill-color-light: #{$color-accent-bg};
-
-  color-scheme: dark;
 }
 
 // === Menu ===
@@ -55,7 +53,7 @@
 
   &:hover {
     color: $text-primary !important;
-    background-color: rgba(255, 255, 255, 0.05) !important;
+    background-color: rgba(0, 0, 0, 0.04) !important;
   }
 
   &.is-active {
@@ -73,11 +71,11 @@
   --el-table-bg-color: #{$bg-primary} !important;
   --el-table-tr-bg-color: #{$bg-primary} !important;
   --el-table-header-bg-color: #{$bg-secondary} !important;
-  --el-table-row-hover-bg-color: rgba(255,255,255,0.03) !important;
-  --el-table-border-color: #{$border-color-light} !important;
+  --el-table-row-hover-bg-color: #{$color-accent-bg} !important;
+  --el-table-border-color: #{$border-color} !important;
   --el-table-text-color: #{$text-primary} !important;
   --el-table-header-text-color: #{$text-secondary} !important;
-  background-color: #{$bg-primary} !important;
+  background-color: #{$bg-secondary} !important;
   font-size: $font-size-sm;
 }
 
@@ -89,20 +87,20 @@
 }
 
 .el-table td.el-table__cell { border-color: $border-color-light !important; }
-.el-table .el-table__body tr:hover > td.el-table__cell { background-color: rgba(255, 255, 255, 0.03) !important; }
-.el-table .el-table__empty-block { background-color: #{$bg-primary} !important; }
+.el-table .el-table__body tr:hover > td.el-table__cell { background-color: #{$color-accent-bg} !important; }
+.el-table .el-table__empty-block { background-color: #{$bg-secondary} !important; }
 
-.el-table__inner-wrapper::before { background-color: #{$bg-primary} !important; }
+.el-table__inner-wrapper::before { background-color: #{$bg-secondary} !important; }
 
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background-color: rgba(15, 23, 42, 0.5) !important;
+  background-color: #{$bg-tertiary} !important;
 }
 
 // === Card ===
 .el-card {
-  background-color: $bg-primary;
-  border: 1px solid $border-color-light;
-  box-shadow: none;
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+  box-shadow: $shadow-sm;
   color: $text-primary;
 
   .el-card__header {
@@ -115,7 +113,7 @@
 
 // === Dialog ===
 .el-dialog {
-  background-color: $bg-primary;
+  background-color: $bg-secondary;
   border: 1px solid $border-color;
   box-shadow: $shadow-lg;
 
@@ -151,9 +149,9 @@
   --el-button-hover-bg-color: #{$color-accent-hover};
   --el-button-hover-border-color: #{$color-accent-hover};
   --el-button-active-bg-color: #{$color-accent-hover};
-  color: #052e16;
+  color: #FFFFFF;
 
-  &:hover, &:focus { color: #052e16; }
+  &:hover, &:focus { color: #FFFFFF; }
 }
 
 .el-button.is-text {
@@ -189,7 +187,7 @@
     background-color: $bg-secondary;
     color: $text-secondary;
     border: 1px solid $border-color;
-    &.is-active { background-color: $color-accent; color: #052e16; border-color: $color-accent; }
+    &.is-active { background-color: $color-accent; color: #FFFFFF; border-color: $color-accent; }
   }
 }
 
@@ -210,7 +208,7 @@
 .el-breadcrumb__inner.is-link:hover { color: $color-accent; }
 
 // === Drawer ===
-.el-drawer { background-color: $bg-primary; }
+.el-drawer { background-color: $bg-secondary; }
 .el-drawer__header { color: $text-primary; border-bottom: 1px solid $border-color-light; }
 
 // === Tabs ===
@@ -227,7 +225,7 @@
 .el-step__title { font-size: $font-size-base; color: $text-primary; }
 
 // === Loaders ===
-.el-loading-mask { background-color: rgba(2, 6, 23, 0.7); }
+.el-loading-mask { background-color: rgba(255, 255, 255, 0.7); }
 
 // === Tooltip ===
 .el-tooltip__popper {

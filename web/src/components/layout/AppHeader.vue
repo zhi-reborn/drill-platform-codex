@@ -150,7 +150,7 @@ function handleUserCommand(command: string) {
   color: $text-primary;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   .user-name {
@@ -161,7 +161,7 @@ function handleUserCommand(command: string) {
   .user-dept {
     font-size: 11px;
     color: $text-tertiary;
-    background: #334155;
+    background: $bg-tertiary;
     padding: 1px 6px;
     border-radius: 4px;
   }

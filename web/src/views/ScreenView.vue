@@ -533,7 +533,7 @@ onBeforeUnmount(() => {
 @use '@/styles/variables' as *;
 
 .screen-root {
-  background: $bg-deep;
+  background: #0A0E1A;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   z-index: 100;
-  background: $bg-deep;
+  background: #0A0E1A;
 
   &.error .error-content {
     display: flex;
@@ -607,7 +607,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: $spacing-md $spacing-xl;
   height: $header-height;
-  background: $bg-primary;
+  background: #0F172A;
   border-bottom: 1px solid $border-color-light;
   flex-shrink: 0;
 
@@ -751,21 +751,21 @@ onBeforeUnmount(() => {
 
 .panel-timeline {
   width: 280px;
-  background: $bg-tertiary;
+  background: #0A0F1D;
   border-right: 1px solid $border-color-light;
   flex-shrink: 0;
 }
 
 .panel-charts {
   flex: 1;
-  background: $bg-deep;
+  background: #0A0E1A;
   min-width: 0;
   padding: $spacing-sm;
 }
 
 .panel-logs {
   width: 280px;
-  background: $bg-tertiary;
+  background: #0A0F1D;
   border-left: 1px solid $border-color-light;
   flex-shrink: 0;
 }
@@ -891,7 +891,7 @@ onBeforeUnmount(() => {
 }
 
 .chart-cell {
-  background: $bg-primary;
+  background: #0F172A;
   border: 1px solid $border-color-light;
   border-radius: $radius-md;
   overflow: hidden;
