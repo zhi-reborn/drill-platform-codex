@@ -1,19 +1,14 @@
 <template>
-  <div class="screen-wrapper">
-    <!-- 科技背景层 -->
-    <div class="particle-grid"></div>
-    <div class="scan-line"></div>
-    <div class="ambient-glow"></div>
-
-    <!-- 加载状态 -->
+  <div class="screen-root">
+    <!-- Loading state -->
     <div v-if="loading" class="overlay-state">
       <div class="loader">
-        <div class="loader-ring"></div>
+        <div class="loader-ring" />
         <p class="loader-text">正在连接演练数据...</p>
       </div>
     </div>
 
-    <!-- 错误状态 -->
+    <!-- Error state -->
     <div v-else-if="error" class="overlay-state error">
       <div class="error-content">
         <el-icon :size="48"><CircleClose /></el-icon>
@@ -22,12 +17,11 @@
       </div>
     </div>
 
-    <!-- 主内容 -->
+    <!-- Main content -->
     <div v-else-if="currentDrill" class="screen-content">
-      <!-- 顶部标题栏 -->
-      <header class="screen-header cyber-border-bottom">
+      <!-- Header -->
+      <header class="screen-header">
         <div class="header-left">
-          <div class="title-glow"></div>
           <h1 class="drill-title">{{ currentDrill.name }}</h1>
           <span class="drill-status-tag" :class="'status-' + (currentDrill.status || '')">
             {{ getStatusLabel(currentDrill.status || '') }}
@@ -38,371 +32,236 @@
             <Clock :size="14" />
             <span class="time-value">{{ currentTime }}</span>
           </div>
-          <button class="cyber-btn" @click="toggleFullscreen" title="全屏切换">
+          <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
             <FullScreen :size="16" />
           </button>
         </div>
       </header>
 
-      <!-- 核心指标栏 -->
-      <section class="metrics-bar">
-        <!-- 核心指标组 -->
-        <div class="metric-group primary-metrics">
-          <div class="metric-card core-metric running">
-            <div class="metric-corners"></div>
-            <div class="metric-icon-box">
-              <Timer :size="14" />
-            </div>
-            <div class="metric-body">
-              <span class="metric-label">执行中</span>
-              <span class="metric-value" :data-value="drillSteps.filter(s => s.status === 'running').length">
-                {{ drillSteps.filter(s => s.status === 'running').length }}
-              </span>
-            </div>
-          </div>
-          <div class="metric-card core-metric completed">
-            <div class="metric-corners"></div>
-            <div class="metric-icon-box">
-              <CircleCheck :size="14" />
-            </div>
-            <div class="metric-body">
-              <span class="metric-label">已完成</span>
-              <span class="metric-value">
-                {{ completedCount }}<span class="metric-total">/{{ drillSteps.length }}</span>
-              </span>
-            </div>
-          </div>
-          <div class="metric-card core-metric rate">
-            <div class="metric-corners"></div>
-            <div class="metric-icon-box">
-              <DataLine :size="14" />
-            </div>
-            <div class="metric-body">
-              <span class="metric-label">成功率</span>
-              <span class="metric-value" :class="successRate === 100 ? 'success' : successRate > 0 ? 'warning' : ''">{{ successRate }}%</span>
-            </div>
-          </div>
+      <!-- KPI Row -->
+      <section class="kpi-row">
+        <div class="kpi-card">
+          <span class="kpi-label">进度</span>
+          <span class="kpi-value kpi-value-accent">{{ progressPercent }}%</span>
         </div>
-
-        <!-- 分隔线 -->
-        <div class="metric-divider"></div>
-
-        <!-- 次要指标组 -->
-        <div class="metric-group secondary-metrics">
-          <div class="metric-card mini-metric">
-            <div class="metric-icon-box">
-              <User :size="12" />
-            </div>
-            <div class="metric-body">
-              <span class="metric-label">创建人</span>
-              <span class="metric-value">{{ currentDrill.created_by_name || '-' }}</span>
-            </div>
-          </div>
-          <div class="metric-card mini-metric">
-            <div class="metric-icon-box">
-              <Calendar :size="12" />
-            </div>
-            <div class="metric-body">
-              <span class="metric-label">开始</span>
-              <span class="metric-value">{{ currentDrill.start_time ? formatTime(currentDrill.start_time) : '-' }}</span>
-            </div>
-          </div>
+        <div class="kpi-card">
+          <span class="kpi-label">已完成</span>
+          <span class="kpi-value">{{ completedCount }}<span class="kpi-total">/{{ totalCount }}</span></span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">异常</span>
+          <span class="kpi-value" :class="{ 'kpi-value-error': issueCount > 0 }">{{ issueCount }}</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">执行中</span>
+          <span class="kpi-value kpi-value-accent">{{ runningCount }}</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">预计剩余</span>
+          <span class="kpi-value">{{ estimatedRemaining }}</span>
         </div>
       </section>
 
-      <!-- 主体内容区 -->
-      <main class="screen-body">
-        <!-- 左侧：步骤执行面板 -->
-        <aside class="left-panel cyber-panel">
+      <!-- Three-column main -->
+      <main class="screen-main">
+        <!-- Left: Step timeline -->
+        <aside class="panel panel-timeline">
           <div class="panel-header">
             <List :size="12" />
-            <span>步骤执行面板</span>
+            <span>步骤执行</span>
           </div>
-          <div class="steps-list">
+          <div class="panel-body steps-list">
             <div
               v-for="step in drillSteps"
               :key="step.id"
               class="step-item"
-              :class="['step-' + step.status, { 'active-step': step.status === 'running' }]"
+              :class="'step-' + step.status"
             >
-              <div class="step-indicator">
-                <component :is="getStepStatusIcon(step.status)" :size="14" />
-              </div>
-              <div class="step-body">
-                <div class="step-name">{{ step.name }}</div>
-                <div class="step-meta">
+              <span class="step-dot" :class="'dot-' + step.status" />
+              <div class="step-info">
+                <span class="step-name">{{ step.name }}</span>
+                <span class="step-meta">
                   <span v-if="step.executor_team" class="step-team">{{ step.executor_team }}</span>
                   <span v-if="step.start_time" class="step-duration">{{ calculateDuration(step) }}</span>
-                </div>
+                </span>
               </div>
-              <span class="step-badge" :class="'badge-' + step.status">
-                {{ getStepStatusLabel(step.status) }}
-              </span>
+              <span class="step-badge">{{ getStepStatusLabel(step.status) }}</span>
             </div>
           </div>
         </aside>
 
-        <!-- 中间：进度仪表盘 -->
-        <section class="center-panel">
-          <div class="gauge-container cyber-card">
-            <div class="panel-header">
-              <DataLine :size="12" />
-              <span>执行进度</span>
+        <!-- Center: ECharts grid -->
+        <section class="panel panel-charts">
+          <div class="chart-grid">
+            <div class="chart-cell">
+              <div ref="bulletChartRef" class="chart-container" />
             </div>
-            <div class="gauge-chart">
-              <svg viewBox="0 0 200 200" class="gauge-svg">
-                <defs>
-                  <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#00d4ff" />
-                    <stop offset="100%" stop-color="#00e88a" />
-                  </linearGradient>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
-                    <feMerge>
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
-                </defs>
-                <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="8" />
-                <circle
-                  cx="100" cy="100" r="80"
-                  fill="none"
-                  stroke="url(#gaugeGradient)"
-                  stroke-width="8"
-                  stroke-linecap="round"
-                  :stroke-dasharray="503"
-                  :stroke-dashoffset="503 - (503 * progressPercent / 100)"
-                  transform="rotate(-90 100 100)"
-                  filter="url(#glow)"
-                  class="gauge-progress"
-                />
-                <text x="100" y="95" text-anchor="middle" fill="#f8fafc" font-size="32" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">
-                  {{ progressPercent }}%
-                </text>
-                <text x="100" y="115" text-anchor="middle" fill="rgba(148, 163, 184, 0.5)" font-size="9" font-family="sans-serif" letter-spacing="2">
-                  PROGRESS
-                </text>
-              </svg>
+            <div class="chart-cell">
+              <div ref="lineChartRef" class="chart-container" />
             </div>
-          </div>
-
-          <div class="status-bars cyber-card">
-            <div class="panel-header">
-              <PieChart :size="14" />
-              <span>状态分布</span>
+            <div class="chart-cell">
+              <div ref="pieChartRef" class="chart-container" />
             </div>
-            <div class="bars-container">
-              <div v-for="(item, idx) in stepStatusData" :key="item.name" class="status-bar-row">
-                <span class="bar-label">{{ item.name }}</span>
-                <div class="bar-track">
-                  <div
-                    class="bar-fill"
-                    :class="'bar-' + getBarColorClass(item.name)"
-                    :style="{ width: Math.max((item.value / drillSteps.length) * 100, 3) + '%' }"
-                  />
-                </div>
-                <span class="bar-value">{{ item.value }}</span>
-              </div>
+            <div class="chart-cell">
+              <div ref="radarChartRef" class="chart-container" />
             </div>
           </div>
         </section>
 
-        <!-- 右侧：时间线与日志 -->
-        <aside class="right-panel cyber-panel">
+        <!-- Right: Event logs -->
+        <aside class="panel panel-logs">
           <div class="panel-header">
-            <Connection :size="14" />
-            <span>执行日志</span>
+            <Connection :size="12" />
+            <span>事件日志</span>
           </div>
-          <div class="logs-list">
+          <div class="panel-body logs-list">
             <div
-              v-for="(log, idx) in drillLogs"
+              v-for="(log, idx) in recentLogs"
               :key="log.ID || idx"
               class="log-item"
-              :class="'log-' + (log.action || '')"
+              :class="'log-' + (log.Action || '').split('_')[0]"
             >
-              <div class="log-dot" />
-              <div class="log-content">
-                <div class="log-action">{{ formatLogAction(log.action) }}</div>
-                <div class="log-detail" v-if="log.content">{{ log.content }}</div>
+              <div class="log-border" />
+              <div class="log-body">
+                <div class="log-action">{{ formatLogAction(log.Action) }}</div>
+                <div v-if="log.Remark" class="log-text">{{ log.Remark }}</div>
                 <div class="log-time">{{ formatTime(log.CreatedAt) }}</div>
               </div>
             </div>
+            <div v-if="recentLogs.length === 0" class="log-empty">暂无日志</div>
           </div>
         </aside>
       </main>
-
-      <!-- 底部进度条 -->
-      <footer class="bottom-bar cyber-border-top">
-        <div class="bottom-progress-track">
-          <div class="bottom-progress-fill" :style="{ width: progressPercent + '%' }" />
-        </div>
-      </footer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Clock,
   FullScreen,
-  User,
-  Calendar,
-  List,
-  DataLine,
-  PieChart,
-  CircleCheck,
   CircleClose,
-  Loading,
+  List,
   Connection,
-  Timer,
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import type { StepInstance } from '@/types'
+import * as echarts from 'echarts'
+import type { StepInstance, StepInstanceLog } from '@/types/instance'
+import type { DrillInstance } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
 
 const route = useRoute()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const currentTime = ref(new Date().toLocaleString('zh-CN'))
+
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
+let timeTimer: number | null = null
+
+// Chart refs
+const bulletChartRef = ref<HTMLElement | null>(null)
+const lineChartRef = ref<HTMLElement | null>(null)
+const pieChartRef = ref<HTMLElement | null>(null)
+const radarChartRef = ref<HTMLElement | null>(null)
+
+let bulletChart: echarts.ECharts | null = null
+let lineChart: echarts.ECharts | null = null
+let pieChart: echarts.ECharts | null = null
+let radarChart: echarts.ECharts | null = null
 
 const drillId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? parseInt(id, 10) : null
 })
 
-const currentDrill = ref<any>(null)
+const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
+const recentLogs = ref<StepInstanceLog[]>([])
 
-const completedCount = computed(() => drillSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length)
-
+// Computed KPIs
+const completedCount = computed(() =>
+  drillSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
+)
+const totalCount = computed(() => drillSteps.value.length)
+const issueCount = computed(() => drillSteps.value.filter(s => s.status === 'issue').length)
+const runningCount = computed(() => drillSteps.value.filter(s => s.status === 'running').length)
 const progressPercent = computed(() => {
-  if (drillSteps.value.length === 0) return 0
-  return Math.round((completedCount.value / drillSteps.value.length) * 100)
+  if (totalCount.value === 0) return 0
+  return Math.round((completedCount.value / totalCount.value) * 100)
 })
 
-function formatLogAction(action: string): string {
-  const map: Record<string, string> = {
-    complete: '步骤完成',
-    issue: '异常上报',
-    start: '步骤启动',
-    timeout: '步骤超时',
-    skip: '步骤跳过',
-    force_complete: '强制完成',
-  }
-  return map[action] || action
-}
-
-function getBarColorClass(name: string): string {
-  const map: Record<string, string> = {
-    '已完成': 'completed',
-    '执行中': 'running',
-    '待执行': 'pending',
-    '超时': 'timeout',
-    '异常': 'issue',
-    '已跳过': 'skipped',
-  }
-  return map[name] || 'pending'
-}
-
-const stepStatusData = computed(() => {
-  const counts: Record<string, number> = {}
-  drillSteps.value.forEach(step => {
-    counts[step.status] = (counts[step.status] || 0) + 1
+const estimatedRemaining = computed(() => {
+  const remaining = drillSteps.value.filter(s => s.status === 'pending')
+  if (remaining.length === 0) return '0分钟'
+  // Use estimated_duration_minutes if available, otherwise assume 5 min avg
+  let totalMin = 0
+  let counted = 0
+  remaining.forEach(s => {
+    if (s.estimated_duration_minutes && s.estimated_duration_minutes > 0) {
+      totalMin += s.estimated_duration_minutes
+      counted++
+    }
   })
-  const statusMap: Record<string, string> = {
-    pending: '待执行',
-    running: '执行中',
-    completed: '已完成',
-    timeout: '超时',
-    issue: '异常',
-    skipped: '已跳过',
+  if (counted === 0) {
+    // Calculate from completed steps average
+    const completed = drillSteps.value.filter(s => s.status === 'completed' && s.start_time && s.end_time)
+    if (completed.length > 0) {
+      let sum = 0
+      completed.forEach(s => {
+        const dur = (new Date(s.end_time!).getTime() - new Date(s.start_time!).getTime()) / 60000
+        sum += dur
+      })
+      totalMin = Math.round(sum / completed.length * remaining.length)
+    } else {
+      totalMin = remaining.length * 5
+    }
+  } else {
+    totalMin = Math.round(totalMin)
   }
-  return Object.entries(counts).map(([key, value]) => ({
-    name: statusMap[key] || key,
-    value,
-  }))
+  if (totalMin < 60) return `${totalMin}分钟`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m > 0 ? `${h}小时${m}分钟` : `${h}小时`
 })
 
-const drillLogs = ref<any[]>([])
-
-let timeTimer: number
-
+// Time update
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   })
 }
 
-async function loadData() {
-  if (!drillId.value) {
-    error.value = '无效的演练 ID'
-    loading.value = false
-    return
-  }
-
-  try {
-    const drill = await drillApi.getDetail(drillId.value)
-    currentDrill.value = drill
-
-    const steps = await drillApi.getSteps(drillId.value)
-    drillSteps.value = steps.sort((a: StepInstance, b: StepInstance) => a.seq - b.seq)
-
-    const logs = await drillApi.getLogs(drillId.value)
-    drillLogs.value = logs.slice(0, 30)
-
-    loading.value = false
-    error.value = null
-
-    connectWebSocket()
-  } catch (err: any) {
-    error.value = err.message || '加载数据失败'
-    console.error('Failed to load drill data:', err)
-    loading.value = false
-  }
-}
-
+// Labels
 function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    running: '执行中',
-    paused: '已暂停',
-    completed: '已完成',
-    terminated: '已终止',
-    pending: '待启动',
+    running: '执行中', paused: '已暂停', completed: '已完成', terminated: '已终止', pending: '待启动',
   }
   return map[status] || status
 }
 
 function getStepStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    pending: '待执行',
-    running: '执行中',
-    completed: '已完成',
-    timeout: '超时',
-    skipped: '已跳过',
-    issue: '异常',
+    pending: '待执行', running: '执行中', completed: '已完成', timeout: '超时', skipped: '已跳过', issue: '异常',
   }
   return map[status] || status
 }
 
-function getStepStatusIcon(status: string) {
-  switch (status) {
-    case 'completed': return CircleCheck
-    case 'running': return Loading
-    case 'issue': return CircleClose
-    case 'timeout': return CircleClose
-    default: return CircleCheck
+function formatLogAction(action: string): string {
+  const map: Record<string, string> = {
+    complete: '步骤完成', issue: '异常上报', start: '步骤启动', timeout: '步骤超时',
+    skip: '步骤跳过', force_complete: '强制完成', step_start: '步骤启动', step_complete: '步骤完成',
+    step_issue: '异常上报', step_skip: '步骤跳过',
   }
+  return map[action] || action
+}
+
+function formatTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '--:--'
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
 function calculateDuration(step: StepInstance): string {
@@ -415,24 +274,47 @@ function calculateDuration(step: StepInstance): string {
   return mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`
 }
 
-function formatTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '--:--'
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
+// Data loading
+async function loadData() {
+  if (!drillId.value) {
+    error.value = '无效的演练 ID'
+    loading.value = false
+    return
+  }
+
+  try {
+    const drill = await drillApi.getDetail(drillId.value)
+    currentDrill.value = drill
+
+    const steps = await drillApi.getSteps(drillId.value)
+    drillSteps.value = steps.sort((a, b) => a.seq - b.seq)
+
+    const logs = await drillApi.getLogs(drillId.value)
+    recentLogs.value = logs.slice(0, 30)
+
+    loading.value = false
+    error.value = null
+
+    connectWebSocket()
+    await nextTick()
+    initCharts()
+  } catch (err: any) {
+    error.value = err.message || '加载数据失败'
+    console.error('Failed to load drill data:', err)
+    loading.value = false
+  }
 }
 
+function handleRetry() {
+  loadData()
+}
+
+// WebSocket
 function connectWebSocket() {
-  if (ws) {
-    ws.close()
-  }
+  if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}`
-  
+
   ws = new WebSocket(wsUrl)
   ws.onmessage = (event) => {
     try {
@@ -464,6 +346,7 @@ function startFallbackPolling() {
   }, 3000)
 }
 
+// Fullscreen
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen?.()
@@ -472,10 +355,166 @@ function toggleFullscreen() {
   }
 }
 
-function handleRetry() {
-  loadData()
+// ECharts
+const CHART_COLORS = {
+  accent: '#22C55E',
+  error: '#EF4444',
+  info: '#3B82F6',
+  warning: '#FACC15',
+  text: '#F8FAFC',
+  textDim: '#64748B',
+  grid: '#1E293B',
 }
 
+function initCharts() {
+  initBulletChart()
+  initLineChart()
+  initPieChart()
+  initRadarChart()
+
+  window.addEventListener('resize', handleResize)
+}
+
+function handleResize() {
+  bulletChart?.resize()
+  lineChart?.resize()
+  pieChart?.resize()
+  radarChart?.resize()
+}
+
+function initBulletChart() {
+  if (!bulletChartRef.value) return
+  if (bulletChart) bulletChart.dispose()
+  bulletChart = echarts.init(bulletChartRef.value)
+
+  const completedSteps = drillSteps.value.filter(s => s.status === 'completed' && s.start_time && s.end_time)
+  const data = completedSteps.slice(0, 10).map(s => ({
+    name: s.name.length > 12 ? s.name.slice(0, 12) + '...' : s.name,
+    value: Math.round((new Date(s.end_time!).getTime() - new Date(s.start_time!).getTime()) / 1000),
+  }))
+
+  bulletChart.setOption({
+    title: { text: '步骤耗时 TOP 10', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
+    grid: { left: 80, right: 30, top: 36, bottom: 20 },
+    xAxis: { type: 'value', axisLabel: { color: CHART_COLORS.textDim, formatter: '{s}' }, splitLine: { lineStyle: { color: CHART_COLORS.grid } }, axisLine: { lineStyle: { color: CHART_COLORS.grid } } },
+    yAxis: { type: 'category', data: data.map(d => d.name).reverse(), axisLabel: { color: CHART_COLORS.textDim }, axisLine: { show: false }, axisTick: { show: false } },
+    series: [{
+      type: 'bar', data: data.map(d => d.value).reverse(), barWidth: 16,
+      itemStyle: { color: CHART_COLORS.accent, borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', color: CHART_COLORS.text, fontSize: 11, formatter: '{c}s' },
+    }],
+  })
+}
+
+function initLineChart() {
+  if (!lineChartRef.value) return
+  if (lineChart) lineChart.dispose()
+  lineChart = echarts.init(lineChartRef.value)
+
+  // Build duration trend: cumulative completed steps over time
+  const completed = drillSteps.value.filter(s => s.status === 'completed' && s.end_time).sort((a, b) => new Date(a.end_time!).getTime() - new Date(b.end_time!).getTime())
+  const labels: string[] = []
+  const values: number[] = []
+  completed.forEach((s, i) => {
+    labels.push(s.name.length > 8 ? s.name.slice(0, 8) + '..' : s.name)
+    const dur = s.start_time && s.end_time ? Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 1000) : 0
+    values.push(dur)
+  })
+
+  lineChart.setOption({
+    title: { text: '耗时趋势', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
+    grid: { left: 40, right: 20, top: 36, bottom: 30 },
+    xAxis: { type: 'category', data: labels, axisLabel: { color: CHART_COLORS.textDim, rotate: 30 }, axisLine: { lineStyle: { color: CHART_COLORS.grid } }, axisTick: { show: false } },
+    yAxis: { type: 'value', axisLabel: { color: CHART_COLORS.textDim, formatter: '{s}s' }, splitLine: { lineStyle: { color: CHART_COLORS.grid } }, axisLine: { lineStyle: { color: CHART_COLORS.grid } } },
+    series: [{
+      type: 'line', data: values, smooth: true, symbol: 'circle', symbolSize: 6,
+      lineStyle: { color: CHART_COLORS.accent, width: 2 },
+      itemStyle: { color: CHART_COLORS.accent },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(34, 197, 94, 0.3)' },
+          { offset: 1, color: 'rgba(34, 197, 94, 0.02)' },
+        ]),
+      },
+    }],
+  })
+}
+
+function initPieChart() {
+  if (!pieChartRef.value) return
+  if (pieChart) pieChart.dispose()
+  pieChart = echarts.init(pieChartRef.value)
+
+  const statusMap: Record<string, { name: string; color: string }> = {
+    completed: { name: '已完成', color: CHART_COLORS.accent },
+    running: { name: '执行中', color: CHART_COLORS.info },
+    issue: { name: '异常', color: CHART_COLORS.error },
+    timeout: { name: '超时', color: CHART_COLORS.warning },
+    pending: { name: '待执行', color: CHART_COLORS.textDim },
+    skipped: { name: '已跳过', color: '#A78BFA' },
+  }
+
+  const counts: Record<string, number> = {}
+  drillSteps.value.forEach(s => { counts[s.status] = (counts[s.status] || 0) + 1 })
+  const data = Object.entries(counts).map(([k, v]) => ({ name: statusMap[k]?.name || k, value: v, itemStyle: { color: statusMap[k]?.color || CHART_COLORS.textDim } }))
+
+  pieChart.setOption({
+    title: { text: '状态分布', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
+    series: [{
+      type: 'pie', radius: ['40%', '65%'], center: ['50%', '58%'],
+      roseType: 'area', data,
+      label: { color: CHART_COLORS.textDim, fontSize: 11 },
+      labelLine: { length: 8, length2: 10 },
+    }],
+  })
+}
+
+function initRadarChart() {
+  if (!radarChartRef.value) return
+  if (radarChart) radarChart.dispose()
+  radarChart = echarts.init(radarChartRef.value)
+
+  // Aggregate workload by executor_team
+  const teamCounts: Record<string, number> = {}
+  drillSteps.value.forEach(s => {
+    if (s.executor_team) {
+      teamCounts[s.executor_team] = (teamCounts[s.executor_team] || 0) + 1
+    }
+  })
+
+  const teams = Object.entries(teamCounts).slice(0, 6)
+  if (teams.length === 0) {
+    teams.push(['默认团队', drillSteps.value.length])
+  }
+
+  radarChart.setOption({
+    title: { text: '团队负载', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
+    radar: {
+      indicator: teams.map(([name]) => ({ name, max: Math.max(...teams.map(([, v]) => v), 1) + 2 })),
+      radius: '65%',
+      axisName: { color: CHART_COLORS.textDim, fontSize: 11 },
+      splitArea: { areaStyle: { color: ['rgba(30,41,59,0.5)', 'rgba(15,23,42,0.5)'] } },
+      splitLine: { lineStyle: { color: CHART_COLORS.grid } },
+      axisLine: { lineStyle: { color: CHART_COLORS.grid } },
+    },
+    series: [{
+      type: 'radar', data: [{ value: teams.map(([, v]) => v), name: '任务数' }],
+      areaStyle: { color: 'rgba(34, 197, 94, 0.2)' },
+      lineStyle: { color: CHART_COLORS.accent },
+      itemStyle: { color: CHART_COLORS.accent },
+    }],
+  })
+}
+
+function disposeCharts() {
+  bulletChart?.dispose(); bulletChart = null
+  lineChart?.dispose(); lineChart = null
+  pieChart?.dispose(); pieChart = null
+  radarChart?.dispose(); radarChart = null
+  window.removeEventListener('resize', handleResize)
+}
+
+// Lifecycle
 onMounted(() => {
   loadData()
   updateTime()
@@ -483,99 +522,29 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearInterval(timeTimer)
+  if (timeTimer) clearInterval(timeTimer)
   if (refreshTimer) clearInterval(refreshTimer)
-  if (ws) {
-    ws.close()
-    ws = null
-  }
+  if (ws) { ws.close(); ws = null }
+  disposeCharts()
 })
 </script>
 
 <style lang="scss" scoped>
-// ===== 核心变量 =====
-$bg-deep: #020617;
-$bg-surface: rgba(8, 18, 35, 0.7);
-$bg-glass: rgba(15, 25, 45, 0.5);
-$bg-card: rgba(10, 20, 40, 0.8);
+@use '@/styles/variables' as *;
 
-$border-subtle: rgba(0, 180, 255, 0.1);
-$border-active: rgba(0, 212, 255, 0.35);
-
-$text-primary: #f8fafc;
-$text-secondary: rgba(148, 163, 184, 0.8);
-$text-muted: rgba(100, 120, 150, 0.6);
-
-$cyan: #00d4ff;
-$cyan-dim: rgba(0, 212, 255, 0.15);
-$green: #00e88a;
-$green-dim: rgba(0, 232, 138, 0.15);
-$red: #ff3b5c;
-$red-dim: rgba(255, 59, 92, 0.15);
-$yellow: #ffaa00;
-$yellow-dim: rgba(255, 170, 0, 0.15);
-$purple: #a855f7;
-$purple-dim: rgba(168, 85, 247, 0.15);
-
-.screen-wrapper {
-  width: 100vw;
-  height: 100vh;
+.screen-root {
   background: $bg-deep;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   color: $text-primary;
+  font-family: $font-family-ui;
   overflow: hidden;
-  position: relative;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-// ===== 背景层 =====
-.particle-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(0, 180, 255, 0.08) 1px, transparent 0);
-  background-size: 40px 40px;
-  z-index: 0;
-  animation: gridFloat 60s linear infinite;
-}
-
-@keyframes gridFloat {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(40px); }
-}
-
-.scan-line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
-  animation: scanMove 8s ease-in-out infinite;
-  z-index: 1;
-  pointer-events: none;
-}
-
-@keyframes scanMove {
-  0%, 100% { top: 0; opacity: 0; }
-  5%, 95% { opacity: 1; }
-  100% { top: 100vh; opacity: 0; }
-}
-
-.ambient-glow {
-  position: absolute;
-  top: -30%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80vw;
-  height: 60vh;
-  background: radial-gradient(ellipse, rgba(0, 100, 200, 0.06) 0%, transparent 70%);
-  z-index: 0;
-  pointer-events: none;
-}
-
-// ===== 通用状态 =====
+// Overlay states
 .overlay-state {
-  position: absolute;
+  position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
@@ -587,411 +556,296 @@ $purple-dim: rgba(168, 85, 247, 0.15);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: $spacing-base;
     color: $text-secondary;
 
-    .el-icon { color: $red; }
-
-    p { font-size: 14px; }
-
+    .el-icon { color: $color-error; }
+    p { font-size: $font-size-sm; }
     .el-button {
       background: transparent;
-      border: 1px solid $cyan;
-      color: $cyan;
-      &:hover { background: $cyan-dim; }
+      border: 1px solid $color-accent;
+      color: $color-accent;
+      &:hover { background: $color-accent-bg; }
     }
   }
 }
 
 .loader {
   text-align: center;
-
   .loader-ring {
     width: 48px;
     height: 48px;
-    margin: 0 auto 16px;
-    border: 2px solid $border-subtle;
-    border-top-color: $cyan;
+    margin: 0 auto $spacing-base;
+    border: 2px solid $border-color-light;
+    border-top-color: $color-accent;
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
-
   .loader-text {
     color: $text-secondary;
-    font-size: 13px;
+    font-size: $font-size-xs;
     letter-spacing: 3px;
     text-transform: uppercase;
   }
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
-// ===== 主内容 =====
+// Screen content
 .screen-content {
-  position: relative;
-  z-index: 2;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  animation: fadeIn 0.6s ease-out;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-// ===== Header =====
+// Header
 .screen-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background: rgba(5, 12, 25, 0.8);
-  border-bottom: 1px solid $border-subtle;
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 10%;
-    right: 10%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, $border-active, transparent);
-  }
+  padding: $spacing-md $spacing-xl;
+  height: $header-height;
+  background: $bg-primary;
+  border-bottom: 1px solid $border-color-light;
+  flex-shrink: 0;
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 10px;
-
-    .title-glow {
-      width: 3px;
-      height: 16px;
-      background: linear-gradient(180deg, $cyan, transparent);
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-
-    .drill-title {
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      margin: 0;
-      color: $text-primary;
-    }
-
-    .drill-status-tag {
-      padding: 3px 10px;
-      border-radius: 3px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-
-      &.status-running {
-        background: $green-dim;
-        color: $green;
-        border: 1px solid rgba(0, 232, 138, 0.3);
-        animation: pulseGlow 3s ease-in-out infinite;
-      }
-      &.status-pending {
-        background: $yellow-dim;
-        color: $yellow;
-        border: 1px solid rgba(255, 170, 0, 0.3);
-      }
-      &.status-completed {
-        background: $green-dim;
-        color: $green;
-        border: 1px solid rgba(0, 232, 138, 0.4);
-      }
-      &.status-paused {
-        background: $yellow-dim;
-        color: $yellow;
-        border: 1px solid rgba(255, 170, 0, 0.3);
-      }
-      &.status-terminated {
-        background: $red-dim;
-        color: $red;
-        border: 1px solid rgba(255, 59, 92, 0.3);
-      }
-    }
+    gap: $spacing-md;
   }
 
-  @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 4px rgba(0, 232, 138, 0.2); }
-    50% { box-shadow: 0 0 12px rgba(0, 232, 138, 0.3); }
+  .drill-title {
+    font-size: $font-size-lg;
+    font-weight: $font-weight-bold;
+    margin: 0;
+    letter-spacing: 1px;
+  }
+
+  .drill-status-tag {
+    padding: 2px $spacing-sm;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-semibold;
+
+    &.status-running {
+      background: $color-success-bg;
+      color: $color-success;
+      border: 1px solid $color-accent-border;
+    }
+    &.status-completed {
+      background: $color-success-bg;
+      color: $color-success;
+      border: 1px solid $color-accent-border;
+    }
+    &.status-pending {
+      background: $color-warning-bg;
+      color: $color-warning;
+      border: 1px solid rgba(250, 204, 21, 0.2);
+    }
+    &.status-paused {
+      background: $color-warning-bg;
+      color: $color-warning;
+      border: 1px solid rgba(250, 204, 21, 0.2);
+    }
+    &.status-terminated {
+      background: $color-error-bg;
+      color: $color-error;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: $spacing-lg;
 
     .time-display {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: $spacing-xs;
       color: $text-secondary;
-      font-size: 13px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: $font-size-sm;
+      font-family: $font-family-mono;
     }
 
-    .cyber-btn {
+    .btn-icon {
       background: transparent;
-      border: 1px solid $border-subtle;
+      border: 1px solid $border-color-light;
       color: $text-secondary;
       width: 32px;
       height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 4px;
+      border-radius: $radius-sm;
       cursor: pointer;
       transition: all 0.2s;
 
       &:hover {
-        border-color: $cyan;
-        color: $cyan;
-        box-shadow: 0 0 8px rgba(0, 212, 255, 0.15);
+        border-color: $color-accent;
+        color: $color-accent;
       }
     }
   }
 }
 
-// ===== Metrics =====
-.metrics-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  background: rgba(5, 12, 25, 0.5);
-  border-bottom: 1px solid $border-subtle;
-}
-
-.metric-group {
-  display: flex;
-  gap: 10px;
-
-  &.primary-metrics { flex: 1; }
-  &.secondary-metrics { gap: 8px; }
-}
-
-.metric-divider {
-  width: 1px;
-  height: 32px;
-  background: linear-gradient(180deg, transparent, $border-active, transparent);
-}
-
-.metric-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: $bg-card;
-  border-radius: 6px;
-  border: 1px solid $border-subtle;
-  transition: all 0.3s;
-
-  &:hover {
-    border-color: $border-active;
-  }
-
-  .metric-corners {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: 6px;
-
-    &::before, &::after {
-      content: '';
-      position: absolute;
-      width: 8px;
-      height: 8px;
-      border-color: $cyan;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-
-    &::before {
-      top: -1px;
-      left: -1px;
-      border-top: 2px solid;
-      border-left: 2px solid;
-    }
-
-    &::after {
-      bottom: -1px;
-      right: -1px;
-      border-bottom: 2px solid;
-      border-right: 2px solid;
-    }
-  }
-
-  &:hover .metric-corners::before,
-  &:hover .metric-corners::after {
-    opacity: 0.6;
-  }
-
-  &.core-metric {
-    flex: 1;
-    padding: 6px 8px;
-
-    .metric-value {
-      font-size: 16px;
-    }
-
-    &.running .metric-icon-box { background: $cyan-dim; color: $cyan; }
-    &.completed .metric-icon-box { background: $green-dim; color: $green; }
-    &.rate .metric-icon-box { background: $purple-dim; color: $purple; }
-  }
-
-  &.mini-metric {
-    .metric-icon-box {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
-      background: rgba(0, 180, 255, 0.06);
-      color: $text-secondary;
-    }
-
-    .metric-label { font-size: 10px; }
-    .metric-value { font-size: 12px; }
-  }
-
-  .metric-icon-box {
-    width: 28px;
-    height: 28px;
-    border-radius: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    background: rgba(0, 180, 255, 0.08);
-    color: $cyan;
-  }
-
-  .metric-body {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-
-    .metric-label {
-      font-size: 10px;
-      color: $text-muted;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-
-    .metric-value {
-      font-size: 14px;
-      font-weight: 700;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      color: $text-primary;
-      line-height: 1;
-
-      .metric-total {
-        font-weight: 400;
-        color: $text-secondary;
-        font-size: 0.75em;
-      }
-
-      &.success { color: $green; }
-      &.warning { color: $yellow; }
-    }
-  }
-}
-
-// ===== Body =====
-.screen-body {
-  flex: 1;
+// KPI row
+.kpi-row {
   display: grid;
-  grid-template-columns: 260px 1fr 280px;
-  gap: 10px;
-  padding: 10px;
-  overflow: hidden;
+  grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid $border-color-light;
+  flex-shrink: 0;
 }
 
-.cyber-panel {
-  background: $bg-surface;
-  border-radius: 8px;
-  border: 1px solid $border-subtle;
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-sm $spacing-base;
+  gap: 4px;
+  min-height: 56px;
+  border-right: 1px solid $border-color-light;
+
+  &:last-child { border-right: none; }
+
+  .kpi-label {
+    font-size: $font-size-xs;
+    color: $text-tertiary;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .kpi-value {
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    font-family: $font-family-mono;
+
+    .kpi-total {
+      font-weight: $font-weight-regular;
+      color: $text-tertiary;
+      font-size: $font-size-sm;
+    }
+
+    &.kpi-value-accent { color: $color-accent; }
+    &.kpi-value-error { color: $color-error; }
+  }
+}
+
+// Screen main
+.screen-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+// Panels
+.panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  backdrop-filter: blur(12px);
+}
+
+.panel-timeline {
+  width: 280px;
+  background: $bg-tertiary;
+  border-right: 1px solid $border-color-light;
+  flex-shrink: 0;
+}
+
+.panel-charts {
+  flex: 1;
+  background: $bg-deep;
+  min-width: 0;
+  padding: $spacing-sm;
+}
+
+.panel-logs {
+  width: 280px;
+  background: $bg-tertiary;
+  border-left: 1px solid $border-color-light;
+  flex-shrink: 0;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: rgba(0, 180, 255, 0.03);
-  border-bottom: 1px solid $border-subtle;
-  font-size: 10px;
-  font-weight: 600;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-base;
+  background: rgba(34, 197, 94, 0.03);
+  border-bottom: 1px solid $border-color-light;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
   color: $text-secondary;
-  letter-spacing: 2px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   flex-shrink: 0;
 
-  svg { color: $cyan; }
+  svg { color: $color-accent; }
 }
 
-// Steps
-.steps-list {
+.panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  padding: $spacing-sm;
 
-  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar { width: 3px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: $border-subtle; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: $border-color; border-radius: 2px; }
 }
 
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  margin-bottom: 3px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 4px;
-  border: 1px solid transparent;
-  transition: all 0.25s;
+// Steps list
+.steps-list {
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    padding: $spacing-xs $spacing-sm;
+    margin-bottom: 3px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: $radius-sm;
+    border: 1px solid transparent;
+    transition: all 0.2s;
 
-  &.active-step {
-    border-color: rgba(0, 232, 138, 0.25);
-    background: rgba(0, 232, 138, 0.04);
-
-    .step-indicator svg {
-      animation: spin 1s linear infinite;
-      color: $green;
+    &.step-running {
+      border-color: $color-accent-border;
+      background: $color-accent-bg;
     }
-  }
+    &.step-issue, &.step-timeout {
+      border-color: rgba(239, 68, 68, 0.15);
+      background: rgba(239, 68, 68, 0.04);
+    }
 
-  .step-indicator {
-    flex-shrink: 0;
-    color: $text-muted;
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: $text-tertiary;
 
-    .step-completed & { color: $green; }
-    .step-issue &, .step-timeout & { color: $red; }
-  }
+      &.dot-completed { background: $color-accent; }
+      &.dot-running {
+        background: $color-accent;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      &.dot-issue, &.dot-timeout { background: $color-error; }
+      &.dot-skipped { background: #A78BFA; }
+    }
 
-  .step-body {
-    flex: 1;
-    min-width: 0;
+    .step-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
 
     .step-name {
-      font-size: 12px;
-      font-weight: 500;
-      color: $text-primary;
-      margin-bottom: 3px;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-medium;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -999,232 +853,105 @@ $purple-dim: rgba(168, 85, 247, 0.15);
 
     .step-meta {
       display: flex;
-      gap: 8px;
+      gap: $spacing-xs;
       font-size: 10px;
-      color: $text-muted;
+      color: $text-tertiary;
 
       .step-team {
-        background: $cyan-dim;
-        padding: 1px 5px;
+        background: $color-accent-bg;
+        padding: 1px 4px;
         border-radius: 2px;
-        color: $cyan;
+        color: $color-accent;
+      }
+    }
+
+    .step-badge {
+      font-size: 9px;
+      font-weight: $font-weight-semibold;
+      padding: 1px 4px;
+      border-radius: 2px;
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
+  50% { opacity: 0.5; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
+}
+
+// Chart grid
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: $spacing-sm;
+  height: 100%;
+}
+
+.chart-cell {
+  background: $bg-primary;
+  border: 1px solid $border-color-light;
+  border-radius: $radius-md;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.chart-container {
+  width: 100%;
+  height: 100%;
+}
+
+// Logs list
+.logs-list {
+  .log-item {
+    position: relative;
+    padding: $spacing-xs $spacing-xs $spacing-xs $spacing-base;
+    margin-bottom: $spacing-xs;
+
+    .log-border {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      border-radius: 2px;
+    }
+
+    &.log-complete .log-border, &.log-step .log-border { background: $color-accent; }
+    &.log-issue .log-border { background: $color-error; }
+    &.log-force .log-border { background: $color-info; }
+    &.log-skip .log-border { background: #A78BFA; }
+    &.log-timeout .log-border { background: $color-warning; }
+
+    .log-body {
+      .log-action {
+        font-size: $font-size-xs;
+        font-weight: $font-weight-medium;
+        margin-bottom: 2px;
+      }
+
+      .log-text {
+        font-size: 11px;
+        color: $text-secondary;
+        margin-bottom: 2px;
+        line-height: 1.3;
+      }
+
+      .log-time {
+        font-size: 10px;
+        font-family: $font-family-mono;
+        color: $text-tertiary;
       }
     }
   }
 
-  .step-badge {
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
-
-    &.badge-completed { background: $green-dim; color: $green; }
-    &.badge-running { background: $cyan-dim; color: $cyan; }
-    &.badge-pending { background: rgba(255, 255, 255, 0.03); color: $text-muted; }
-    &.badge-issue, &.badge-timeout { background: $red-dim; color: $red; }
-    &.badge-skipped { background: $purple-dim; color: $purple; }
+  .log-empty {
+    text-align: center;
+    color: $text-tertiary;
+    font-size: $font-size-xs;
+    padding: $spacing-2xl 0;
   }
-}
-
-// Center
-.center-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.cyber-card {
-  background: $bg-surface;
-  border-radius: 8px;
-  border: 1px solid $border-subtle;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  backdrop-filter: blur(12px);
-
-  &.gauge-container { flex: 1.3; }
-  &.status-bars { flex: 0.7; }
-}
-
-.gauge-chart {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-}
-
-.gauge-svg {
-  width: 100%;
-  max-width: 200px;
-  height: auto;
-}
-
-.gauge-progress {
-  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.bars-container {
-  flex: 1;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.status-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .bar-label {
-    font-size: 11px;
-    color: $text-secondary;
-    width: 42px;
-    flex-shrink: 0;
-  }
-
-  .bar-track {
-    flex: 1;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-
-    &.bar-completed { background: linear-gradient(90deg, $green, rgba(0, 232, 138, 0.5)); box-shadow: 0 0 6px rgba(0, 232, 138, 0.3); }
-    &.bar-running { background: linear-gradient(90deg, $cyan, rgba(0, 212, 255, 0.5)); box-shadow: 0 0 6px rgba(0, 212, 255, 0.3); }
-    &.bar-pending { background: rgba(255, 255, 255, 0.1); }
-    &.bar-issue, &.bar-timeout { background: linear-gradient(90deg, $red, rgba(255, 59, 92, 0.5)); box-shadow: 0 0 6px rgba(255, 59, 92, 0.3); }
-    &.bar-skipped { background: linear-gradient(90deg, $purple, rgba(168, 85, 247, 0.5)); }
-  }
-
-  .bar-value {
-    font-size: 12px;
-    font-weight: 700;
-    font-family: 'SF Mono', monospace;
-    color: $text-primary;
-    width: 16px;
-    text-align: right;
-    flex-shrink: 0;
-  }
-}
-
-// Right: Logs
-.logs-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-
-  &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: $border-subtle; border-radius: 2px; }
-}
-
-.log-item {
-  position: relative;
-  padding: 0 0 10px 16px;
-
-  &:last-child { padding-bottom: 0; }
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: 4px;
-    top: 8px;
-    bottom: 0;
-    width: 1px;
-    background: $border-subtle;
-  }
-
-  &:last-child::before { display: none; }
-
-  .log-dot {
-    position: absolute;
-    left: 1px;
-    top: 4px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: $text-muted;
-    box-shadow: 0 0 4px rgba(0, 212, 255, 0.2);
-  }
-
-  &.log-complete .log-dot { background: $green; box-shadow: 0 0 6px rgba(0, 232, 138, 0.4); }
-  &.log-issue .log-dot { background: $red; box-shadow: 0 0 6px rgba(255, 59, 92, 0.4); animation: pulseDot 1.5s ease-in-out infinite; }
-  &.log-start .log-dot { background: $cyan; }
-
-  @keyframes pulseDot {
-    0%, 100% { box-shadow: 0 0 4px rgba(255, 59, 92, 0.3); }
-    50% { box-shadow: 0 0 10px rgba(255, 59, 92, 0.5); }
-  }
-
-  .log-content {
-    .log-action {
-      font-size: 12px;
-      font-weight: 500;
-      color: $text-primary;
-      margin-bottom: 2px;
-    }
-
-    .log-detail {
-      font-size: 11px;
-      color: $text-secondary;
-      margin-bottom: 2px;
-    }
-
-    .log-time {
-      font-size: 10px;
-      font-family: 'SF Mono', monospace;
-      color: $text-muted;
-    }
-  }
-}
-
-// Bottom bar
-.bottom-bar {
-  position: relative;
-  padding: 0;
-  background: rgba(5, 12, 25, 0.8);
-  border-top: 1px solid $border-subtle;
-  flex-shrink: 0;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: -1px;
-    left: 15%;
-    right: 15%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, $border-active, transparent);
-  }
-}
-
-.bottom-progress-track {
-  height: 2px;
-  background: rgba(255, 255, 255, 0.03);
-  overflow: hidden;
-}
-
-.bottom-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, $cyan, $green);
-  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: progressGlow 3s ease-in-out infinite;
-}
-
-@keyframes progressGlow {
-  0%, 100% { box-shadow: 0 0 6px rgba(0, 212, 255, 0.2); }
-  50% { box-shadow: 0 0 14px rgba(0, 212, 255, 0.4); }
 }
 </style>
