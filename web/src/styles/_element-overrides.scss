@@ -1,19 +1,17 @@
 @use 'variables' as *;
-@use 'mixins' as *;
 
-// Element Plus CSS variables override (浅色主题 - 深色导航)
-// 导航区使用深色主题，内容区使用浅色主题
+// === Element Plus 暗色主题 CSS 变量 ===
 :root {
-  --el-color-primary: #{$color-primary};
-  --el-color-primary-dark-2: #{$color-primary-dark};
-  --el-color-primary-light-3: #{$color-primary-light};
+  --el-color-primary: #{$color-accent};
+  --el-color-primary-dark-2: #{$color-accent-hover};
+  --el-color-primary-light-3: #{$color-accent-hover};
   --el-color-success: #{$color-success};
   --el-color-warning: #{$color-warning};
   --el-color-danger: #{$color-error};
   --el-color-info: #{$color-info};
 
   --el-bg-color: #{$bg-primary};
-  --el-bg-color-page: #{$bg-primary};
+  --el-bg-color-page: #{$bg-deep};
   --el-bg-color-overlay: #{$bg-secondary};
 
   --el-text-color-primary: #{$text-primary};
@@ -24,6 +22,7 @@
 
   --el-border-color: #{$border-color};
   --el-border-color-light: #{$border-color-light};
+  --el-border-color-darker: #475569;
 
   --el-border-radius-base: #{$radius-base};
   --el-border-radius-small: #{$radius-sm};
@@ -34,295 +33,105 @@
 
   --el-fill-color-blank: #{$bg-secondary};
   --el-fill-color: #{$bg-tertiary};
-  --el-fill-color-light: #{$color-primary-bg};
+  --el-fill-color-light: #{$color-accent-bg};
+
+  color-scheme: dark;
 }
 
-// Table overrides (浅色主题)
-.el-table,
-.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  --el-table-bg-color: #{$bg-secondary} !important;
-  --el-table-tr-bg-color: #{$bg-secondary} !important;
-  --el-table-header-bg-color: #{$bg-tertiary} !important;
-  --el-table-row-hover-bg-color: #{$color-primary-bg} !important;
-  --el-table-border-color: #{$border-color} !important;
-  --el-table-row-hover-border-color: #{$border-color} !important;
+// === Menu ===
+.el-menu {
+  background-color: transparent;
+  border-right: none;
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  color: $text-secondary;
+  height: 40px;
+  line-height: 40px;
+  font-size: $font-size-sm;
+  border-radius: $radius-base;
+  margin: 2px 8px;
+
+  &:hover {
+    color: $text-primary !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  &.is-active {
+    color: $color-accent !important;
+    background-color: $color-accent-bg !important;
+    border-right: 2px solid $color-accent;
+  }
+}
+
+.el-sub-menu .el-menu { background-color: transparent !important; }
+.el-sub-menu .el-menu-item { padding-left: 52px !important; }
+
+// === Table ===
+.el-table {
+  --el-table-bg-color: #{$bg-primary} !important;
+  --el-table-tr-bg-color: #{$bg-primary} !important;
+  --el-table-header-bg-color: #{$bg-secondary} !important;
+  --el-table-row-hover-bg-color: rgba(255,255,255,0.03) !important;
+  --el-table-border-color: #{$border-color-light} !important;
   --el-table-text-color: #{$text-primary} !important;
   --el-table-header-text-color: #{$text-secondary} !important;
-  background-color: #{$bg-secondary} !important;
-}
-
-.el-table .el-table__cell {
-  background-color: inherit !important;
-  border-color: #{$border-color-light} !important;
-  color: #{$text-primary} !important;
+  background-color: #{$bg-primary} !important;
+  font-size: $font-size-sm;
 }
 
 .el-table th.el-table__cell {
-  background-color: #{$bg-tertiary} !important;
-  color: #{$text-secondary} !important;
-  font-weight: #{$font-weight-semibold} !important;
-  font-size: #{$font-size-sm} !important;
-  border-color: #{$border-color-light} !important;
+  background-color: #{$bg-secondary} !important;
+  color: $text-secondary !important;
+  font-weight: $font-weight-medium !important;
+  border-color: $border-color-light !important;
 }
 
-.el-table td.el-table__cell {
-  border-color: #{$border-color-light} !important;
-}
+.el-table td.el-table__cell { border-color: $border-color-light !important; }
+.el-table .el-table__body tr:hover > td.el-table__cell { background-color: rgba(255, 255, 255, 0.03) !important; }
+.el-table .el-table__empty-block { background-color: #{$bg-primary} !important; }
 
-.el-table__body tr:hover > td.el-table__cell {
-  background-color: #{$color-primary-bg} !important;
-}
+.el-table__inner-wrapper::before { background-color: #{$bg-primary} !important; }
 
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background-color: #{rgba(241, 245, 249, 0.5)} !important;
+  background-color: rgba(15, 23, 42, 0.5) !important;
 }
 
-// Striped row alternate color fix
-.el-table .el-table__body tr.el-table__row--striped:nth-child(even) td.el-table__cell {
-  background-color: #{$bg-tertiary} !important;
-}
-
-.el-table .el-table__body tr.el-table__row--striped:nth-child(odd) td.el-table__cell {
-  background-color: #{$bg-secondary} !important;
-}
-
-// Fix: element-plus may inject background via component styles
-.el-table__inner-wrapper::before {
-  background-color: #{$bg-secondary} !important;
-}
-
-.el-table .el-table__empty-block {
-  background-color: #{$bg-secondary} !important;
-}
-
-// Card overrides (浅色主题)
+// === Card ===
 .el-card {
-  background-color: $bg-secondary;
-  border: 1px solid $border-color;
-  box-shadow: $shadow-sm;
+  background-color: $bg-primary;
+  border: 1px solid $border-color-light;
+  box-shadow: none;
   color: $text-primary;
 
   .el-card__header {
-    background-color: $bg-tertiary;
-    border-bottom: 1px solid $border-color;
+    background-color: $bg-secondary;
+    border-bottom: 1px solid $border-color-light;
     color: $text-primary;
     font-weight: $font-weight-semibold;
   }
 }
 
-// Dialog overrides
+// === Dialog ===
 .el-dialog {
-  background-color: $bg-secondary;
+  background-color: $bg-primary;
   border: 1px solid $border-color;
   box-shadow: $shadow-lg;
 
-  .el-dialog__header {
-    border-bottom-color: $border-color;
-  }
-
-  .el-dialog__title {
-    color: $text-primary;
-  }
+  .el-dialog__header { border-bottom-color: $border-color-light; padding: $spacing-base $spacing-xl; }
+  .el-dialog__title { color: $text-primary; }
+  .el-dialog__body { color: $text-primary; padding: $spacing-base $spacing-xl; }
+  .el-dialog__footer { border-top-color: $border-color-light; }
 }
 
-// Button overrides
-.el-button--primary {
-  --el-button-hover-bg-color: #{$color-primary-dark};
-  --el-button-active-bg-color: #{$color-primary-dark};
-}
-
-// Input overrides
+// === Input ===
 .el-input__wrapper {
   background-color: $bg-secondary;
   border-color: $border-color;
   box-shadow: none;
 
-  &.is-focus {
-    box-shadow: 0 0 0 1px $color-primary inset;
-  }
-}
-
-// Select dropdown
-.el-select-dropdown {
-  background-color: $bg-secondary;
-  border-color: $border-color;
-  box-shadow: $shadow-md;
-}
-
-.el-scrollbar__wrap {
-  @include scrollbar;
-}
-
-// Pagination
-.el-pagination {
-  --el-pagination-bg-color: transparent;
-  --el-pagination-text-color: #{$text-secondary};
-  --el-pagination-button-color: #{$text-secondary};
-  --el-pagination-hover-color: #{$color-primary};
-
-  .el-pager li {
-    background-color: $bg-secondary;
-    color: $text-secondary;
-    border: 1px solid $border-color;
-
-    &.is-active {
-      background-color: $color-primary;
-      color: white;
-      border-color: $color-primary;
-    }
-  }
-}
-
-// Message
-.el-message {
-  background-color: $bg-secondary;
-  border-color: $border-color;
-  box-shadow: $shadow-md;
-}
-
-// Notification
-.el-notification {
-  background-color: $bg-secondary;
-  border-color: $border-color;
-  box-shadow: $shadow-lg;
-}
-
-// Card padding 统一
-.el-card__body {
-  padding: $spacing-base;
-}
-
-// Dialog
-.el-dialog__body {
-  padding: $spacing-base $spacing-xl;
-}
-
-.el-dialog__header {
-  padding: $spacing-base $spacing-xl;
-}
-
-// Steps
-.el-step__title {
-  font-size: $font-size-base;
-}
-
-// Form
-.el-form-item {
-  margin-bottom: $spacing-base;
-}
-
-// Table
-.el-table {
-  font-size: $font-size-sm;
-}
-
-.el-table .el-table__cell {
-  padding: $spacing-sm $spacing-base;
-}
-
-// Tabs
-.el-tabs__header {
-  margin: 0 0 $spacing-base 0;
-}
-
-// Breadcrumb
-.el-breadcrumb {
-  padding: $spacing-sm 0;
-}
-
-// === el-tag 浅色主题 ===
-.el-tag {
-  border-color: transparent !important;
-  font-size: 12px;
-
-  &.el-tag--primary {
-    background-color: #{$color-primary-bg} !important;
-    color: #{$color-primary} !important;
-  }
-  &.el-tag--success {
-    background-color: #{$color-success-bg} !important;
-    color: #{$color-success} !important;
-  }
-  &.el-tag--warning {
-    background-color: #{$color-warning-bg} !important;
-    color: #{$color-warning} !important;
-  }
-  &.el-tag--danger {
-    background-color: #{$color-error-bg} !important;
-    color: #{$color-error} !important;
-  }
-  &.el-tag--info {
-    background-color: rgba(100, 116, 139, 0.1) !important;
-    color: #{$color-secondary} !important;
-  }
-}
-
-// === el-descriptions 浅色主题 ===
-.el-descriptions {
-  .el-descriptions__cell {
-    background-color: inherit !important;
-  }
-
-  .el-descriptions__label {
-    background-color: $bg-tertiary !important;
-    color: $text-secondary !important;
-    border-color: $border-color-light !important;
-    font-weight: $font-weight-medium;
-    font-size: $font-size-sm;
-    padding: $spacing-sm $spacing-base !important;
-  }
-
-  .el-descriptions__content {
-    background-color: $bg-secondary !important;
-    color: $text-primary !important;
-    border-color: $border-color-light !important;
-    font-size: $font-size-sm;
-    padding: $spacing-sm $spacing-base !important;
-  }
-}
-
-// === el-timeline 浅色主题 ===
-.el-timeline {
-  .el-timeline-item__node {
-    background-color: $color-primary;
-    border-color: $color-primary;
-  }
-
-  .el-timeline-item__content {
-    .el-card {
-      background-color: $bg-tertiary;
-      border-color: $border-color;
-      box-shadow: $shadow-sm;
-      color: $text-primary;
-
-      h4 {
-        color: $text-primary;
-        font-size: $font-size-base;
-        margin-bottom: $spacing-xs;
-      }
-
-      p {
-        color: $text-secondary;
-        font-size: $font-size-sm;
-        margin-bottom: $spacing-sm;
-      }
-
-      .el-tag {
-        margin-bottom: $spacing-sm;
-      }
-
-      .timeout-info {
-        color: $text-tertiary;
-        font-size: $font-size-sm;
-      }
-    }
-  }
-}
-
-// === el-form 浅色主题 ===
-.el-form-item__label {
-  color: $text-secondary !important;
-  font-size: $font-size-sm;
+  &.is-focus { box-shadow: 0 0 0 1px $color-accent inset; }
 }
 
 .el-textarea__inner {
@@ -331,171 +140,107 @@
   color: $text-primary !important;
   box-shadow: none;
 
-  &::placeholder {
-    color: $text-tertiary !important;
-  }
-
-  &:focus {
-    box-shadow: 0 0 0 1px $color-primary inset !important;
-  }
+  &::placeholder { color: $text-tertiary !important; }
+  &:focus { box-shadow: 0 0 0 1px $color-accent inset !important; }
 }
 
-// === el-dialog body content ===
-.el-dialog__body {
-  .el-form {
-    .el-form-item {
-      .el-form-item__label {
-        color: $text-secondary;
-      }
-    }
-  }
+// === Button ===
+.el-button--primary {
+  --el-button-bg-color: #{$color-accent};
+  --el-button-border-color: #{$color-accent};
+  --el-button-hover-bg-color: #{$color-accent-hover};
+  --el-button-hover-border-color: #{$color-accent-hover};
+  --el-button-active-bg-color: #{$color-accent-hover};
+  color: #052e16;
+
+  &:hover, &:focus { color: #052e16; }
 }
 
-// === el-dialog overrides ===
-.el-dialog {
-  background-color: $bg-secondary;
-  border: 1px solid $border-color;
-  box-shadow: $shadow-lg;
-
-  .el-dialog__header {
-    border-bottom-color: $border-color;
-    padding: $spacing-base $spacing-xl;
-  }
-
-  .el-dialog__title {
-    color: $text-primary;
-  }
-
-  .el-dialog__body {
-    color: $text-primary;
-    padding: $spacing-base $spacing-xl;
-  }
-
-  .el-dialog__footer {
-    border-top-color: $border-color;
-  }
-}
-
-// === el-input/textarea in dialog ===
-.el-dialog__body {
-  .el-input__wrapper,
-  .el-textarea__inner {
-    background-color: $bg-secondary;
-    border-color: $border-color;
-  }
-}
-
-// === el-button text type in tables ===
 .el-button.is-text {
-  color: $color-primary;
-  font-size: $font-size-sm;
-
-  &:hover {
-    background-color: $color-primary-bg;
-  }
-}
-
-// === el-tabs 浅色主题 ===
-.el-tabs__nav-wrap::after {
-  background-color: $border-color-light;
-}
-
-.el-tabs__item {
   color: $text-secondary;
   font-size: $font-size-sm;
-
-  &.is-active {
-    color: $color-primary;
-  }
-
-  &:hover {
-    color: $text-primary;
-  }
+  &:hover { color: $text-primary; background-color: rgba(255, 255, 255, 0.05); }
 }
 
-.el-tabs__active-bar {
-  background-color: $color-primary;
+// === Tag ===
+.el-tag {
+  border-color: transparent !important;
+  font-size: 12px;
+
+  &.el-tag--success { background-color: #{$color-success-bg} !important; color: #{$color-success} !important; }
+  &.el-tag--warning { background-color: #{$color-warning-bg} !important; color: #{$color-warning} !important; }
+  &.el-tag--danger { background-color: #{$color-error-bg} !important; color: #{$color-error} !important; }
+  &.el-tag--info { background-color: rgba(100, 116, 139, 0.15) !important; color: #{$text-secondary} !important; }
 }
 
-// === el-pagination 浅色主题 ===
+// === Form ===
+.el-form-item__label { color: $text-secondary !important; font-size: $font-size-sm; }
+.el-form-item { margin-bottom: $spacing-base; }
+
+// === Pagination ===
 .el-pagination {
-  .btn-prev,
-  .btn-next {
+  .btn-prev, .btn-next {
     background-color: $bg-secondary;
     color: $text-secondary;
     border: 1px solid $border-color;
-
-    &:disabled {
-      background-color: $bg-tertiary;
-      color: $text-disabled;
-    }
+    &:disabled { background-color: $bg-tertiary; color: $text-disabled; }
+  }
+  .el-pager li {
+    background-color: $bg-secondary;
+    color: $text-secondary;
+    border: 1px solid $border-color;
+    &.is-active { background-color: $color-accent; color: #052e16; border-color: $color-accent; }
   }
 }
 
-// === el-menu 浅色主题 ===
-.el-menu {
-  background-color: transparent;
-  border-right: none;
-
-  &.el-menu--collapse {
-    width: $sidebar-collapsed-width;
-  }
+// === Dropdown / Popover ===
+.el-dropdown-menu, .el-select-dropdown, .el-popover.el-popper {
+  background-color: $bg-secondary;
+  border: 1px solid $border-color;
+  box-shadow: $shadow-md;
 }
 
-.el-menu-item,
-.el-sub-menu__title {
+.el-dropdown-menu__item {
+  color: $text-primary;
+  &:hover { background-color: rgba(255, 255, 255, 0.05); color: $color-accent; }
+}
+
+// === Breadcrumb ===
+.el-breadcrumb__inner { color: $text-secondary; }
+.el-breadcrumb__inner.is-link:hover { color: $color-accent; }
+
+// === Drawer ===
+.el-drawer { background-color: $bg-primary; }
+.el-drawer__header { color: $text-primary; border-bottom: 1px solid $border-color-light; }
+
+// === Tabs ===
+.el-tabs__nav-wrap::after { background-color: $border-color-light; }
+.el-tabs__item {
   color: $text-secondary;
-
-  &:hover {
-    color: $color-primary;
-    background-color: $color-primary-bg;
-  }
-
-  &.is-active {
-    color: $color-primary;
-    background-color: $color-primary-bg;
-    border-right: 2px solid $color-primary;
-  }
+  font-size: $font-size-sm;
+  &.is-active { color: $color-accent; }
+  &:hover { color: $text-primary; }
 }
+.el-tabs__active-bar { background-color: $color-accent; }
 
-// === el-dropdown 浅色主题 ===
-.el-dropdown-menu {
-  background-color: $bg-secondary;
-  border: 1px solid $border-color;
-  box-shadow: $shadow-md;
+// === Steps ===
+.el-step__title { font-size: $font-size-base; color: $text-primary; }
 
-  .el-dropdown-menu__item {
-    color: $text-primary;
+// === Loaders ===
+.el-loading-mask { background-color: rgba(2, 6, 23, 0.7); }
 
-    &:hover {
-      background-color: $bg-tertiary;
-      color: $color-primary;
-    }
-
-    &.is-disabled {
-      color: $text-disabled;
-    }
-  }
-}
-
-// === el-popover 浅色主题 ===
-.el-popover.el-popper {
-  background-color: $bg-secondary;
-  border: 1px solid $border-color;
-  box-shadow: $shadow-lg;
-}
-
-// === el-tooltip 浅色主题 ===
+// === Tooltip ===
 .el-tooltip__popper {
-  background-color: $text-primary !important;
+  background-color: $bg-secondary !important;
   box-shadow: $shadow-md;
-
-  .el-tooltip__arrow::before {
-    background-color: $text-primary !important;
-  }
+  .el-tooltip__arrow::before { background-color: $bg-secondary !important; }
 }
 
-// === el-badge 浅色主题 ===
-.el-badge__content {
-  background-color: $color-error;
-}
+// === Badge ===
+.el-badge__content { background-color: $color-error; }
+
+// === Scrollbar ===
+.el-scrollbar__wrap { scrollbar-width: thin; scrollbar-color: $border-color transparent; }
+
+// === Card body ===
+.el-card__body { padding: $spacing-base; }
