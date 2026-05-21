@@ -42,16 +42,27 @@ type UpdateTemplateRequest struct {
 }
 
 type StepTemplateRequest struct {
-	Name                string  `json:"name" binding:"required,max=200"`
-	Seq                 int     `json:"seq" binding:"required"`
-	ParentStepID        *uint64 `json:"parent_step_id"`
-	StepType            string  `json:"step_type" binding:"required,oneof=serial parallel any_of condition"`
-	TimeoutMinutes      int     `json:"timeout_minutes"`
-	PreStepIDs          []int64 `json:"pre_step_ids"`
-	GuideContent        string  `json:"guide_content"`
-	IsBlocking          int8    `json:"is_blocking"`
-	DefaultAssigneeRole string  `json:"default_assignee_role"`
-	ExecutorTeam        string  `json:"executor_team"`
+	Name                     string  `json:"name" binding:"required,max=200"`
+	Seq                      int     `json:"seq" binding:"required"`
+	ParentStepID             *uint64 `json:"parent_step_id"`
+	StepType                 string  `json:"step_type" binding:"required,oneof=serial parallel any_of condition"`
+	TimeoutMinutes           int     `json:"timeout_minutes"`
+	PreStepIDs               []int64 `json:"pre_step_ids"`
+	GuideContent             string  `json:"guide_content"`
+	IsBlocking               int8    `json:"is_blocking"`
+	DefaultAssigneeRole      string  `json:"default_assignee_role"`
+	ExecutorTeam             string  `json:"executor_team"`
+	Phase                    string  `json:"phase"`
+	PhaseStep                string  `json:"phase_step"`
+	ExecutionMode            string  `json:"execution_mode"`
+	EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
+	EstimatedStartOffset     *int    `json:"estimated_start_offset"`
+	TaskName                 string  `json:"task_name"`
+	SubTask                  string  `json:"sub_task"`
+	ResponsibleDepartment    string  `json:"responsible_department"`
+	ResponsiblePerson        string  `json:"responsible_person"`
+	Executor                 string  `json:"executor"`
+	Reviewer                 string  `json:"reviewer"`
 }
 
 type UpdateDrillStatusRequest struct {

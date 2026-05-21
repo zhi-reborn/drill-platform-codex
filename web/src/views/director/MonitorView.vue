@@ -197,45 +197,137 @@
         </div>
       </el-card>
 
-      <!-- 步骤列表 -->
+      <!-- 步骤列表 (按 phase 分组) -->
       <el-card class="steps-card">
         <template #header>
           <span class="card-title">步骤列表</span>
         </template>
-        <el-table :data="drillStepTree" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%">
-          <el-table-column prop="seq" label="序号" width="60" align="center" />
-          <el-table-column prop="name" label="步骤名" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="step_type" label="类型" width="80" align="center">
-            <template #default="{ row }">
-              <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+        <el-collapse v-model="activePhases" class="phase-collapse">
+          <el-collapse-item v-for="(group, phase) in phaseGroups" :key="phase" :name="phase">
+            <template #title>
+              <div class="phase-title">
+                <span class="phase-name">{{ phase }}</span>
+                <el-tag size="small" type="info">{{ group.length }} 步</el-tag>
+              </div>
             </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" width="160" align="center">
-            <template #default="{ row }">
-              <template v-if="row.children && row.children.length > 0">
-                {{ getStepStatusText(row).text }}
-              </template>
-              <template v-else>
-                <DrillStatusBadge :status="row.status" type="step" />
-              </template>
-            </template>
-          </el-table-column>
-          <el-table-column prop="default_assignee_role" label="执行角色" width="80" align="center">
-            <template #default="{ row }">
-              <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
-                {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="executor_team" label="执行团队" width="120" align="center" show-overflow-tooltip />
-          <el-table-column prop="timeout_minutes" label="超时 (分)" width="80" align="center" />
-          <el-table-column label="耗时" width="100" align="center">
-            <template #default="{ row }">
-              {{ calculateDuration(row) }}
-            </template>
-          </el-table-column>
-        </el-table>
+            <el-table :data="group" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%" size="small">
+              <el-table-column prop="seq" label="序号" width="55" align="center" />
+              <el-table-column prop="name" label="步骤名" min-width="150" show-overflow-tooltip />
+              <el-table-column prop="step_type" label="类型" width="70" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" width="140" align="center">
+                <template #default="{ row }">
+                  <template v-if="row.children && row.children.length > 0">
+                    {{ getStepStatusText(row).text }}
+                  </template>
+                  <template v-else>
+                    <DrillStatusBadge :status="row.status" type="step" />
+                  </template>
+                </template>
+              </el-table-column>
+              <el-table-column prop="execution_mode" label="执行模式" width="75" align="center">
+                <template #default="{ row }">
+                  <template v-if="row.execution_mode">
+                    <el-tooltip :content="row.execution_mode === 'serial' ? '串行' : '并行'" placement="top">
+                      <el-tag :type="row.execution_mode === 'serial' ? 'warning' : 'success'" size="small" effect="plain">
+                        {{ row.execution_mode === 'serial' ? '串' : '并' }}
+                      </el-tag>
+                    </el-tooltip>
+                  </template>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="estimated_duration_minutes" label="预计耗时" width="80" align="center">
+                <template #default="{ row }">
+                  {{ row.estimated_duration_minutes ? `${row.estimated_duration_minutes}m` : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
+                    {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="responsible_person" label="责任人" width="90" align="center" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.responsible_person || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="executor" label="执行人" width="90" align="center" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.executor || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="reviewer" label="复核人" width="90" align="center" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.reviewer || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="实际耗时" width="85" align="center">
+                <template #default="{ row }">
+                  {{ calculateDuration(row) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="70" align="center" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
       </el-card>
+
+      <!-- 步骤详情弹窗 -->
+      <el-dialog v-model="detailVisible" :title="`步骤详情：${selectedStep?.name || ''}`" width="720px" destroy-on-close>
+        <template v-if="selectedStep">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="序号">{{ selectedStep.seq }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <DrillStatusBadge :status="selectedStep.status" type="step" />
+            </el-descriptions-item>
+            <el-descriptions-item label="步骤类型">
+              <el-tag :type="getStepTypeTag(selectedStep.step_type)" size="small">{{ getStepTypeLabel(selectedStep.step_type) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="阶段">{{ selectedStep.phase || '未分类' }}</el-descriptions-item>
+            <el-descriptions-item label="阶段内步骤">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="执行模式">
+              <template v-if="selectedStep.execution_mode">
+                <el-tag :type="selectedStep.execution_mode === 'serial' ? 'warning' : 'success'" size="small">
+                  {{ selectedStep.execution_mode === 'serial' ? '串行' : '并行' }}
+                </el-tag>
+              </template>
+              <span v-else>-</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? `${selectedStep.estimated_duration_minutes} 分钟` : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="预计启动偏移">{{ selectedStep.estimated_start_offset ? `${selectedStep.estimated_start_offset} 秒` : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="执行角色">
+              <el-tag :type="selectedStep.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
+                {{ selectedStep.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="超时时间">{{ selectedStep.timeout_minutes ? `${selectedStep.timeout_minutes} 分钟` : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="责任部门">{{ selectedStep.responsible_department || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="责任人">{{ selectedStep.responsible_person || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="执行人">{{ selectedStep.executor || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="复核人">{{ selectedStep.reviewer || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="分配人员">{{ selectedStep.assignee_names || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="任务名称" :span="2">{{ selectedStep.task_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="子任务内容" :span="2">
+              <div class="sub-task-content">{{ selectedStep.sub_task || '-' }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item label="实际耗时">{{ calculateDuration(selectedStep) }}</el-descriptions-item>
+            <el-descriptions-item label="开始时间">{{ selectedStep.start_time ? formatTime(selectedStep.start_time) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="结束时间">{{ selectedStep.end_time ? formatTime(selectedStep.end_time) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="超时时间">{{ selectedStep.timeout_at ? formatTime(selectedStep.timeout_at) : '-' }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
+      </el-dialog>
 
       <!-- 操作日志 -->
       <el-card class="logs-card">
@@ -278,6 +370,10 @@ import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
+
+const activePhases = ref<string[]>([])
+const selectedStep = ref<StepInstance | null>(null)
+const detailVisible = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -323,6 +419,51 @@ const drillStepTree = computed(() => {
 
   return roots
 })
+
+// 按 phase 分组（支持树形结构）
+const phaseGroups = computed(() => {
+  const groups: Record<string, (StepInstance & { children?: StepInstance[] })[]> = {}
+  const sorted = steps.value.sort((a, b) => a.seq - b.seq)
+  const stepMap = new Map<number, StepInstance & { children?: StepInstance[] }>()
+
+  // 第一步：初始化所有步骤到 map
+  for (const step of sorted) {
+    stepMap.set(step.id, { ...step })
+  }
+
+  // 第二步：建立父子关系
+  for (const step of sorted) {
+    const node = stepMap.get(step.id)!
+    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
+      const parent = stepMap.get(step.parent_step_id)!
+      if (!parent.children) {
+        parent.children = []
+      }
+      parent.children.push(node)
+    }
+  }
+
+  // 第三步：按 phase 分组，仅处理根步骤（tree roots）
+  for (const step of sorted) {
+    const node = stepMap.get(step.id)!
+    // 只处理根步骤（没有 parent_step_id 或 parent 不存在）
+    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
+      continue
+    }
+    const phase = node.phase || '未分类'
+    if (!groups[phase]) {
+      groups[phase] = []
+    }
+    groups[phase].push(node)
+  }
+
+  return groups
+})
+
+// 初始化 activePhases，默认展开所有 phase
+function initActivePhases() {
+  activePhases.value = Object.keys(phaseGroups.value)
+}
 
 // 父步骤状态聚合显示
 function getStepStatusText(row: StepInstance & { children?: StepInstance[] }): { text: string; isParent: boolean } {
@@ -500,6 +641,9 @@ async function loadDrillData() {
       ElMessage.error('演练不存在')
       router.back()
     }
+
+    // 初始化展开所有 phase 面板
+    initActivePhases()
   } catch (error) {
     ElMessage.error('加载数据失败')
     console.error('Failed to load drill data:', error)
@@ -584,6 +728,11 @@ async function handleForceComplete(step: StepInstance) {
   } catch (error) {
     ElMessage.error('强制完成失败')
   }
+}
+
+function showStepDetail(step: StepInstance) {
+  selectedStep.value = step
+  detailVisible.value = true
 }
 
 onMounted(() => {
@@ -821,6 +970,42 @@ onMounted(() => {
         background: rgba(26, 31, 46, 0.5);
       }
     }
+  }
+
+  .phase-collapse {
+    :deep(.el-collapse-item__header) {
+      background: $bg-tertiary;
+      border-radius: $radius-sm;
+      padding: 0 $spacing-sm;
+    }
+
+    :deep(.el-collapse-item__content) {
+      padding-top: $spacing-sm;
+      padding-bottom: $spacing-sm;
+    }
+
+    .phase-title {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      width: 100%;
+
+      .phase-name {
+        font-size: $font-size-sm;
+        font-weight: $font-weight-semibold;
+        color: $text-primary;
+      }
+    }
+  }
+
+  .sub-task-content {
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: $font-size-xs;
+    line-height: 1.6;
+    color: $text-secondary;
   }
 
   .logs-card {

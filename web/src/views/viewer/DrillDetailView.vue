@@ -42,34 +42,50 @@
         </el-descriptions>
       </el-card>
 
-      <!-- 步骤列表 -->
+      <!-- 步骤列表（按 phase 分组） -->
       <el-card class="steps-card">
         <template #header>
           <span class="card-title">步骤列表</span>
         </template>
-        <el-table :data="drillStepTree" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%">
-          <el-table-column prop="order_index" label="序号" width="80" />
-          <el-table-column prop="step_name" label="步骤名" min-width="200" />
-          <el-table-column prop="step_type" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="getStepTypeTag(row.step_type)" size="small">
-                {{ getStepTypeLabel(row.step_type) }}
-              </el-tag>
+        <el-collapse v-model="activePhases" class="phase-collapse">
+          <el-collapse-item v-for="(group, phaseName) in groupedSteps" :key="phaseName" :name="phaseName">
+            <template #title>
+              <div class="phase-title">
+                <span class="phase-name">{{ phaseName || '未分组' }}</span>
+                <el-tag size="small" type="info">{{ Object.keys(groupedSteps).length > 0 ? (group as any[]).length : 0 }} 步</el-tag>
+              </div>
             </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" width="180">
-            <template #default="{ row }">
-              <span v-if="isParentStep(row)">{{ getStepStatusText(row) }}</span>
-              <DrillStatusBadge v-else :status="row.status" type="step" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="assignee_name" label="执行人" width="120" />
-          <el-table-column label="耗时" width="120">
-            <template #default="{ row }">
-              {{ calculateDuration(row) }}
-            </template>
-          </el-table-column>
-        </el-table>
+            <div class="step-list">
+              <div v-for="step in (group as any[])" :key="step.id" class="step-item">
+                <div class="step-main">
+                  <div class="step-header">
+                    <span class="step-order">#{{ step.seq ?? step.order_index ?? 0 }}</span>
+                    <span class="step-name">{{ step.name || step.step_name }}</span>
+                    <DrillStatusBadge :status="step.status" type="step" />
+                  </div>
+                  <div class="step-meta">
+                    <span v-if="step.responsible_person" class="meta-item">
+                      <el-icon><UserFilled /></el-icon>
+                      责任人：{{ step.responsible_person }}
+                    </span>
+                    <span v-if="step.executor" class="meta-item">
+                      <el-icon><Avatar /></el-icon>
+                      执行人：{{ step.executor }}
+                    </span>
+                    <span v-if="step.estimated_duration_minutes" class="meta-item">
+                      <el-icon><Timer /></el-icon>
+                      预计：{{ step.estimated_duration_minutes }}分钟
+                    </span>
+                    <span v-if="getStartTime(step) && getEndTime(step)" class="meta-item">
+                      <el-icon><Clock /></el-icon>
+                      实际：{{ calculateDuration(step) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </el-card>
 
       <!-- 时间线图表 -->
@@ -84,10 +100,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, UserFilled, Avatar, Timer, Clock } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 
 interface TimelineItem {
@@ -105,6 +121,7 @@ const router = useRouter()
 
 const instance = ref<DrillInstance | null>(null)
 const steps = ref<StepInstance[]>([])
+const activePhases = ref<string[]>([])
 
 const drillId = computed(() => {
   const id = route.params.id
@@ -112,7 +129,34 @@ const drillId = computed(() => {
 })
 
 const drillSteps = computed(() => {
-  return steps.value.filter(s => s.drill_id === drillId.value).sort((a, b) => a.order_index - b.order_index)
+  return steps.value.filter(s => s.drill_instance_id === drillId.value || s.drill_id === drillId.value).sort((a, b) => {
+    const ai = (a as any).order_index ?? a.seq ?? 0
+    const bi = (b as any).order_index ?? b.seq ?? 0
+    return ai - bi
+  })
+})
+
+// 按 phase 分组步骤
+const groupedSteps = computed(() => {
+  const groups: Record<string, StepInstance[]> = {}
+  for (const step of drillSteps.value) {
+    const phase = step.phase || '未分组'
+    if (!groups[phase]) {
+      groups[phase] = []
+    }
+    groups[phase].push(step)
+  }
+  // 按 phase 名称排序，未分组放最后
+  const sorted: Record<string, StepInstance[]> = {}
+  const keys = Object.keys(groups).sort((a, b) => {
+    if (a === '未分组') return 1
+    if (b === '未分组') return -1
+    return a.localeCompare(b, 'zh-CN')
+  })
+  for (const key of keys) {
+    sorted[key] = groups[key]
+  }
+  return sorted
 })
 
 interface StepWithChildren extends StepInstance {
@@ -125,7 +169,7 @@ const drillStepTree = computed(() => {
   const stepMap = new Map<number, StepWithChildren>()
 
   for (const step of sorted) {
-    stepMap.set(step.id, { ...step })
+    stepMap.set(step.id, { ...(step as any), step_name: step.name })
   }
 
   const roots: StepWithChildren[] = []
@@ -192,12 +236,22 @@ function getStepTypeTag(type: string): 'primary' | 'success' | 'warning' | 'info
   return map[type] || 'info'
 }
 
+function getStartTime(step: StepInstance): string | undefined {
+  return (step as any).started_at || step.start_time
+}
+
+function getEndTime(step: StepInstance): string | undefined {
+  return (step as any).completed_at || step.end_time
+}
+
 function calculateDuration(step: StepInstance): string {
-  if (!step.started_at || !step.completed_at) {
+  const startTime = (step as any).started_at || step.start_time
+  const endTime = (step as any).completed_at || step.end_time
+  if (!startTime || !endTime) {
     return '-'
   }
-  const start = new Date(step.started_at).getTime()
-  const end = new Date(step.completed_at).getTime()
+  const start = new Date(startTime).getTime()
+  const end = new Date(endTime).getTime()
   const diff = Math.floor((end - start) / 1000)
   if (diff < 60) {
     return `${diff}s`
@@ -231,6 +285,13 @@ async function loadDrillData() {
     console.error('Failed to load drill data:', error)
   }
 }
+
+// 数据加载后默认展开所有分组
+watch(groupedSteps, (groups) => {
+  if (activePhases.value.length === 0) {
+    activePhases.value = Object.keys(groups)
+  }
+}, { immediate: true })
 
 onMounted(() => {
   loadDrillData()
@@ -328,6 +389,105 @@ onMounted(() => {
 
         .el-table__row--striped td {
           background: rgba(26, 31, 46, 0.5);
+        }
+      }
+
+      :deep(.el-collapse) {
+        border: none;
+
+        .el-collapse-item__header {
+          background: $bg-tertiary;
+          padding: $spacing-sm $spacing-base;
+          border-radius: $border-radius-sm;
+          margin-bottom: $spacing-xs;
+          height: auto;
+          line-height: normal;
+
+          .phase-title {
+            display: flex;
+            align-items: center;
+            gap: $spacing-sm;
+            width: 100%;
+            font-size: $font-size-base;
+            font-weight: $font-weight-semibold;
+            color: $text-primary;
+
+            .phase-name {
+              flex: 1;
+            }
+          }
+        }
+
+        .el-collapse-item__content {
+          padding-bottom: $spacing-base;
+        }
+      }
+
+      .step-list {
+        display: flex;
+        flex-direction: column;
+        gap: $spacing-sm;
+
+        .step-item {
+          display: flex;
+          align-items: flex-start;
+          padding: $spacing-sm $spacing-base;
+          background: $bg-tertiary;
+          border-radius: $border-radius-sm;
+          border-left: 3px solid var(--el-color-primary);
+          transition: background 0.2s;
+
+          &:hover {
+            background: rgba(64, 158, 255, 0.08);
+          }
+
+          .step-main {
+            flex: 1;
+            min-width: 0;
+
+            .step-header {
+              display: flex;
+              align-items: center;
+              gap: $spacing-sm;
+              margin-bottom: $spacing-xs;
+
+              .step-order {
+                font-size: $font-size-xs;
+                color: $text-tertiary;
+                font-family: monospace;
+                min-width: 28px;
+              }
+
+              .step-name {
+                font-size: $font-size-base;
+                color: $text-primary;
+                font-weight: $font-weight-medium;
+                flex: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              }
+            }
+
+            .step-meta {
+              display: flex;
+              flex-wrap: wrap;
+              gap: $spacing-base;
+              font-size: $font-size-xs;
+              color: $text-secondary;
+
+              .meta-item {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+
+                .el-icon {
+                  font-size: 12px;
+                  opacity: 0.7;
+                }
+              }
+            }
+          }
         }
       }
     }

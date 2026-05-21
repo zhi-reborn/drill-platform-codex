@@ -105,15 +105,26 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 	newSteps := make([]entity.StepTemplate, 0, len(steps))
 	for i, stepReq := range steps {
 		step := entity.StepTemplate{
-			Name:                stepReq.Name,
-			Seq:                 i + 1,
-			ParentStepID:        stepReq.ParentStepID,
-			StepType:            stepReq.StepType,
-			TimeoutMinutes:      stepReq.TimeoutMinutes,
-			GuideContent:        stepReq.GuideContent,
-			IsBlocking:          stepReq.IsBlocking,
-			DefaultAssigneeRole: stepReq.DefaultAssigneeRole,
-			ExecutorTeam:        stepReq.ExecutorTeam,
+			Name:                     stepReq.Name,
+			Seq:                      i + 1,
+			ParentStepID:             stepReq.ParentStepID,
+			StepType:                 stepReq.StepType,
+			TimeoutMinutes:           stepReq.TimeoutMinutes,
+			GuideContent:             stepReq.GuideContent,
+			IsBlocking:               stepReq.IsBlocking,
+			DefaultAssigneeRole:      stepReq.DefaultAssigneeRole,
+			ExecutorTeam:             stepReq.ExecutorTeam,
+			Phase:                    stepReq.Phase,
+			PhaseStep:                stepReq.PhaseStep,
+			ExecutionMode:            stepReq.ExecutionMode,
+			EstimatedDurationMinutes: stepReq.EstimatedDurationMinutes,
+			EstimatedStartOffset:     stepReq.EstimatedStartOffset,
+			TaskName:                 stepReq.TaskName,
+			SubTask:                  stepReq.SubTask,
+			ResponsibleDepartment:    stepReq.ResponsibleDepartment,
+			ResponsiblePerson:        stepReq.ResponsiblePerson,
+			Executor:                 stepReq.Executor,
+			Reviewer:                 stepReq.Reviewer,
 		}
 		newSteps = append(newSteps, step)
 	}

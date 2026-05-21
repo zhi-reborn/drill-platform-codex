@@ -51,6 +51,17 @@ type StepTemplate struct {
 	IsBlocking         int8      `gorm:"type:tinyint;not null;default:1;column:is_blocking" json:"is_blocking"`
 	DefaultAssigneeRole string   `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
 	ExecutorTeam       string   `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
+	Phase              string    `gorm:"type:varchar(64);column:phase" json:"phase"`
+	PhaseStep          string    `gorm:"type:varchar(64);column:phase_step" json:"phase_step"`
+	ExecutionMode      string    `gorm:"type:varchar(16);column:execution_mode" json:"execution_mode"`
+	EstimatedDurationMinutes *int `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
+	EstimatedStartOffset     *int `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
+	TaskName           string    `gorm:"type:varchar(128);column:task_name" json:"task_name"`
+	SubTask            string    `gorm:"type:text;column:sub_task" json:"sub_task"`
+	ResponsibleDepartment string `gorm:"type:varchar(64);column:responsible_department" json:"responsible_department"`
+	ResponsiblePerson  string    `gorm:"type:varchar(64);column:responsible_person" json:"responsible_person"`
+	Executor           string    `gorm:"type:varchar(64);column:executor" json:"executor"`
+	Reviewer           string    `gorm:"type:varchar(64);column:reviewer" json:"reviewer"`
 	CreatedAt          time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillTemplate DrillTemplate `gorm:"foreignKey:DrillTemplateID;references:ID" json:"drill_template,omitempty"`

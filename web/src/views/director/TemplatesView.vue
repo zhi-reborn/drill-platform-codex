@@ -169,6 +169,16 @@
                 {{ row.default_assignee_role ? (row.default_assignee_role === 'director' ? '指挥组' : '执行组') : '-' }}
               </template>
             </el-table-column>
+            <el-table-column prop="phase" label="阶段" width="100" align="center">
+              <template #default="{ row }">
+                {{ row.phase || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="execution_mode" label="执行模式" width="80" align="center">
+              <template #default="{ row }">
+                {{ row.execution_mode ? getStepTypeLabel(row.execution_mode) : '-' }}
+              </template>
+            </el-table-column>
             <el-table-column prop="executor_team" label="执行团队" width="120" align="center" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.executor_team || '-' }}
@@ -255,7 +265,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="singleAddVisible" title="添加步骤" width="520px">
+    <el-dialog v-model="singleAddVisible" :title="singleStepEditIndex !== null ? '编辑步骤' : '添加步骤'" width="520px">
       <el-form :model="singleStepForm" label-width="90px" class="single-step-form">
         <el-form-item label="步骤名称" required>
           <el-input v-model="singleStepForm.name" placeholder="请输入步骤名称" maxlength="100" show-word-limit />
@@ -306,10 +316,68 @@
             </el-select>
           </el-form-item>
         </div>
+
+        <el-divider>阶段信息</el-divider>
+        <el-form-item label="阶段">
+          <el-input v-model="singleStepForm.phase" placeholder="如：准备阶段、执行阶段" clearable />
+        </el-form-item>
+        <el-form-item label="环节">
+          <el-input v-model="singleStepForm.phase_step" placeholder="如：环境检查、服务重启" clearable />
+        </el-form-item>
+
+        <el-divider>执行设置</el-divider>
+        <div class="form-row">
+          <el-form-item label="执行模式" class="inline-form-item">
+            <el-select v-model="singleStepForm.execution_mode" clearable placeholder="可选">
+              <el-option label="串行" value="serial" />
+              <el-option label="并行" value="parallel" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="预计耗时" class="inline-form-item">
+            <el-input-number v-model="singleStepForm.estimated_duration_minutes" :min="1" :max="1440" controls-position="right" placeholder="可选" />
+            <span class="unit-label">分钟</span>
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="开始偏移" class="inline-form-item">
+            <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right" placeholder="相对启动时间" />
+            <span class="unit-label">分钟</span>
+          </el-form-item>
+        </div>
+
+        <el-divider>角色分配</el-divider>
+        <el-form-item label="责任部门">
+          <el-input v-model="singleStepForm.responsible_department" placeholder="责任部门" clearable />
+        </el-form-item>
+        <div class="form-row">
+          <el-form-item label="责任人" class="inline-form-item">
+            <el-input v-model="singleStepForm.responsible_person" placeholder="责任人姓名" clearable />
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="执行人" class="inline-form-item">
+            <el-input v-model="singleStepForm.executor" placeholder="执行人姓名" clearable />
+          </el-form-item>
+        </div>
+        <div class="form-row">
+          <el-form-item label="复核人" class="inline-form-item">
+            <el-input v-model="singleStepForm.reviewer" placeholder="复核人姓名" clearable />
+          </el-form-item>
+        </div>
+
+        <el-divider>详细信息</el-divider>
+        <el-form-item label="任务名称">
+          <el-input v-model="singleStepForm.task_name" placeholder="可独立于步骤名展示的任务名" clearable maxlength="128" show-word-limit />
+        </el-form-item>
+        <el-form-item label="子任务描述">
+          <el-input v-model="singleStepForm.sub_task" type="textarea" placeholder="操作步骤/子任务详细描述" :rows="3" maxlength="2000" show-word-limit />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="singleAddVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleAddSingleStep">添加步骤</el-button>
+        <el-button type="primary" @click="handleAddSingleStep">{{ singleStepEditIndex !== null ? '保存修改' : '添加步骤' }}</el-button>
       </template>
     </el-dialog>
 
@@ -484,6 +552,17 @@ const singleStepForm = reactive({
   default_assignee_role: 'executor',
   executor_team: '',
   parent_step_id: undefined as number | undefined,
+  phase: '',
+  phase_step: '',
+  execution_mode: '' as 'serial' | 'parallel' | '',
+  estimated_duration_minutes: undefined as number | undefined,
+  estimated_start_offset: undefined as number | undefined,
+  task_name: '',
+  sub_task: '',
+  responsible_department: '',
+  responsible_person: '',
+  executor: '',
+  reviewer: '',
 })
 
 const departmentOptions = ref<string[]>([])
@@ -518,6 +597,17 @@ function resetSingleStepForm() {
   singleStepForm.default_assignee_role = 'executor'
   singleStepForm.executor_team = ''
   singleStepForm.parent_step_id = undefined
+  singleStepForm.phase = ''
+  singleStepForm.phase_step = ''
+  singleStepForm.execution_mode = ''
+  singleStepForm.estimated_duration_minutes = undefined
+  singleStepForm.estimated_start_offset = undefined
+  singleStepForm.task_name = ''
+  singleStepForm.sub_task = ''
+  singleStepForm.responsible_department = ''
+  singleStepForm.responsible_person = ''
+  singleStepForm.executor = ''
+  singleStepForm.reviewer = ''
 }
 
 function handleAddSingleStep() {
@@ -536,6 +626,17 @@ function handleAddSingleStep() {
     step.default_assignee_role = singleStepForm.default_assignee_role
     step.executor_team = singleStepForm.executor_team
     step.parent_step_id = singleStepForm.parent_step_id
+    step.phase = singleStepForm.phase
+    step.phase_step = singleStepForm.phase_step
+    step.execution_mode = singleStepForm.execution_mode || undefined
+    step.estimated_duration_minutes = singleStepForm.estimated_duration_minutes
+    step.estimated_start_offset = singleStepForm.estimated_start_offset
+    step.task_name = singleStepForm.task_name
+    step.sub_task = singleStepForm.sub_task
+    step.responsible_department = singleStepForm.responsible_department
+    step.responsible_person = singleStepForm.responsible_person
+    step.executor = singleStepForm.executor
+    step.reviewer = singleStepForm.reviewer
     ElMessage.success('步骤已更新')
   } else {
     // 新增模式
@@ -551,6 +652,17 @@ function handleAddSingleStep() {
       parent_step_id: singleStepForm.parent_step_id,
       order_index: editingSteps.value.length + 1,
       created_at: new Date().toISOString(),
+      phase: singleStepForm.phase,
+      phase_step: singleStepForm.phase_step,
+      execution_mode: singleStepForm.execution_mode || undefined,
+      estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
+      estimated_start_offset: singleStepForm.estimated_start_offset,
+      task_name: singleStepForm.task_name,
+      sub_task: singleStepForm.sub_task,
+      responsible_department: singleStepForm.responsible_department,
+      responsible_person: singleStepForm.responsible_person,
+      executor: singleStepForm.executor,
+      reviewer: singleStepForm.reviewer,
     })
     ElMessage.success('步骤已添加')
   }
@@ -577,6 +689,17 @@ function openStepEditDialog(index: number) {
   singleStepForm.default_assignee_role = step.default_assignee_role || ''
   singleStepForm.executor_team = step.executor_team || ''
   singleStepForm.parent_step_id = step.parent_step_id
+  singleStepForm.phase = step.phase || ''
+  singleStepForm.phase_step = step.phase_step || ''
+  singleStepForm.execution_mode = step.execution_mode || ''
+  singleStepForm.estimated_duration_minutes = step.estimated_duration_minutes
+  singleStepForm.estimated_start_offset = step.estimated_start_offset
+  singleStepForm.task_name = step.task_name || ''
+  singleStepForm.sub_task = step.sub_task || ''
+  singleStepForm.responsible_department = step.responsible_department || ''
+  singleStepForm.responsible_person = step.responsible_person || ''
+  singleStepForm.executor = step.executor || ''
+  singleStepForm.reviewer = step.reviewer || ''
   singleStepEditIndex.value = index
   singleAddVisible.value = true
 }
@@ -819,6 +942,17 @@ async function handleSaveSteps() {
       guide_content: s.description || s.guide_content || '',
       default_assignee_role: s.default_assignee_role || '',
       executor_team: s.executor_team || '',
+      phase: s.phase || '',
+      phase_step: s.phase_step || '',
+      execution_mode: s.execution_mode || '',
+      estimated_duration_minutes: s.estimated_duration_minutes,
+      estimated_start_offset: s.estimated_start_offset,
+      task_name: s.task_name || '',
+      sub_task: s.sub_task || '',
+      responsible_department: s.responsible_department || '',
+      responsible_person: s.responsible_person || '',
+      executor: s.executor || '',
+      reviewer: s.reviewer || '',
     })))
     ElMessage.success('步骤已保存')
     stepsVisible.value = false
@@ -830,16 +964,18 @@ async function handleSaveSteps() {
 }
 
 function downloadTemplate() {
-  const header = ['步骤名称', '描述', '步骤类型', '超时时间 (秒)', '执行角色', '执行团队', '说明']
+  const header = ['步骤名称', '描述', '步骤类型', '超时时间 (秒)', '执行角色', '执行团队', '阶段', '环节', '执行模式', '预计耗时 (分)', '责任部门', '责任人', '执行人', '复核人', '任务名称', '子任务描述', '说明']
   const data = [
     header,
-    ['检查数据库状态', '检查主库是否正常运行', 'serial', '300', 'executor', '技术部', '步骤类型可选值：serial(串行), parallel(并行), any_of(任选), condition(条件)'],
-    ['切换从库', '将从库提升为主库', 'parallel', '600', 'director', '运维部', '超时时间单位：秒，范围 30-3600'],
+    ['检查数据库状态', '检查主库是否正常运行', 'serial', '300', 'executor', '技术部', '准备阶段', '环境检查', 'serial', '10', '技术部', '张三', '李四', '王五', '数据库状态检查', '确认主库正常运行，检查连接池状态', '步骤类型可选值：serial(串行), parallel(并行), any_of(任选), condition(条件)'],
+    ['切换从库', '将从库提升为主库', 'parallel', '600', 'director', '运维部', '执行阶段', '主从切换', 'parallel', '15', '运维部', '赵六', '钱七', '孙八', '主从切换', '停止主库写入，提升从库为主库', '超时时间单位：秒，范围 30-3600'],
   ]
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
   const colWidths = [
-    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 50 }
+    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
+    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 40 }, { wch: 50 }
   ]
   ws['!cols'] = colWidths
   XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
@@ -874,6 +1010,16 @@ function handleExcelUpload(file: File) {
         const timeoutSeconds = parseInt(String(row[3] || '300')) || 300
         const assigneeRoleRaw = String(row[4] || '').trim()
         const executorTeam = String(row[5] || '').trim()
+        const phase = String(row[6] || '').trim()
+        const phaseStep = String(row[7] || '').trim()
+        const executionModeRaw = String(row[8] || '').trim()
+        const estimatedDuration = parseInt(String(row[9] || '')) || undefined
+        const responsibleDepartment = String(row[10] || '').trim()
+        const responsiblePerson = String(row[11] || '').trim()
+        const executor = String(row[12] || '').trim()
+        const reviewer = String(row[13] || '').trim()
+        const taskName = String(row[14] || '').trim()
+        const subTask = String(row[15] || '').trim()
 
         if (!name) {
           errors.push(`第${rowNum}行：步骤名称不能为空`)
@@ -893,17 +1039,37 @@ function handleExcelUpload(file: File) {
         }
         const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
 
+        // 解析执行模式
+        const executionModeMap: Record<string, string> = {
+          '串行': 'serial', '并行': 'parallel',
+          'serial': 'serial', 'parallel': 'parallel',
+        }
+        const executionMode = executionModeMap[executionModeRaw] || undefined
+
+        const timeoutMinutes = Math.floor(Math.min(60, Math.max(1, timeoutSeconds / 60)))
+
         steps.push({
           id: Date.now() + Math.random(),
           template_id: editingTemplateId.value || 0,
           name,
           description,
           step_type: stepType as any,
-          timeout_minutes: Math.floor(Math.min(60, Math.max(1, timeoutSeconds / 60))),
+          timeout_minutes: timeoutMinutes,
           default_assignee_role: assigneeRole,
           executor_team: executorTeam,
           order_index: editingSteps.value.length + steps.length + 1,
           created_at: new Date().toISOString(),
+          phase,
+          phase_step: phaseStep,
+          execution_mode: executionMode as 'serial' | 'parallel' | undefined,
+          estimated_duration_minutes: estimatedDuration,
+          estimated_start_offset: undefined,
+          task_name: taskName,
+          sub_task: subTask,
+          responsible_department: responsibleDepartment,
+          responsible_person: responsiblePerson,
+          executor,
+          reviewer,
         })
       }
 

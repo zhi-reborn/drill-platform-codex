@@ -77,17 +77,28 @@ type FlowDef struct {
 }
 
 type StepDef struct {
-	ID                  int64         `json:"id"`
-	Name                string        `json:"name"`
-	Seq                 int           `json:"seq"`
-	StepType            StepType      `json:"step_type"`
-	TimeoutMinutes      int           `json:"timeout_minutes"`
-	PreStepIDs          []int64       `json:"pre_step_ids"`
-	GuideContent        string        `json:"guide_content"`
-	IsBlocking          bool          `json:"is_blocking"`
-	DefaultAssigneeRole string        `json:"default_assignee_role"`
-	Condition           *ConditionDef `json:"condition,omitempty"`
-	ParentStepID        int64         `json:"parent_step_id"`
+	ID                       int64         `json:"id"`
+	Name                     string        `json:"name"`
+	Seq                      int           `json:"seq"`
+	StepType                 StepType      `json:"step_type"`
+	TimeoutMinutes           int           `json:"timeout_minutes"`
+	PreStepIDs               []int64       `json:"pre_step_ids"`
+	GuideContent             string        `json:"guide_content"`
+	IsBlocking               bool          `json:"is_blocking"`
+	DefaultAssigneeRole      string        `json:"default_assignee_role"`
+	Condition                *ConditionDef `json:"condition,omitempty"`
+	ParentStepID             int64         `json:"parent_step_id"`
+	Phase                    string        `json:"phase"`
+	PhaseStep                string        `json:"phase_step"`
+	ExecutionMode            string        `json:"execution_mode"`
+	EstimatedDurationMinutes *int          `json:"estimated_duration_minutes,omitempty"`
+	EstimatedStartOffset     *int          `json:"estimated_start_offset,omitempty"`
+	TaskName                 string        `json:"task_name"`
+	SubTask                  string        `json:"sub_task"`
+	ResponsibleDepartment    string        `json:"responsible_department"`
+	ResponsiblePerson        string        `json:"responsible_person"`
+	Executor                 string        `json:"executor"`
+	Reviewer                 string        `json:"reviewer"`
 }
 
 type ConditionDef struct {
@@ -113,21 +124,32 @@ type FlowInst struct {
 }
 
 type StepInst struct {
-	mu              sync.RWMutex
-	ID              int64           `json:"id"`
-	StepDefID       int64           `json:"step_def_id"`
-	Name            string          `json:"name"`
-	Seq             int             `json:"seq"`
-	Status          StepStatus      `json:"status"`
-	AssigneeIDs     []int64         `json:"assignee_ids"`
-	ActualOperator  *int64          `json:"actual_operator,omitempty"`
-	StartTime       *time.Time      `json:"start_time,omitempty"`
-	EndTime         *time.Time      `json:"end_time,omitempty"`
-	TimeoutAt       *time.Time      `json:"timeout_at,omitempty"`
-	Remark          string          `json:"remark,omitempty"`
-	IssueDesc       string          `json:"issue_desc,omitempty"`
-	ConditionResult ConditionResult `json:"condition_result,omitempty"`
-	ParentStepID      int64         `json:"parent_step_id"`
+	mu                       sync.RWMutex
+	ID                       int64           `json:"id"`
+	StepDefID                int64           `json:"step_def_id"`
+	Name                     string          `json:"name"`
+	Seq                      int             `json:"seq"`
+	Status                   StepStatus      `json:"status"`
+	AssigneeIDs              []int64         `json:"assignee_ids"`
+	ActualOperator           *int64          `json:"actual_operator,omitempty"`
+	StartTime                *time.Time      `json:"start_time,omitempty"`
+	EndTime                  *time.Time      `json:"end_time,omitempty"`
+	TimeoutAt                *time.Time      `json:"timeout_at,omitempty"`
+	Remark                   string          `json:"remark,omitempty"`
+	IssueDesc                string          `json:"issue_desc,omitempty"`
+	ConditionResult          ConditionResult `json:"condition_result,omitempty"`
+	ParentStepID             int64           `json:"parent_step_id"`
+	Phase                    string          `json:"phase"`
+	PhaseStep                string          `json:"phase_step"`
+	ExecutionMode            string          `json:"execution_mode"`
+	EstimatedDurationMinutes *int            `json:"estimated_duration_minutes,omitempty"`
+	EstimatedStartOffset     *int            `json:"estimated_start_offset,omitempty"`
+	TaskName                 string          `json:"task_name"`
+	SubTask                  string          `json:"sub_task"`
+	ResponsibleDepartment    string          `json:"responsible_department"`
+	ResponsiblePerson        string          `json:"responsible_person"`
+	Executor                 string          `json:"executor"`
+	Reviewer                 string          `json:"reviewer"`
 }
 
 type Event struct {
