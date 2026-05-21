@@ -5,7 +5,7 @@
         <el-icon :size="20"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
       </el-button>
       <div class="logo">
-        <el-icon :size="24" color="#0891B2"><Monitor /></el-icon>
+        <el-icon :size="24" color="#22C55E"><Monitor /></el-icon>
         <span class="logo-text">演练流程管理系统</span>
       </div>
     </div>
@@ -87,8 +87,8 @@ function handleUserCommand(command: string) {
 
 .app-header {
   height: $header-height;
-  background: #1E293B;
-  border-bottom: 1px solid #334155;
+  background: $bg-secondary;
+  border-bottom: 1px solid $border-color;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -114,7 +114,7 @@ function handleUserCommand(command: string) {
   .logo-text {
     font-size: $font-size-lg;
     font-weight: $font-weight-bold;
-    color: #F1F5F9;
+    color: $text-primary;
     letter-spacing: 0.5px;
   }
 }
@@ -132,7 +132,7 @@ function handleUserCommand(command: string) {
 
   &.connected .status-dot {
     background: $color-success;
-    box-shadow: 0 0 4px $color-success;
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
   }
 
   &.disconnected .status-dot {
@@ -147,20 +147,20 @@ function handleUserCommand(command: string) {
   cursor: pointer;
   padding: $spacing-xs $spacing-sm;
   border-radius: $radius-base;
-  color: #F1F5F9;
+  color: $text-primary;
 
   &:hover {
-    background: #334155;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .user-name {
     font-size: $font-size-sm;
-    color: #F1F5F9;
+    color: $text-primary;
   }
 
   .user-dept {
     font-size: 11px;
-    color: #94A3B8;
+    color: $text-tertiary;
     background: #334155;
     padding: 1px 6px;
     border-radius: 4px;
@@ -168,13 +168,13 @@ function handleUserCommand(command: string) {
 }
 
 .user-avatar {
-  background: $color-primary;
+  background: $color-accent;
   color: white;
   font-weight: $font-weight-semibold;
   font-size: $font-size-sm;
 }
 
 :deep(.el-button) {
-  color: #F1F5F9;
+  color: $text-secondary;
 }
 </style>
