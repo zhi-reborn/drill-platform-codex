@@ -21,9 +21,9 @@ body {
 }
 
 a {
-  color: $color-primary;
+  color: $color-accent;
   text-decoration: none;
-  &:hover { color: $color-primary-dark; }
+  &:hover { color: $color-accent-hover; }
 }
 
 button {
