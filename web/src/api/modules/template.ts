@@ -113,4 +113,31 @@ export const templateApi = {
       data: { steps },
     })
   },
+
+  updateStep: (id: number, stepId: number, data: {
+    name: string
+    seq: number
+    step_type: string
+    timeout_minutes?: number
+    guide_content?: string
+    is_blocking?: number
+    default_assignee_role?: string
+    executor_team?: string
+    phase?: string
+    phase_step?: string
+    estimated_duration_minutes?: number
+    estimated_start_offset?: number
+    task_name?: string
+    sub_task?: string
+    responsible_department?: string
+    responsible_person?: string
+    executor?: string
+    reviewer?: string
+  }) => {
+    return apiRequest<void>({
+      url: `/v1/templates/${id}/steps/${stepId}`,
+      method: 'PUT',
+      data,
+    })
+  },
 }

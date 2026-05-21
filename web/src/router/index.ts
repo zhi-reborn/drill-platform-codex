@@ -73,6 +73,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模板管理', icon: 'Document' },
       },
       {
+        path: 'templates/:id(\\d+)/steps',
+        name: 'DirectorTemplateSteps',
+        component: () => import('@/views/director/TemplateStepsEditor.vue'),
+        meta: { title: '编辑步骤', icon: 'Edit', hidden: true },
+      },
+      {
         path: 'create',
         name: 'DirectorCreate',
         component: () => import('@/views/director/CreateDrillView.vue'),

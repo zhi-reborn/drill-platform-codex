@@ -56,6 +56,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.POST("/templates/:id/clone", middleware.RequireDirectorOrAbove(), templateHandler.Clone)
 			v1.POST("/templates/:id/toggle-status", middleware.RequireDirectorOrAbove(), templateHandler.ToggleStatus)
 			v1.PUT("/templates/:id/steps", middleware.RequireDirectorOrAbove(), templateHandler.UpdateSteps)
+		v1.PUT("/templates/:id/steps/:step_id", middleware.RequireDirectorOrAbove(), templateHandler.UpdateStepSingle)
 			v1.GET("/template-categories", templateHandler.GetCategories)
 			v1.POST("/template-categories", middleware.RequireDirectorOrAbove(), templateHandler.SaveCategories)
 

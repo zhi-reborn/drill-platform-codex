@@ -178,13 +178,27 @@ func (h *Handler) ToggleStatus(c *gin.Context) {
 
 type UpdateStepsRequest struct {
 	Steps []struct {
-		Name                string  `json:"name" binding:"required,max=200"`
-		StepType            string  `json:"step_type" binding:"required,oneof=serial parallel any_of condition"`
-		TimeoutMinutes      int     `json:"timeout_minutes"`
-		GuideContent        string  `json:"guide_content"`
-		IsBlocking          int8    `json:"is_blocking"`
-		DefaultAssigneeRole string  `json:"default_assignee_role"`
-		ExecutorTeam        string  `json:"executor_team"`
+		ID                       *uint64 `json:"id"`
+		Name                     string  `json:"name" binding:"required,max=200"`
+		Seq                      int     `json:"seq" binding:"required"`
+		ParentStepID             *uint64 `json:"parent_step_id"`
+		StepType                 string  `json:"step_type" binding:"required,oneof=serial parallel any_of condition"`
+		TimeoutMinutes           int     `json:"timeout_minutes"`
+		GuideContent             string  `json:"guide_content"`
+		IsBlocking               int8    `json:"is_blocking"`
+		DefaultAssigneeRole      string  `json:"default_assignee_role"`
+		ExecutorTeam             string  `json:"executor_team"`
+		Phase                    string  `json:"phase"`
+		PhaseStep                string  `json:"phase_step"`
+		ExecutionMode            string  `json:"execution_mode"`
+		EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
+		EstimatedStartOffset     *int    `json:"estimated_start_offset"`
+		TaskName                 string  `json:"task_name"`
+		SubTask                  string  `json:"sub_task"`
+		ResponsibleDepartment    string  `json:"responsible_department"`
+		ResponsiblePerson        string  `json:"responsible_person"`
+		Executor                 string  `json:"executor"`
+		Reviewer                 string  `json:"reviewer"`
 	} `json:"steps" binding:"required,dive"`
 }
 
@@ -202,16 +216,29 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 	}
 
 	steps := make([]dto.StepTemplateRequest, 0, len(req.Steps))
-	for i, s := range req.Steps {
+	for _, s := range req.Steps {
 		steps = append(steps, dto.StepTemplateRequest{
-			Name:                s.Name,
-			Seq:                 i + 1,
-			StepType:            s.StepType,
-			TimeoutMinutes:      s.TimeoutMinutes,
-			GuideContent:        s.GuideContent,
-			IsBlocking:          s.IsBlocking,
-			DefaultAssigneeRole: s.DefaultAssigneeRole,
-			ExecutorTeam:        s.ExecutorTeam,
+			ID:                       s.ID,
+			Name:                     s.Name,
+			Seq:                      s.Seq,
+			ParentStepID:             s.ParentStepID,
+			StepType:                 s.StepType,
+			TimeoutMinutes:           s.TimeoutMinutes,
+			GuideContent:             s.GuideContent,
+			IsBlocking:               s.IsBlocking,
+			DefaultAssigneeRole:      s.DefaultAssigneeRole,
+			ExecutorTeam:             s.ExecutorTeam,
+			Phase:                    s.Phase,
+			PhaseStep:                s.PhaseStep,
+			ExecutionMode:            s.ExecutionMode,
+			EstimatedDurationMinutes: s.EstimatedDurationMinutes,
+			EstimatedStartOffset:     s.EstimatedStartOffset,
+			TaskName:                 s.TaskName,
+			SubTask:                  s.SubTask,
+			ResponsibleDepartment:    s.ResponsibleDepartment,
+			ResponsiblePerson:        s.ResponsiblePerson,
+			Executor:                 s.Executor,
+			Reviewer:                 s.Reviewer,
 		})
 	}
 
@@ -221,4 +248,30 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 	}
 
 	response.SuccessWithMessage(c, "步骤已保存", nil)
+}
+
+func (h *Handler) UpdateStepSingle(c *gin.Context) {
+	templateID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的模板 ID")
+		return
+	}
+	stepID, err := strconv.ParseUint(c.Param("step_id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的步骤 ID")
+		return
+	}
+
+	var req dto.StepTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误："+err.Error())
+		return
+	}
+
+	if err := h.templateService.UpdateStep(templateID, stepID, req); err != nil {
+		response.InternalError(c, "更新步骤失败："+err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "步骤已更新", nil)
 }

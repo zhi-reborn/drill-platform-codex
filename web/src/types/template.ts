@@ -1,5 +1,5 @@
 export type TemplateCategory = 'disaster_recovery' | 'degradation' | 'release' | 'security'
-export type StepType = 'serial' | 'parallel' | 'any_of' | 'condition'
+export type StepType = 'serial' | 'parallel'
 
 export const CATEGORY_LABELS: Record<TemplateCategory, string> = {
   disaster_recovery: '灾备切换',
@@ -11,8 +11,6 @@ export const CATEGORY_LABELS: Record<TemplateCategory, string> = {
 export const STEP_TYPE_LABELS: Record<StepType, string> = {
   serial: '串行',
   parallel: '并行',
-  any_of: '任意',
-  condition: '条件',
 }
 
 export interface StepTemplate {
@@ -32,7 +30,6 @@ export interface StepTemplate {
   executor_team?: string
   phase?: string
   phase_step?: string
-  execution_mode?: 'serial' | 'parallel'
   estimated_duration_minutes?: number
   estimated_start_offset?: number
   task_name?: string

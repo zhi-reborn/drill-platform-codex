@@ -164,6 +164,8 @@ function handleUserCommand(command: string) {
 
 <style lang="scss">
 /* Header 深色模式 - 强制覆盖所有 button hover 背景 */
+@use '@/styles/variables' as *;
+
 .app-header .el-button:hover,
 .app-header .el-button.el-button--text:hover {
   background-color: #{$sidebar-bg-hover} !important;

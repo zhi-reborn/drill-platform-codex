@@ -65,7 +65,7 @@ CREATE TABLE `drill_template_step` (
     `parent_step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '父步骤 ID，NULL 表示根节点',
     `name` VARCHAR(128) NOT NULL COMMENT '步骤名称',
     `seq` INT NOT NULL COMMENT '排序序号',
-    `step_type` VARCHAR(32) NOT NULL COMMENT '类型：serial/parallel/any_of/condition',
+    `step_type` VARCHAR(32) NOT NULL COMMENT '类型：serial/parallel',
     `timeout_minutes` INT NOT NULL DEFAULT 5 COMMENT '超时时间 (分钟)',
     `pre_step_ids` JSON DEFAULT NULL COMMENT '前置步骤 ID 列表',
     `guide_content` TEXT COMMENT '操作指引',

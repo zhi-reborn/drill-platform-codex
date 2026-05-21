@@ -42,6 +42,7 @@ type UpdateTemplateRequest struct {
 }
 
 type StepTemplateRequest struct {
+	ID                       *uint64 `json:"id"`
 	Name                     string  `json:"name" binding:"required,max=200"`
 	Seq                      int     `json:"seq" binding:"required"`
 	ParentStepID             *uint64 `json:"parent_step_id"`
