@@ -398,7 +398,7 @@ onMounted(() => {
         .el-collapse-item__header {
           background: $bg-tertiary;
           padding: $spacing-sm $spacing-base;
-          border-radius: $border-radius-sm;
+          border-radius: $radius-sm;
           margin-bottom: $spacing-xs;
           height: auto;
           line-height: normal;
@@ -433,7 +433,7 @@ onMounted(() => {
           align-items: flex-start;
           padding: $spacing-sm $spacing-base;
           background: $bg-tertiary;
-          border-radius: $border-radius-sm;
+          border-radius: $radius-sm;
           border-left: 3px solid var(--el-color-primary);
           transition: background 0.2s;
 
