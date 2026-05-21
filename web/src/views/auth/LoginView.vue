@@ -274,7 +274,9 @@ onMounted(async () => {
 @use '@/styles/variables' as *;
 
 .login-page {
+  background: #020617;
   height: 100vh;
+  min-height: 100vh;
   display: flex;
   // 移除 overflow: hidden 以允许下拉框显示
 }
@@ -368,8 +370,8 @@ onMounted(async () => {
     max-width: 380px;
     padding: $spacing-3xl $spacing-2xl;
     border-radius: $radius-lg;
-    background: #0D1117;
-    border: 1px solid #30363D;
+    background: #0F172A;
+    border: 1px solid #1E293B;
 
     .login-title {
       font-size: 24px;

@@ -39,3 +39,4 @@ openspec/
 docs/superpowers/
 tests/
 .tokensave
+.superpowers
