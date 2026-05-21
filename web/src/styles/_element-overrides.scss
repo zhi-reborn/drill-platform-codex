@@ -36,35 +36,56 @@
   --el-fill-color-light: #{$color-accent-bg};
 }
 
-// === Menu ===
-.el-menu {
-  background-color: transparent;
-  border-right: none;
+// === Sidebar Menu (深色主题) ===
+.app-sidebar .el-menu {
+  background-color: transparent !important;
+  border-right: none !important;
 }
 
-.el-menu-item,
-.el-sub-menu__title {
-  color: $text-secondary;
-  height: 40px;
-  line-height: 40px;
+.app-sidebar .el-menu-item,
+.app-sidebar .el-sub-menu__title {
+  color: $sidebar-text !important;
+  height: 44px;
+  line-height: 44px;
   font-size: $font-size-sm;
-  border-radius: $radius-base;
-  margin: 2px 8px;
+  margin: 2px 12px;
+
+  .el-icon {
+    color: $sidebar-text;
+  }
 
   &:hover {
-    color: $text-primary !important;
-    background-color: rgba(0, 0, 0, 0.04) !important;
+    color: $sidebar-text-active !important;
+    background-color: $sidebar-bg-hover !important;
+
+    .el-icon {
+      color: $sidebar-text-active !important;
+    }
   }
 
   &.is-active {
     color: $color-accent !important;
-    background-color: $color-accent-bg !important;
-    border-right: 2px solid $color-accent;
+    background-color: $sidebar-active-bg !important;
+    border-right: none !important;
+
+    .el-icon {
+      color: $color-accent !important;
+    }
   }
 }
 
-.el-sub-menu .el-menu { background-color: transparent !important; }
-.el-sub-menu .el-menu-item { padding-left: 52px !important; }
+.app-sidebar .el-sub-menu .el-menu {
+  background-color: transparent !important;
+}
+
+.app-sidebar .el-sub-menu .el-menu-item {
+  padding-left: 52px !important;
+}
+
+.app-sidebar.is-collapsed .el-menu-item,
+.app-sidebar.is-collapsed .el-sub-menu__title {
+  margin: 2px 8px;
+}
 
 // === Table ===
 .el-table {
@@ -157,7 +178,30 @@
 .el-button.is-text {
   color: $text-secondary;
   font-size: $font-size-sm;
-  &:hover { color: $text-primary; background-color: rgba(255, 255, 255, 0.05); }
+  &:hover { color: $color-accent; background-color: $color-accent-bg; }
+}
+
+// 深色 header 下的按钮 hover 覆盖
+.app-header {
+  .el-button {
+    --el-button-text-hover-bg-color: #{$sidebar-bg-hover} !important;
+    --el-button-text-active-bg-color: #{$sidebar-active-bg} !important;
+  }
+
+  .el-button.is-text,
+  .el-button.el-button--text {
+    color: $sidebar-text !important;
+    background-color: transparent !important;
+
+    &:not(.is-disabled):hover {
+      color: $sidebar-text-active !important;
+      background-color: $sidebar-bg-hover !important;
+    }
+  }
+
+  .notification-bell .el-button {
+    background-color: transparent !important;
+  }
 }
 
 // === Tag ===
@@ -200,7 +244,12 @@
 
 .el-dropdown-menu__item {
   color: $text-primary;
-  &:hover { background-color: rgba(255, 255, 255, 0.05); color: $color-accent; }
+  &:hover { background-color: $color-accent-bg; color: $color-accent; }
+}
+
+// Header 深色模式下下拉菜单适配
+.app-header .el-dropdown-menu__item {
+  &:hover { background-color: $color-accent-bg; color: $color-accent; }
 }
 
 // === Breadcrumb ===

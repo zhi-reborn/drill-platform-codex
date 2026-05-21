@@ -46,19 +46,31 @@ const breadcrumbs = computed(() => {
 .app-main {
   margin-left: $sidebar-width;
   padding-top: $header-height;
-  transition: margin-left 0.3s ease;
+  transition: margin-left 0.3s cubic-bezier(0.2, 0, 0, 1);
   min-height: calc(100vh - $header-height);
   background: $bg-primary;
 }
 
 .app-breadcrumb {
-  padding: $spacing-sm $spacing-base;
+  padding: $spacing-sm $spacing-xl;
   background: $bg-secondary;
-  border-bottom: 1px solid $border-color-light;
+  border-bottom: 1px solid $border-color;
+  
+  :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+    color: $text-primary;
+  }
+  
+  :deep(.el-breadcrumb__inner) {
+    color: $text-secondary;
+    
+    &:hover {
+      color: $color-accent;
+    }
+  }
 }
 
 .app-content {
-  padding: $spacing-base;
+  padding: $spacing-xl;
   overflow-x: hidden;
 }
 

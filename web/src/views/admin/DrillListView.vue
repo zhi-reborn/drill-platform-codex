@@ -35,9 +35,9 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="started_at" label="开始时间" width="180">
+        <el-table-column prop="start_time" label="开始时间" width="180">
           <template #default="{ row }">
-            {{ row.started_at ? formatTime(row.started_at) : '-' }}
+            {{ row.start_time ? formatTime(row.start_time) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">

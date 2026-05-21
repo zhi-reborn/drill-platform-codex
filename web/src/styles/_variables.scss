@@ -1,36 +1,43 @@
-// === 商务浅色主题 ===
-// 主色调
-$color-accent: #1E40AF;
-$color-accent-hover: #1E3A8A;
-$color-accent-light: #3B82F6;
-$color-accent-bg: rgba(30, 64, 175, 0.08);
-$color-accent-border: rgba(30, 64, 175, 0.2);
+// 语义色
+$color-accent: #1890FF;
+$color-accent-hover: #096DD9;
+$color-accent-light: #40A9FF;
+$color-accent-bg: rgba(24, 144, 255, 0.1);
+$color-accent-border: rgba(24, 144, 255, 0.2);
 
 // 语义色
-$color-success: #16A34A;
-$color-success-bg: rgba(22, 163, 74, 0.08);
-$color-warning: #D97706;
-$color-warning-bg: rgba(217, 119, 6, 0.08);
-$color-error: #DC2626;
-$color-error-bg: rgba(220, 38, 38, 0.08);
-$color-info: #2563EB;
+$color-success: #52C41A;
+$color-success-bg: rgba(82, 196, 26, 0.1);
+$color-warning: #FAAD14;
+$color-warning-bg: rgba(250, 173, 20, 0.1);
+$color-error: #FF4D4F;
+$color-error-bg: rgba(255, 77, 79, 0.1);
+$color-info: #1890FF;
 
-// 浅色背景层级
-$bg-deep: #E8ECF0;
-$bg-primary: #F0F2F5;
+// 背景色（阿里云控制台风格）
+$bg-primary: #F5F7FA;
 $bg-secondary: #FFFFFF;
 $bg-tertiary: #F8FAFC;
+$bg-deep: #E8ECF0;
 $bg-overlay: rgba(0, 0, 0, 0.4);
 
 // 边框
-$border-color: #E2E8F0;
-$border-color-light: #F1F5F9;
+$border-color: #E4E7ED;
+$border-color-light: #EBEEF5;
+
+// 侧边栏（深色主题）
+$sidebar-bg: #1E2A3E;
+$sidebar-bg-hover: #243447;
+$sidebar-text: #A3B1C6;
+$sidebar-text-active: #FFFFFF;
+$sidebar-active-bg: rgba(24, 144, 255, 0.15);
+$sidebar-collapsed-bg: #141C2B;
 
 // 文字（浅色背景上）
-$text-primary: #1E293B;
-$text-secondary: #475569;
-$text-tertiary: #94A3B8;
-$text-disabled: #CBD5E1;
+$text-primary: #1D2129;
+$text-secondary: #4E5969;
+$text-tertiary: #86909C;
+$text-disabled: #C9CDD4;
 
 // 字体
 $font-family-ui: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -71,10 +78,10 @@ $radius-base: 6px;
 $radius-md: 8px;
 $radius-lg: 12px;
 
-// 阴影（暗色主题弱化）
-$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-$shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-$shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+// 阴影（阿里云风格 - 更柔和）
+$shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$shadow-md: 0 2px 8px 0 rgba(0, 0, 0, 0.08);
+$shadow-lg: 0 4px 16px 0 rgba(0, 0, 0, 0.1);
 
 // 布局
 $header-height: 56px;

@@ -56,10 +56,10 @@ const visibleMenus = computed(() => {
   position: fixed;
   left: 0;
   top: $header-height;
-  background: $bg-secondary;
-  border-right: 1px solid $border-color;
+  background: $sidebar-bg;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   z-index: $z-index-sidebar;
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
   overflow: hidden;
 
   &.is-collapsed {
@@ -73,6 +73,70 @@ const visibleMenus = computed(() => {
 
   :deep(.el-menu) {
     background: transparent;
+    border-right: none;
+  }
+
+  // 一级菜单标题
+  :deep(.el-sub-menu__title) {
+    color: $sidebar-text !important;
+
+    &:hover {
+      background: $sidebar-bg-hover !important;
+      color: $sidebar-text-active !important;
+    }
+
+    .el-icon {
+      color: $sidebar-text;
+    }
+  }
+
+  // 一级菜单激活
+  :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+    color: $sidebar-text-active !important;
+
+    .el-icon {
+      color: $sidebar-text-active !important;
+    }
+  }
+
+  // 子菜单项
+  :deep(.el-menu--inline .el-menu-item) {
+    background-color: rgba(0, 0, 0, 0.12) !important;
+    color: $sidebar-text;
+
+    &:hover {
+      background-color: $sidebar-bg-hover !important;
+      color: $sidebar-text-active !important;
+    }
+
+    &.is-active {
+      background-color: $sidebar-active-bg !important;
+      color: $color-accent !important;
+    }
+  }
+
+  // 无子菜单的菜单项
+  :deep(.el-menu-item) {
+    color: $sidebar-text;
+
+    &:hover {
+      background: $sidebar-bg-hover !important;
+      color: $sidebar-text-active !important;
+    }
+
+    &.is-active {
+      background-color: $sidebar-active-bg !important;
+      color: $color-accent !important;
+    }
+  }
+
+  // 折叠状态
+  :deep(.el-menu--collapse) {
+    width: $sidebar-collapsed-width;
+
+    .el-menu-item.is-active {
+      background-color: $sidebar-active-bg !important;
+    }
   }
 }
 </style>

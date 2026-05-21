@@ -29,26 +29,8 @@ export const menuConfig: MenuItem[] = [
     roles: ['admin', 'director'],
     children: [
       { path: '/director/templates', title: '模板库', icon: 'Document', roles: ['admin', 'director'] },
+      { path: '/director/create', title: '创建演练', icon: 'Plus', roles: ['admin', 'director'] },
       { path: '/director/drills', title: '演练列表', icon: 'Monitor', roles: ['admin', 'director'] },
-    ],
-  },
-  {
-    path: '/monitor',
-    title: '监控中心',
-    icon: 'VideoCamera',
-    roles: ['admin', 'director'],
-    children: [
-      { path: '/director/monitor/', title: '实时监控', icon: 'VideoCamera', roles: ['admin', 'director'] },
-    ],
-  },
-  {
-    path: '/system',
-    title: '系统管理',
-    icon: 'Setting',
-    roles: ['admin'],
-    children: [
-      { path: '/admin/users', title: '用户管理', icon: 'User', roles: ['admin'] },
-      { path: '/admin/drills', title: '全部演练', icon: 'Monitor', roles: ['admin'] },
     ],
   },
   {

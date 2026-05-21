@@ -1,19 +1,19 @@
 @use './variables' as *;
 
 @mixin page-container {
-  padding: 4px;
-  min-height: calc(100vh - $header-height - 88px);
+  padding: 0;
+  min-height: calc(100vh - $header-height - 40px);
 }
 
 @mixin page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-base;
+  margin-bottom: $spacing-xl;
 
   .page-title {
     font-size: $font-size-xl;
-    font-weight: $font-weight-bold;
+    font-weight: $font-weight-semibold;
     color: $text-primary;
     margin: 0;
   }
@@ -25,14 +25,14 @@
 }
 
 @mixin page-content {
-  margin-top: $spacing-base;
+  // Content area padding handled by .app-content (24px)
 }
 
 @mixin stat-card {
   background: $bg-secondary;
   border: 1px solid $border-color;
   border-radius: $radius-md;
-  padding: $spacing-base;
+  padding: $spacing-xl;
   box-shadow: $shadow-sm;
   display: flex;
   flex-direction: column;
@@ -59,6 +59,6 @@
   background: $bg-secondary;
   border: 1px solid $border-color;
   border-radius: $radius-md;
-  padding: $spacing-base;
+  padding: $spacing-xl;
   box-shadow: $shadow-sm;
 }

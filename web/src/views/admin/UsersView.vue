@@ -44,6 +44,9 @@
             {{ row.status === 1 ? '正常' : '禁用' }}
           </el-tag>
         </template>
+        <template #created_at="{ row }">
+          {{ formatTime(row.created_at) }}
+        </template>
         <template #last_login_at="{ row }">
           {{ row.last_login_at ? formatTime(row.last_login_at) : '从未登录' }}
         </template>
@@ -309,7 +312,7 @@ const columns: TableColumn[] = [
   { prop: 'status', label: '状态', width: 100, slot: true },
   { prop: 'department', label: '部门' },
   { prop: 'phone', label: '手机号', width: 160 },
-  { prop: 'created_at', label: '创建时间', width: 180 },
+  { prop: 'created_at', label: '创建时间', width: 180, slot: true },
 ]
 
 // 创建用户表单

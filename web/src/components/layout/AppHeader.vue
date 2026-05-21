@@ -11,10 +11,6 @@
     </div>
 
     <div class="header-right">
-      <div class="ws-status" :class="wsStatus" :title="wsStatusText">
-        <span class="status-dot"></span>
-      </div>
-
       <NotificationPopover />
 
       <el-dropdown trigger="click" @command="handleUserCommand">
@@ -46,7 +42,6 @@
 import { computed, onMounted } from 'vue'
 import { Fold, Expand, Monitor, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { useWsStore } from '@/stores/ws'
 import NotificationPopover from '@/components/notifications/NotificationPopover.vue'
 
 interface Props {
@@ -60,19 +55,15 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{ 'toggle-sidebar': [] }>()
 
 const authStore = useAuthStore()
-const wsStore = useWsStore()
 
 const userInitial = computed(() => authStore.userInitial)
 const userName = computed(() => authStore.userName)
 const userDept = computed(() => authStore.userDept)
 const roleName = computed(() => authStore.roleName)
 const roleType = computed(() => authStore.roleType)
-const wsStatus = computed(() => wsStore.status)
-const wsStatusText = computed(() => wsStore.statusText)
 
 onMounted(() => {
   authStore.restoreSession()
-  wsStore.update()
 })
 
 function handleUserCommand(command: string) {
@@ -87,23 +78,24 @@ function handleUserCommand(command: string) {
 
 .app-header {
   height: $header-height;
-  background: $bg-secondary;
-  border-bottom: 1px solid $border-color;
+  background: $sidebar-bg;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 $spacing-base;
+  padding: 0 $spacing-xl;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: $z-index-header;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: $spacing-md;
+  gap: $spacing-base;
 }
 
 .logo {
@@ -113,31 +105,25 @@ function handleUserCommand(command: string) {
 
   .logo-text {
     font-size: $font-size-lg;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
+    font-weight: $font-weight-semibold;
+    color: $sidebar-text-active;
     letter-spacing: 0.5px;
+  }
+}
+
+.collapse-btn {
+  color: $sidebar-text;
+  
+  &:hover {
+    color: $sidebar-text-active;
+    background: $sidebar-bg-hover;
   }
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: $spacing-md;
-}
-
-.ws-status {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-
-  &.connected .status-dot {
-    background: $color-success;
-    box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
-  }
-
-  &.disconnected .status-dot {
-    background: $color-error;
-  }
+  gap: $spacing-base;
 }
 
 .user-info {
@@ -147,21 +133,21 @@ function handleUserCommand(command: string) {
   cursor: pointer;
   padding: $spacing-xs $spacing-sm;
   border-radius: $radius-base;
-  color: $text-primary;
+  color: $sidebar-text-active;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.04);
+    background: $sidebar-bg-hover;
   }
 
   .user-name {
     font-size: $font-size-sm;
-    color: $text-primary;
+    color: $sidebar-text-active;
   }
 
   .user-dept {
     font-size: 11px;
-    color: $text-tertiary;
-    background: $bg-tertiary;
+    color: $sidebar-text;
+    background: rgba(255, 255, 255, 0.08);
     padding: 1px 6px;
     border-radius: 4px;
   }
@@ -174,7 +160,16 @@ function handleUserCommand(command: string) {
   font-size: $font-size-sm;
 }
 
-:deep(.el-button) {
-  color: $text-secondary;
+</style>
+
+<style lang="scss">
+/* Header 深色模式 - 强制覆盖所有 button hover 背景 */
+.app-header .el-button:hover,
+.app-header .el-button.el-button--text:hover {
+  background-color: #{$sidebar-bg-hover} !important;
+}
+
+.app-header .notification-bell .el-button {
+  background-color: transparent !important;
 }
 </style>
