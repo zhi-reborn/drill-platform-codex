@@ -26,6 +26,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getVisibleMenus } from '@/config/menu'
+import type { Role } from '@/types'
 
 defineProps<{ collapsed: boolean }>()
 
@@ -42,7 +43,7 @@ const activeMenu = computed(() => {
 
 const visibleMenus = computed(() => {
   const role = authStore.role
-  return getVisibleMenus(role)
+  return getVisibleMenus(role as Role)
 })
 </script>
 
