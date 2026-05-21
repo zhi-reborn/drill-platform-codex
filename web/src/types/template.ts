@@ -18,6 +18,7 @@ export const STEP_TYPE_LABELS: Record<StepType, string> = {
 export interface StepTemplate {
   id: number
   template_id: number
+  parent_step_id?: number
   name: string
   description?: string
   step_type: StepType

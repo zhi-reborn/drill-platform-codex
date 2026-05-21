@@ -54,6 +54,7 @@ export interface StepInstance {
   id: number
   drill_instance_id: number
   step_template_id: number
+  parent_step_id?: number
   name: string
   seq: number
   status: StepStatus

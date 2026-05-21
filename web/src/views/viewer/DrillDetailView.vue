@@ -47,7 +47,7 @@
         <template #header>
           <span class="card-title">步骤列表</span>
         </template>
-        <el-table :data="drillSteps" style="width: 100%">
+        <el-table :data="drillStepTree" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%">
           <el-table-column prop="order_index" label="序号" width="80" />
           <el-table-column prop="step_name" label="步骤名" min-width="200" />
           <el-table-column prop="step_type" label="类型" width="100">
@@ -57,9 +57,10 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="120">
+          <el-table-column prop="status" label="状态" width="180">
             <template #default="{ row }">
-              <DrillStatusBadge :status="row.status" type="step" />
+              <span v-if="isParentStep(row)">{{ getStepStatusText(row) }}</span>
+              <DrillStatusBadge v-else :status="row.status" type="step" />
             </template>
           </el-table-column>
           <el-table-column prop="assignee_name" label="执行人" width="120" />
@@ -113,6 +114,52 @@ const drillId = computed(() => {
 const drillSteps = computed(() => {
   return steps.value.filter(s => s.drill_id === drillId.value).sort((a, b) => a.order_index - b.order_index)
 })
+
+interface StepWithChildren extends StepInstance {
+  children?: StepWithChildren[]
+}
+
+// 将扁平步骤数据转换为树形结构
+const drillStepTree = computed(() => {
+  const sorted = drillSteps.value
+  const stepMap = new Map<number, StepWithChildren>()
+
+  for (const step of sorted) {
+    stepMap.set(step.id, { ...step })
+  }
+
+  const roots: StepWithChildren[] = []
+
+  for (const step of sorted) {
+    const node = stepMap.get(step.id)!
+    const parentId = (step as any).parent_step_id
+    if (parentId && stepMap.has(parentId)) {
+      const parent = stepMap.get(parentId)!
+      if (!parent.children) {
+        parent.children = []
+      }
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  return roots
+})
+
+// 父步骤状态聚合显示 (只读模式)
+function getStepStatusText(row: StepWithChildren): string {
+  if (!row.children || row.children.length === 0) {
+    return row.status
+  }
+  const total = row.children.length
+  const completed = row.children.filter(c => c.status === 'completed' || c.status === 'skipped').length
+  return `${completed}/${total} 子任务已完成`
+}
+
+function isParentStep(row: StepWithChildren): boolean {
+  return !!(row.children && row.children.length > 0)
+}
 
 const timelineData = computed(() => {
   return drillSteps.value.map(step => ({

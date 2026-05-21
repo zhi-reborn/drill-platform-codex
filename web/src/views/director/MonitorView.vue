@@ -202,7 +202,7 @@
         <template #header>
           <span class="card-title">步骤列表</span>
         </template>
-        <el-table :data="drillSteps" style="width: 100%">
+        <el-table :data="drillStepTree" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%">
           <el-table-column prop="seq" label="序号" width="60" align="center" />
           <el-table-column prop="name" label="步骤名" min-width="180" show-overflow-tooltip />
           <el-table-column prop="step_type" label="类型" width="80" align="center">
@@ -210,9 +210,14 @@
               <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100" align="center">
+          <el-table-column prop="status" label="状态" width="160" align="center">
             <template #default="{ row }">
-              <DrillStatusBadge :status="row.status" type="step" />
+              <template v-if="row.children && row.children.length > 0">
+                {{ getStepStatusText(row).text }}
+              </template>
+              <template v-else>
+                <DrillStatusBadge :status="row.status" type="step" />
+              </template>
             </template>
           </el-table-column>
           <el-table-column prop="default_assignee_role" label="执行角色" width="80" align="center">
@@ -289,6 +294,45 @@ const drillId = computed(() => {
 const drillSteps = computed(() => {
   return steps.value.sort((a, b) => a.seq - b.seq)
 })
+
+// 将扁平步骤数据转换为树形结构
+const drillStepTree = computed(() => {
+  const sorted = steps.value.sort((a, b) => a.seq - b.seq)
+  const stepMap = new Map<number, StepInstance & { children?: StepInstance[] }>()
+
+  // 第一步：初始化所有步骤到 map
+  for (const step of sorted) {
+    stepMap.set(step.id, { ...step })
+  }
+
+  const roots: (StepInstance & { children?: StepInstance[] })[] = []
+
+  // 第二步：建立父子关系
+  for (const step of sorted) {
+    const node = stepMap.get(step.id)!
+    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
+      const parent = stepMap.get(step.parent_step_id)!
+      if (!parent.children) {
+        parent.children = []
+      }
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  return roots
+})
+
+// 父步骤状态聚合显示
+function getStepStatusText(row: StepInstance & { children?: StepInstance[] }): { text: string; isParent: boolean } {
+  if (!row.children || row.children.length === 0) {
+    return { text: row.status, isParent: false }
+  }
+  const total = row.children.length
+  const completed = row.children.filter(c => c.status === 'completed' || c.status === 'skipped').length
+  return { text: `${completed}/${total} 子任务已完成`, isParent: true }
+}
 
 const completedSteps = computed(() => {
   return steps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length

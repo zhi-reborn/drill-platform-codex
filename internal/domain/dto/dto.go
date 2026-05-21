@@ -44,6 +44,7 @@ type UpdateTemplateRequest struct {
 type StepTemplateRequest struct {
 	Name                string  `json:"name" binding:"required,max=200"`
 	Seq                 int     `json:"seq" binding:"required"`
+	ParentStepID        *uint64 `json:"parent_step_id"`
 	StepType            string  `json:"step_type" binding:"required,oneof=serial parallel any_of condition"`
 	TimeoutMinutes      int     `json:"timeout_minutes"`
 	PreStepIDs          []int64 `json:"pre_step_ids"`

@@ -146,7 +146,7 @@
       </template>
       <div class="steps-editor">
         <div v-if="editingSteps.length > 0" class="steps-table">
-          <el-table :data="editingSteps" border size="small" row-key="id">
+          <el-table :data="stepsTree" border size="small" row-key="id" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }" default-expand-all>
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column prop="name" label="步骤名称" min-width="150">
               <template #default="{ row }">
@@ -174,19 +174,33 @@
                 {{ row.executor_team || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="160" align="center" fixed="right">
-              <template #default="{ $index }">
+            <el-table-column label="操作" width="220" align="center" fixed="right">
+              <template #default="{ row }">
                 <el-button-group size="small">
-                  <el-button text type="primary" @click="openStepEditDialog($index)" title="编辑">
+                  <el-button text type="primary" @click="openStepEditDialogByRow(row)" title="编辑">
                     <el-icon><Edit /></el-icon>
                   </el-button>
-                  <el-button :disabled="$index === 0" text @click="moveStep($index, -1)" title="上移">
-                    <el-icon><Top /></el-icon>
+                  <el-button text type="success" @click="addChildStep(row)" title="添加子步骤">
+                    <el-icon><Plus /></el-icon>
+                    添加子步骤
                   </el-button>
-                  <el-button :disabled="$index === editingSteps.length - 1" text @click="moveStep($index, 1)" title="下移">
-                    <el-icon><Bottom /></el-icon>
-                  </el-button>
-                  <el-button text type="danger" @click="removeStep($index)" title="删除">
+                  <el-select
+                    :model-value="row.parent_step_id"
+                    placeholder="设为子步骤"
+                    size="small"
+                    style="width: 120px"
+                    clearable
+                    filterable
+                    @change="(val: number | undefined) => handleSetParent(row, val)"
+                  >
+                    <el-option
+                      v-for="opt in parentStepOptions(row)"
+                      :key="opt.value"
+                      :label="opt.label"
+                      :value="opt.value"
+                    />
+                  </el-select>
+                  <el-button text type="danger" @click="removeStepByRow(row)" title="删除">
                     <el-icon><Delete /></el-icon>
                   </el-button>
                 </el-button-group>
@@ -280,6 +294,18 @@
             </el-select>
           </el-form-item>
         </div>
+        <div class="form-row">
+          <el-form-item label="父步骤" class="inline-form-item">
+            <el-select v-model="singleStepForm.parent_step_id" clearable placeholder="可选" filterable>
+              <el-option
+                v-for="opt in formParentStepOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="singleAddVisible = false">取消</el-button>
@@ -347,6 +373,103 @@ const filteredTemplates = computed(() => {
   return templates.value.filter(t => t.category === activeCategory.value)
 })
 
+// 树形展示：将扁平步骤数据转为树形结构
+interface StepTreeNode extends StepTemplate {
+  children?: StepTreeNode[]
+}
+
+const stepsTree = computed<StepTreeNode[]>(() => {
+  const nodes: StepTreeNode[] = editingSteps.value.map(s => ({ ...s, children: [] }))
+  const nodeMap = new Map<number, StepTreeNode>()
+  for (const node of nodes) {
+    nodeMap.set(node.id, node)
+  }
+  const roots: StepTreeNode[] = []
+  for (const node of nodes) {
+    if (node.parent_step_id && nodeMap.has(node.parent_step_id)) {
+      const parent = nodeMap.get(node.parent_step_id)!
+      parent.children!.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  return roots
+})
+
+function parentStepOptions(row: StepTemplate): { value: number; label: string }[] {
+  return editingSteps.value
+    .filter(s => s.id !== row.id && s.parent_step_id !== row.id)
+    .map(s => ({
+      value: s.id,
+      label: `#${s.order_index || ''} ${s.name}`,
+    }))
+}
+
+const formParentStepOptions = computed(() => {
+  return editingSteps.value
+    .filter(s => s.id !== (singleStepEditIndex.value !== null ? editingSteps.value[singleStepEditIndex.value]?.id : undefined))
+    .map(s => ({
+      value: s.id as number,
+      label: `#${s.order_index || ''} ${s.name}`,
+    }))
+})
+
+function handleSetParent(row: StepTreeNode, parentId: number | undefined) {
+  const step = editingSteps.value.find(s => s.id === row.id)
+  if (step) {
+    step.parent_step_id = parentId
+  }
+}
+
+function addChildStep(parent: StepTreeNode) {
+  resetSingleStepForm()
+  singleStepEditIndex.value = null
+  singleStepForm.parent_step_id = parent.id
+  // 设置默认名称
+  singleStepForm.name = `${parent.name} - 子步骤`
+  singleAddVisible.value = true
+}
+
+function openStepEditDialogByRow(row: StepTreeNode) {
+  const index = editingSteps.value.findIndex(s => s.id === row.id)
+  if (index >= 0) {
+    openStepEditDialog(index)
+    singleStepForm.parent_step_id = row.parent_step_id
+  }
+}
+
+function removeStepByRow(row: StepTreeNode) {
+  const index = editingSteps.value.findIndex(s => s.id === row.id)
+  if (index >= 0) {
+    // 子步骤自动升为根步骤
+    const removed = editingSteps.value[index]
+    editingSteps.value.forEach(s => {
+      if (s.parent_step_id === removed.id) {
+        s.parent_step_id = removed.parent_step_id
+      }
+    })
+    editingSteps.value.splice(index, 1)
+  }
+}
+
+function flattenAndRecalculateSteps(): StepTemplate[] {
+  const result: StepTemplate[] = []
+  let seq = 0
+  function traverse(nodes: StepTreeNode[]) {
+    for (const node of nodes) {
+      seq++
+      const flat = { ...node } as Record<string, unknown>
+      delete flat.children
+      result.push({ ...flat, order_index: seq } as unknown as StepTemplate)
+      if (node.children && node.children.length > 0) {
+        traverse(node.children)
+      }
+    }
+  }
+  traverse(stepsTree.value)
+  return result
+}
+
 const form = reactive({
   name: '',
   category: 'disaster_recovery' as TemplateCategory,
@@ -360,6 +483,7 @@ const singleStepForm = reactive({
   timeout_minutes: 5,
   default_assignee_role: 'executor',
   executor_team: '',
+  parent_step_id: undefined as number | undefined,
 })
 
 const departmentOptions = ref<string[]>([])
@@ -393,6 +517,7 @@ function resetSingleStepForm() {
   singleStepForm.timeout_minutes = 5
   singleStepForm.default_assignee_role = 'executor'
   singleStepForm.executor_team = ''
+  singleStepForm.parent_step_id = undefined
 }
 
 function handleAddSingleStep() {
@@ -410,6 +535,7 @@ function handleAddSingleStep() {
     step.timeout_minutes = singleStepForm.timeout_minutes
     step.default_assignee_role = singleStepForm.default_assignee_role
     step.executor_team = singleStepForm.executor_team
+    step.parent_step_id = singleStepForm.parent_step_id
     ElMessage.success('步骤已更新')
   } else {
     // 新增模式
@@ -422,6 +548,7 @@ function handleAddSingleStep() {
       timeout_minutes: singleStepForm.timeout_minutes,
       default_assignee_role: singleStepForm.default_assignee_role,
       executor_team: singleStepForm.executor_team,
+      parent_step_id: singleStepForm.parent_step_id,
       order_index: editingSteps.value.length + 1,
       created_at: new Date().toISOString(),
     })
@@ -449,6 +576,7 @@ function openStepEditDialog(index: number) {
   singleStepForm.timeout_minutes = step.timeout_minutes || 5
   singleStepForm.default_assignee_role = step.default_assignee_role || ''
   singleStepForm.executor_team = step.executor_team || ''
+  singleStepForm.parent_step_id = step.parent_step_id
   singleStepEditIndex.value = index
   singleAddVisible.value = true
 }
@@ -681,9 +809,11 @@ function removeStep(index: number) {
 
 async function handleSaveSteps() {
   try {
-    await templateApi.updateSteps(editingTemplateId.value!, editingSteps.value.map((s, index) => ({
+    const flatSteps = flattenAndRecalculateSteps()
+    await templateApi.updateSteps(editingTemplateId.value!, flatSteps.map(s => ({
       name: s.name,
-      seq: index + 1,
+      seq: s.order_index,
+      parent_step_id: s.parent_step_id,
       step_type: s.step_type,
       timeout_minutes: s.timeout_minutes || 5,
       guide_content: s.description || s.guide_content || '',

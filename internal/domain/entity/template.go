@@ -41,6 +41,7 @@ func (DrillTemplate) TableName() string {
 type StepTemplate struct {
 	ID                 uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	DrillTemplateID    uint64    `gorm:"type:bigint unsigned;not null;column:drill_template_id;index:idx_drill_template_id" json:"drill_template_id"`
+	ParentStepID       *uint64   `gorm:"type:bigint unsigned;column:parent_step_id" json:"parent_step_id"`
 	Name               string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
 	Seq                int       `gorm:"type:int;not null;column:seq" json:"seq"`
 	StepType           string    `gorm:"type:varchar(32);not null;column:step_type" json:"step_type"`

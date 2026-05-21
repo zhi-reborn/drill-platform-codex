@@ -62,6 +62,7 @@ DROP TABLE IF EXISTS `drill_template_step`;
 CREATE TABLE `drill_template_step` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_template_id` BIGINT UNSIGNED NOT NULL COMMENT '所属模板 ID',
+    `parent_step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '父步骤 ID，NULL 表示根节点',
     `name` VARCHAR(128) NOT NULL COMMENT '步骤名称',
     `seq` INT NOT NULL COMMENT '排序序号',
     `step_type` VARCHAR(32) NOT NULL COMMENT '类型：serial/parallel/any_of/condition',
@@ -74,7 +75,9 @@ CREATE TABLE `drill_template_step` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_drill_template_id` (`drill_template_id`),
-    CONSTRAINT `fk_step_template_drill` FOREIGN KEY (`drill_template_id`) REFERENCES `drill_template` (`id`) ON DELETE CASCADE
+    KEY `idx_parent_step` (`parent_step_id`),
+    CONSTRAINT `fk_step_template_drill` FOREIGN KEY (`drill_template_id`) REFERENCES `drill_template` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_step_parent_template` FOREIGN KEY (`parent_step_id`) REFERENCES `drill_template_step` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤模板表';
 
 -- 演练实例表
@@ -103,6 +106,7 @@ DROP TABLE IF EXISTS `drill_instance_step`;
 CREATE TABLE `drill_instance_step` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_instance_id` BIGINT UNSIGNED NOT NULL COMMENT '所属演练 ID',
+    `parent_step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '父步骤 ID，NULL 表示根节点',
     `step_template_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID',
     `name` VARCHAR(128) NOT NULL COMMENT '步骤名称',
     `seq` INT NOT NULL COMMENT '排序序号',
@@ -121,7 +125,9 @@ CREATE TABLE `drill_instance_step` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_drill_step` (`drill_instance_id`, `status`),
-    CONSTRAINT `fk_step_instance_drill` FOREIGN KEY (`drill_instance_id`) REFERENCES `drill_instance` (`id`) ON DELETE CASCADE
+    KEY `idx_parent_step` (`parent_step_id`),
+    CONSTRAINT `fk_step_instance_drill` FOREIGN KEY (`drill_instance_id`) REFERENCES `drill_instance` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_step_parent_instance` FOREIGN KEY (`parent_step_id`) REFERENCES `drill_instance_step` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤实例表';
 
 -- 演练操作日志表

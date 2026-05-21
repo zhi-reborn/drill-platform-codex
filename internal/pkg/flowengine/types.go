@@ -87,6 +87,7 @@ type StepDef struct {
 	IsBlocking          bool          `json:"is_blocking"`
 	DefaultAssigneeRole string        `json:"default_assignee_role"`
 	Condition           *ConditionDef `json:"condition,omitempty"`
+	ParentStepID        int64         `json:"parent_step_id"`
 }
 
 type ConditionDef struct {
@@ -126,6 +127,7 @@ type StepInst struct {
 	Remark          string          `json:"remark,omitempty"`
 	IssueDesc       string          `json:"issue_desc,omitempty"`
 	ConditionResult ConditionResult `json:"condition_result,omitempty"`
+	ParentStepID      int64         `json:"parent_step_id"`
 }
 
 type Event struct {

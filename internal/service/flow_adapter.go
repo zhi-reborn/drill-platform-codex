@@ -94,6 +94,10 @@ func (a *DrillFlowAdapter) GetStepDef(flowDefID, stepDefID int64) (*flowengine.S
 					}
 				}
 			}
+			parentStepID := int64(0)
+			if st.ParentStepID != nil {
+				parentStepID = int64(*st.ParentStepID)
+			}
 			return &flowengine.StepDef{
 				ID:                  int64(st.ID),
 				Name:                st.Name,
@@ -104,6 +108,7 @@ func (a *DrillFlowAdapter) GetStepDef(flowDefID, stepDefID int64) (*flowengine.S
 				GuideContent:        st.GuideContent,
 				IsBlocking:          st.IsBlocking == 1,
 				DefaultAssigneeRole: st.DefaultAssigneeRole,
+				ParentStepID:        parentStepID,
 			}, nil
 		}
 	}
@@ -134,6 +139,10 @@ func (a *DrillFlowAdapter) GetAllStepDefs(flowDefID int64) ([]*flowengine.StepDe
 				}
 			}
 		}
+		parentStepID := int64(0)
+		if st.ParentStepID != nil {
+			parentStepID = int64(*st.ParentStepID)
+		}
 		defs = append(defs, &flowengine.StepDef{
 			ID:                  int64(st.ID),
 			Name:                st.Name,
@@ -144,6 +153,7 @@ func (a *DrillFlowAdapter) GetAllStepDefs(flowDefID int64) ([]*flowengine.StepDe
 			GuideContent:        st.GuideContent,
 			IsBlocking:          st.IsBlocking == 1,
 			DefaultAssigneeRole: st.DefaultAssigneeRole,
+			ParentStepID:        parentStepID,
 		})
 	}
 	return defs, nil
@@ -556,6 +566,174 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 			IsRead:    false,
 		}, uint64(operatorID))
 	}
+
+	a.handleSubtaskCompletion(evt.FlowInstID, stepDefID)
+}
+
+func (a *DrillFlowAdapter) handleSubtaskCompletion(flowInstID, stepDefID int64) {
+	stepDef, err := a.GetStepDef(flowInstID, stepDefID)
+	if err != nil || stepDef.ParentStepID == 0 {
+		return
+	}
+
+	parentStepDefID := stepDef.ParentStepID
+	siblings, err := a.GetAllStepDefs(flowInstID)
+	if err != nil {
+		return
+	}
+
+	var childIDs []int64
+	for _, sd := range siblings {
+		if sd.ParentStepID == parentStepDefID {
+			childIDs = append(childIDs, sd.ID)
+		}
+	}
+	if len(childIDs) == 0 {
+		return
+	}
+
+	inst, ok := a.engine.GetInstanceForMutate(flowInstID)
+	if !ok {
+		return
+	}
+
+	for _, childID := range childIDs {
+		si, exists := inst.Steps[childID]
+		if !exists {
+			return
+		}
+		switch si.Status {
+		case flowengine.StepStatusCompleted:
+		case flowengine.StepStatusSkipped:
+		case flowengine.StepStatusTimeout:
+		case flowengine.StepStatusIssue:
+		default:
+			return
+		}
+	}
+
+	a.autoCompleteParentStep(flowInstID, parentStepDefID)
+}
+
+func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDefID int64) {
+	drillID := uint64(flowInstID)
+
+	inst, ok := a.engine.GetInstanceForMutate(flowInstID)
+	if !ok {
+		return
+	}
+
+	parentSI, exists := inst.Steps[parentStepDefID]
+	if !exists {
+		return
+	}
+
+	switch parentSI.Status {
+	case flowengine.StepStatusCompleted:
+	case flowengine.StepStatusSkipped:
+	case flowengine.StepStatusTimeout:
+	case flowengine.StepStatusIssue:
+		return
+	}
+
+	parentInst, err := a.findStepInstance(drillID, parentStepDefID)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
+		"status":   string(flowengine.StepStatusCompleted),
+		"end_time": &now,
+	})
+
+	parentSI.Status = flowengine.StepStatusCompleted
+	parentSI.EndTime = &now
+	inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:        uint(drillID),
+			StepID:         uint(parentInst.ID),
+			StepName:       parentInst.Name,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:      string(flowengine.StepStatusCompleted),
+		})
+	}
+
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		StepInstanceID:  &parentInst.ID,
+		Action:          "auto_complete",
+		Content:         fmt.Sprintf("[%s] 子任务全部完成，父步骤自动完成", parentInst.Name),
+		CreatedAt:       now,
+	})
+
+	a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成")
+	a.handleSubtaskCompletion(flowInstID, parentStepDefID)
+}
+
+func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID int64, status flowengine.StepStatus, at time.Time) {
+	stepDef, err := a.GetStepDef(flowInstID, stepDefID)
+	if err != nil || stepDef.ParentStepID == 0 {
+		return
+	}
+
+	parentStepDefID := stepDef.ParentStepID
+
+	drillID := uint64(flowInstID)
+	inst, ok := a.engine.GetInstanceForMutate(flowInstID)
+	if !ok {
+		return
+	}
+
+	parentSI, exists := inst.Steps[parentStepDefID]
+	if !exists {
+		return
+	}
+
+	switch parentSI.Status {
+	case flowengine.StepStatusCompleted:
+	case flowengine.StepStatusSkipped:
+	case flowengine.StepStatusTimeout:
+	case flowengine.StepStatusIssue:
+		return
+	}
+
+	parentInst, err := a.findStepInstance(drillID, parentStepDefID)
+	if err != nil {
+		return
+	}
+
+	parentSI.Status = status
+	parentSI.EndTime = &at
+
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
+		"status":   string(status),
+		"end_time": &at,
+	})
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:        uint(drillID),
+			StepID:         uint(parentInst.ID),
+			StepName:       parentInst.Name,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:      string(status),
+		})
+	}
+
+	label := "超时"
+	if status == flowengine.StepStatusIssue {
+		label = "异常"
+	}
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		StepInstanceID:  &parentInst.ID,
+		Action:          "parent_" + string(status),
+		Content:         fmt.Sprintf("[%s] 子步骤%s，父步骤同步%s", parentInst.Name, label, label),
+		CreatedAt:       at,
+	})
 }
 
 func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
@@ -629,6 +807,8 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 			})
 		}
 	}
+
+	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusTimeout, now)
 }
 
 func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
@@ -709,6 +889,8 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 			IsRead:   false,
 		}, uint64(operatorID))
 	}
+
+	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusIssue, nw)
 }
 
 func (a *DrillFlowAdapter) handleFlowComplete(evt flowengine.Event) {
@@ -776,6 +958,10 @@ func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *floweng
 				}
 			}
 		}
+		parentStepID := int64(0)
+		if st.ParentStepID != nil {
+			parentStepID = int64(*st.ParentStepID)
+		}
 		flowDef.Steps = append(flowDef.Steps, &flowengine.StepDef{
 			ID:                  int64(st.ID),
 			Name:                st.Name,
@@ -786,6 +972,7 @@ func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *floweng
 			GuideContent:        st.GuideContent,
 			IsBlocking:          st.IsBlocking == 1,
 			DefaultAssigneeRole: st.DefaultAssigneeRole,
+			ParentStepID:        parentStepID,
 		})
 	}
 	return flowDef
@@ -804,4 +991,14 @@ func (a *DrillFlowAdapter) BuildAssignees(drillID uint64) map[int64][]int64 {
 		}
 	}
 	return assignees
+}
+
+func removeFromParentCurrent(currentIDs []int64, removeID int64) []int64 {
+	result := make([]int64, 0, len(currentIDs))
+	for _, id := range currentIDs {
+		if id != removeID {
+			result = append(result, id)
+		}
+	}
+	return result
 }

@@ -35,6 +35,7 @@ func (s *TemplateService) Create(req *dto.CreateTemplateRequest, createdBy uint6
 		step := entity.StepTemplate{
 			Name:                stepReq.Name,
 			Seq:                 stepReq.Seq,
+			ParentStepID:        stepReq.ParentStepID,
 			StepType:            stepReq.StepType,
 			TimeoutMinutes:      stepReq.TimeoutMinutes,
 			GuideContent:        stepReq.GuideContent,
@@ -106,6 +107,7 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 		step := entity.StepTemplate{
 			Name:                stepReq.Name,
 			Seq:                 i + 1,
+			ParentStepID:        stepReq.ParentStepID,
 			StepType:            stepReq.StepType,
 			TimeoutMinutes:      stepReq.TimeoutMinutes,
 			GuideContent:        stepReq.GuideContent,

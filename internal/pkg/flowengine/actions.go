@@ -108,24 +108,43 @@ func (e *Engine) ReportIssue(instanceID, stepDefID int64, operatorID int64, issu
 }
 
 func (e *Engine) updateProgress(inst *FlowInst) {
-	total := len(inst.Steps)
+	total, completed := e.countLeafProgress(inst)
 	if total == 0 {
 		return
-	}
-
-	completed := 0
-	for _, si := range inst.Steps {
-		if si.Status == StepStatusCompleted || si.Status == StepStatusSkipped {
-			completed++
-		}
 	}
 
 	inst.ProgressPct = (completed * 100) / total
 }
 
-func (e *Engine) checkFlowCompletion(inst *FlowInst) {
+func (e *Engine) countLeafProgress(inst *FlowInst) (total, completed int) {
+	parentIDs := make(map[int64]bool)
 	for _, si := range inst.Steps {
-		if si.Status != StepStatusCompleted && si.Status != StepStatusSkipped {
+		if si.ParentStepID != 0 {
+			parentIDs[si.ParentStepID] = true
+		}
+	}
+
+	for _, si := range inst.Steps {
+		if !parentIDs[si.StepDefID] {
+			total++
+			if si.Status == StepStatusCompleted || si.Status == StepStatusSkipped {
+				completed++
+			}
+		}
+	}
+	return
+}
+
+func (e *Engine) checkFlowCompletion(inst *FlowInst) {
+	parentIDs := make(map[int64]bool)
+	for _, si := range inst.Steps {
+		if si.ParentStepID != 0 {
+			parentIDs[si.ParentStepID] = true
+		}
+	}
+
+	for _, si := range inst.Steps {
+		if !parentIDs[si.StepDefID] && si.Status != StepStatusCompleted && si.Status != StepStatusSkipped {
 			return
 		}
 	}

@@ -170,6 +170,7 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		step := entity.StepInstance{
 			DrillInstanceID:     drill.ID,
 			StepTemplateID:      stepTpl.ID,
+			ParentStepID:        stepTpl.ParentStepID,
 			Name:                stepTpl.Name,
 			Seq:                 stepTpl.Seq,
 			Status:              "pending",

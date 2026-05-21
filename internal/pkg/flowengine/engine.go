@@ -79,10 +79,11 @@ func (e *Engine) CreateInstance(flowDef *FlowDef, assignees map[int64][]int64, c
 
 	for _, stepDef := range flowDef.Steps {
 		si := &StepInst{
-			StepDefID: stepDef.ID,
-			Name:      stepDef.Name,
-			Seq:       stepDef.Seq,
-			Status:    StepStatusPending,
+			StepDefID:    stepDef.ID,
+			Name:         stepDef.Name,
+			Seq:          stepDef.Seq,
+			Status:       StepStatusPending,
+			ParentStepID: stepDef.ParentStepID,
 		}
 		if users, ok := assignees[stepDef.ID]; ok {
 			si.AssigneeIDs = users
