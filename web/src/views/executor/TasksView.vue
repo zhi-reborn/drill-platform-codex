@@ -467,13 +467,13 @@ onMounted(() => {
       color: $text-secondary;
 
       &:hover {
-        color: $color-primary;
+        color: $color-accent;
       }
     }
 
     :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-      background: $color-primary;
-      border-color: $color-primary;
+      background: $color-accent;
+      border-color: $color-accent;
       color: #fff;
     }
   }
@@ -529,7 +529,7 @@ onMounted(() => {
       &:hover {
         transform: translateY(-2px);
         box-shadow: $shadow-md;
-        border-color: $color-primary;
+        border-color: $color-accent;
       }
 
       .drill-header {

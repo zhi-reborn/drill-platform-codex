@@ -306,7 +306,7 @@ onMounted(async () => {
 
   .brand-tagline {
     font-size: 20px;
-    color: $color-primary;
+    color: $color-accent;
     margin-bottom: $spacing-base;
     font-weight: 400;
   }
@@ -331,7 +331,7 @@ onMounted(async () => {
       font-size: 14px;
       
       .el-icon {
-        color: $color-primary;
+        color: $color-accent;
       }
     }
   }
@@ -394,11 +394,11 @@ onMounted(async () => {
     padding: 16px;
     font-size: 16px;
     height: auto;
-    background: $color-primary;
-    border-color: $color-primary;
+    background: $color-accent;
+    border-color: $color-accent;
 
     &:hover {
-      background: $color-primary-dark;
+      background: $color-accent-hover;
     }
   }
 
@@ -409,7 +409,7 @@ onMounted(async () => {
 
   .link-btn {
     text-align: center;
-    color: $color-primary;
+    color: $color-accent;
     cursor: pointer;
     font-size: 13px;
     margin-top: $spacing-base;

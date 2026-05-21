@@ -329,8 +329,8 @@ onMounted(() => {
           }
 
           &.total {
-            background: $color-primary-bg;
-            color: $color-primary;
+            background: $color-accent-bg;
+            color: $color-accent;
           }
 
           &.active {
@@ -344,8 +344,8 @@ onMounted(() => {
           }
 
           &.team {
-            background: rgba($color-secondary, 0.2);
-            color: $color-secondary;
+            background: rgba($text-tertiary, 0.2);
+            color: $text-tertiary;
           }
         }
 

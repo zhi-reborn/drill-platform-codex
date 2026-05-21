@@ -247,13 +247,13 @@ loadTemplates()
         border-width: 2px;
 
         &:hover {
-          border-color: $color-primary;
+          border-color: $color-accent;
           box-shadow: $shadow-sm;
         }
 
         &.selected {
-          border-color: $color-primary;
-          background: $color-primary-bg;
+          border-color: $color-accent;
+          background: $color-accent-bg;
         }
 
         .template-name {

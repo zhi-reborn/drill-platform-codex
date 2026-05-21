@@ -60,8 +60,8 @@ async function copyCode() {
     cursor: pointer;
     
     &:hover {
-      color: $color-primary;
-      border-color: $color-primary;
+      color: $color-accent;
+      border-color: $color-accent;
     }
   }
 }

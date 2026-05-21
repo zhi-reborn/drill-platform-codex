@@ -162,7 +162,7 @@ watch(() => props.total, () => {
   border-left-color: transparent;
 
   &:hover {
-    border-color: $color-primary;
+    border-color: $color-accent;
     box-shadow: $shadow-sm;
 
     .delete-btn {
@@ -171,8 +171,8 @@ watch(() => props.total, () => {
   }
 
   &.unread {
-    background: $color-primary-bg;
-    border-left-color: $color-primary;
+    background: $color-accent-bg;
+    border-left-color: $color-accent;
   }
 
   .notification-header {

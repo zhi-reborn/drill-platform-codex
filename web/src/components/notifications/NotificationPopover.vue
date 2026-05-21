@@ -173,7 +173,7 @@ function handleViewAll() {
       }
 
       &.is-unread {
-        background: $color-primary-bg;
+        background: $color-accent-bg;
       }
 
       .notification-content {

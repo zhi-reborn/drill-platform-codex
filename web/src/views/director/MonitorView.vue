@@ -904,7 +904,7 @@ onMounted(() => {
           margin-bottom: $spacing-xs;
 
           .step-seq {
-            color: $color-primary;
+            color: $color-accent;
             margin-right: $spacing-xs;
           }
         }
