@@ -64,13 +64,13 @@
                     <DrillStatusBadge :status="step.status" type="step" />
                   </div>
                   <div class="step-meta">
-                    <span v-if="step.responsible_person" class="meta-item">
-                      <el-icon><UserFilled /></el-icon>
-                      责任人：{{ step.responsible_person }}
+                    <span v-if="step.attributes?.responsible_department" class="meta-item">
+                      <el-icon><OfficeBuilding /></el-icon>
+                      责任部门：{{ step.attributes.responsible_department }}
                     </span>
-                    <span v-if="step.executor" class="meta-item">
+                    <span v-if="step.attributes?.operator" class="meta-item">
                       <el-icon><Avatar /></el-icon>
-                      执行人：{{ step.executor }}
+                      操作人：{{ step.attributes.operator }}
                     </span>
                     <span v-if="step.estimated_duration_minutes" class="meta-item">
                       <el-icon><Timer /></el-icon>

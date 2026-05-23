@@ -22,7 +22,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	r.Use(corsMiddleware())
 
 	authHandler := auth.NewHandler(services.AuthService)
-	templateHandler := template.NewHandler(services.TemplateService)
+	templateHandler := template.NewHandler(services.TemplateService, services.AuthService)
 	drillHandler := drill.NewHandler(services.DrillService, services.AuthService)
 	taskHandler := task.NewHandler(services.TaskService)
 	displayHandler := display.NewHandler(services.DisplayService)

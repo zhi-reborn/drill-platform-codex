@@ -33,7 +33,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本" width="100" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="(row.status_label || row.status) === 'enabled' || row.status === 2 ? 'success' : 'info'" size="small">

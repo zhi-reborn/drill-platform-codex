@@ -133,12 +133,7 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 			ExecutionMode:            stepReq.ExecutionMode,
 			EstimatedDurationMinutes: stepReq.EstimatedDurationMinutes,
 			EstimatedStartOffset:     stepReq.EstimatedStartOffset,
-			TaskName:                 stepReq.TaskName,
-			SubTask:                  stepReq.SubTask,
-			ResponsibleDepartment:    stepReq.ResponsibleDepartment,
-			ResponsiblePerson:        stepReq.ResponsiblePerson,
-			Executor:                 stepReq.Executor,
-			Reviewer:                 stepReq.Reviewer,
+			JSONAttributes:           stepReq.JSONAttributes,
 		}
 		if stepReq.ID != nil {
 			step.ID = *stepReq.ID
@@ -182,12 +177,7 @@ func (s *TemplateService) UpdateStep(templateID uint64, stepID uint64, stepReq d
 		ExecutionMode:            stepReq.ExecutionMode,
 		EstimatedDurationMinutes: stepReq.EstimatedDurationMinutes,
 		EstimatedStartOffset:     stepReq.EstimatedStartOffset,
-		TaskName:                 stepReq.TaskName,
-		SubTask:                  stepReq.SubTask,
-		ResponsibleDepartment:    stepReq.ResponsibleDepartment,
-		ResponsiblePerson:        stepReq.ResponsiblePerson,
-		Executor:                 stepReq.Executor,
-		Reviewer:                 stepReq.Reviewer,
+		JSONAttributes:           stepReq.JSONAttributes,
 	}
 	step.DrillTemplateID = template.ID
 

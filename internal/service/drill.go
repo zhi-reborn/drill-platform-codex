@@ -184,12 +184,7 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 			ExecutionMode:          stepTpl.ExecutionMode,
 			EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
 			EstimatedStartOffset:   stepTpl.EstimatedStartOffset,
-			TaskName:               stepTpl.TaskName,
-			SubTask:                stepTpl.SubTask,
-			ResponsibleDepartment:  stepTpl.ResponsibleDepartment,
-			ResponsiblePerson:      stepTpl.ResponsiblePerson,
-			Executor:               stepTpl.Executor,
-			Reviewer:               stepTpl.Reviewer,
+			JSONAttributes:         stepTpl.JSONAttributes,
 		}
 		repository.DB.Create(&step)
 	}

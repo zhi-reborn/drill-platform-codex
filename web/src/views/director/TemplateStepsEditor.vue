@@ -115,21 +115,28 @@
             <el-descriptions :column="2" border size="default">
               <el-descriptions-item label="步骤名称" :span="2">{{ selectedStep.name }}</el-descriptions-item>
               <el-descriptions-item label="描述" :span="2">{{ selectedStep.description || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="父任务Id">{{ selectedStep.parent_step_id || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="父步骤序号">{{ selectedStep.parent_seq_display || '-' }}</el-descriptions-item>
               <el-descriptions-item label="步骤类型">{{ getStepTypeLabel(selectedStep.step_type) }}</el-descriptions-item>
               <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? selectedStep.estimated_duration_minutes + ' 分钟' : '-' }}</el-descriptions-item>
               <el-descriptions-item label="开始偏移">{{ selectedStep.estimated_start_offset ? selectedStep.estimated_start_offset + ' 分钟' : '-' }}</el-descriptions-item>
             </el-descriptions>
-            <el-divider>详细信息</el-divider>
+            <el-divider>责任与扩展</el-divider>
             <el-descriptions :column="2" border size="default">
               <el-descriptions-item label="执行角色">{{ selectedStep.default_assignee_role ? (selectedStep.default_assignee_role === 'director' ? '指挥组' : '执行组') : '-' }}</el-descriptions-item>
               <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="责任部门">{{ selectedStep.responsible_department || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="责任人">{{ selectedStep.responsible_person || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="执行人">{{ selectedStep.executor || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="复核人">{{ selectedStep.reviewer || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="任务名称" :span="2">{{ selectedStep.task_name || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="子任务描述" :span="2">{{ selectedStep.sub_task || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="责任团队">{{ selectedStep.attributes?.responsible_team || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            <el-divider>说明与预案</el-divider>
+            <el-descriptions :column="1" border size="default">
+              <el-descriptions-item label="操作说明">{{ selectedStep.attributes?.operation_guide || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="验证方式">{{ selectedStep.attributes?.verification_method || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="最坏影响分析">{{ selectedStep.attributes?.worst_case_analysis || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="兜底措施">{{ selectedStep.attributes?.fallback_measures || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="备注">{{ selectedStep.attributes?.remark || '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
           <div v-else class="empty-detail">
@@ -248,28 +255,43 @@
             </el-select>
           </el-form-item>
         </div>
+
+        <el-divider>责任信息</el-divider>
         <div class="form-row">
           <el-form-item label="责任部门" class="inline-form-item">
-            <el-input v-model="singleStepForm.responsible_department" placeholder="责任部门" clearable />
+            <el-input v-model="singleStepForm.attributes.responsible_department" placeholder="责任部门" clearable />
           </el-form-item>
-          <el-form-item label="责任人" class="inline-form-item">
-            <el-input v-model="singleStepForm.responsible_person" placeholder="责任人姓名" clearable />
+          <el-form-item label="配合部门" class="inline-form-item">
+            <el-input v-model="singleStepForm.attributes.cooperating_department" placeholder="配合部门" clearable />
           </el-form-item>
         </div>
         <div class="form-row">
-          <el-form-item label="执行人" class="inline-form-item">
-            <el-input v-model="singleStepForm.executor" placeholder="执行人姓名" clearable />
+          <el-form-item label="责任团队" class="inline-form-item">
+            <el-input v-model="singleStepForm.attributes.responsible_team" placeholder="责任团队" clearable />
           </el-form-item>
-          <el-form-item label="复核人" class="inline-form-item">
-            <el-input v-model="singleStepForm.reviewer" placeholder="复核人姓名" clearable />
+          <el-form-item label="操作人" class="inline-form-item">
+            <el-input v-model="singleStepForm.attributes.operator" placeholder="操作人姓名" clearable />
           </el-form-item>
         </div>
-
-        <el-form-item label="任务名称">
-          <el-input v-model="singleStepForm.task_name" placeholder="可独立于步骤名展示的任务名" clearable maxlength="128" show-word-limit />
+        <el-form-item label="复核人">
+          <el-input v-model="singleStepForm.attributes.reviewer" placeholder="复核人姓名" clearable />
         </el-form-item>
-        <el-form-item label="子任务描述">
-          <el-input v-model="singleStepForm.sub_task" type="textarea" placeholder="操作步骤/子任务详细描述" :rows="3" maxlength="2000" show-word-limit />
+
+        <el-divider>说明与预案</el-divider>
+        <el-form-item label="操作说明">
+          <el-input v-model="singleStepForm.attributes.operation_guide" type="textarea" placeholder="操作步骤详细说明" :rows="3" maxlength="2000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="验证方式">
+          <el-input v-model="singleStepForm.attributes.verification_method" type="textarea" placeholder="如何验证操作成功" :rows="2" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="最坏影响分析">
+          <el-input v-model="singleStepForm.attributes.worst_case_analysis" type="textarea" placeholder="操作失败的最大影响" :rows="2" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="兜底措施">
+          <el-input v-model="singleStepForm.attributes.fallback_measures" type="textarea" placeholder="失败后如何恢复" :rows="2" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="singleStepForm.attributes.remark" placeholder="其他备注信息" clearable />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -288,7 +310,7 @@ import { Refresh, Plus, Delete, Upload, Download, Check, Edit, ArrowLeft, Settin
 import * as XLSX from 'xlsx'
 import { userApi } from '@/api'
 import { templateApi } from '@/api/modules/template'
-import type { StepTemplate, StepType } from '@/types'
+import type { StepTemplate, StepType, StepAttributes } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -324,10 +346,11 @@ const activeSteps = computed(() => getPhaseSteps(activePhaseName.value))
 // 当前阶段步骤的树形结构
 interface StepTreeNode extends StepTemplate {
   children?: StepTreeNode[]
+  hasChildren?: boolean
 }
 
 const activeStepsTree = computed<StepTreeNode[]>(() => {
-  const nodes: StepTreeNode[] = activeSteps.value.map(s => ({ ...s, children: [] }))
+  const nodes: StepTreeNode[] = activeSteps.value.map(s => ({ ...s, children: [], hasChildren: false }))
   const nodeMap = new Map<number, StepTreeNode>()
   for (const node of nodes) {
     nodeMap.set(node.id, node)
@@ -337,11 +360,25 @@ const activeStepsTree = computed<StepTreeNode[]>(() => {
     if (node.parent_step_id && nodeMap.has(node.parent_step_id)) {
       const parent = nodeMap.get(node.parent_step_id)!
       parent.children!.push(node)
+      parent.hasChildren = true
     } else {
       roots.push(node)
     }
   }
   return roots
+})
+
+// 构建当前树形结构的步骤序号映射（ID -> order_index）
+const stepSeqMap = computed(() => {
+  const map: Record<number, number> = {}
+  const traverse = (nodes: StepTreeNode[]) => {
+    for (const n of nodes) {
+      if (n.id !== undefined) map[n.id as number] = n.order_index ?? 0
+      if (n.children?.length) traverse(n.children)
+    }
+  }
+  traverse(activeStepsTree.value)
+  return map
 })
 
 // 获取所有步骤（扁平化，用于保存）
@@ -360,7 +397,7 @@ function getAllSteps(): StepTemplate[] {
 
 // 构建树形并返回有序的扁平列表
 function buildOrderMap(steps: StepTemplate[]): { nodes: StepTemplate[] } {
-  const nodeMap = new Map<number, StepTemplate>()
+  const nodeMap = new Map<number, StepTreeNode>()
   const nodes: StepTreeNode[] = steps.map(s => ({ ...s, children: [] }))
   for (const node of nodes) {
     nodeMap.set(node.id, node)
@@ -450,7 +487,7 @@ function handleSavePhases() {
 // ============ 步骤 CRUD ============
 
 const templateName = ref('')
-const selectedStep = ref<StepTemplate | null>(null)
+const selectedStep = ref<(StepTemplate & { parent_seq_display?: string }) | null>(null)
 const importVisible = ref(false)
 const importTargetPhase = ref('')
 const singleAddVisible = ref(false)
@@ -468,12 +505,7 @@ const singleStepForm = reactive({
   parent_step_id: undefined as number | undefined,
   estimated_duration_minutes: undefined as number | undefined,
   estimated_start_offset: undefined as number | undefined,
-  task_name: '',
-  sub_task: '',
-  responsible_department: '',
-  responsible_person: '',
-  executor: '',
-  reviewer: '',
+  attributes: {} as StepAttributes,
 })
 
 const formParentStepOptions = computed(() => {
@@ -510,6 +542,12 @@ async function loadTemplateSteps() {
     const steps = JSON.parse(JSON.stringify(template.steps || []))
     steps.forEach((s: StepTemplate) => {
       s.description = s.guide_content || s.description || ''
+      // 确保 attributes 是对象（兼容后端返回的 JSON 字符串）
+      if (s.attributes && typeof s.attributes === 'string') {
+        try { s.attributes = JSON.parse(s.attributes) } catch { s.attributes = {} }
+      } else if (!s.attributes) {
+        s.attributes = {}
+      }
     })
 
     // 按阶段分组
@@ -548,7 +586,30 @@ async function loadTemplateSteps() {
 
 // 行选择
 function handleRowSelect(row: StepTemplate | undefined) {
-  selectedStep.value = row || null
+  if (row) {
+    let parentSeq = '-'
+    if (row.parent_step_id) {
+      const seq = stepSeqMap.value[row.parent_step_id]
+      if (seq && seq > 0) {
+        parentSeq = `#${seq}`
+      } else {
+        // fallback: 从扁平列表中查找父步骤的 order_index
+        const parent = activeSteps.value.find(s => s.id === row.parent_step_id)
+        if (parent?.order_index) {
+          parentSeq = `#${parent.order_index}`
+        } else if (row.parent_step_id) {
+          parentSeq = String(row.parent_step_id)
+        }
+      }
+    }
+    selectedStep.value = { 
+      ...row, 
+      attributes: { ...((row as any).attributes || {}) },
+      parent_seq_display: parentSeq 
+    }
+  } else {
+    selectedStep.value = null
+  }
 }
 
 // 删除步骤
@@ -588,12 +649,7 @@ function resetSingleStepForm() {
   singleStepForm.parent_step_id = undefined
   singleStepForm.estimated_duration_minutes = undefined
   singleStepForm.estimated_start_offset = undefined
-  singleStepForm.task_name = ''
-  singleStepForm.sub_task = ''
-  singleStepForm.responsible_department = ''
-  singleStepForm.responsible_person = ''
-  singleStepForm.executor = ''
-  singleStepForm.reviewer = ''
+  singleStepForm.attributes = {}
 }
 
 // 选中步骤的编辑对话框
@@ -611,7 +667,7 @@ function openStepEditDialogForSelected() {
 function openStepEditDialog(index: number) {
   const step = activeSteps.value[index]
   singleStepForm.name = step.name
-  singleStepForm.description = step.description || ''
+  singleStepForm.description = step.description || step.guide_content || ''
   singleStepForm.step_type = step.step_type as StepType
   singleStepForm.timeout_minutes = step.timeout_minutes || 5
   singleStepForm.default_assignee_role = step.default_assignee_role || ''
@@ -619,14 +675,18 @@ function openStepEditDialog(index: number) {
   singleStepForm.parent_step_id = step.parent_step_id
   singleStepForm.estimated_duration_minutes = step.estimated_duration_minutes
   singleStepForm.estimated_start_offset = step.estimated_start_offset
-  singleStepForm.task_name = step.task_name || ''
-  singleStepForm.sub_task = step.sub_task || ''
-  singleStepForm.responsible_department = step.responsible_department || ''
-  singleStepForm.responsible_person = step.responsible_person || ''
-  singleStepForm.executor = step.executor || ''
-  singleStepForm.reviewer = step.reviewer || ''
+  singleStepForm.attributes = parseAttributes(step.attributes)
   singleStepEditIndex.value = index
   singleAddVisible.value = true
+}
+
+function parseAttributes(val: unknown): Record<string, string | undefined> {
+  if (!val) return {}
+  if (typeof val === 'string') {
+    try { return JSON.parse(val) } catch { return {} }
+  }
+  // 返回浅拷贝，防止编辑表单时直接影响原数据
+  return { ...(val as Record<string, string | undefined>) }
 }
 
 // 编辑步骤（调后端 API 立即生效）
@@ -639,54 +699,70 @@ async function handleEditStep() {
   const steps = activeSteps.value
   const step = steps[singleStepEditIndex.value!]
 
-  try {
-    const seqVal = (step as any).seq || step.order_index || 1
-    await templateApi.updateStep(templateId.value, step.id, {
-      name: singleStepForm.name.trim(),
-      seq: seqVal,
-      step_type: singleStepForm.step_type,
-      timeout_minutes: Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2),
-      guide_content: singleStepForm.description.trim(),
-      default_assignee_role: singleStepForm.default_assignee_role,
-      executor_team: singleStepForm.executor_team,
-      phase: step.phase || activePhaseName.value,
-      phase_step: step.phase_step,
-      estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
-      estimated_start_offset: singleStepForm.estimated_start_offset,
-      task_name: singleStepForm.task_name,
-      sub_task: singleStepForm.sub_task,
-      responsible_department: singleStepForm.responsible_department,
-      responsible_person: singleStepForm.responsible_person,
-      executor: singleStepForm.executor,
-      reviewer: singleStepForm.reviewer,
-    })
+  // 更新本地状态
+  step.name = singleStepForm.name.trim()
+  step.description = singleStepForm.description.trim()
+  step.step_type = singleStepForm.step_type as StepType
+  step.seq = singleStepEditIndex.value! + 1
+  step.order_index = singleStepEditIndex.value! + 1
+  step.timeout_minutes = Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2)
+  step.default_assignee_role = singleStepForm.default_assignee_role
+  step.executor_team = singleStepForm.executor_team
+  step.parent_step_id = singleStepForm.parent_step_id
+  step.estimated_duration_minutes = singleStepForm.estimated_duration_minutes
+  step.estimated_start_offset = singleStepForm.estimated_start_offset
+  step.attributes = { ...singleStepForm.attributes }
 
-    // 更新本地状态
-    step.name = singleStepForm.name.trim()
-    step.description = singleStepForm.description.trim()
-    step.step_type = singleStepForm.step_type as StepType
-    step.timeout_minutes = Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2)
-    step.default_assignee_role = singleStepForm.default_assignee_role
-    step.executor_team = singleStepForm.executor_team
-    step.estimated_duration_minutes = singleStepForm.estimated_duration_minutes
-    step.estimated_start_offset = singleStepForm.estimated_start_offset
-    step.task_name = singleStepForm.task_name
-    step.sub_task = singleStepForm.sub_task
-    step.responsible_department = singleStepForm.responsible_department
-    step.responsible_person = singleStepForm.responsible_person
-    step.executor = singleStepForm.executor
-    step.reviewer = singleStepForm.reviewer
-
-    // 同步刷新右侧详情面板
-    if (selectedStep.value?.id === step.id) {
-      selectedStep.value = { ...step }
+  // 仅已保存步骤（真实数据库 ID）调用 API
+  const realId = step.id && Number.isInteger(step.id)
+  if (realId) {
+    try {
+      const seqVal = singleStepEditIndex.value! + 1
+      await templateApi.updateStep(templateId.value, step.id, {
+        name: singleStepForm.name.trim(),
+        seq: seqVal,
+        step_type: singleStepForm.step_type,
+        timeout_minutes: Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2),
+        guide_content: singleStepForm.description.trim(),
+        default_assignee_role: singleStepForm.default_assignee_role,
+        executor_team: singleStepForm.executor_team,
+        phase: step.phase || activePhaseName.value,
+        phase_step: step.phase_step,
+        parent_step_id: singleStepForm.parent_step_id,
+        estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
+        estimated_start_offset: singleStepForm.estimated_start_offset,
+        attributes: JSON.stringify(singleStepForm.attributes),
+      })
+      ElMessage.success('步骤已更新')
+    } catch (error) {
+      ElMessage.error('保存步骤失败')
+      console.error('Save step error:', error)
+      return
     }
+  } else {
+    const isNew = singleStepEditIndex.value === steps.length - 1 || !step.seq
+    ElMessage.success(isNew ? '步骤已添加' : '步骤已更新')
+  }
 
-    ElMessage.success('步骤已更新')
-  } catch (error) {
-    ElMessage.error('保存步骤失败')
-    console.error('Save step error:', error)
-    return
+  // 强制刷新右侧详情面板（直接赋新值确保视图更新）
+  let parentSeq = '-'
+  if (step.parent_step_id) {
+    const seq = stepSeqMap.value[step.parent_step_id]
+    if (seq && seq > 0) {
+      parentSeq = `#${seq}`
+    } else {
+      const parent = activeSteps.value.find(s => s.id === step.parent_step_id)
+      if (parent?.order_index) {
+        parentSeq = `#${parent.order_index}`
+      } else if (step.parent_step_id) {
+        parentSeq = String(step.parent_step_id)
+      }
+    }
+  }
+  selectedStep.value = {
+    ...step,
+    attributes: { ...step.attributes },
+    parent_seq_display: parentSeq
   }
 
   resetSingleStepForm()
@@ -721,12 +797,7 @@ function handleAddSingleStep() {
       created_at: new Date().toISOString(),
       estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
       estimated_start_offset: singleStepForm.estimated_start_offset,
-      task_name: singleStepForm.task_name,
-      sub_task: singleStepForm.sub_task,
-      responsible_department: singleStepForm.responsible_department,
-      responsible_person: singleStepForm.responsible_person,
-      executor: singleStepForm.executor,
-      reviewer: singleStepForm.reviewer,
+      attributes: { ...singleStepForm.attributes },
     })
     ElMessage.success('步骤已添加')
 
@@ -752,12 +823,7 @@ async function handleSaveSteps() {
       phase_step: s.phase_step || '',
       estimated_duration_minutes: s.estimated_duration_minutes,
       estimated_start_offset: s.estimated_start_offset,
-      task_name: s.task_name || '',
-      sub_task: s.sub_task || '',
-      responsible_department: s.responsible_department || '',
-      responsible_person: s.responsible_person || '',
-      executor: s.executor || '',
-      reviewer: s.reviewer || '',
+      attributes: typeof s.attributes === 'string' ? s.attributes : JSON.stringify(s.attributes || {}),
     })))
     ElMessage.success('步骤已保存')
     goBack()
@@ -793,18 +859,18 @@ function openBatchImportDialog() {
 }
 
 function downloadTemplate() {
-  const header = ['步骤名称', '描述', '步骤类型', '执行角色', '执行团队', '预计耗时 (分)', '责任部门', '责任人', '执行人', '复核人', '任务名称', '子任务描述', '说明']
+  const header = ['步骤名称', '描述', '步骤类型', '执行角色', '执行团队', '预计耗时 (分)', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
   const data = [
     header,
-    ['检查数据库状态', '检查主库是否正常运行', 'serial', 'executor', '技术部', '10', '技术部', '张三', '李四', '王五', '数据库状态检查', '确认主库正常运行，检查连接池状态', '步骤类型可选值：serial(串行), parallel(并行)'],
-    ['切换从库', '将从库提升为主库', 'parallel', 'director', '运维部', '15', '运维部', '赵六', '钱七', '孙八', '主从切换', '停止主库写入，提升从库为主库', '超时时间 = 预计耗时 * 2 (最小 5 分钟)'],
+    ['检查数据库状态', '检查主库是否正常运行', 'serial', 'executor', '技术部', '10', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
+    ['切换从库', '将从库提升为主库', 'parallel', 'director', '运维部', '15', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
   ]
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
   const colWidths = [
-    { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
-    { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 20 }, { wch: 40 }, { wch: 50 }
+    { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 }
   ]
   ws['!cols'] = colWidths
   XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
@@ -847,11 +913,15 @@ function handleExcelUpload(file: File) {
         const executorTeam = String(row[4] || '').trim()
         const estimatedDuration = parseInt(String(row[5] || '')) || undefined
         const responsibleDepartment = String(row[6] || '').trim()
-        const responsiblePerson = String(row[7] || '').trim()
-        const executor = String(row[8] || '').trim()
-        const reviewer = String(row[9] || '').trim()
-        const taskName = String(row[10] || '').trim()
-        const subTask = String(row[11] || '').trim()
+        const cooperatingDepartment = String(row[7] || '').trim()
+        const responsibleTeam = String(row[8] || '').trim()
+        const operator = String(row[9] || '').trim()
+        const reviewer = String(row[10] || '').trim()
+        const operationGuide = String(row[11] || '').trim()
+        const verificationMethod = String(row[12] || '').trim()
+        const worstCaseAnalysis = String(row[13] || '').trim()
+        const fallbackMeasures = String(row[14] || '').trim()
+        const remark = String(row[15] || '').trim()
 
         if (!name) {
           errors.push(`第${rowNum}行：步骤名称不能为空`)
@@ -884,12 +954,18 @@ function handleExcelUpload(file: File) {
           phase: importTargetPhase.value,
           estimated_duration_minutes: estimatedDuration,
           estimated_start_offset: undefined,
-          task_name: taskName,
-          sub_task: subTask,
-          responsible_department: responsibleDepartment,
-          responsible_person: responsiblePerson,
-          executor,
-          reviewer,
+          attributes: {
+            responsible_department: responsibleDepartment || undefined,
+            cooperating_department: cooperatingDepartment || undefined,
+            responsible_team: responsibleTeam || undefined,
+            operator: operator || undefined,
+            reviewer: reviewer || undefined,
+            operation_guide: operationGuide || undefined,
+            verification_method: verificationMethod || undefined,
+            worst_case_analysis: worstCaseAnalysis || undefined,
+            fallback_measures: fallbackMeasures || undefined,
+            remark: remark || undefined,
+          },
         })
       }
 
@@ -1009,7 +1085,17 @@ onMounted(() => {
 .steps-panel .panel-body {
   :deep(.el-table) {
     --el-table-border-color: $border-color;
+    --el-table-tree-indent: 16px;
   }
+
+  :deep(.el-table__indent) {
+    padding-left: var(--el-table-tree-indent) !important;
+    padding-right: 0 !important;
+  }
+
+  :deep(.el-table__row--level-1 .el-table__indent) { padding-left: 16px !important; }
+  :deep(.el-table__row--level-2 .el-table__indent) { padding-left: 32px !important; }
+  :deep(.el-table__row--level-3 .el-table__indent) { padding-left: 48px !important; }
 }
 
 .empty-steps {

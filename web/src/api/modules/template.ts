@@ -106,6 +106,12 @@ export const templateApi = {
     is_blocking?: number
     default_assignee_role?: string
     executor_team?: string
+    phase?: string
+    phase_step?: string
+    parent_step_id?: number
+    estimated_duration_minutes?: number
+    estimated_start_offset?: number
+    attributes?: string
   }>) => {
     return apiRequest<void>({
       url: `/v1/templates/${id}/steps`,
@@ -127,12 +133,7 @@ export const templateApi = {
     phase_step?: string
     estimated_duration_minutes?: number
     estimated_start_offset?: number
-    task_name?: string
-    sub_task?: string
-    responsible_department?: string
-    responsible_person?: string
-    executor?: string
-    reviewer?: string
+    attributes?: string
   }) => {
     return apiRequest<void>({
       url: `/v1/templates/${id}/steps/${stepId}`,

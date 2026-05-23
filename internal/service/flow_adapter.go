@@ -114,12 +114,7 @@ func (a *DrillFlowAdapter) GetStepDef(flowDefID, stepDefID int64) (*flowengine.S
 				ExecutionMode:            st.ExecutionMode,
 				EstimatedDurationMinutes: st.EstimatedDurationMinutes,
 				EstimatedStartOffset:     st.EstimatedStartOffset,
-				TaskName:                 st.TaskName,
-				SubTask:                  st.SubTask,
-				ResponsibleDepartment:    st.ResponsibleDepartment,
-				ResponsiblePerson:        st.ResponsiblePerson,
-				Executor:                 st.Executor,
-				Reviewer:                 st.Reviewer,
+				JSONAttributes:           st.JSONAttributes,
 			}, nil
 		}
 	}
@@ -170,12 +165,7 @@ func (a *DrillFlowAdapter) GetAllStepDefs(flowDefID int64) ([]*flowengine.StepDe
 			ExecutionMode:            st.ExecutionMode,
 			EstimatedDurationMinutes: st.EstimatedDurationMinutes,
 			EstimatedStartOffset:     st.EstimatedStartOffset,
-			TaskName:                 st.TaskName,
-			SubTask:                  st.SubTask,
-			ResponsibleDepartment:    st.ResponsibleDepartment,
-			ResponsiblePerson:        st.ResponsiblePerson,
-			Executor:                 st.Executor,
-			Reviewer:                 st.Reviewer,
+			JSONAttributes:           st.JSONAttributes,
 		})
 	}
 	return defs, nil
@@ -1000,12 +990,7 @@ func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *floweng
 			ExecutionMode:            st.ExecutionMode,
 			EstimatedDurationMinutes: st.EstimatedDurationMinutes,
 			EstimatedStartOffset:     st.EstimatedStartOffset,
-			TaskName:                 st.TaskName,
-			SubTask:                  st.SubTask,
-			ResponsibleDepartment:    st.ResponsibleDepartment,
-			ResponsiblePerson:        st.ResponsiblePerson,
-			Executor:                 st.Executor,
-			Reviewer:                 st.Reviewer,
+			JSONAttributes:           st.JSONAttributes,
 		})
 	}
 	return flowDef

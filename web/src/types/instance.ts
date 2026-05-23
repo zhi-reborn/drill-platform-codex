@@ -1,3 +1,5 @@
+import type { StepAttributes } from './template'
+
 export type DrillStatus = 'pending' | 'running' | 'paused' | 'completed' | 'terminated'
 export type StepStatus = 'pending' | 'running' | 'completed' | 'timeout' | 'skipped' | 'issue'
 
@@ -75,12 +77,7 @@ export interface StepInstance {
   execution_mode?: 'serial' | 'parallel'
   estimated_duration_minutes?: number
   estimated_start_offset?: number
-  task_name?: string
-  sub_task?: string
-  responsible_department?: string
-  responsible_person?: string
-  executor?: string
-  reviewer?: string
+  attributes?: StepAttributes
   created_at: string
   drill_instance?: DrillInstance
   logs?: StepInstanceLog[]

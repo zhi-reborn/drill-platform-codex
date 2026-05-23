@@ -89,12 +89,7 @@ func (e *Engine) CreateInstance(flowDef *FlowDef, assignees map[int64][]int64, c
 			ExecutionMode:            stepDef.ExecutionMode,
 			EstimatedDurationMinutes: stepDef.EstimatedDurationMinutes,
 			EstimatedStartOffset:     stepDef.EstimatedStartOffset,
-			TaskName:                 stepDef.TaskName,
-			SubTask:                  stepDef.SubTask,
-			ResponsibleDepartment:    stepDef.ResponsibleDepartment,
-			ResponsiblePerson:        stepDef.ResponsiblePerson,
-			Executor:                 stepDef.Executor,
-			Reviewer:                 stepDef.Reviewer,
+			JSONAttributes:           stepDef.JSONAttributes,
 		}
 		if users, ok := assignees[stepDef.ID]; ok {
 			si.AssigneeIDs = users

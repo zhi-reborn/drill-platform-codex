@@ -13,10 +13,11 @@ import (
 
 type Handler struct {
 	templateService *service.TemplateService
+	authService     *service.AuthService
 }
 
-func NewHandler(templateService *service.TemplateService) *Handler {
-	return &Handler{templateService: templateService}
+func NewHandler(templateService *service.TemplateService, authService *service.AuthService) *Handler {
+	return &Handler{templateService: templateService, authService: authService}
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -36,6 +37,11 @@ func (h *Handler) List(c *gin.Context) {
 
 	for i := range templates {
 		templates[i].StatusLabel = statusToLabel(templates[i].Status)
+		if templates[i].CreatedBy > 0 {
+			if user, err := h.authService.GetUserByID(templates[i].CreatedBy); err == nil && user != nil {
+				templates[i].CreatedByName = user.RealName
+			}
+		}
 	}
 
 	response.SuccessPage(c, templates, total, q.Page, q.PageSize)
@@ -193,12 +199,7 @@ type UpdateStepsRequest struct {
 		ExecutionMode            string  `json:"execution_mode"`
 		EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
 		EstimatedStartOffset     *int    `json:"estimated_start_offset"`
-		TaskName                 string  `json:"task_name"`
-		SubTask                  string  `json:"sub_task"`
-		ResponsibleDepartment    string  `json:"responsible_department"`
-		ResponsiblePerson        string  `json:"responsible_person"`
-		Executor                 string  `json:"executor"`
-		Reviewer                 string  `json:"reviewer"`
+		JSONAttributes           string  `json:"attributes"`
 	} `json:"steps" binding:"required,dive"`
 }
 
@@ -233,12 +234,7 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 			ExecutionMode:            s.ExecutionMode,
 			EstimatedDurationMinutes: s.EstimatedDurationMinutes,
 			EstimatedStartOffset:     s.EstimatedStartOffset,
-			TaskName:                 s.TaskName,
-			SubTask:                  s.SubTask,
-			ResponsibleDepartment:    s.ResponsibleDepartment,
-			ResponsiblePerson:        s.ResponsiblePerson,
-			Executor:                 s.Executor,
-			Reviewer:                 s.Reviewer,
+			JSONAttributes:           s.JSONAttributes,
 		})
 	}
 

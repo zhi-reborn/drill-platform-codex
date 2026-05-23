@@ -252,19 +252,14 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="responsible_person" label="责任人" width="90" align="center" show-overflow-tooltip>
+              <el-table-column prop="attributes" label="操作人" width="90" align="center" show-overflow-tooltip>
                 <template #default="{ row }">
-                  {{ row.responsible_person || '-' }}
+                  {{ row.attributes?.operator || '-' }}
                 </template>
               </el-table-column>
-              <el-table-column prop="executor" label="执行人" width="90" align="center" show-overflow-tooltip>
+              <el-table-column prop="attributes" label="复核人" width="90" align="center" show-overflow-tooltip>
                 <template #default="{ row }">
-                  {{ row.executor || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="reviewer" label="复核人" width="90" align="center" show-overflow-tooltip>
-                <template #default="{ row }">
-                  {{ row.reviewer || '-' }}
+                  {{ row.attributes?.reviewer || '-' }}
                 </template>
               </el-table-column>
               <el-table-column label="实际耗时" width="85" align="center">
@@ -312,15 +307,14 @@
             </el-descriptions-item>
             <el-descriptions-item label="超时时间">{{ selectedStep.timeout_minutes ? `${selectedStep.timeout_minutes} 分钟` : '-' }}</el-descriptions-item>
             <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="责任部门">{{ selectedStep.responsible_department || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="责任人">{{ selectedStep.responsible_person || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="执行人">{{ selectedStep.executor || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="复核人">{{ selectedStep.reviewer || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-descriptions-item>
             <el-descriptions-item label="分配人员">{{ selectedStep.assignee_names || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="任务名称" :span="2">{{ selectedStep.task_name || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="子任务内容" :span="2">
-              <div class="sub-task-content">{{ selectedStep.sub_task || '-' }}</div>
-            </el-descriptions-item>
+            <el-descriptions-item label="操作说明" :span="2">{{ selectedStep.attributes?.operation_guide || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="验证方式" :span="2">{{ selectedStep.attributes?.verification_method || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="兜底措施" :span="2">{{ selectedStep.attributes?.fallback_measures || '-' }}</el-descriptions-item>
             <el-descriptions-item label="实际耗时">{{ calculateDuration(selectedStep) }}</el-descriptions-item>
             <el-descriptions-item label="开始时间">{{ selectedStep.start_time ? formatTime(selectedStep.start_time) : '-' }}</el-descriptions-item>
             <el-descriptions-item label="结束时间">{{ selectedStep.end_time ? formatTime(selectedStep.end_time) : '-' }}</el-descriptions-item>

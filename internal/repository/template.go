@@ -45,24 +45,21 @@ func (r *TemplateRepo) Update(template *entity.DrillTemplate) error {
 }
 
 func (r *TemplateRepo) UpdateStep(step *entity.StepTemplate) error {
-	return DB.Model(&entity.StepTemplate{}).Where("id = ? AND drill_template_id = ?", step.ID, step.DrillTemplateID).Updates(map[string]interface{}{
+		return DB.Model(&entity.StepTemplate{}).Where("id = ? AND drill_template_id = ?", step.ID, step.DrillTemplateID).Updates(map[string]interface{}{
 		"name":                        step.Name,
+		"seq":                         step.Seq,
 		"step_type":                   step.StepType,
 		"timeout_minutes":            step.TimeoutMinutes,
 		"guide_content":              step.GuideContent,
 		"default_assignee_role":      step.DefaultAssigneeRole,
 		"executor_team":              step.ExecutorTeam,
+		"parent_step_id":             step.ParentStepID,
 		"phase":                      step.Phase,
 		"phase_step":                 step.PhaseStep,
 		"execution_mode":             step.ExecutionMode,
 		"estimated_duration_minutes": step.EstimatedDurationMinutes,
 		"estimated_start_offset":     step.EstimatedStartOffset,
-		"task_name":                  step.TaskName,
-		"sub_task":                   step.SubTask,
-		"responsible_department":     step.ResponsibleDepartment,
-		"responsible_person":         step.ResponsiblePerson,
-		"executor":                   step.Executor,
-		"reviewer":                   step.Reviewer,
+		"attributes":                 step.JSONAttributes,
 	}).Error
 }
 

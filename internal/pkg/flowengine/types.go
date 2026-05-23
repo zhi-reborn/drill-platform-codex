@@ -91,14 +91,9 @@ type StepDef struct {
 	Phase                    string        `json:"phase"`
 	PhaseStep                string        `json:"phase_step"`
 	ExecutionMode            string        `json:"execution_mode"`
-	EstimatedDurationMinutes *int          `json:"estimated_duration_minutes,omitempty"`
-	EstimatedStartOffset     *int          `json:"estimated_start_offset,omitempty"`
-	TaskName                 string        `json:"task_name"`
-	SubTask                  string        `json:"sub_task"`
-	ResponsibleDepartment    string        `json:"responsible_department"`
-	ResponsiblePerson        string        `json:"responsible_person"`
-	Executor                 string        `json:"executor"`
-	Reviewer                 string        `json:"reviewer"`
+	EstimatedDurationMinutes *int           `json:"estimated_duration_minutes,omitempty"`
+	EstimatedStartOffset     *int           `json:"estimated_start_offset,omitempty"`
+	JSONAttributes           string         `json:"attributes"`
 }
 
 type ConditionDef struct {
@@ -144,12 +139,7 @@ type StepInst struct {
 	ExecutionMode            string          `json:"execution_mode"`
 	EstimatedDurationMinutes *int            `json:"estimated_duration_minutes,omitempty"`
 	EstimatedStartOffset     *int            `json:"estimated_start_offset,omitempty"`
-	TaskName                 string          `json:"task_name"`
-	SubTask                  string          `json:"sub_task"`
-	ResponsibleDepartment    string          `json:"responsible_department"`
-	ResponsiblePerson        string          `json:"responsible_person"`
-	Executor                 string          `json:"executor"`
-	Reviewer                 string          `json:"reviewer"`
+	JSONAttributes           string          `json:"attributes"`
 }
 
 type Event struct {

@@ -13,6 +13,19 @@ export const STEP_TYPE_LABELS: Record<StepType, string> = {
   parallel: '并行',
 }
 
+export interface StepAttributes {
+  operation_guide?: string
+  verification_method?: string
+  worst_case_analysis?: string
+  fallback_measures?: string
+  responsible_department?: string
+  cooperating_department?: string
+  responsible_team?: string
+  operator?: string
+  reviewer?: string
+  remark?: string
+}
+
 export interface StepTemplate {
   id: number
   template_id: number
@@ -32,12 +45,7 @@ export interface StepTemplate {
   phase_step?: string
   estimated_duration_minutes?: number
   estimated_start_offset?: number
-  task_name?: string
-  sub_task?: string
-  responsible_department?: string
-  responsible_person?: string
-  executor?: string
-  reviewer?: string
+  attributes?: StepAttributes
   created_at: string
 }
 

@@ -25,8 +25,9 @@ type DrillTemplate struct {
 	Description string    `gorm:"type:text;column:description" json:"description"`
 	Status      int8      `gorm:"type:tinyint;not null;default:1;column:status" json:"status"`
 	StatusLabel string    `gorm:"-" json:"status_label"`
-	CreatedBy   uint64    `gorm:"type:bigint unsigned;not null;column:created_by" json:"created_by"`
-	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	CreatedBy      uint64    `gorm:"type:bigint unsigned;not null;column:created_by" json:"created_by"`
+	CreatedByName  string    `gorm:"-" json:"created_by_name"`
+	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 	DeletedAt   *time.Time `gorm:"index;column:deleted_at" json:"deleted_at,omitempty"`
 
@@ -56,13 +57,8 @@ type StepTemplate struct {
 	ExecutionMode      string    `gorm:"type:varchar(16);column:execution_mode" json:"execution_mode"`
 	EstimatedDurationMinutes *int `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
 	EstimatedStartOffset     *int `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
-	TaskName           string    `gorm:"type:varchar(128);column:task_name" json:"task_name"`
-	SubTask            string    `gorm:"type:text;column:sub_task" json:"sub_task"`
-	ResponsibleDepartment string `gorm:"type:varchar(64);column:responsible_department" json:"responsible_department"`
-	ResponsiblePerson  string    `gorm:"type:varchar(64);column:responsible_person" json:"responsible_person"`
-	Executor           string    `gorm:"type:varchar(64);column:executor" json:"executor"`
-	Reviewer           string    `gorm:"type:varchar(64);column:reviewer" json:"reviewer"`
-	CreatedAt          time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	JSONAttributes       string    `gorm:"type:json;column:attributes" json:"attributes"`
+	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillTemplate DrillTemplate `gorm:"foreignKey:DrillTemplateID;references:ID" json:"drill_template,omitempty"`
 }

@@ -58,12 +58,7 @@ type StepTemplateRequest struct {
 	ExecutionMode            string  `json:"execution_mode"`
 	EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
 	EstimatedStartOffset     *int    `json:"estimated_start_offset"`
-	TaskName                 string  `json:"task_name"`
-	SubTask                  string  `json:"sub_task"`
-	ResponsibleDepartment    string  `json:"responsible_department"`
-	ResponsiblePerson        string  `json:"responsible_person"`
-	Executor                 string  `json:"executor"`
-	Reviewer                 string  `json:"reviewer"`
+	JSONAttributes           string  `json:"attributes"`
 }
 
 type UpdateDrillStatusRequest struct {
