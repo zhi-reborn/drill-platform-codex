@@ -51,37 +51,81 @@
         </div>
         <div class="panel-body">
           <div v-if="activeSteps.length > 0">
-            <el-table
-              :data="activeStepsTree"
-              border
-              size="small"
-              row-key="id"
-              highlight-current-row
-              :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-              default-expand-all
-              @current-change="handleRowSelect"
+            <draggable
+              v-model="rootStepList"
+              :animation="200"
+              item-key="id"
+              handle=".drag-handle"
+              ghost-class="drag-ghost"
+              class="draggable-list"
+              @start="dragging = true"
+              @end="onDragEnd"
             >
-              <el-table-column type="index" label="序号" width="60" align="center" />
-              <el-table-column prop="name" label="步骤名称" min-width="120" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <span :class="{ 'step-selected': selectedStep?.id === row.id }">
-                    {{ row.name || '-' }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="step_type" label="类型" width="70" align="center">
-                <template #default="{ row }">
-                  <el-tag size="small" type="info">{{ getStepTypeLabel(row.step_type) }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="90" align="center" fixed="right">
-                <template #default="{ row }">
-                  <el-button text type="danger" size="small" @click="removeStepByRow(row)" title="删除">
-                    <el-icon><Delete /></el-icon>
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+              <template #item="{ element: root }">
+                <div class="step-group">
+                  <!-- 根步骤行 -->
+                  <div
+                    class="step-row"
+                    :class="{ 'step-selected': selectedStep?.id === root.id }"
+                    @click="handleStepSelect(root)"
+                  >
+                    <span class="drag-handle">⠿</span>
+                    <span class="seq-badge">{{ computeSEQ(root) }}</span>
+                    <button
+                      v-if="root.hasChildren"
+                      class="expand-btn"
+                      @click.stop="toggleCollapse(root.id)"
+                    >
+                      {{ isCollapsed(root.id) ? '▶' : '▼' }}
+                    </button>
+                    <span v-else class="expand-placeholder"></span>
+                    <span class="step-name">{{ root.name || '-' }}</span>
+                    <el-tag size="small" type="info">{{ getStepTypeLabel(root.step_type) }}</el-tag>
+                    <el-button text type="danger" size="small" @click.stop="removeStepByRow(root)" title="删除">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                  <!-- 子步骤行 -->
+                  <template v-if="!isCollapsed(root.id)">
+                    <draggable
+                      v-model="root.children"
+                      :animation="200"
+                      item-key="id"
+                      handle=".drag-handle"
+                      ghost-class="drag-ghost"
+                      :group="{ name: 'children-group', pull: false, put: false }"
+                      class="children-list"
+                      @start="dragging = true"
+                      @end="onDragEnd"
+                    >
+                      <template #item="{ element: child }">
+                        <div
+                          class="step-row child-row"
+                          :class="{ 'step-selected': selectedStep?.id === child.id }"
+                          @click="handleStepSelect(child)"
+                        >
+                          <span class="drag-handle">⠿</span>
+                          <span class="seq-badge">{{ computeSEQ(child) }}</span>
+                          <button
+                            v-if="child.hasChildren"
+                            class="expand-btn"
+                            @click.stop="toggleCollapse(child.id)"
+                          >
+                            {{ isCollapsed(child.id) ? '▶' : '▼' }}
+                          </button>
+                          <span v-else class="expand-placeholder"></span>
+                          <span class="step-name">{{ child.name || '-' }}</span>
+                          <el-tag size="small" type="info">{{ getStepTypeLabel(child.step_type) }}</el-tag>
+                          <el-button text type="danger" size="small" @click.stop="removeStepByRow(child)" title="删除">
+                            <el-icon><Delete /></el-icon>
+                          </el-button>
+                        </div>
+                      </template>
+                    </draggable>
+                  </template>
+                </div>
+              </template>
+            </draggable>
           </div>
           <div v-else class="empty-steps">
             <el-empty :description="phases.length === 0 ? '请先添加阶段' : '暂无步骤，请添加或导入步骤'" :image-size="100">
@@ -307,6 +351,7 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh, Plus, Delete, Upload, Download, Check, Edit, ArrowLeft, Setting } from '@element-plus/icons-vue'
+import draggable from 'vuedraggable'
 import * as XLSX from 'xlsx'
 import { userApi } from '@/api'
 import { templateApi } from '@/api/modules/template'
@@ -343,30 +388,125 @@ function setPhaseSteps(phaseName: string, steps: StepTemplate[]) {
 // 当前激活阶段的步骤
 const activeSteps = computed(() => getPhaseSteps(activePhaseName.value))
 
-// 当前阶段步骤的树形结构
+// ============ 折叠状态管理（localStorage） ============
+
+const storageKey = computed(() => `drill-steps-collapse-${templateId.value}`)
+
+function loadCollapsed(): Set<number> {
+  try {
+    const raw = localStorage.getItem(storageKey.value)
+    return new Set(raw ? JSON.parse(raw) : [])
+  } catch { return new Set() }
+}
+
+const collapsedIds = ref<Set<number>>(loadCollapsed())
+
+watch(
+  collapsedIds,
+  () => localStorage.setItem(storageKey.value, JSON.stringify([...collapsedIds.value])),
+  { deep: true }
+)
+
+function isCollapsed(id: number): boolean { return collapsedIds.value.has(id) }
+function toggleCollapse(id: number) {
+  const next = new Set(collapsedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedIds.value = next
+}
+
+// ============ 树形结构 ============
+
 interface StepTreeNode extends StepTemplate {
   children?: StepTreeNode[]
   hasChildren?: boolean
 }
 
-const activeStepsTree = computed<StepTreeNode[]>(() => {
-  const nodes: StepTreeNode[] = activeSteps.value.map(s => ({ ...s, children: [], hasChildren: false }))
+const rootStepList = ref<StepTreeNode[]>([])
+let _seqCounter = 0
+
+function buildTreeFromSteps(steps: StepTemplate[]): StepTreeNode[] {
+  const nodes: StepTreeNode[] = steps.map(s => ({ ...s, children: [], hasChildren: false }))
   const nodeMap = new Map<number, StepTreeNode>()
   for (const node of nodes) {
     nodeMap.set(node.id, node)
   }
   const roots: StepTreeNode[] = []
   for (const node of nodes) {
-    if (node.parent_step_id && nodeMap.has(node.parent_step_id)) {
-      const parent = nodeMap.get(node.parent_step_id)!
-      parent.children!.push(node)
+    // 兼容 parent_step_id 为 0 或 null 的情况
+    const parentId = node.parent_step_id
+    if (parentId && parentId > 0 && nodeMap.has(parentId)) {
+      const parent = nodeMap.get(parentId)!
+      parent.children.push(node)
       parent.hasChildren = true
     } else {
       roots.push(node)
     }
   }
   return roots
-})
+}
+
+function recomputeSEQ(tree: StepTreeNode[]): number {
+  _seqCounter = 0
+  function walk(nodes: StepTreeNode[]) {
+    for (const node of nodes) {
+      _seqCounter++
+      node.order_index = _seqCounter
+      const flat = getPhaseSteps(activePhaseName.value)?.find(s => s.id === node.id)
+      if (flat) flat.order_index = _seqCounter
+      if (node.children?.length) {
+        walk(node.children)
+      }
+    }
+  }
+  walk(tree)
+  return _seqCounter
+}
+
+function syncTreeToFlatList(tree: StepTreeNode[]) {
+  const phase = phases.value.find(p => p.name === activePhaseName.value)
+  if (!phase) return
+  const newSteps: StepTemplate[] = []
+  function flatten(nodes: StepTreeNode[]) {
+    for (const node of nodes) {
+      const { children, hasChildren, ...flat } = node
+      newSteps.push(flat as unknown as StepTemplate)
+      if (node.children?.length) flatten(node.children)
+    }
+  }
+  flatten(tree)
+  // 替换原始组
+  phase.steps = newSteps
+}
+
+function computeSEQ(step: StepTreeNode): number {
+  return step.order_index ?? 0
+}
+
+function buildAndSyncTree() {
+  const steps = getPhaseSteps(activePhaseName.value)
+  if (!steps || steps.length === 0) {
+    rootStepList.value = []
+    return
+  }
+  const tree = buildTreeFromSteps(steps)
+  recomputeSEQ(tree)
+  rootStepList.value = tree
+  // 强制 Vue 响应式更新
+  nextTick(() => {
+    rootStepList.value = [...rootStepList.value]
+  })
+}
+
+// 监听 activePhaseName 变化，重建根步骤列表
+watch(activePhaseName, buildAndSyncTree, { flush: 'sync' })
+
+// 监听阶段数量变化
+watch(
+  () => phases.value.map(p => p.name).join('|'),
+  buildAndSyncTree,
+  { flush: 'sync' }
+)
 
 // 构建当前树形结构的步骤序号映射（ID -> order_index）
 const stepSeqMap = computed(() => {
@@ -377,9 +517,41 @@ const stepSeqMap = computed(() => {
       if (n.children?.length) traverse(n.children)
     }
   }
-  traverse(activeStepsTree.value)
+  traverse(rootStepList.value)
   return map
 })
+
+// ============ 拖拽排序 ============
+
+const dragging = ref(false)
+
+function handleStepSelect(step: StepTemplate) {
+  let parentSeq = '-'
+  if (step.parent_step_id) {
+    const seq = stepSeqMap.value[step.parent_step_id]
+    if (seq && seq > 0) {
+      parentSeq = `#${seq}`
+    } else {
+      const parent = activeSteps.value.find(s => s.id === step.parent_step_id)
+      if (parent?.order_index) {
+        parentSeq = `#${parent.order_index}`
+      } else if (step.parent_step_id) {
+        parentSeq = String(step.parent_step_id)
+      }
+    }
+  }
+  selectedStep.value = {
+    ...step,
+    attributes: { ...((step as any).attributes || {}) },
+    parent_seq_display: parentSeq
+  }
+}
+
+function onDragEnd() {
+  recomputeSEQ(rootStepList.value)
+  syncTreeToFlatList(rootStepList.value)
+  dragging.value = false
+}
 
 // 获取所有步骤（扁平化，用于保存）
 function getAllSteps(): StepTemplate[] {
@@ -577,6 +749,8 @@ async function loadTemplateSteps() {
     if (newPhases.length > 0) {
       activePhaseName.value = newPhases[0].name
     }
+    // 在 phases 和 activePhaseName 都设置完后强制重建
+    buildAndSyncTree()
     selectedStep.value = null
   } catch (error) {
     ElMessage.error('加载步骤失败')
@@ -584,40 +758,17 @@ async function loadTemplateSteps() {
   }
 }
 
-// 行选择
-function handleRowSelect(row: StepTemplate | undefined) {
-  if (row) {
-    let parentSeq = '-'
-    if (row.parent_step_id) {
-      const seq = stepSeqMap.value[row.parent_step_id]
-      if (seq && seq > 0) {
-        parentSeq = `#${seq}`
-      } else {
-        // fallback: 从扁平列表中查找父步骤的 order_index
-        const parent = activeSteps.value.find(s => s.id === row.parent_step_id)
-        if (parent?.order_index) {
-          parentSeq = `#${parent.order_index}`
-        } else if (row.parent_step_id) {
-          parentSeq = String(row.parent_step_id)
-        }
-      }
-    }
-    selectedStep.value = { 
-      ...row, 
-      attributes: { ...((row as any).attributes || {}) },
-      parent_seq_display: parentSeq 
-    }
-  } else {
-    selectedStep.value = null
-  }
-}
+// 行选择（保留兼容旧代码引用）
+function handleRowSelect(_row: StepTemplate | undefined) {}
 
 // 删除步骤
 function removeStepByRow(row: StepTreeNode) {
-  const steps = activeSteps.value
+  const steps = getPhaseSteps(activePhaseName.value)
+  if (!steps) return
   const index = steps.findIndex(s => s.id === row.id)
   if (index >= 0) {
     const removed = steps[index]
+    // 子步骤提升为父步骤的子步骤
     steps.forEach(s => {
       if (s.parent_step_id === removed.id) {
         s.parent_step_id = removed.parent_step_id
@@ -627,6 +778,8 @@ function removeStepByRow(row: StepTreeNode) {
     if (selectedStep.value?.id === removed.id) {
       selectedStep.value = null
     }
+    // 同步更新树形结构
+    buildAndSyncTree()
   }
 }
 
@@ -767,6 +920,7 @@ async function handleEditStep() {
 
   resetSingleStepForm()
   singleAddVisible.value = false
+  buildAndSyncTree()
 }
 
 // 添加步骤
@@ -803,28 +957,42 @@ function handleAddSingleStep() {
 
   resetSingleStepForm()
   singleAddVisible.value = false
+  buildAndSyncTree()
 }
 
 // ============ 保存 ============
 
 async function handleSaveSteps() {
   const allSteps = getAllSteps()
+  // Build position map for parent step remapping (1-based index)
+  const idToPos = new Map<number, number>()
+  allSteps.forEach((s, idx) => { if (s.id) idToPos.set(s.id, idx + 1) })
+
   try {
-    await templateApi.updateSteps(templateId.value, allSteps.map(s => ({
-      name: s.name,
-      seq: s.order_index,
-      parent_step_id: s.parent_step_id,
-      step_type: s.step_type,
-      timeout_minutes: Math.max(5, (s.estimated_duration_minutes || 5) * 2),
-      guide_content: s.description || s.guide_content || '',
-      default_assignee_role: s.default_assignee_role || '',
-      executor_team: s.executor_team || '',
-      phase: s.phase || '',
-      phase_step: s.phase_step || '',
-      estimated_duration_minutes: s.estimated_duration_minutes,
-      estimated_start_offset: s.estimated_start_offset,
-      attributes: typeof s.attributes === 'string' ? s.attributes : JSON.stringify(s.attributes || {}),
-    })))
+    await templateApi.updateSteps(templateId.value, allSteps.map((s, idx) => {
+      const payload: Record<string, unknown> = {
+        name: s.name,
+        seq: s.order_index || (idx + 1),
+        step_type: s.step_type || 'serial',
+        timeout_minutes: Math.max(5, (s.estimated_duration_minutes || 5) * 2),
+        guide_content: s.description || s.guide_content || '',
+        default_assignee_role: s.default_assignee_role || '',
+        executor_team: s.executor_team || '',
+        phase: s.phase || '',
+        phase_step: s.phase_step || '',
+        estimated_duration_minutes: s.estimated_duration_minutes,
+        estimated_start_offset: s.estimated_start_offset,
+        attributes: typeof s.attributes === 'string' ? s.attributes : JSON.stringify(s.attributes || {}),
+      }
+      if (s.id && Number.isInteger(s.id)) {
+        payload.id = s.id
+      }
+      if (s.parent_step_id && s.parent_step_id > 0) {
+        const parentPos = idToPos.get(s.parent_step_id)
+        if (parentPos) payload.parent_step_id = parentPos
+      }
+      return payload
+    }))
     ElMessage.success('步骤已保存')
     goBack()
   } catch (error) {
@@ -976,9 +1144,9 @@ function handleExcelUpload(file: File) {
 
       if (steps.length > 0) {
         setPhaseSteps(importTargetPhase.value, [...targetSteps, ...steps])
+        buildAndSyncTree()
         ElMessage.success(`成功导入 ${steps.length} 个步骤到「${importTargetPhase.value}」阶段`)
         importVisible.value = false
-        // 自动切换到导入的阶段
         activePhaseName.value = importTargetPhase.value
       } else if (errors.length === 0) {
         ElMessage.warning('未找到有效数据')
@@ -1083,19 +1251,138 @@ onMounted(() => {
 }
 
 .steps-panel .panel-body {
-  :deep(.el-table) {
-    --el-table-border-color: $border-color;
-    --el-table-tree-indent: 16px;
+  .draggable-list {
+    display: flex;
+    flex-direction: column;
   }
 
-  :deep(.el-table__indent) {
-    padding-left: var(--el-table-tree-indent) !important;
-    padding-right: 0 !important;
+  .step-group {
+    margin-bottom: 2px;
   }
 
-  :deep(.el-table__row--level-1 .el-table__indent) { padding-left: 16px !important; }
-  :deep(.el-table__row--level-2 .el-table__indent) { padding-left: 32px !important; }
-  :deep(.el-table__row--level-3 .el-table__indent) { padding-left: 48px !important; }
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: white;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    &:hover {
+      background: #ecf5ff;
+      border-color: var(--el-color-primary-light-7);
+    }
+  }
+
+  .child-row {
+    margin-left: 32px;
+    border-left: 3px solid var(--el-color-primary-light-7);
+    background: #f7f8fa;
+    min-height: 36px;
+    line-height: 1;
+
+    .step-name {
+      color: #606266;
+      line-height: 1;
+    }
+
+    &:hover {
+      background: #ecf5ff;
+      border-color: var(--el-color-primary);
+    }
+  }
+
+  .drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    color: #c0c4cc;
+    font-size: 14px;
+    width: 16px;
+    height: 24px;
+    user-select: none;
+    line-height: 1;
+    flex-shrink: 0;
+
+    &:hover {
+      color: var(--el-color-primary);
+    }
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  .seq-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #606266;
+    font-size: 10px;
+    width: 16px;
+    text-align: center;
+    padding: 0;
+    flex-shrink: 0;
+
+    &:hover { color: var(--el-color-primary); }
+  }
+
+  .expand-placeholder {
+    width: 16px;
+    flex-shrink: 0;
+  }
+
+  .step-name {
+    flex: 1;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .drag-ghost {
+    background: rgba(var(--el-color-primary-rgb, 64, 158, 255), 0.15);
+    border: 1px dashed var(--el-color-primary);
+    border-radius: 4px;
+    opacity: 0.6;
+  }
+
+  .children-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+    margin-left: 4px;
+    border-left: 2px solid $border-color;
+    padding-left: 8px;
+    padding-top: 2px;
+  }
+
+  :deep(.el-tag) {
+    flex-shrink: 0;
+  }
+
+  :deep(.el-button) {
+    flex-shrink: 0;
+  }
 }
 
 .empty-steps {

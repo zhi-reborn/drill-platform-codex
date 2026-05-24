@@ -2,7 +2,6 @@ package repository
 
 import (
 	"drill-platform/internal/domain/entity"
-	"encoding/json"
 	"sort"
 	"gorm.io/gorm"
 )
@@ -56,7 +55,6 @@ func (r *TemplateRepo) UpdateStep(step *entity.StepTemplate) error {
 		"parent_step_id":             step.ParentStepID,
 		"phase":                      step.Phase,
 		"phase_step":                 step.PhaseStep,
-		"execution_mode":             step.ExecutionMode,
 		"estimated_duration_minutes": step.EstimatedDurationMinutes,
 		"estimated_start_offset":     step.EstimatedStartOffset,
 		"attributes":                 step.JSONAttributes,
@@ -65,53 +63,41 @@ func (r *TemplateRepo) UpdateStep(step *entity.StepTemplate) error {
 
 func (r *TemplateRepo) UpdateSteps(templateID uint64, steps []entity.StepTemplate) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var oldSteps []entity.StepTemplate
-		tx.Where("drill_template_id = ?", templateID).Find(&oldSteps)
-		oldIDtoNewID := make(map[uint64]uint64)
-		for _, s := range oldSteps {
-			oldIDtoNewID[s.ID] = s.ID
-		}
+		sort.Slice(steps, func(i, j int) bool { return steps[i].Seq < steps[j].Seq })
+
 		if err := tx.Where("drill_template_id = ?", templateID).Delete(&entity.StepTemplate{}).Error; err != nil {
 			return err
 		}
 		if len(steps) == 0 {
 			return nil
 		}
-		sort.Slice(steps, func(i, j int) bool { return steps[i].Seq < steps[j].Seq })
+
+		// idxToNewID: 1-based array index → new DB auto-increment ID
+		// Frontend sends parent_step_id as 1-based position in the sorted array.
+		idxToNewID := make(map[int]uint64)
+
 		for i := range steps {
 			steps[i].DrillTemplateID = templateID
 			if steps[i].PreStepIDs == "" {
 				steps[i].PreStepIDs = "[]"
-			} else {
-				var preIDs []int64
-				if err := json.Unmarshal([]byte(steps[i].PreStepIDs), &preIDs); err == nil {
-					var remapped []int64
-					for _, pid := range preIDs {
-						if pid >= 0 {
-							if newID, ok := oldIDtoNewID[uint64(pid)]; ok {
-								remapped = append(remapped, int64(newID))
-							}
-						}
-					}
-					b, _ := json.Marshal(remapped)
-					steps[i].PreStepIDs = string(b)
-				}
 			}
-			oldID := steps[i].ID
-			steps[i].ID = 0
+
 			if steps[i].ParentStepID != nil {
-				if newID, ok := oldIDtoNewID[*steps[i].ParentStepID]; ok {
-					steps[i].ParentStepID = &newID
+				parentPos := int(*steps[i].ParentStepID)
+				if parentPos == 0 {
+					steps[i].ParentStepID = nil
+				} else if newParentID, ok := idxToNewID[parentPos]; ok {
+					steps[i].ParentStepID = &newParentID
 				} else {
 					steps[i].ParentStepID = nil
 				}
 			}
+
+			steps[i].ID = 0
 			if err := tx.Create(&steps[i]).Error; err != nil {
 				return err
 			}
-			if oldID != 0 {
-				oldIDtoNewID[oldID] = steps[i].ID
-			}
+			idxToNewID[i+1] = steps[i].ID
 		}
 		return nil
 	})

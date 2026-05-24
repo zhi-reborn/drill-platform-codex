@@ -74,7 +74,6 @@ export interface StepInstance {
   executor_team: string
   phase?: string
   phase_step?: string
-  execution_mode?: 'serial' | 'parallel'
   estimated_duration_minutes?: number
   estimated_start_offset?: number
   attributes?: StepAttributes

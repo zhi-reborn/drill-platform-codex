@@ -228,18 +228,6 @@
                   </template>
                 </template>
               </el-table-column>
-              <el-table-column prop="execution_mode" label="执行模式" width="75" align="center">
-                <template #default="{ row }">
-                  <template v-if="row.execution_mode">
-                    <el-tooltip :content="row.execution_mode === 'serial' ? '串行' : '并行'" placement="top">
-                      <el-tag :type="row.execution_mode === 'serial' ? 'warning' : 'success'" size="small" effect="plain">
-                        {{ row.execution_mode === 'serial' ? '串' : '并' }}
-                      </el-tag>
-                    </el-tooltip>
-                  </template>
-                  <span v-else>-</span>
-                </template>
-              </el-table-column>
               <el-table-column prop="estimated_duration_minutes" label="预计耗时" width="80" align="center">
                 <template #default="{ row }">
                   {{ row.estimated_duration_minutes ? `${row.estimated_duration_minutes}m` : '-' }}
@@ -290,14 +278,6 @@
             </el-descriptions-item>
             <el-descriptions-item label="阶段">{{ selectedStep.phase || '未分类' }}</el-descriptions-item>
             <el-descriptions-item label="阶段内步骤">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="执行模式">
-              <template v-if="selectedStep.execution_mode">
-                <el-tag :type="selectedStep.execution_mode === 'serial' ? 'warning' : 'success'" size="small">
-                  {{ selectedStep.execution_mode === 'serial' ? '串行' : '并行' }}
-                </el-tag>
-              </template>
-              <span v-else>-</span>
-            </el-descriptions-item>
             <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? `${selectedStep.estimated_duration_minutes} 分钟` : '-' }}</el-descriptions-item>
             <el-descriptions-item label="预计启动偏移">{{ selectedStep.estimated_start_offset ? `${selectedStep.estimated_start_offset} 秒` : '-' }}</el-descriptions-item>
             <el-descriptions-item label="执行角色">
@@ -625,7 +605,12 @@ function getCountdown(timeoutAt: string): string {
 async function loadDrillData() {
   try {
     instance.value = await drillApi.getDetail(drillId.value)
-    const stepsData = await drillApi.getSteps(drillId.value)
+    let stepsData = await drillApi.getSteps(drillId.value)
+    // 解析 attributes JSON 字符串为对象
+    stepsData = stepsData.map((step: StepInstance) => ({
+      ...step,
+      attributes: typeof step.attributes === 'string' ? JSON.parse(step.attributes) : step.attributes,
+    }))
     steps.value = stepsData
 
     const logsData = await drillApi.getLogs(drillId.value)

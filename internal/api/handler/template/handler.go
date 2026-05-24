@@ -194,9 +194,8 @@ type UpdateStepsRequest struct {
 		IsBlocking               int8    `json:"is_blocking"`
 		DefaultAssigneeRole      string  `json:"default_assignee_role"`
 		ExecutorTeam             string  `json:"executor_team"`
-		Phase                    string  `json:"phase"`
-		PhaseStep                string  `json:"phase_step"`
-		ExecutionMode            string  `json:"execution_mode"`
+	Phase                    string `json:"phase"`
+		PhaseStep                string `json:"phase_step"`
 		EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
 		EstimatedStartOffset     *int    `json:"estimated_start_offset"`
 		JSONAttributes           string  `json:"attributes"`
@@ -231,7 +230,6 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 			ExecutorTeam:             s.ExecutorTeam,
 			Phase:                    s.Phase,
 			PhaseStep:                s.PhaseStep,
-			ExecutionMode:            s.ExecutionMode,
 			EstimatedDurationMinutes: s.EstimatedDurationMinutes,
 			EstimatedStartOffset:     s.EstimatedStartOffset,
 			JSONAttributes:           s.JSONAttributes,

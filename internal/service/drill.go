@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"drill-platform/internal/domain/dto"
@@ -168,25 +169,43 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		}
 
 		step := entity.StepInstance{
-			DrillInstanceID:        drill.ID,
-			StepTemplateID:         stepTpl.ID,
-			ParentStepID:           stepTpl.ParentStepID,
-			Name:                   stepTpl.Name,
-			Seq:                    stepTpl.Seq,
-			Status:                 "pending",
-			AssigneeIDs:            assigneeIDs,
-			StepType:               stepTpl.StepType,
-			TimeoutMinutes:         stepTpl.TimeoutMinutes,
-			DefaultAssigneeRole:    stepTpl.DefaultAssigneeRole,
-			ExecutorTeam:           stepTpl.ExecutorTeam,
-			Phase:                  stepTpl.Phase,
-			PhaseStep:              stepTpl.PhaseStep,
-			ExecutionMode:          stepTpl.ExecutionMode,
-			EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
-			EstimatedStartOffset:   stepTpl.EstimatedStartOffset,
-			JSONAttributes:         stepTpl.JSONAttributes,
+			DrillInstanceID:      drill.ID,
+			StepTemplateID:       stepTpl.ID,
+			Name:                 stepTpl.Name,
+			Seq:                  stepTpl.Seq,
+			Status:               "pending",
+			AssigneeIDs:          assigneeIDs,
+			StepType:             stepTpl.StepType,
+			TimeoutMinutes:       stepTpl.TimeoutMinutes,
+			ParentStepID:         nil,
+			Phase:                stepTpl.Phase,
+			PhaseStep:            stepTpl.PhaseStep,
+			JSONAttributes:       stepTpl.JSONAttributes,
 		}
-		repository.DB.Create(&step)
+		if err := repository.DB.Create(&step).Error; err != nil {
+			log.Printf("[ERROR] Failed to create step instance for template step %d: %v", stepTpl.ID, err)
+			return nil, err
+		}
+	}
+
+	instanceSteps, _ := s.stepRepo.FindStepsByDrillID(drill.ID)
+	tplIDtoInstID := make(map[uint64]uint64)
+	for _, si := range instanceSteps {
+		tplIDtoInstID[si.StepTemplateID] = si.ID
+	}
+
+	tplStepMap := make(map[uint64]entity.StepTemplate)
+	for _, s := range template.Steps {
+		tplStepMap[s.ID] = s
+	}
+	for i := range instanceSteps {
+		tpl := tplStepMap[instanceSteps[i].StepTemplateID]
+		if tpl.ParentStepID != nil && *tpl.ParentStepID > 0 {
+			if instParentID, ok := tplIDtoInstID[*tpl.ParentStepID]; ok {
+				instanceSteps[i].ParentStepID = &instParentID
+				repository.DB.Model(&instanceSteps[i]).Update("parent_step_id", instParentID)
+			}
+		}
 	}
 
 	return s.drillRepo.FindByID(drill.ID)

@@ -55,7 +55,6 @@ type StepTemplateRequest struct {
 	ExecutorTeam             string  `json:"executor_team"`
 	Phase                    string  `json:"phase"`
 	PhaseStep                string  `json:"phase_step"`
-	ExecutionMode            string  `json:"execution_mode"`
 	EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
 	EstimatedStartOffset     *int    `json:"estimated_start_offset"`
 	JSONAttributes           string  `json:"attributes"`
