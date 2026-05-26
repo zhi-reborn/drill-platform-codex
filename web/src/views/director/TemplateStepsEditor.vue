@@ -21,6 +21,10 @@
           <el-icon><Download /></el-icon>
           批量导入
         </el-button>
+        <el-button type="warning" @click="exportSteps">
+          <el-icon><Upload /></el-icon>
+          导出步骤
+        </el-button>
         <el-button type="primary" @click="handleSaveSteps">
           <el-icon><Check /></el-icon>
           保存步骤
@@ -161,6 +165,7 @@
               <el-descriptions-item label="描述" :span="2">{{ selectedStep.description || '-' }}</el-descriptions-item>
               <el-descriptions-item label="父步骤序号">{{ selectedStep.parent_seq_display || '-' }}</el-descriptions-item>
               <el-descriptions-item label="步骤类型">{{ getStepTypeLabel(selectedStep.step_type) }}</el-descriptions-item>
+              <el-descriptions-item label="环节">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
               <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? selectedStep.estimated_duration_minutes + ' 分钟' : '-' }}</el-descriptions-item>
               <el-descriptions-item label="开始偏移">{{ selectedStep.estimated_start_offset ? selectedStep.estimated_start_offset + ' 分钟' : '-' }}</el-descriptions-item>
             </el-descriptions>
@@ -212,18 +217,7 @@
 
     <!-- 批量导入对话框 -->
     <el-dialog v-model="importVisible" title="批量导入步骤" width="520px">
-      <div v-if="phases.length === 0" class="import-empty-hint">
-        <el-empty description="请先添加阶段" :image-size="60" />
-      </div>
-      <template v-else>
-        <el-form label-width="80px" class="import-form">
-          <el-form-item label="目标阶段">
-            <el-select v-model="importTargetPhase" placeholder="选择要导入的阶段" style="width: 100%">
-              <el-option v-for="phase in phases" :key="phase.name" :label="phase.name" :value="phase.name" />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <div class="excel-upload">
+      <div class="excel-upload">
           <el-upload
             ref="uploadRef"
             :before-upload="handleExcelUpload"
@@ -244,7 +238,6 @@
             </el-button>
           </div>
         </div>
-      </template>
     </el-dialog>
 
     <!-- 单个添加/编辑抽屉 -->
@@ -275,6 +268,9 @@
           </el-form-item>
         </div>
         <div class="form-row">
+          <el-form-item label="环节" class="inline-form-item">
+            <el-input v-model="singleStepForm.phase_step" placeholder="如：初始化、主流程" clearable />
+          </el-form-item>
           <el-form-item label="开始偏移" class="inline-form-item">
             <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right" placeholder="相对启动偏移" />
             <span class="unit-label">分钟</span>
@@ -661,7 +657,6 @@ function handleSavePhases() {
 const templateName = ref('')
 const selectedStep = ref<(StepTemplate & { parent_seq_display?: string }) | null>(null)
 const importVisible = ref(false)
-const importTargetPhase = ref('')
 const singleAddVisible = ref(false)
 const singleStepEditIndex = ref<number | null>(null)
 const departmentOptions = ref<string[]>([])
@@ -677,6 +672,7 @@ const singleStepForm = reactive({
   parent_step_id: undefined as number | undefined,
   estimated_duration_minutes: undefined as number | undefined,
   estimated_start_offset: undefined as number | undefined,
+  phase_step: '' as string,
   attributes: {} as StepAttributes,
 })
 
@@ -703,8 +699,7 @@ async function loadDepartments() {
 // 加载模板步骤
 async function loadTemplateSteps() {
   try {
-    const result = await templateApi.getList({ page: 1, page_size: 1 })
-    const template = result.list?.find((t: any) => t.id === templateId.value)
+    const template = await templateApi.getById(templateId.value)
     if (!template) {
       ElMessage.error('模板不存在')
       goBack()
@@ -802,6 +797,7 @@ function resetSingleStepForm() {
   singleStepForm.parent_step_id = undefined
   singleStepForm.estimated_duration_minutes = undefined
   singleStepForm.estimated_start_offset = undefined
+  singleStepForm.phase_step = ''
   singleStepForm.attributes = {}
 }
 
@@ -828,6 +824,7 @@ function openStepEditDialog(index: number) {
   singleStepForm.parent_step_id = step.parent_step_id
   singleStepForm.estimated_duration_minutes = step.estimated_duration_minutes
   singleStepForm.estimated_start_offset = step.estimated_start_offset
+  singleStepForm.phase_step = step.phase_step || ''
   singleStepForm.attributes = parseAttributes(step.attributes)
   singleStepEditIndex.value = index
   singleAddVisible.value = true
@@ -864,6 +861,7 @@ async function handleEditStep() {
   step.parent_step_id = singleStepForm.parent_step_id
   step.estimated_duration_minutes = singleStepForm.estimated_duration_minutes
   step.estimated_start_offset = singleStepForm.estimated_start_offset
+  step.phase_step = singleStepForm.phase_step || ''
   step.attributes = { ...singleStepForm.attributes }
 
   // 仅已保存步骤（真实数据库 ID）调用 API
@@ -880,7 +878,7 @@ async function handleEditStep() {
         default_assignee_role: singleStepForm.default_assignee_role,
         executor_team: singleStepForm.executor_team,
         phase: step.phase || activePhaseName.value,
-        phase_step: step.phase_step,
+        phase_step: singleStepForm.phase_step || '',
         parent_step_id: singleStepForm.parent_step_id,
         estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
         estimated_start_offset: singleStepForm.estimated_start_offset,
@@ -951,6 +949,7 @@ function handleAddSingleStep() {
       created_at: new Date().toISOString(),
       estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
       estimated_start_offset: singleStepForm.estimated_start_offset,
+      phase_step: singleStepForm.phase_step || '',
       attributes: { ...singleStepForm.attributes },
     })
     ElMessage.success('步骤已添加')
@@ -1018,82 +1017,190 @@ function goBack() {
 // ============ Excel 导入 ============
 
 function openBatchImportDialog() {
-  if (phases.value.length === 0) {
-    ElMessage.warning('请先添加阶段')
-    return
-  }
-  importTargetPhase.value = activePhaseName.value
   importVisible.value = true
 }
 
 function downloadTemplate() {
-  const header = ['步骤名称', '描述', '步骤类型', '执行角色', '执行团队', '预计耗时 (分)', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
+  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
   const data = [
     header,
-    ['检查数据库状态', '检查主库是否正常运行', 'serial', 'executor', '技术部', '10', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
-    ['切换从库', '将从库提升为主库', 'parallel', 'director', '运维部', '15', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
+    ['准备阶段', '初始化', '', '检查数据库状态', '检查主库是否正常运行', '串行', '10', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
+    ['准备阶段', '初始化', '检查数据库状态', '检查主库连接', '检查主库连接池状态', '串行', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '', '连接主库确认连接池正常', '', '', '', ''],
+    ['执行阶段', '主流程', '', '切换从库', '将从库提升为主库', '并行', '15', '指挥组', '运维部', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
   ]
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet(data)
   const colWidths = [
-    { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 12 }, { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 }
+    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 },
+    { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+    { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
   ]
   ws['!cols'] = colWidths
   XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
-  XLSX.writeFile(wb, `步骤导入模板_${templateName.value}_${importTargetPhase.value || '当前阶段'}.xlsx`)
+  XLSX.writeFile(wb, `步骤导入模板_${templateName.value}.xlsx`)
   ElMessage.success('模板已下载')
 }
 
-function handleExcelUpload(file: File) {
-  if (!importTargetPhase.value) {
-    ElMessage.warning('请先选择目标阶段')
-    return false
+// 步骤类型和角色映射（英文 → 中文），保证导出的 Excel 可被导入识别
+const stepTypeLabels: Record<string, string> = {
+  serial: '串行',
+  parallel: '并行',
+}
+
+const assigneeRoleLabels: Record<string, string> = {
+  director: '指挥组',
+  executor: '执行组',
+}
+
+function exportSteps() {
+  // 收集所有阶段的所有步骤，按阶段分组
+  const phaseStepsMap = new Map<string, StepTemplate[]>()
+  for (const phase of phases.value) {
+    if (phase.steps.length > 0) {
+      phaseStepsMap.set(phase.name, [...phase.steps])
+    }
   }
 
+  if (phaseStepsMap.size === 0) {
+    ElMessage.warning('当前模板没有步骤可导出')
+    return
+  }
+
+  // 构建 ID → 步骤名称映射表（用于父步骤名称查表）
+  const idToName = new Map<number, string>()
+  for (const [, steps] of phaseStepsMap) {
+    for (const step of steps) {
+      if (step.id) idToName.set(step.id, step.name)
+    }
+  }
+
+  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
+  const colWidths = [
+    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 },
+    { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+    { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
+  ]
+
+  const wb = XLSX.utils.book_new()
+  let totalSteps = 0
+
+  for (const [phaseName, steps] of phaseStepsMap) {
+    const data: any[][] = [header]
+    for (const step of steps) {
+      const attrs = step.attributes || {}
+      const parentName = step.parent_step_id && step.parent_step_id > 0
+        ? (idToName.get(step.parent_step_id) || '')
+        : ''
+      data.push([
+        phaseName,
+        step.phase_step || '',
+        parentName,
+        step.name || '',
+        step.description || step.guide_content || '',
+        stepTypeLabels[step.step_type] || step.step_type || '串行',
+        step.estimated_duration_minutes ?? '',
+        assigneeRoleLabels[step.default_assignee_role] || step.default_assignee_role || '执行组',
+        step.executor_team || '',
+        attrs.responsible_department || '',
+        attrs.cooperating_department || '',
+        attrs.responsible_team || '',
+        attrs.operator || '',
+        attrs.reviewer || '',
+        attrs.operation_guide || '',
+        attrs.verification_method || '',
+        attrs.worst_case_analysis || '',
+        attrs.fallback_measures || '',
+        attrs.remark || '',
+      ])
+    }
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = colWidths
+    // sheet 名最长 31 字符
+    const sheetName = phaseName.length > 31 ? phaseName.slice(0, 31) : phaseName
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    totalSteps += steps.length
+  }
+
+  XLSX.writeFile(wb, `步骤导出_${templateName.value}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  ElMessage.success(`成功导出 ${totalSteps} 个步骤到 ${phaseStepsMap.size} 个 Sheet`)
+}
+
+function handleExcelUpload(file: File) {
   const reader = new FileReader()
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array', cellDates: true })
-      const sheetName = workbook.SheetNames[0]
-      const sheet = workbook.Sheets[sheetName]
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
+      const errors: string[] = []
 
-      if (rows.length < 2) {
-        ElMessage.warning('Excel 文件内容为空')
-        return false
+      // 构建全局名称 → ID 映射表（所有已存在的阶段 + 步骤）
+      const nameToIdMap = new Map<string, number>()
+      for (const phase of phases.value) {
+        for (const s of phase.steps) {
+          if (s.id && s.name) nameToIdMap.set(s.name, s.id)
+        }
       }
 
-      const steps: StepTemplate[] = []
-      const errors: string[] = []
-      const targetSteps = getPhaseSteps(importTargetPhase.value)
+      // 阶段 → 步骤列表
+      const phaseStepsMap = new Map<string, StepTemplate[]>()
+      let globalOrder = 1
 
-      // 新表头（无阶段列）
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i]
-        const rowNum = i + 1
-        const name = String(row[0] || '').trim()
-        const description = String(row[1] || '').trim()
-        const stepTypeRaw = String(row[2] || '').trim()
-        const assigneeRoleRaw = String(row[3] || '').trim()
-        const executorTeam = String(row[4] || '').trim()
-        const estimatedDuration = parseInt(String(row[5] || '')) || undefined
-        const responsibleDepartment = String(row[6] || '').trim()
-        const cooperatingDepartment = String(row[7] || '').trim()
-        const responsibleTeam = String(row[8] || '').trim()
-        const operator = String(row[9] || '').trim()
-        const reviewer = String(row[10] || '').trim()
-        const operationGuide = String(row[11] || '').trim()
-        const verificationMethod = String(row[12] || '').trim()
-        const worstCaseAnalysis = String(row[13] || '').trim()
-        const fallbackMeasures = String(row[14] || '').trim()
-        const remark = String(row[15] || '').trim()
+      // 遍历所有 Sheet，每个 Sheet 对应一个阶段
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName]
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
+
+        if (rows.length < 2) continue // 跳过空 Sheet
+
+        // 19 列表头
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i]
+          const rowNum = i + 1
+        const phase = String(row[0] || '').trim()
+        const phaseStepName = String(row[1] || '').trim()
+        const parentStepName = String(row[2] || '').trim()
+        const name = String(row[3] || '').trim()
+        const description = String(row[4] || '').trim()
+        const stepTypeRaw = String(row[5] || '').trim()
+        const estimatedDuration = parseInt(String(row[6] || '')) || undefined
+        const assigneeRoleRaw = String(row[7] || '').trim()
+        const executorTeam = String(row[8] || '').trim()
+        const responsibleDepartment = String(row[9] || '').trim()
+        const cooperatingDepartment = String(row[10] || '').trim()
+        const responsibleTeam = String(row[11] || '').trim()
+        const operator = String(row[12] || '').trim()
+        const reviewer = String(row[13] || '').trim()
+        const operationGuide = String(row[14] || '').trim()
+        const verificationMethod = String(row[15] || '').trim()
+        const worstCaseAnalysis = String(row[16] || '').trim()
+        const fallbackMeasures = String(row[17] || '').trim()
+        const remark = String(row[18] || '').trim()
 
         if (!name) {
-          errors.push(`第${rowNum}行：步骤名称不能为空`)
+          errors.push(`「${sheetName}」第${rowNum}行：步骤名称不能为空`)
           continue
+        }
+        if (!phase) {
+          errors.push(`「${sheetName}」第${rowNum}行：阶段不能为空`)
+          continue
+        }
+
+        // 检查步骤名称是否重复
+        if (nameToIdMap.has(name)) {
+          errors.push(`「${sheetName}」第${rowNum}行：步骤名称「${name}」与已有步骤重复`)
+          continue
+        }
+
+        // 解析父子关系
+        let parentStepId: number | undefined
+        if (parentStepName) {
+          const parentId = nameToIdMap.get(parentStepName)
+          if (parentId) {
+            parentStepId = parentId
+          } else {
+            errors.push(`「${sheetName}」第${rowNum}行：父步骤「${parentStepName}」不存在，请确保父步骤在该步骤之前出现`)
+            continue
+          }
         }
 
         const stepTypeMap: Record<string, string> = {
@@ -1108,20 +1215,22 @@ function handleExcelUpload(file: File) {
         }
         const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
 
-        steps.push({
-          id: Date.now() + Math.random(),
+        const newId = Date.now() + Math.random()
+        const newStep: StepTemplate = {
+          id: newId,
           template_id: templateId.value,
+          parent_step_id: parentStepId,
           name,
           description,
           step_type: stepType as any,
           timeout_minutes: Math.max(5, Math.max(5, estimatedDuration || 5) * 2),
           default_assignee_role: assigneeRole,
-          executor_team: executorTeam,
-          order_index: targetSteps.length + steps.length + 1,
+          executor_team: executorTeam || '',
+          order_index: globalOrder++,
           created_at: new Date().toISOString(),
-          phase: importTargetPhase.value,
+          phase,
+          phase_step: phaseStepName || '',
           estimated_duration_minutes: estimatedDuration,
-          estimated_start_offset: undefined,
           attributes: {
             responsible_department: responsibleDepartment || undefined,
             cooperating_department: cooperatingDepartment || undefined,
@@ -1134,27 +1243,54 @@ function handleExcelUpload(file: File) {
             fallback_measures: fallbackMeasures || undefined,
             remark: remark || undefined,
           },
-        })
-      }
+        }
 
-      if (errors.length > 0) {
-        ElMessage.warning(errors.join('\n'))
-        return false
-      }
+        if (!phaseStepsMap.has(phase)) {
+          phaseStepsMap.set(phase, [])
+        }
+        phaseStepsMap.get(phase)!.push(newStep)
 
-      if (steps.length > 0) {
-        setPhaseSteps(importTargetPhase.value, [...targetSteps, ...steps])
-        buildAndSyncTree()
-        ElMessage.success(`成功导入 ${steps.length} 个步骤到「${importTargetPhase.value}」阶段`)
-        importVisible.value = false
-        activePhaseName.value = importTargetPhase.value
-      } else if (errors.length === 0) {
-        ElMessage.warning('未找到有效数据')
-        return false
+        // 将新步骤加入映射表，后续行可以引用它作为父步骤
+        nameToIdMap.set(name, newId)
       }
-    } catch {
-      ElMessage.error('Excel 文件解析失败')
+    } // end sheet loop
+
+    if (errors.length > 0) {
+      ElMessage.warning(errors.join('\n'))
+      return false
     }
+
+    // 统计总导入步骤数
+    let totalImported = 0
+    for (const [, steps] of phaseStepsMap) {
+      totalImported += steps.length
+    }
+    if (totalImported === 0) {
+      ElMessage.warning('未找到有效数据')
+      return false
+    }
+
+    // 将导入的步骤分配到对应阶段
+    for (const [phaseName, newSteps] of phaseStepsMap) {
+      const existingPhase = phases.value.find(p => p.name === phaseName)
+      if (existingPhase) {
+        existingPhase.steps = [...existingPhase.steps, ...newSteps]
+      } else {
+        phases.value.push({ name: phaseName, steps: newSteps })
+      }
+    }
+
+    // 激活第一个有数据的阶段
+    if (phaseStepsMap.size > 0) {
+      const firstPhase = phaseStepsMap.keys().next().value
+      activePhaseName.value = firstPhase
+    }
+    buildAndSyncTree()
+    ElMessage.success(`成功导入 ${totalImported} 个步骤到 ${phaseStepsMap.size} 个阶段`)
+    importVisible.value = false
+  } catch {
+    ElMessage.error('Excel 文件解析失败')
+  }
   }
   reader.readAsArrayBuffer(file)
   return false

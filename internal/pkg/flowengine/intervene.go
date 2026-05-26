@@ -188,7 +188,7 @@ func (e *Engine) handleForceComplete(inst *FlowInst, stepDefID int64, operatorID
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusCompleted)
 		cbs.OnStepCompleted(si.ID, operatorID, "forced by director")
-		cbs.LogAction(si.ID, "force_complete", operatorID, "director forced completion")
+		cbs.LogAction(si.ID, "force_complete", operatorID, "指挥员强制完成")
 	}
 
 	e.eventBus.emit(EventStepForceComplete, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
