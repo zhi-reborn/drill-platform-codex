@@ -135,6 +135,7 @@ CREATE TABLE `drill_instance_step` (
     `executor_team` VARCHAR(64) DEFAULT NULL COMMENT '执行团队',
     `phase` VARCHAR(64) DEFAULT NULL COMMENT '阶段名称',
     `phase_step` VARCHAR(64) DEFAULT NULL COMMENT '环节/子阶段',
+    `pre_step_ids` JSON DEFAULT NULL COMMENT '前置步骤 ID 列表（实例步骤ID）',
     `execution_mode` VARCHAR(16) DEFAULT 'serial' COMMENT '执行模式：serial/parallel',
     `estimated_duration_minutes` INT DEFAULT NULL COMMENT '预计耗时(分钟)',
     `estimated_start_offset` INT DEFAULT NULL COMMENT '预计开始时间偏移(分钟)',

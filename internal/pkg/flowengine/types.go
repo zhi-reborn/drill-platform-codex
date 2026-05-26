@@ -134,6 +134,8 @@ type StepInst struct {
 	IssueDesc                string          `json:"issue_desc,omitempty"`
 	ConditionResult          ConditionResult `json:"condition_result,omitempty"`
 	ParentStepID             int64           `json:"parent_step_id"`
+	PreStepIDs               []int64         `json:"pre_step_ids"`
+	StepType                 StepType        `json:"step_type"`
 	Phase                    string          `json:"phase"`
 	PhaseStep                string          `json:"phase_step"`
 	ExecutionMode            string          `json:"execution_mode"`

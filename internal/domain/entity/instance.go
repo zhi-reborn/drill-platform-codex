@@ -50,6 +50,7 @@ type StepInstance struct {
 	ExecutorTeam    string     `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
 	Phase           string     `gorm:"type:varchar(64);column:phase" json:"phase"`
 	PhaseStep       string     `gorm:"type:varchar(64);column:phase_step" json:"phase_step"`
+	PreStepIDs      string     `gorm:"type:json;column:pre_step_ids" json:"pre_step_ids"`
 	EstimatedDurationMinutes *int `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
 	EstimatedStartOffset     *int `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
 	JSONAttributes  string     `gorm:"type:json;column:attributes" json:"attributes"`

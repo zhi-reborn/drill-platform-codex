@@ -84,6 +84,8 @@ func (e *Engine) CreateInstance(flowDef *FlowDef, assignees map[int64][]int64, c
 			Seq:                      stepDef.Seq,
 			Status:                   StepStatusPending,
 			ParentStepID:             stepDef.ParentStepID,
+			PreStepIDs:               stepDef.PreStepIDs,
+			StepType:                 stepDef.StepType,
 			Phase:                    stepDef.Phase,
 			PhaseStep:                stepDef.PhaseStep,
 			ExecutionMode:            stepDef.ExecutionMode,
@@ -157,7 +159,7 @@ func (e *Engine) GetInstanceForMutate(instanceID int64) (*FlowInst, bool) {
 func (e *Engine) activateInitialSteps(inst *FlowInst) {
 	var firstSteps []*StepInst
 	for _, si := range inst.Steps {
-		if e.hasNoPredecessors(inst, si.StepDefID) {
+		if len(si.PreStepIDs) == 0 {
 			firstSteps = append(firstSteps, si)
 		}
 	}
@@ -165,20 +167,6 @@ func (e *Engine) activateInitialSteps(inst *FlowInst) {
 	for _, si := range firstSteps {
 		e.activateStep(inst, si)
 	}
-}
-
-func (e *Engine) hasNoPredecessors(inst *FlowInst, stepDefID int64) bool {
-	loader := e.getStepLoader()
-	if loader == nil {
-		return false
-	}
-
-	stepDef, err := loader.GetStepDef(inst.FlowDefID, stepDefID)
-	if err != nil {
-		return false
-	}
-
-	return len(stepDef.PreStepIDs) == 0
 }
 
 func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
@@ -215,17 +203,12 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 }
 
 func (e *Engine) handleStepCompletion(inst *FlowInst, completedStepDefID int64) {
-	loader := e.getStepLoader()
-	if loader == nil {
+	si, exists := inst.Steps[completedStepDefID]
+	if !exists {
 		return
 	}
 
-	stepDef, err := loader.GetStepDef(inst.FlowDefID, completedStepDefID)
-	if err != nil {
-		return
-	}
-
-	switch stepDef.StepType {
+	switch si.StepType {
 	case StepTypeSerial, "":
 		e.advanceSerialSteps(inst, completedStepDefID)
 	case StepTypeParallel:
@@ -234,7 +217,7 @@ func (e *Engine) handleStepCompletion(inst *FlowInst, completedStepDefID int64) 
 		e.advanceAnyOfSteps(inst, completedStepDefID)
 	case StepTypeCondition:
 		result := ConditionPass
-		if si, ok := inst.Steps[completedStepDefID]; ok && si.ConditionResult != "" {
+		if si.ConditionResult != "" {
 			result = si.ConditionResult
 		}
 		e.advanceConditionSteps(inst, completedStepDefID, result)

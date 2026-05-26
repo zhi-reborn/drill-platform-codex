@@ -178,6 +178,7 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 			StepType:             stepTpl.StepType,
 			TimeoutMinutes:       stepTpl.TimeoutMinutes,
 			ParentStepID:         nil,
+			PreStepIDs:           "[]",
 			Phase:                stepTpl.Phase,
 			PhaseStep:            stepTpl.PhaseStep,
 			JSONAttributes:       stepTpl.JSONAttributes,
@@ -207,6 +208,8 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 			}
 		}
 	}
+
+	s.computeInstancePreStepIDs(instanceSteps, template.Steps)
 
 	return s.drillRepo.FindByID(drill.ID)
 }

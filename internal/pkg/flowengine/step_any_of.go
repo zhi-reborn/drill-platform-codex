@@ -3,8 +3,12 @@ package flowengine
 import "time"
 
 func (e *Engine) advanceAnyOfSteps(inst *FlowInst, completedStepDefID int64) {
-	completedStep := e.getStepDefByType(inst, completedStepDefID, StepTypeAnyOf)
-	if completedStep != nil {
+	si, exists := inst.Steps[completedStepDefID]
+	if !exists {
+		return
+	}
+
+	if si.StepType == StepTypeAnyOf {
 		e.handleAnyOfGroupComplete(inst, completedStepDefID)
 		return
 	}
@@ -21,9 +25,6 @@ func (e *Engine) advanceAnyOfSteps(inst *FlowInst, completedStepDefID int64) {
 }
 
 func (e *Engine) handleAnyOfGroupComplete(inst *FlowInst, completedStepDefID int64) {
-	completedSet := make(map[int64]bool)
-	completedSet[completedStepDefID] = true
-
 	e.activateDependentSteps(inst, []int64{completedStepDefID})
 }
 
@@ -34,23 +35,20 @@ func (e *Engine) getAnyOfSiblings(inst *FlowInst, stepDefID int64) []int64 {
 	}
 
 	stepDef, err := loader.GetStepDef(inst.FlowDefID, stepDefID)
-	if err != nil || len(stepDef.PreStepIDs) == 0 {
+	if err != nil {
 		return nil
 	}
 
-	parentStepID := stepDef.PreStepIDs[0]
-	parentDef, err := loader.GetStepDef(inst.FlowDefID, parentStepID)
-	if err != nil || parentDef.StepType != StepTypeAnyOf {
+	if stepDef.StepType != StepTypeAnyOf || stepDef.Condition == nil {
 		return nil
 	}
 
 	var siblings []int64
-	for _, childID := range parentDef.Condition.TrueStepIDs {
+	for _, childID := range stepDef.Condition.TrueStepIDs {
 		if childID != stepDefID {
 			siblings = append(siblings, childID)
 		}
 	}
-
 	return siblings
 }
 

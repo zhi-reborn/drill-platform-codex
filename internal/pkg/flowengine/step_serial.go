@@ -1,20 +1,6 @@
 package flowengine
 
 func (e *Engine) advanceSerialSteps(inst *FlowInst, completedStepDefID int64) {
-	loader := e.getStepLoader()
-	if loader == nil {
-		return
-	}
-
-	stepDef, err := loader.GetStepDef(inst.FlowDefID, completedStepDefID)
-	if err != nil {
-		return
-	}
-
-	if stepDef.StepType != StepTypeSerial {
-		return
-	}
-
 	nextSteps := e.findNextSteps(inst, completedStepDefID)
 	for _, nextStepDefID := range nextSteps {
 		if !e.allPredecessorsDone(inst, nextStepDefID) {
@@ -33,46 +19,30 @@ func (e *Engine) advanceSerialSteps(inst *FlowInst, completedStepDefID int64) {
 }
 
 func (e *Engine) findNextSteps(inst *FlowInst, completedStepDefID int64) []int64 {
-	loader := e.getStepLoader()
-	if loader == nil {
-		return nil
-	}
-
-	allSteps, err := loader.GetAllStepDefs(inst.FlowDefID)
-	if err != nil {
-		return nil
-	}
-
 	var nextSteps []int64
-	for _, sd := range allSteps {
-		for _, preID := range sd.PreStepIDs {
+	for stepDefID, si := range inst.Steps {
+		for _, preID := range si.PreStepIDs {
 			if preID == completedStepDefID {
-				nextSteps = append(nextSteps, sd.ID)
+				nextSteps = append(nextSteps, stepDefID)
 				break
 			}
 		}
 	}
-
 	return nextSteps
 }
 
 func (e *Engine) allPredecessorsDone(inst *FlowInst, stepDefID int64) bool {
-	loader := e.getStepLoader()
-	if loader == nil {
+	si, exists := inst.Steps[stepDefID]
+	if !exists {
 		return false
 	}
 
-	stepDef, err := loader.GetStepDef(inst.FlowDefID, stepDefID)
-	if err != nil {
-		return false
-	}
-
-	for _, preID := range stepDef.PreStepIDs {
-		si, exists := inst.Steps[preID]
-		if !exists {
+	for _, preID := range si.PreStepIDs {
+		preSI, ok := inst.Steps[preID]
+		if !ok {
 			return false
 		}
-		if si.Status != StepStatusCompleted && si.Status != StepStatusSkipped {
+		if preSI.Status != StepStatusCompleted && preSI.Status != StepStatusSkipped {
 			return false
 		}
 	}

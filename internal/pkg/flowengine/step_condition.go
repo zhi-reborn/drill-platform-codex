@@ -3,20 +3,21 @@ package flowengine
 import "time"
 
 func (e *Engine) advanceConditionSteps(inst *FlowInst, stepDefID int64, result ConditionResult) {
+	si, exists := inst.Steps[stepDefID]
+	if !exists || si.StepType != StepTypeCondition {
+		return
+	}
+
 	loader := e.getStepLoader()
 	if loader == nil {
 		return
 	}
 
 	stepDef, err := loader.GetStepDef(inst.FlowDefID, stepDefID)
-	if err != nil || stepDef.StepType != StepTypeCondition || stepDef.Condition == nil {
+	if err != nil || stepDef.Condition == nil {
 		return
 	}
 
-	si, exists := inst.Steps[stepDefID]
-	if !exists {
-		return
-	}
 	si.ConditionResult = result
 
 	var nextStepIDs []int64
@@ -38,17 +39,18 @@ func (e *Engine) advanceConditionSteps(inst *FlowInst, stepDefID int64, result C
 }
 
 func (e *Engine) evaluateCondition(inst *FlowInst, stepDefID int64, result ConditionResult) {
+	si, exists := inst.Steps[stepDefID]
+	if !exists || si.StepType != StepTypeCondition {
+		return
+	}
+
 	loader := e.getStepLoader()
 	if loader == nil {
 		return
 	}
 
 	stepDef, err := loader.GetStepDef(inst.FlowDefID, stepDefID)
-	if err != nil || stepDef.StepType != StepTypeCondition {
-		return
-	}
-
-	if stepDef.Condition == nil {
+	if err != nil || stepDef.Condition == nil {
 		return
 	}
 
