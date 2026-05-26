@@ -67,8 +67,8 @@ func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*en
 func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
 	err := repository.DB.
-		Where("JSON_CONTAINS(assignee_ids, CAST(? AS JSON)) AND status IN (?, ?)",
-			userID, "pending", "running").
+		Where("JSON_CONTAINS(assignee_ids, CAST(? AS JSON)) AND status = ?",
+			userID, "running").
 		Find(&steps).Error
 	return steps, err
 }

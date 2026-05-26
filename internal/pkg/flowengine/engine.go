@@ -1,6 +1,7 @@
 package flowengine
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -175,6 +176,9 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 	si.Status = StepStatusRunning
 	si.StartTime = &now
 
+	log.Printf("[FLOW] activateStep: step=%d name=%s old=%s new=%s instID=%d",
+		si.StepDefID, si.Name, oldStatus, si.Status, si.ID)
+
 	var timeoutAt time.Time
 	loader := e.getStepLoader()
 	if loader != nil {
@@ -207,6 +211,8 @@ func (e *Engine) handleStepCompletion(inst *FlowInst, completedStepDefID int64) 
 	if !exists {
 		return
 	}
+
+	log.Printf("[FLOW] handleStepCompletion: step=%d name=%s type=%s", completedStepDefID, si.Name, si.StepType)
 
 	switch si.StepType {
 	case StepTypeSerial, "":

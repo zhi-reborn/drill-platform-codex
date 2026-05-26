@@ -279,6 +279,10 @@
             <el-input-number v-model="singleStepForm.estimated_duration_minutes" :min="1" :max="1440" controls-position="right" placeholder="可选" />
             <span class="unit-label">分钟</span>
           </el-form-item>
+          <el-form-item label="超时时间" class="inline-form-item">
+            <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="1440" controls-position="right" placeholder="5" />
+            <span class="unit-label">分钟</span>
+          </el-form-item>
         </div>
 
         <el-divider>详细信息</el-divider>
@@ -855,7 +859,7 @@ async function handleEditStep() {
   step.step_type = singleStepForm.step_type as StepType
   step.seq = singleStepEditIndex.value! + 1
   step.order_index = singleStepEditIndex.value! + 1
-  step.timeout_minutes = Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2)
+  step.timeout_minutes = singleStepForm.timeout_minutes
   step.default_assignee_role = singleStepForm.default_assignee_role
   step.executor_team = singleStepForm.executor_team
   step.parent_step_id = singleStepForm.parent_step_id
@@ -873,7 +877,7 @@ async function handleEditStep() {
         name: singleStepForm.name.trim(),
         seq: seqVal,
         step_type: singleStepForm.step_type,
-        timeout_minutes: Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2),
+        timeout_minutes: singleStepForm.timeout_minutes,
         guide_content: singleStepForm.description.trim(),
         default_assignee_role: singleStepForm.default_assignee_role,
         executor_team: singleStepForm.executor_team,
@@ -941,7 +945,7 @@ function handleAddSingleStep() {
       name: singleStepForm.name.trim(),
       description: singleStepForm.description.trim(),
       step_type: singleStepForm.step_type as StepType,
-      timeout_minutes: Math.max(5, (singleStepForm.estimated_duration_minutes || 5) * 2),
+      timeout_minutes: singleStepForm.timeout_minutes,
       default_assignee_role: singleStepForm.default_assignee_role,
       executor_team: singleStepForm.executor_team,
       parent_step_id: singleStepForm.parent_step_id,
@@ -973,7 +977,7 @@ async function handleSaveSteps() {
         name: s.name,
         seq: s.order_index || (idx + 1),
         step_type: s.step_type || 'serial',
-        timeout_minutes: Math.max(5, (s.estimated_duration_minutes || 5) * 2),
+        timeout_minutes: s.timeout_minutes || 5,
         guide_content: s.description || s.guide_content || '',
         default_assignee_role: s.default_assignee_role || '',
         executor_team: s.executor_team || '',
@@ -1074,9 +1078,9 @@ function exportSteps() {
     }
   }
 
-  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
+const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
   const colWidths = [
-    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 },
+    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
     { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
     { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
   ]
@@ -1099,6 +1103,7 @@ function exportSteps() {
         step.description || step.guide_content || '',
         stepTypeLabels[step.step_type] || step.step_type || '串行',
         step.estimated_duration_minutes ?? '',
+        step.timeout_minutes ?? 5,
         assigneeRoleLabels[step.default_assignee_role] || step.default_assignee_role || '执行组',
         step.executor_team || '',
         attrs.responsible_department || '',
@@ -1152,7 +1157,7 @@ function handleExcelUpload(file: File) {
 
         if (rows.length < 2) continue // 跳过空 Sheet
 
-        // 19 列表头
+        // 20 列表头
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i]
           const rowNum = i + 1
@@ -1163,18 +1168,19 @@ function handleExcelUpload(file: File) {
         const description = String(row[4] || '').trim()
         const stepTypeRaw = String(row[5] || '').trim()
         const estimatedDuration = parseInt(String(row[6] || '')) || undefined
-        const assigneeRoleRaw = String(row[7] || '').trim()
-        const executorTeam = String(row[8] || '').trim()
-        const responsibleDepartment = String(row[9] || '').trim()
-        const cooperatingDepartment = String(row[10] || '').trim()
-        const responsibleTeam = String(row[11] || '').trim()
-        const operator = String(row[12] || '').trim()
-        const reviewer = String(row[13] || '').trim()
-        const operationGuide = String(row[14] || '').trim()
-        const verificationMethod = String(row[15] || '').trim()
-        const worstCaseAnalysis = String(row[16] || '').trim()
-        const fallbackMeasures = String(row[17] || '').trim()
-        const remark = String(row[18] || '').trim()
+        const timeoutMinutes = parseInt(String(row[7] || '')) || 5
+        const assigneeRoleRaw = String(row[8] || '').trim()
+        const executorTeam = String(row[9] || '').trim()
+        const responsibleDepartment = String(row[10] || '').trim()
+        const cooperatingDepartment = String(row[11] || '').trim()
+        const responsibleTeam = String(row[12] || '').trim()
+        const operator = String(row[13] || '').trim()
+        const reviewer = String(row[14] || '').trim()
+        const operationGuide = String(row[15] || '').trim()
+        const verificationMethod = String(row[16] || '').trim()
+        const worstCaseAnalysis = String(row[17] || '').trim()
+        const fallbackMeasures = String(row[18] || '').trim()
+        const remark = String(row[19] || '').trim()
 
         if (!name) {
           errors.push(`「${sheetName}」第${rowNum}行：步骤名称不能为空`)
@@ -1223,7 +1229,7 @@ function handleExcelUpload(file: File) {
           name,
           description,
           step_type: stepType as any,
-          timeout_minutes: Math.max(5, Math.max(5, estimatedDuration || 5) * 2),
+          timeout_minutes: timeoutMinutes,
           default_assignee_role: assigneeRole,
           executor_team: executorTeam || '',
           order_index: globalOrder++,

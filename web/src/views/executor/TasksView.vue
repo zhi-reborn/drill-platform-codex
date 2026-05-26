@@ -150,11 +150,17 @@
               </div>
 
               <div class="task-card-body">
-                <div v-if="task.executor_team" class="task-meta">
-                  <el-tag size="small" type="info">{{ task.executor_team }}</el-tag>
+                <div class="task-meta-row">
+                  <el-tag v-if="task.default_assignee_role === 'director'" size="small" type="warning">指挥组</el-tag>
+                  <el-tag v-else-if="task.default_assignee_role" size="small" type="primary">{{ task.default_assignee_role }}</el-tag>
+                  <el-tag v-if="task.executor_team" size="small" type="info">{{ task.executor_team }}</el-tag>
+                  <span v-if="task.phase_step" class="task-phase">{{ task.phase_step }}</span>
                 </div>
 
                 <div class="task-meta">
+                  <div v-if="task.estimated_duration_minutes" class="task-duration">
+                    预计耗时：{{ task.estimated_duration_minutes }} 分钟
+                  </div>
                   <div v-if="task.timeout_at" class="task-deadline">
                     <el-icon><Clock /></el-icon>
                     <span>截止：{{ formatDeadline(task.timeout_at) }}</span>
@@ -172,12 +178,19 @@
                   等待中
                 </el-button>
                 <el-button
-                  v-else-if="task.status === 'running'"
+                  v-else-if="task.status === 'running' && !isParentTask(task)"
                   type="primary"
                   class="action-btn"
                   @click="goToTaskDetail(task.id)"
                 >
                   开始执行
+                </el-button>
+                <el-button
+                  v-else-if="task.status === 'running'"
+                  class="action-btn"
+                  disabled
+                >
+                  子任务执行中
                 </el-button>
                 <el-button
                   v-else-if="task.status === 'issue'"
@@ -331,6 +344,11 @@ function formatDeadline(d: string): string {
     return '1 小时内'
   }
   return `${hours}小时`
+}
+
+// 检查是否为父任务（有其他任务的 parent_step_id 指向它）
+function isParentTask(task: StepInstance): boolean {
+  return tasks.value.some((t: StepInstance) => t.parent_step_id === task.id)
 }
 
 // 选择演练
@@ -663,6 +681,20 @@ onMounted(() => {
       flex: 1;
       margin-bottom: $spacing-sm;
 
+      .task-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: $spacing-xs;
+        align-items: center;
+
+        .task-phase {
+          font-size: $font-size-xs;
+          color: $text-tertiary;
+          margin-left: 4px;
+        }
+      }
+
       .task-step-name {
         font-size: $font-size-base;
         font-weight: $font-weight-medium;
@@ -684,6 +716,10 @@ onMounted(() => {
         gap: $spacing-xs;
         font-size: $font-size-xs;
         color: $text-tertiary;
+
+        .task-duration {
+          color: $text-secondary;
+        }
 
         .task-deadline,
         .task-assignee {

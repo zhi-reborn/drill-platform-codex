@@ -181,6 +181,10 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 			PreStepIDs:           "[]",
 			Phase:                stepTpl.Phase,
 			PhaseStep:            stepTpl.PhaseStep,
+			DefaultAssigneeRole: stepTpl.DefaultAssigneeRole,
+			ExecutorTeam:        stepTpl.ExecutorTeam,
+			EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
+			EstimatedStartOffset:     stepTpl.EstimatedStartOffset,
 			JSONAttributes:       stepTpl.JSONAttributes,
 		}
 		if err := repository.DB.Create(&step).Error; err != nil {
@@ -254,6 +258,8 @@ func (s *DrillService) Start(id uint64) error {
 
 	// 同步内存中步骤实例的 ID 到数据库 ID
 	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
+
+	s.syncPreStepIDsToEngine(int64(drill.ID))
 
 	// 查询操作人姓名
 	var user entity.User

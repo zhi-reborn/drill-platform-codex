@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"log"
 	"sort"
 
 	"drill-platform/internal/domain/entity"
@@ -9,10 +10,12 @@ import (
 )
 
 type stepInfo struct {
-	id       uint64
-	seq      int
-	stepType string
-	parentID uint64
+	id        uint64
+	seq       int
+	stepType  string
+	parentID  uint64
+	phase     string
+	phaseStep string
 }
 
 func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInstance, _ []entity.StepTemplate) {
@@ -26,7 +29,10 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 
 	for i := range instanceSteps {
 		si := &instanceSteps[i]
-		p := &stepInfo{id: si.ID, seq: si.Seq, stepType: si.StepType}
+		p := &stepInfo{
+			id: si.ID, seq: si.Seq, stepType: si.StepType,
+			phase: si.Phase, phaseStep: si.PhaseStep,
+		}
 		if si.ParentStepID != nil && *si.ParentStepID > 0 {
 			p.parentID = *si.ParentStepID
 			childrenOf[p.parentID] = append(childrenOf[p.parentID], p.id)
@@ -54,21 +60,22 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 	processed := make(map[uint64]bool)
 
 	for i := 0; i < len(roots); i++ {
-		if all[roots[i]].stepType != "parallel" {
+		ri := all[roots[i]]
+		if ri.stepType != "parallel" {
 			continue
 		}
 		j := i + 1
-		for j < len(roots) && all[roots[j]].stepType == "parallel" {
+		for j < len(roots) && all[roots[j]].stepType == "parallel" && all[roots[j]].phaseStep == ri.phaseStep {
 			j++
 		}
-		consecutive := true
+		consecutive := j > i+1
 		for k := i; k < j-1; k++ {
 			if all[roots[k+1]].seq-all[roots[k]].seq != 1 {
 				consecutive = false
 				break
 			}
 		}
-		g := &group{consecutive: consecutive && j > i+1}
+		g := &group{consecutive: consecutive}
 		for k := i; k < j; k++ {
 			g.rootIDs = append(g.rootIDs, roots[k])
 			groupOf[roots[k]] = g
@@ -88,6 +95,7 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 	}
 	waves := []*wave{}
 	var cur *wave
+	var prevPstep string
 
 	for _, rid := range roots {
 		if processed[rid] {
@@ -97,24 +105,30 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 		for _, mid := range g.rootIDs {
 			processed[mid] = true
 		}
+		ri := all[rid]
 
-		if all[rid].stepType == "parallel" {
-			if cur == nil {
-				cur = &wave{groups: []*group{g}, grouped: g.consecutive}
-			} else if cur.grouped && g.consecutive {
-				cur.groups = append(cur.groups, g)
-			} else {
-				waves = append(waves, cur)
-				cur = &wave{groups: []*group{g}, grouped: g.consecutive}
+		isNewWave := false
+		if cur != nil {
+			if ri.phaseStep != prevPstep {
+				isNewWave = true
+			} else if ri.stepType != "parallel" {
+				isNewWave = true
 			}
-		} else {
+		}
+
+		if isNewWave || cur == nil {
 			if cur != nil {
 				waves = append(waves, cur)
 			}
-			cur = &wave{groups: []*group{g}, grouped: false}
-			waves = append(waves, cur)
-			cur = nil
+			cur = &wave{groups: []*group{g}, grouped: g.consecutive}
+			if ri.stepType != "parallel" {
+				waves = append(waves, cur)
+				cur = nil
+			}
+		} else {
+			cur.groups = append(cur.groups, g)
 		}
+		prevPstep = ri.phaseStep
 	}
 	if cur != nil {
 		waves = append(waves, cur)
@@ -185,6 +199,42 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 				}
 			}
 			walk(ch)
+		}
+	}
+}
+
+func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {
+	inst, ok := s.engine.GetInstance(flowInstID)
+	if !ok {
+		return
+	}
+
+	var steps []entity.StepInstance
+	repository.DB.Where("drill_instance_id = ?", flowInstID).Find(&steps)
+
+	instIDToDefID := make(map[uint64]int64)
+	instIDToPres := make(map[int64][]int64)
+	for _, step := range steps {
+		defID := int64(step.StepTemplateID)
+		instIDToDefID[step.ID] = defID
+
+		if step.PreStepIDs == "" || step.PreStepIDs == "[]" || step.PreStepIDs == "null" {
+			continue
+		}
+		var ids []uint64
+		if json.Unmarshal([]byte(step.PreStepIDs), &ids) == nil {
+			for _, iid := range ids {
+				if did, ok := instIDToDefID[iid]; ok {
+					instIDToPres[defID] = append(instIDToPres[defID], did)
+				}
+			}
+		}
+	}
+
+	for defID, preDefIDs := range instIDToPres {
+		if si, exists := inst.Steps[defID]; exists {
+			si.PreStepIDs = preDefIDs
+			log.Printf("[SYNC] PreStepIDs: step=%d(%s) -> %v", defID, si.Name, preDefIDs)
 		}
 	}
 }

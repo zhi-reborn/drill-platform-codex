@@ -163,7 +163,7 @@
             </div>
             <div class="step-actions">
               <ActionConfirm
-                v-if="step.default_assignee_role === 'director'"
+                v-if="step.default_assignee_role === 'director' && !isParentStep(step)"
                 :title="`完成任务：${step.name}`"
                 message="确认已完成此步骤？"
                 type="success"
@@ -174,6 +174,7 @@
                 完成任务
               </ActionConfirm>
               <ActionConfirm
+                v-if="!isParentStep(step)"
                 :title="`跳过步骤：${step.name}`"
                 message="跳过此步骤后，该步骤将标记为已跳过，是否继续？"
                 type="warning"
@@ -184,6 +185,7 @@
                 跳过
               </ActionConfirm>
               <ActionConfirm
+                v-if="!isParentStep(step)"
                 :title="`强制完成：${step.name}`"
                 message="强制将此步骤标记为完成，是否继续？"
                 @confirm="handleForceComplete(step)"
@@ -192,6 +194,9 @@
                 <el-icon><CircleCheck /></el-icon>
                 强制完成
               </ActionConfirm>
+              <span v-if="isParentStep(step)" class="parent-hint">
+                父任务 · 子任务全部完成后自动完成
+              </span>
             </div>
           </el-card>
         </div>
@@ -202,13 +207,17 @@
         <template #header>
           <span class="card-title">步骤列表</span>
         </template>
-        <el-collapse v-model="activePhases" class="phase-collapse">
-          <el-collapse-item v-for="(group, phase) in phaseGroups" :key="phase" :name="phase">
-            <template #title>
-              <div class="phase-title">
-                <span class="phase-name">{{ phase }}</span>
+        <el-tabs v-model="activePhase" type="card" class="phase-tabs">
+          <el-tab-pane
+            v-for="(group, phase) in phaseGroups"
+            :key="phase"
+            :name="phase"
+          >
+            <template #label>
+              <span class="tab-label">
+                {{ phase }}
                 <el-tag size="small" type="info">{{ group.length }} 步</el-tag>
-              </div>
+              </span>
             </template>
             <el-table :data="group" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%" size="small">
               <el-table-column prop="seq" label="序号" width="55" align="center" />
@@ -261,8 +270,8 @@
                 </template>
               </el-table-column>
             </el-table>
-          </el-collapse-item>
-        </el-collapse>
+          </el-tab-pane>
+        </el-tabs>
       </el-card>
 
       <!-- 步骤详情弹窗 -->
@@ -336,7 +345,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
@@ -345,7 +354,7 @@ import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
 
-const activePhases = ref<string[]>([])
+const activePhase = ref<string>('')
 const selectedStep = ref<StepInstance | null>(null)
 const detailVisible = ref(false)
 
@@ -355,6 +364,10 @@ const router = useRouter()
 const instance = ref<DrillInstance | null>(null)
 const steps = ref<StepInstance[]>([])
 const logs = ref<any[]>([])
+
+// WebSocket
+let ws: WebSocket | null = null
+let refreshTimer: number | null = null
 
 const drillId = computed(() => {
   const id = route.params.id
@@ -434,9 +447,12 @@ const phaseGroups = computed(() => {
   return groups
 })
 
-// 初始化 activePhases，默认展开所有 phase
-function initActivePhases() {
-  activePhases.value = Object.keys(phaseGroups.value)
+// 初始化 activePhase，默认选中第一个 phase
+function initActivePhase() {
+  const phases = Object.keys(phaseGroups.value)
+  if (phases.length > 0) {
+    activePhase.value = phases[0]
+  }
 }
 
 // 父步骤状态聚合显示
@@ -447,6 +463,11 @@ function getStepStatusText(row: StepInstance & { children?: StepInstance[] }): {
   const total = row.children.length
   const completed = row.children.filter(c => c.status === 'completed' || c.status === 'skipped').length
   return { text: `${completed}/${total} 子任务已完成`, isParent: true }
+}
+
+// 检查是否为父步骤（有其他步骤的 parent_step_id 指向它）
+function isParentStep(step: StepInstance): boolean {
+  return steps.value.some(s => s.parent_step_id === step.id)
 }
 
 const completedSteps = computed(() => {
@@ -602,6 +623,44 @@ function getCountdown(timeoutAt: string): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+// WebSocket 实时刷新
+function connectWebSocket() {
+  if (ws) ws.close()
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}`
+
+  ws = new WebSocket(wsUrl)
+  ws.onmessage = () => {
+    loadDrillData()
+  }
+  ws.onerror = () => {
+    startFallbackPolling()
+  }
+  ws.onclose = () => {
+    if (instance.value?.status === 'running') {
+      startFallbackPolling()
+    }
+  }
+}
+
+function startFallbackPolling() {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = window.setInterval(() => {
+    if (instance.value?.status === 'running') {
+      loadDrillData()
+    } else {
+      stopFallbackPolling()
+    }
+  }, 5000)
+}
+
+function stopFallbackPolling() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
 async function loadDrillData() {
   try {
     instance.value = await drillApi.getDetail(drillId.value)
@@ -622,7 +681,10 @@ async function loadDrillData() {
     }
 
     // 初始化展开所有 phase 面板
-    initActivePhases()
+    initActivePhase()
+
+    // 连接 WebSocket，演练运行中自动刷新状态
+    connectWebSocket()
   } catch (error) {
     ElMessage.error('加载数据失败')
     console.error('Failed to load drill data:', error)
@@ -716,6 +778,14 @@ function showStepDetail(step: StepInstance) {
 
 onMounted(() => {
   loadDrillData()
+})
+
+onUnmounted(() => {
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+  stopFallbackPolling()
 })
 </script>
 
@@ -916,6 +986,12 @@ onMounted(() => {
           gap: 4px;
           flex: 1;
         }
+
+        .parent-hint {
+          font-size: $font-size-xs;
+          color: $text-tertiary;
+          font-style: italic;
+        }
       }
     }
   }
@@ -951,29 +1027,11 @@ onMounted(() => {
     }
   }
 
-  .phase-collapse {
-    :deep(.el-collapse-item__header) {
-      background: $bg-tertiary;
-      border-radius: $radius-sm;
-      padding: 0 $spacing-sm;
-    }
-
-    :deep(.el-collapse-item__content) {
-      padding-top: $spacing-sm;
-      padding-bottom: $spacing-sm;
-    }
-
-    .phase-title {
+  .phase-tabs {
+    .tab-label {
       display: flex;
       align-items: center;
-      gap: $spacing-sm;
-      width: 100%;
-
-      .phase-name {
-        font-size: $font-size-sm;
-        font-weight: $font-weight-semibold;
-        color: $text-primary;
-      }
+      gap: $spacing-xs;
     }
   }
 
