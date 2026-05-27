@@ -10,12 +10,10 @@ import (
 )
 
 type stepInfo struct {
-	id        uint64
-	seq       int
-	stepType  string
-	parentID  uint64
-	phase     string
-	phaseStep string
+	id       uint64
+	seq      int
+	stepType string
+	parentID uint64
 }
 
 func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInstance, _ []entity.StepTemplate) {
@@ -31,7 +29,6 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 		si := &instanceSteps[i]
 		p := &stepInfo{
 			id: si.ID, seq: si.Seq, stepType: si.StepType,
-			phase: si.Phase, phaseStep: si.PhaseStep,
 		}
 		if si.ParentStepID != nil && *si.ParentStepID > 0 {
 			p.parentID = *si.ParentStepID
@@ -65,7 +62,7 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 			continue
 		}
 		j := i + 1
-		for j < len(roots) && all[roots[j]].stepType == "parallel" && all[roots[j]].phaseStep == ri.phaseStep {
+		for j < len(roots) && all[roots[j]].stepType == "parallel" {
 			j++
 		}
 		consecutive := j > i+1
@@ -95,7 +92,6 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 	}
 	waves := []*wave{}
 	var cur *wave
-	var prevPstep string
 
 	for _, rid := range roots {
 		if processed[rid] {
@@ -108,12 +104,8 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 		ri := all[rid]
 
 		isNewWave := false
-		if cur != nil {
-			if ri.phaseStep != prevPstep {
-				isNewWave = true
-			} else if ri.stepType != "parallel" {
-				isNewWave = true
-			}
+		if cur != nil && ri.stepType != "parallel" {
+			isNewWave = true
 		}
 
 		if isNewWave || cur == nil {
@@ -128,7 +120,6 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 		} else {
 			cur.groups = append(cur.groups, g)
 		}
-		prevPstep = ri.phaseStep
 	}
 	if cur != nil {
 		waves = append(waves, cur)
@@ -162,14 +153,8 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 				result = nil
 			} else {
 				prevWave := waves[waveIdx-1]
-				if prevWave.grouped {
-					for _, g := range prevWave.groups {
-						result = append(result, g.rootIDs[len(g.rootIDs)-1])
-					}
-				} else {
-					for _, g := range prevWave.groups {
-						result = append(result, g.rootIDs...)
-					}
+				for _, g := range prevWave.groups {
+					result = append(result, g.rootIDs...)
 				}
 			}
 		}

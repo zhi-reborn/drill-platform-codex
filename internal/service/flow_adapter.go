@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -114,6 +115,7 @@ func (a *DrillFlowAdapter) GetStepDef(flowDefID, stepDefID int64) (*flowengine.S
 				EstimatedDurationMinutes: st.EstimatedDurationMinutes,
 				EstimatedStartOffset:     st.EstimatedStartOffset,
 				JSONAttributes:           st.JSONAttributes,
+				Condition:                computeParallelGroupCondition(template.Steps, int64(st.ID)),
 			}, nil
 		}
 	}
@@ -652,14 +654,25 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 	}
 
 	now := time.Now()
+
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
 		"status":   string(flowengine.StepStatusCompleted),
 		"end_time": &now,
 	})
 
-	parentSI.Status = flowengine.StepStatusCompleted
-	parentSI.EndTime = &now
-	inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+	repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		StepInstanceID:  &parentInst.ID,
+		Action:          "auto_complete",
+		Content:         fmt.Sprintf("[%s] 子任务全部完成，父步骤自动完成", parentInst.Name),
+		CreatedAt:       now,
+	})
+
+	if err := a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成"); err != nil {
+		parentSI.Status = flowengine.StepStatusCompleted
+		parentSI.EndTime = &now
+		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+	}
 
 	if a.wsManager != nil {
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
@@ -671,16 +684,7 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		})
 	}
 
-	repository.DB.Create(&entity.DrillInstanceLog{
-		DrillInstanceID: drillID,
-		StepInstanceID:  &parentInst.ID,
-		Action:          "auto_complete",
-		Content:         fmt.Sprintf("[%s] 子任务全部完成，父步骤自动完成", parentInst.Name),
-		CreatedAt:       now,
-	})
-
-	a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成")
-	a.handleSubtaskCompletion(flowInstID, parentStepDefID)
+	// handleSubtaskCompletion 会由 CompleteStep 发出的 EventStepComplete 自动触发
 }
 
 func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID int64, status flowengine.StepStatus, at time.Time) {
@@ -953,6 +957,46 @@ func parseAssigneeIDsFromInstance(assigneeIDsJSON string) []int64 {
 	return ids
 }
 
+// computeParallelGroupCondition 为并行步骤计算其所属并行组的 Condition
+// 相邻 root 并行步骤（无子步骤在中间的并行兄弟）自动成组
+func computeParallelGroupCondition(templateSteps []entity.StepTemplate, targetStepID int64) *flowengine.ConditionDef {
+	type rootInfo struct {
+		id       int64
+		seq      int
+		stepType string
+	}
+	var roots []rootInfo
+	for _, s := range templateSteps {
+		if s.ParentStepID == nil || *s.ParentStepID == 0 {
+			roots = append(roots, rootInfo{id: int64(s.ID), seq: s.Seq, stepType: s.StepType})
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool { return roots[i].seq < roots[j].seq })
+
+	for i := 0; i < len(roots); i++ {
+		if roots[i].stepType != "parallel" {
+			continue
+		}
+		j := i + 1
+		for j < len(roots) && roots[j].stepType == "parallel" {
+			j++
+		}
+		if j > i+1 {
+			var groupIDs []int64
+			for k := i; k < j; k++ {
+				groupIDs = append(groupIDs, roots[k].id)
+			}
+			for _, id := range groupIDs {
+				if id == targetStepID {
+					return &flowengine.ConditionDef{TrueStepIDs: groupIDs}
+				}
+			}
+		}
+		i = j - 1
+	}
+	return nil
+}
+
 func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *flowengine.FlowDef {
 	flowDef := &flowengine.FlowDef{
 		ID:   int64(template.ID),
@@ -988,6 +1032,7 @@ func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *floweng
 			EstimatedDurationMinutes: st.EstimatedDurationMinutes,
 			EstimatedStartOffset:     st.EstimatedStartOffset,
 			JSONAttributes:           st.JSONAttributes,
+			Condition:                computeParallelGroupCondition(template.Steps, int64(st.ID)),
 		})
 	}
 	return flowDef
