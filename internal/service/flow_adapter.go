@@ -381,6 +381,14 @@ func (a *DrillFlowAdapter) SetupEventSubscriptions(engine *flowengine.Engine) {
 		}
 	}()
 
+	stepForceCompleteCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepForceComplete, stepForceCompleteCh)
+	go func() {
+		for evt := range stepForceCompleteCh {
+			a.handleStepComplete(evt)
+		}
+	}()
+
 	stepTimeoutCh := make(chan flowengine.Event, 100)
 	engine.GetEventBus().Subscribe(flowengine.EventStepTimeout, stepTimeoutCh)
 	go func() {

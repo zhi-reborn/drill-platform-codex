@@ -301,6 +301,10 @@ func (e *Engine) DirectorCompleteStep(instanceID int64, stepDefID int64, operato
 		cbs.LogAction(si.ID, "director_complete", operatorID, "指挥组完成任务")
 	}
 
+	e.eventBus.emit(EventStepForceComplete, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
+		"operator_id": operatorID,
+	})
+
 	e.handleStepCompletion(inst, stepDefID)
 	e.updateProgress(inst)
 

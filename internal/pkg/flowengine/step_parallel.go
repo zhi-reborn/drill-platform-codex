@@ -21,7 +21,8 @@ func (e *Engine) advanceParallelSteps(inst *FlowInst, completedStepDefID int64) 
 	}
 
 	if allDone {
-		e.activateDependentSteps(inst, siblingStepDefIDs)
+		allGroupIDs := append([]int64{completedStepDefID}, siblingStepDefIDs...)
+		e.activateDependentSteps(inst, allGroupIDs)
 		e.checkFlowCompletion(inst)
 	}
 }

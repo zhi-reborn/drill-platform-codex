@@ -275,6 +275,8 @@
             <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right" placeholder="相对启动偏移" />
             <span class="unit-label">分钟</span>
           </el-form-item>
+        </div>
+        <div class="form-row">
            <el-form-item label="预计耗时" class="inline-form-item">
             <el-input-number v-model="singleStepForm.estimated_duration_minutes" :min="1" :max="1440" controls-position="right" placeholder="可选" />
             <span class="unit-label">分钟</span>
@@ -285,7 +287,7 @@
           </el-form-item>
         </div>
 
-        <el-divider>详细信息</el-divider>
+        <el-divider>执行权限</el-divider>
          <div class="form-row">
           <el-form-item label="执行角色" class="inline-form-item">
             <el-select v-model="singleStepForm.default_assignee_role" clearable placeholder="可留空">
