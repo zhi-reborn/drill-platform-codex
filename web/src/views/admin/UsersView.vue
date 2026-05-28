@@ -236,7 +236,7 @@ import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
 import { userApi } from '@/api/modules/user'
-import type { User } from '@/types'
+import type { User, Role } from '@/types'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -285,7 +285,7 @@ async function submitResetPassword() {
   }
   submitting.value = true
   try {
-    await userApi.resetPassword(resetPasswordUser.value.id, newPassword.value)
+    await userApi.resetPassword(resetPasswordUser.value.id!, newPassword.value)
     ElMessage.success('密码已重置为: ' + newPassword.value)
     showResetPasswordDialog.value = false
   } catch (error: any) {
@@ -371,7 +371,7 @@ const filteredUsers = computed(() => {
   return users.value.filter(
     (user) =>
       user.username.toLowerCase().includes(query) ||
-      user.real_name.toLowerCase().includes(query) ||
+      user.real_name?.toLowerCase().includes(query) ||
       (user.department && user.department.toLowerCase().includes(query))
   )
 })
@@ -414,7 +414,7 @@ function handleSearch() {
 
 async function handleDisableUser(user: User) {
   try {
-    await userApi.update(user.id, { status: 0 as any })
+    await userApi.update(user.id!, { status: 0 as any })
     ElMessage.success('用户已禁用')
     loadUsers()
   } catch (error) {
@@ -425,7 +425,7 @@ async function handleDisableUser(user: User) {
 
 async function handleEnableUser(user: User) {
   try {
-    await userApi.update(user.id, { status: 1 as any })
+    await userApi.update(user.id!, { status: 1 as any })
     ElMessage.success('用户已启用')
     loadUsers()
   } catch (error) {
@@ -479,7 +479,7 @@ function resetForm() {
 
 // 编辑用户相关函数
 function handleEditUser(user: User) {
-  editingUserId.value = user.id
+  editingUserId.value = user.id!
   editForm.value = {
     username: user.username,
     real_name: user.real_name || '',
@@ -501,7 +501,7 @@ async function handleUpdateUser() {
     await userApi.update(editingUserId.value, {
       real_name: editForm.value.real_name,
       email: editForm.value.email,
-      role: editForm.value.role,
+      role: editForm.value.role as Role,
       phone: editForm.value.phone || undefined,
       department: editForm.value.department || undefined,
     })
@@ -534,7 +534,7 @@ function resetEditForm() {
 
 async function handleDeleteUser(user: User) {
   try {
-    await userApi.delete(user.id)
+    await userApi.delete(user.id!)
     ElMessage.success('用户已删除')
     loadUsers()
   } catch (error) {

@@ -10,7 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const isAuthenticated = computed(() => !!token.value && !!user.value)
 
-  const role = computed(() => user.value?.role ?? '' as Role)
+  const role = computed(() => user.value?.role ?? 'viewer' as Role)
   const userName = computed(() => user.value?.name ?? '未登录')
   const userInitial = computed(() => user.value?.name?.charAt(0) ?? '?')
   const userDept = computed(() => user.value?.department ?? '')
