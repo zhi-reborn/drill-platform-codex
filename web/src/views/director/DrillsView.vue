@@ -50,12 +50,15 @@
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" @click="viewMonitor(row)">
+            <el-button text type="primary" size="small" @click="viewMonitor(row)">
               监控
             </el-button>
-            <el-button text type="danger" @click="handleDelete(row)">
+            <el-button text type="success" size="small" @click="viewScreen(row)">
+              大屏
+            </el-button>
+            <el-button text type="danger" size="small" @click="handleDelete(row)">
               删除
             </el-button>
           </template>
@@ -160,6 +163,10 @@ function formatTime(time: string): string {
 
 function viewMonitor(row: DrillInstance) {
   router.push(`/director/monitor/${row.id}`)
+}
+
+function viewScreen(row: DrillInstance) {
+  router.push(`/director/screen/${row.id}`)
 }
 
 function handleDelete(row: DrillInstance) {

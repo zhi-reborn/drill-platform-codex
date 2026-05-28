@@ -7,6 +7,7 @@ type DrillInstance struct {
 	ID            uint64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	TemplateID    uint64     `gorm:"type:bigint unsigned;not null;column:template_id;index:idx_template_id" json:"template_id"`
 	Name          string     `gorm:"type:varchar(128);not null;column:name" json:"name"`
+	Description   string     `gorm:"type:text;column:description" json:"description"`
 	Status        string     `gorm:"type:varchar(32);not null;default:pending;column:status;index:idx_status" json:"status"`
 	StartTime     *time.Time `gorm:"column:start_time" json:"start_time"`
 	EndTime       *time.Time `gorm:"column:end_time" json:"end_time"`

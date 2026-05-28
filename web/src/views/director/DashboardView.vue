@@ -241,7 +241,7 @@ async function loadDashboard() {
 }
 
 function viewDrill(drillId: number) {
-  router.push(`/director/monitor/${drillId}`)
+  router.push(`/director/screen/${drillId}`)
 }
 
 function viewScreen(drillId: number) {

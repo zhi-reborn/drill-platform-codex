@@ -96,6 +96,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/director/MonitorView.vue'),
         meta: { title: '实时监控', icon: 'VideoCamera' },
       },
+      {
+        path: 'screen/:id(\\d+)',
+        name: 'DirectorScreen',
+        component: () => import('@/views/director/ScreenView2.vue'),
+        meta: { title: '数据大屏', icon: 'DataBoard' },
+      },
     ],
   },
 
@@ -117,6 +123,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/executor/TaskDetailView.vue'),
         meta: { title: '任务详情', icon: 'EditPen', hidden: true },
       },
+      {
+        path: 'screen/:id(\\d+)',
+        name: 'ExecutorScreen',
+        component: () => import('@/views/director/ScreenView2.vue'),
+        meta: { title: '数据大屏', icon: 'DataBoard', hidden: true },
+      },
     ],
   },
 
@@ -137,6 +149,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ViewerDrillDetail',
         component: () => import('@/views/viewer/DrillDetailView.vue'),
         meta: { title: '演练详情', icon: 'Document', hidden: true },
+      },
+      {
+        path: 'screen/:id(\\d+)',
+        name: 'ViewerScreen',
+        component: () => import('@/views/director/ScreenView2.vue'),
+        meta: { title: '数据大屏', icon: 'DataBoard', hidden: true },
       },
     ],
   },

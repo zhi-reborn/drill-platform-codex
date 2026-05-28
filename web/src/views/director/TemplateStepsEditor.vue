@@ -3,30 +3,42 @@
     <div class="page-header">
       <div class="header-left">
         <el-button text @click="goBack">
-          <el-icon><ArrowLeft /></el-icon>
+          <el-icon>
+            <ArrowLeft />
+          </el-icon>
           返回模板列表
         </el-button>
         <h2 class="page-title">编辑步骤 - {{ templateName }}</h2>
       </div>
       <div class="header-actions">
         <el-button @click="loadTemplateSteps">
-          <el-icon><Refresh /></el-icon>
+          <el-icon>
+            <Refresh />
+          </el-icon>
           重新加载
         </el-button>
         <el-button @click="openPhaseManageDialog">
-          <el-icon><Setting /></el-icon>
+          <el-icon>
+            <Setting />
+          </el-icon>
           阶段管理
         </el-button>
         <el-button type="success" @click="openBatchImportDialog">
-          <el-icon><Download /></el-icon>
+          <el-icon>
+            <Download />
+          </el-icon>
           批量导入
         </el-button>
         <el-button type="warning" @click="exportSteps">
-          <el-icon><Upload /></el-icon>
+          <el-icon>
+            <Upload />
+          </el-icon>
           导出步骤
         </el-button>
         <el-button type="primary" @click="handleSaveSteps">
-          <el-icon><Check /></el-icon>
+          <el-icon>
+            <Check />
+          </el-icon>
           保存步骤
         </el-button>
       </div>
@@ -37,91 +49,62 @@
       <div class="steps-panel">
         <!-- 阶段 tabs -->
         <el-tabs v-model="activePhaseName" class="phase-tabs" type="card">
-          <el-tab-pane
-            v-for="phase in phases"
-            :key="phase.name"
-            :name="phase.name"
-            :label="phase.name"
-          />
+          <el-tab-pane v-for="phase in phases" :key="phase.name" :name="phase.name" :label="phase.name" />
           <el-tab-pane v-if="phases.length === 0" name="_empty" label="无阶段" disabled />
         </el-tabs>
 
         <div class="panel-header">
           <h3>步骤树</h3>
           <el-button type="primary" size="small" @click="openSingleAddDialog" :disabled="!activePhaseName">
-            <el-icon><Plus /></el-icon>
+            <el-icon>
+              <Plus />
+            </el-icon>
             添加步骤
           </el-button>
         </div>
         <div class="panel-body">
           <div v-if="activeSteps.length > 0">
-            <draggable
-              v-model="rootStepList"
-              :animation="200"
-              item-key="id"
-              handle=".drag-handle"
-              ghost-class="drag-ghost"
-              class="draggable-list"
-              @start="dragging = true"
-              @end="onDragEnd"
-            >
+            <draggable v-model="rootStepList" :animation="200" item-key="id" handle=".drag-handle"
+              ghost-class="drag-ghost" class="draggable-list" @start="dragging = true" @end="onDragEnd">
               <template #item="{ element: root }">
                 <div class="step-group">
                   <!-- 根步骤行 -->
-                  <div
-                    class="step-row"
-                    :class="{ 'step-selected': selectedStep?.id === root.id }"
-                    @click="handleStepSelect(root)"
-                  >
+                  <div class="step-row" :class="{ 'step-selected': selectedStep?.id === root.id }"
+                    @click="handleStepSelect(root)">
                     <span class="drag-handle">⠿</span>
                     <span class="seq-badge">{{ computeSEQ(root) }}</span>
-                    <button
-                      v-if="root.hasChildren"
-                      class="expand-btn"
-                      @click.stop="toggleCollapse(root.id)"
-                    >
+                    <button v-if="root.hasChildren" class="expand-btn" @click.stop="toggleCollapse(root.id)">
                       {{ isCollapsed(root.id) ? '▶' : '▼' }}
                     </button>
                     <span v-else class="expand-placeholder"></span>
                     <span class="step-name">{{ root.name || '-' }}</span>
                     <el-tag size="small" type="info">{{ getStepTypeLabel(root.step_type) }}</el-tag>
                     <el-button text type="danger" size="small" @click.stop="removeStepByRow(root)" title="删除">
-                      <el-icon><Delete /></el-icon>
+                      <el-icon>
+                        <Delete />
+                      </el-icon>
                     </el-button>
                   </div>
                   <!-- 子步骤行 -->
                   <template v-if="!isCollapsed(root.id)">
-                    <draggable
-                      v-model="root.children"
-                      :animation="200"
-                      item-key="id"
-                      handle=".drag-handle"
-                      ghost-class="drag-ghost"
-                      :group="{ name: 'children-group', pull: false, put: false }"
-                      class="children-list"
-                      @start="dragging = true"
-                      @end="onDragEnd"
-                    >
+                    <draggable v-model="root.children" :animation="200" item-key="id" handle=".drag-handle"
+                      ghost-class="drag-ghost" :group="{ name: 'children-group', pull: false, put: false }"
+                      class="children-list" @start="dragging = true" @end="onDragEnd">
                       <template #item="{ element: child }">
-                        <div
-                          class="step-row child-row"
-                          :class="{ 'step-selected': selectedStep?.id === child.id }"
-                          @click="handleStepSelect(child)"
-                        >
+                        <div class="step-row child-row" :class="{ 'step-selected': selectedStep?.id === child.id }"
+                          @click="handleStepSelect(child)">
                           <span class="drag-handle">⠿</span>
                           <span class="seq-badge">{{ computeSEQ(child) }}</span>
-                          <button
-                            v-if="child.hasChildren"
-                            class="expand-btn"
-                            @click.stop="toggleCollapse(child.id)"
-                          >
+                          <button v-if="child.hasChildren" class="expand-btn" @click.stop="toggleCollapse(child.id)">
                             {{ isCollapsed(child.id) ? '▶' : '▼' }}
                           </button>
                           <span v-else class="expand-placeholder"></span>
                           <span class="step-name">{{ child.name || '-' }}</span>
                           <el-tag size="small" type="info">{{ getStepTypeLabel(child.step_type) }}</el-tag>
                           <el-button text type="danger" size="small" @click.stop="removeStepByRow(child)" title="删除">
-                            <el-icon><Delete /></el-icon>
+                            <el-icon>
+                              <Delete />
+                            </el-icon>
                           </el-button>
                         </div>
                       </template>
@@ -134,11 +117,15 @@
           <div v-else class="empty-steps">
             <el-empty :description="phases.length === 0 ? '请先添加阶段' : '暂无步骤，请添加或导入步骤'" :image-size="100">
               <el-button v-if="activePhaseName" type="primary" @click="openSingleAddDialog">
-                <el-icon><Plus /></el-icon>
+                <el-icon>
+                  <Plus />
+                </el-icon>
                 添加步骤
               </el-button>
               <el-button v-if="activePhaseName" type="success" @click="openBatchImportDialog" style="margin-left: 8px">
-                <el-icon><Download /></el-icon>
+                <el-icon>
+                  <Download />
+                </el-icon>
                 批量导入
               </el-button>
             </el-empty>
@@ -153,7 +140,9 @@
           <h3 v-else>请选择一个步骤</h3>
           <div v-if="selectedStep" class="panel-actions">
             <el-button text type="primary" size="small" @click="openStepEditDialogForSelected">
-              <el-icon><Edit /></el-icon>
+              <el-icon>
+                <Edit />
+              </el-icon>
               编辑
             </el-button>
           </div>
@@ -166,25 +155,37 @@
               <el-descriptions-item label="父步骤序号">{{ selectedStep.parent_seq_display || '-' }}</el-descriptions-item>
               <el-descriptions-item label="步骤类型">{{ getStepTypeLabel(selectedStep.step_type) }}</el-descriptions-item>
               <el-descriptions-item label="环节">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? selectedStep.estimated_duration_minutes + ' 分钟' : '-' }}</el-descriptions-item>
-              <el-descriptions-item label="开始偏移">{{ selectedStep.estimated_start_offset ? selectedStep.estimated_start_offset + ' 分钟' : '-' }}</el-descriptions-item>
+              <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ?
+                selectedStep.estimated_duration_minutes + ' 分钟' : '-' }}</el-descriptions-item>
+              <el-descriptions-item label="开始偏移">{{ selectedStep.estimated_start_offset ?
+                selectedStep.estimated_start_offset
+                + ' 分钟' : '-' }}</el-descriptions-item>
             </el-descriptions>
             <el-divider>责任与扩展</el-divider>
             <el-descriptions :column="2" border size="default">
-              <el-descriptions-item label="执行角色">{{ selectedStep.default_assignee_role ? (selectedStep.default_assignee_role === 'director' ? '指挥组' : '执行组') : '-' }}</el-descriptions-item>
+              <el-descriptions-item label="执行角色">{{ selectedStep.default_assignee_role ?
+                (selectedStep.default_assignee_role
+                  === 'director' ? '指挥组' : '执行组') : '-' }}</el-descriptions-item>
               <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="责任团队">{{ selectedStep.attributes?.responsible_team || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-'
+                }}</el-descriptions-item>
+              <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-'
+                }}</el-descriptions-item>
+              <el-descriptions-item label="责任团队">{{ selectedStep.attributes?.responsible_team || '-'
+                }}</el-descriptions-item>
               <el-descriptions-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-descriptions-item>
               <el-descriptions-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-descriptions-item>
             </el-descriptions>
             <el-divider>说明与预案</el-divider>
             <el-descriptions :column="1" border size="default">
-              <el-descriptions-item label="操作说明">{{ selectedStep.attributes?.operation_guide || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="验证方式">{{ selectedStep.attributes?.verification_method || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="最坏影响分析">{{ selectedStep.attributes?.worst_case_analysis || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="兜底措施">{{ selectedStep.attributes?.fallback_measures || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="操作说明">{{ selectedStep.attributes?.operation_guide || '-'
+                }}</el-descriptions-item>
+              <el-descriptions-item label="验证方式">{{ selectedStep.attributes?.verification_method || '-'
+                }}</el-descriptions-item>
+              <el-descriptions-item label="最坏影响分析">{{ selectedStep.attributes?.worst_case_analysis || '-'
+                }}</el-descriptions-item>
+              <el-descriptions-item label="兜底措施">{{ selectedStep.attributes?.fallback_measures || '-'
+                }}</el-descriptions-item>
               <el-descriptions-item label="备注">{{ selectedStep.attributes?.remark || '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
@@ -201,12 +202,16 @@
         <div v-for="(phase, index) in editablePhases" :key="index" class="phase-manage-item">
           <el-input v-model="phase.name" placeholder="阶段名称，如：准备阶段" size="default" clearable />
           <el-button size="default" type="danger" text @click="removePhase(index)">
-            <el-icon><Delete /></el-icon>
+            <el-icon>
+              <Delete />
+            </el-icon>
           </el-button>
         </div>
       </div>
       <el-button type="primary" plain style="width: 100%; margin-top: 12px" @click="addPhase">
-        <el-icon><Plus /></el-icon>
+        <el-icon>
+          <Plus />
+        </el-icon>
         添加阶段
       </el-button>
       <template #footer>
@@ -218,26 +223,25 @@
     <!-- 批量导入对话框 -->
     <el-dialog v-model="importVisible" title="批量导入步骤" width="520px">
       <div class="excel-upload">
-          <el-upload
-            ref="uploadRef"
-            :before-upload="handleExcelUpload"
-            :show-file-list="false"
-            accept=".xlsx,.xls"
-            class="upload-area"
-          >
-            <div class="upload-content">
-              <el-icon class="upload-icon"><Upload /></el-icon>
-              <div class="upload-text">点击或拖拽上传 Excel 文件</div>
-              <div class="upload-hint">支持 .xlsx, .xls 格式</div>
-            </div>
-          </el-upload>
-          <div class="template-download">
-            <el-button type="info" plain @click="downloadTemplate">
-              <el-icon><Download /></el-icon>
-              下载 Excel 模板
-            </el-button>
+        <el-upload ref="uploadRef" :before-upload="handleExcelUpload" :show-file-list="false" accept=".xlsx,.xls"
+          class="upload-area">
+          <div class="upload-content">
+            <el-icon class="upload-icon">
+              <Upload />
+            </el-icon>
+            <div class="upload-text">点击或拖拽上传 Excel 文件</div>
+            <div class="upload-hint">支持 .xlsx, .xls 格式</div>
           </div>
+        </el-upload>
+        <div class="template-download">
+          <el-button type="info" plain @click="downloadTemplate">
+            <el-icon>
+              <Download />
+            </el-icon>
+            下载 Excel 模板
+          </el-button>
         </div>
+      </div>
     </el-dialog>
 
     <!-- 单个添加/编辑抽屉 -->
@@ -247,17 +251,13 @@
           <el-input v-model="singleStepForm.name" placeholder="请输入步骤名称" maxlength="100" show-word-limit />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500" show-word-limit />
+          <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500"
+            show-word-limit />
         </el-form-item>
         <div class="form-row">
-         <el-form-item label="父步骤" class="inline-form-item">
+          <el-form-item label="父步骤" class="inline-form-item">
             <el-select v-model="singleStepForm.parent_step_id" clearable placeholder="可选" filterable>
-              <el-option
-                v-for="opt in formParentStepOptions"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
-              />
+              <el-option v-for="opt in formParentStepOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="步骤类型" class="inline-form-item">
@@ -272,30 +272,33 @@
             <el-input v-model="singleStepForm.phase_step" placeholder="如：初始化、主流程" clearable />
           </el-form-item>
           <el-form-item label="开始偏移" class="inline-form-item">
-            <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right" placeholder="相对启动偏移" />
+            <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right"
+              placeholder="相对启动偏移" />
             <span class="unit-label">分钟</span>
           </el-form-item>
         </div>
         <div class="form-row">
-           <el-form-item label="预计耗时" class="inline-form-item">
-            <el-input-number v-model="singleStepForm.estimated_duration_minutes" :min="1" :max="1440" controls-position="right" placeholder="可选" />
+          <el-form-item label="预计耗时" class="inline-form-item">
+            <el-input-number v-model="singleStepForm.estimated_duration_minutes" :min="1" :max="1440"
+              controls-position="right" placeholder="可选" />
             <span class="unit-label">分钟</span>
           </el-form-item>
           <el-form-item label="超时时间" class="inline-form-item">
-            <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="1440" controls-position="right" placeholder="5" />
+            <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="1440" controls-position="right"
+              placeholder="5" />
             <span class="unit-label">分钟</span>
           </el-form-item>
         </div>
 
         <el-divider>执行权限</el-divider>
-         <div class="form-row">
+        <div class="form-row">
           <el-form-item label="执行角色" class="inline-form-item">
             <el-select v-model="singleStepForm.default_assignee_role" clearable placeholder="可留空">
               <el-option label="指挥组" value="director" />
               <el-option label="执行组" value="executor" />
             </el-select>
           </el-form-item>
-           <el-form-item label="执行团队" class="inline-form-item">
+          <el-form-item label="执行团队" class="inline-form-item">
             <el-select v-model="singleStepForm.executor_team" clearable placeholder="选择团队" filterable allow-create>
               <el-option v-for="dept in departmentOptions" :key="dept" :label="dept" :value="dept" />
             </el-select>
@@ -325,16 +328,20 @@
 
         <el-divider>说明与预案</el-divider>
         <el-form-item label="操作说明">
-          <el-input v-model="singleStepForm.attributes.operation_guide" type="textarea" placeholder="操作步骤详细说明" :rows="3" maxlength="2000" show-word-limit />
+          <el-input v-model="singleStepForm.attributes.operation_guide" type="textarea" placeholder="操作步骤详细说明" :rows="3"
+            maxlength="2000" show-word-limit />
         </el-form-item>
         <el-form-item label="验证方式">
-          <el-input v-model="singleStepForm.attributes.verification_method" type="textarea" placeholder="如何验证操作成功" :rows="2" maxlength="1000" show-word-limit />
+          <el-input v-model="singleStepForm.attributes.verification_method" type="textarea" placeholder="如何验证操作成功"
+            :rows="2" maxlength="1000" show-word-limit />
         </el-form-item>
         <el-form-item label="最坏影响分析">
-          <el-input v-model="singleStepForm.attributes.worst_case_analysis" type="textarea" placeholder="操作失败的最大影响" :rows="2" maxlength="1000" show-word-limit />
+          <el-input v-model="singleStepForm.attributes.worst_case_analysis" type="textarea" placeholder="操作失败的最大影响"
+            :rows="2" maxlength="1000" show-word-limit />
         </el-form-item>
         <el-form-item label="兜底措施">
-          <el-input v-model="singleStepForm.attributes.fallback_measures" type="textarea" placeholder="失败后如何恢复" :rows="2" maxlength="1000" show-word-limit />
+          <el-input v-model="singleStepForm.attributes.fallback_measures" type="textarea" placeholder="失败后如何恢复"
+            :rows="2" maxlength="1000" show-word-limit />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="singleStepForm.attributes.remark" placeholder="其他备注信息" clearable />
@@ -342,7 +349,8 @@
       </el-form>
       <template #footer>
         <el-button @click="singleAddVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleAddSingleStep">{{ singleStepEditIndex !== null ? '保存修改' : '添加步骤' }}</el-button>
+        <el-button type="primary" @click="handleAddSingleStep">{{ singleStepEditIndex !== null ? '保存修改' : '添加步骤'
+          }}</el-button>
       </template>
     </el-drawer>
   </div>
@@ -760,7 +768,7 @@ async function loadTemplateSteps() {
 }
 
 // 行选择（保留兼容旧代码引用）
-function handleRowSelect(_row: StepTemplate | undefined) {}
+function handleRowSelect(_row: StepTemplate | undefined) { }
 
 // 删除步骤
 function removeStepByRow(row: StepTreeNode) {
@@ -942,23 +950,23 @@ function handleAddSingleStep() {
   }
 
   steps.push({
-      id: Date.now(),
-      template_id: templateId.value,
-      name: singleStepForm.name.trim(),
-      description: singleStepForm.description.trim(),
-      step_type: singleStepForm.step_type as StepType,
-      timeout_minutes: singleStepForm.timeout_minutes,
-      default_assignee_role: singleStepForm.default_assignee_role,
-      executor_team: singleStepForm.executor_team,
-      parent_step_id: singleStepForm.parent_step_id,
-      order_index: steps.length + 1,
-      created_at: new Date().toISOString(),
-      estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
-      estimated_start_offset: singleStepForm.estimated_start_offset,
-      phase_step: singleStepForm.phase_step || '',
-      attributes: { ...singleStepForm.attributes },
-    })
-    ElMessage.success('步骤已添加')
+    id: Date.now(),
+    template_id: templateId.value,
+    name: singleStepForm.name.trim(),
+    description: singleStepForm.description.trim(),
+    step_type: singleStepForm.step_type as StepType,
+    timeout_minutes: singleStepForm.timeout_minutes,
+    default_assignee_role: singleStepForm.default_assignee_role,
+    executor_team: singleStepForm.executor_team,
+    parent_step_id: singleStepForm.parent_step_id,
+    order_index: steps.length + 1,
+    created_at: new Date().toISOString(),
+    estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
+    estimated_start_offset: singleStepForm.estimated_start_offset,
+    phase_step: singleStepForm.phase_step || '',
+    attributes: { ...singleStepForm.attributes },
+  })
+  ElMessage.success('步骤已添加')
 
   resetSingleStepForm()
   singleAddVisible.value = false
@@ -1027,22 +1035,34 @@ function openBatchImportDialog() {
 }
 
 function downloadTemplate() {
-  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
-  const data = [
-    header,
-    ['准备阶段', '初始化', '', '检查数据库状态', '检查主库是否正常运行', '串行', '10', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
-    ['准备阶段', '初始化', '检查数据库状态', '检查主库连接', '检查主库连接池状态', '串行', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '', '连接主库确认连接池正常', '', '', '', ''],
-    ['执行阶段', '主流程', '', '切换从库', '将从库提升为主库', '并行', '15', '指挥组', '运维部', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
-  ]
-  const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet(data)
+  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
   const colWidths = [
-    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 },
+    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
     { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
     { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
   ]
-  ws['!cols'] = colWidths
-  XLSX.utils.book_append_sheet(wb, ws, '步骤导入')
+
+  // 按阶段分组示例数据，每个阶段对应一个 sheet
+  const phasesData: Record<string, any[][]> = {
+    '准备阶段': [
+      header,
+      ['准备阶段', '初始化', '', '检查数据库状态', '检查主库是否正常运行', '串行', '10', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
+      ['准备阶段', '初始化', '检查数据库状态', '检查主库连接', '检查主库连接池状态', '串行', '5', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '', '连接主库确认连接池正常', '', '', '', ''],
+    ],
+    '执行阶段': [
+      header,
+      ['执行阶段', '主流程', '', '切换从库', '将从库提升为主库', '并行', '15', '5', '指挥组', '运维部', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
+    ],
+  }
+
+  const wb = XLSX.utils.book_new()
+  for (const [phaseName, rows] of Object.entries(phasesData)) {
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = colWidths
+    // sheet 名最长 31 字符
+    const sheetName = phaseName.length > 31 ? phaseName.slice(0, 31) : phaseName
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  }
   XLSX.writeFile(wb, `步骤导入模板_${templateName.value}.xlsx`)
   ElMessage.success('模板已下载')
 }
@@ -1080,7 +1100,7 @@ function exportSteps() {
     }
   }
 
-const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
+  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
   const colWidths = [
     { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
     { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
@@ -1163,142 +1183,142 @@ function handleExcelUpload(file: File) {
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i]
           const rowNum = i + 1
-        const phase = String(row[0] || '').trim()
-        const phaseStepName = String(row[1] || '').trim()
-        const parentStepName = String(row[2] || '').trim()
-        const name = String(row[3] || '').trim()
-        const description = String(row[4] || '').trim()
-        const stepTypeRaw = String(row[5] || '').trim()
-        const estimatedDuration = parseInt(String(row[6] || '')) || undefined
-        const timeoutMinutes = parseInt(String(row[7] || '')) || 5
-        const assigneeRoleRaw = String(row[8] || '').trim()
-        const executorTeam = String(row[9] || '').trim()
-        const responsibleDepartment = String(row[10] || '').trim()
-        const cooperatingDepartment = String(row[11] || '').trim()
-        const responsibleTeam = String(row[12] || '').trim()
-        const operator = String(row[13] || '').trim()
-        const reviewer = String(row[14] || '').trim()
-        const operationGuide = String(row[15] || '').trim()
-        const verificationMethod = String(row[16] || '').trim()
-        const worstCaseAnalysis = String(row[17] || '').trim()
-        const fallbackMeasures = String(row[18] || '').trim()
-        const remark = String(row[19] || '').trim()
+          const phase = String(row[0] || '').trim()
+          const phaseStepName = String(row[1] || '').trim()
+          const parentStepName = String(row[2] || '').trim()
+          const name = String(row[3] || '').trim()
+          const description = String(row[4] || '').trim()
+          const stepTypeRaw = String(row[5] || '').trim()
+          const estimatedDuration = parseInt(String(row[6] || '')) || undefined
+          const timeoutMinutes = parseInt(String(row[7] || '')) || 5
+          const assigneeRoleRaw = String(row[8] || '').trim()
+          const executorTeam = String(row[9] || '').trim()
+          const responsibleDepartment = String(row[10] || '').trim()
+          const cooperatingDepartment = String(row[11] || '').trim()
+          const responsibleTeam = String(row[12] || '').trim()
+          const operator = String(row[13] || '').trim()
+          const reviewer = String(row[14] || '').trim()
+          const operationGuide = String(row[15] || '').trim()
+          const verificationMethod = String(row[16] || '').trim()
+          const worstCaseAnalysis = String(row[17] || '').trim()
+          const fallbackMeasures = String(row[18] || '').trim()
+          const remark = String(row[19] || '').trim()
 
-        if (!name) {
-          errors.push(`「${sheetName}」第${rowNum}行：步骤名称不能为空`)
-          continue
-        }
-        if (!phase) {
-          errors.push(`「${sheetName}」第${rowNum}行：阶段不能为空`)
-          continue
-        }
-
-        // 检查步骤名称是否重复
-        if (nameToIdMap.has(name)) {
-          errors.push(`「${sheetName}」第${rowNum}行：步骤名称「${name}」与已有步骤重复`)
-          continue
-        }
-
-        // 解析父子关系
-        let parentStepId: number | undefined
-        if (parentStepName) {
-          const parentId = nameToIdMap.get(parentStepName)
-          if (parentId) {
-            parentStepId = parentId
-          } else {
-            errors.push(`「${sheetName}」第${rowNum}行：父步骤「${parentStepName}」不存在，请确保父步骤在该步骤之前出现`)
+          if (!name) {
+            errors.push(`「${sheetName}」第${rowNum}行：步骤名称不能为空`)
             continue
           }
-        }
+          if (!phase) {
+            errors.push(`「${sheetName}」第${rowNum}行：阶段不能为空`)
+            continue
+          }
 
-        const stepTypeMap: Record<string, string> = {
-          '串行': 'serial', '并行': 'parallel',
-          'serial': 'serial', 'parallel': 'parallel',
-        }
-        const stepType = stepTypeMap[stepTypeRaw] || 'serial'
+          // 检查步骤名称是否重复
+          if (nameToIdMap.has(name)) {
+            errors.push(`「${sheetName}」第${rowNum}行：步骤名称「${name}」与已有步骤重复`)
+            continue
+          }
 
-        const assigneeRoleMap: Record<string, string> = {
-          '指挥组': 'director', '执行组': 'executor',
-          'director': 'director', 'executor': 'executor',
-        }
-        const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
+          // 解析父子关系
+          let parentStepId: number | undefined
+          if (parentStepName) {
+            const parentId = nameToIdMap.get(parentStepName)
+            if (parentId) {
+              parentStepId = parentId
+            } else {
+              errors.push(`「${sheetName}」第${rowNum}行：父步骤「${parentStepName}」不存在，请确保父步骤在该步骤之前出现`)
+              continue
+            }
+          }
 
-        const newId = Date.now() + Math.random()
-        const newStep: StepTemplate = {
-          id: newId,
-          template_id: templateId.value,
-          parent_step_id: parentStepId,
-          name,
-          description,
-          step_type: stepType as any,
-          timeout_minutes: timeoutMinutes,
-          default_assignee_role: assigneeRole,
-          executor_team: executorTeam || '',
-          order_index: globalOrder++,
-          created_at: new Date().toISOString(),
-          phase,
-          phase_step: phaseStepName || '',
-          estimated_duration_minutes: estimatedDuration,
-          attributes: {
-            responsible_department: responsibleDepartment || undefined,
-            cooperating_department: cooperatingDepartment || undefined,
-            responsible_team: responsibleTeam || undefined,
-            operator: operator || undefined,
-            reviewer: reviewer || undefined,
-            operation_guide: operationGuide || undefined,
-            verification_method: verificationMethod || undefined,
-            worst_case_analysis: worstCaseAnalysis || undefined,
-            fallback_measures: fallbackMeasures || undefined,
-            remark: remark || undefined,
-          },
-        }
+          const stepTypeMap: Record<string, string> = {
+            '串行': 'serial', '并行': 'parallel',
+            'serial': 'serial', 'parallel': 'parallel',
+          }
+          const stepType = stepTypeMap[stepTypeRaw] || 'serial'
 
-        if (!phaseStepsMap.has(phase)) {
-          phaseStepsMap.set(phase, [])
-        }
-        phaseStepsMap.get(phase)!.push(newStep)
+          const assigneeRoleMap: Record<string, string> = {
+            '指挥组': 'director', '执行组': 'executor',
+            'director': 'director', 'executor': 'executor',
+          }
+          const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
 
-        // 将新步骤加入映射表，后续行可以引用它作为父步骤
-        nameToIdMap.set(name, newId)
+          const newId = Date.now() + Math.random()
+          const newStep: StepTemplate = {
+            id: newId,
+            template_id: templateId.value,
+            parent_step_id: parentStepId,
+            name,
+            description,
+            step_type: stepType as any,
+            timeout_minutes: timeoutMinutes,
+            default_assignee_role: assigneeRole,
+            executor_team: executorTeam || '',
+            order_index: globalOrder++,
+            created_at: new Date().toISOString(),
+            phase,
+            phase_step: phaseStepName || '',
+            estimated_duration_minutes: estimatedDuration,
+            attributes: {
+              responsible_department: responsibleDepartment || undefined,
+              cooperating_department: cooperatingDepartment || undefined,
+              responsible_team: responsibleTeam || undefined,
+              operator: operator || undefined,
+              reviewer: reviewer || undefined,
+              operation_guide: operationGuide || undefined,
+              verification_method: verificationMethod || undefined,
+              worst_case_analysis: worstCaseAnalysis || undefined,
+              fallback_measures: fallbackMeasures || undefined,
+              remark: remark || undefined,
+            },
+          }
+
+          if (!phaseStepsMap.has(phase)) {
+            phaseStepsMap.set(phase, [])
+          }
+          phaseStepsMap.get(phase)!.push(newStep)
+
+          // 将新步骤加入映射表，后续行可以引用它作为父步骤
+          nameToIdMap.set(name, newId)
+        }
+      } // end sheet loop
+
+      if (errors.length > 0) {
+        ElMessage.warning(errors.join('\n'))
+        return false
       }
-    } // end sheet loop
 
-    if (errors.length > 0) {
-      ElMessage.warning(errors.join('\n'))
-      return false
-    }
-
-    // 统计总导入步骤数
-    let totalImported = 0
-    for (const [, steps] of phaseStepsMap) {
-      totalImported += steps.length
-    }
-    if (totalImported === 0) {
-      ElMessage.warning('未找到有效数据')
-      return false
-    }
-
-    // 将导入的步骤分配到对应阶段
-    for (const [phaseName, newSteps] of phaseStepsMap) {
-      const existingPhase = phases.value.find(p => p.name === phaseName)
-      if (existingPhase) {
-        existingPhase.steps = [...existingPhase.steps, ...newSteps]
-      } else {
-        phases.value.push({ name: phaseName, steps: newSteps })
+      // 统计总导入步骤数
+      let totalImported = 0
+      for (const [, steps] of phaseStepsMap) {
+        totalImported += steps.length
       }
-    }
+      if (totalImported === 0) {
+        ElMessage.warning('未找到有效数据')
+        return false
+      }
 
-    // 激活第一个有数据的阶段
-    if (phaseStepsMap.size > 0) {
-      const firstPhase = phaseStepsMap.keys().next().value
-      activePhaseName.value = firstPhase
+      // 将导入的步骤分配到对应阶段
+      for (const [phaseName, newSteps] of phaseStepsMap) {
+        const existingPhase = phases.value.find(p => p.name === phaseName)
+        if (existingPhase) {
+          existingPhase.steps = [...existingPhase.steps, ...newSteps]
+        } else {
+          phases.value.push({ name: phaseName, steps: newSteps })
+        }
+      }
+
+      // 激活第一个有数据的阶段
+      if (phaseStepsMap.size > 0) {
+        const firstPhase = phaseStepsMap.keys().next().value
+        activePhaseName.value = firstPhase
+      }
+      buildAndSyncTree()
+      ElMessage.success(`成功导入 ${totalImported} 个步骤到 ${phaseStepsMap.size} 个阶段`)
+      importVisible.value = false
+    } catch {
+      ElMessage.error('Excel 文件解析失败')
     }
-    buildAndSyncTree()
-    ElMessage.success(`成功导入 ${totalImported} 个步骤到 ${phaseStepsMap.size} 个阶段`)
-    importVisible.value = false
-  } catch {
-    ElMessage.error('Excel 文件解析失败')
-  }
   }
   reader.readAsArrayBuffer(file)
   return false
@@ -1486,7 +1506,9 @@ onMounted(() => {
     padding: 0;
     flex-shrink: 0;
 
-    &:hover { color: var(--el-color-primary); }
+    &:hover {
+      color: var(--el-color-primary);
+    }
   }
 
   .expand-placeholder {

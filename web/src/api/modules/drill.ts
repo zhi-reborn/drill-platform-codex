@@ -31,7 +31,7 @@ export const drillApi = {
     })
   },
 
-  create: (data: { template_id: number; name: string }) => {
+  create: (data: { template_id: number; name: string; description?: string; planned_start?: string }) => {
     return apiRequest<DrillInstance>({
       url: '/v1/drills',
       method: 'POST',

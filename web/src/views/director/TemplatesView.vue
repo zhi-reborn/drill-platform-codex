@@ -131,30 +131,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importVisible" title="批量导入步骤" width="520px">
-      <div class="excel-upload">
-        <el-upload
-          ref="uploadRef"
-          :before-upload="handleExcelUpload"
-          :show-file-list="false"
-          accept=".xlsx,.xls"
-          class="upload-area"
-        >
-          <div class="upload-content">
-            <el-icon class="upload-icon"><Upload /></el-icon>
-            <div class="upload-text">点击或拖拽上传 Excel 文件</div>
-            <div class="upload-hint">支持 .xlsx, .xls 格式</div>
-          </div>
-        </el-upload>
-        <div class="template-download">
-          <el-button type="info" plain @click="downloadTemplate">
-            <el-icon><Download /></el-icon>
-            下载 Excel 模板
-          </el-button>
-        </div>
-      </div>
-    </el-dialog>
-
     <el-dialog v-model="deleteVisible" title="确认删除" width="400px">
       <p>确定要删除模板「{{ deleteTarget?.name }}」吗？此操作不可撤销。</p>
       <template #footer>
@@ -201,7 +177,6 @@ const categories = ref<CategoryItem[]>([...defaultCategories])
 const formVisible = ref(false)
 const deleteVisible = ref(false)
 const categoryVisible = ref(false)
-const importVisible = ref(false)
 const editableCategories = ref<CategoryItem[]>([])
 
 const isEditing = ref(false)

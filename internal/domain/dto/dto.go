@@ -19,6 +19,7 @@ type LoginResponse struct {
 type CreateDrillRequest struct {
 	TemplateID   uint64              `json:"template_id" binding:"required"`
 	Name         string              `json:"name" binding:"required,max=200"`
+	Description  string              `json:"description"`
 	PlannedStart string              `json:"planned_start"`
 	Assignees    map[uint64][]uint64 `json:"assignees"`
 }

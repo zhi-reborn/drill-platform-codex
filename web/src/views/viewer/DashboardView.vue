@@ -191,7 +191,7 @@ function formatDuration(seconds: number): string {
 }
 
 function viewScreen(drillId: number) {
-  router.push(`/screen/${drillId}`)
+  router.push(`/viewer/screen/${drillId}`)
 }
 
 async function loadDashboard() {

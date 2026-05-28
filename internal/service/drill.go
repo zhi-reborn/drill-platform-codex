@@ -129,10 +129,11 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 	}
 
 	drill := &entity.DrillInstance{
-		TemplateID: req.TemplateID,
-		Name:       req.Name,
-		Status:     "pending",
-		CreatedBy:  createdBy,
+		TemplateID:  req.TemplateID,
+		Name:        req.Name,
+		Description: req.Description,
+		Status:      "pending",
+		CreatedBy:   createdBy,
 	}
 
 	if req.PlannedStart != "" {

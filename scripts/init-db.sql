@@ -97,6 +97,7 @@ CREATE TABLE `drill_instance` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `template_id` BIGINT UNSIGNED NOT NULL COMMENT '来源模板 ID',
     `name` VARCHAR(128) NOT NULL COMMENT '演练名称',
+    `description` TEXT COMMENT '注意事项/演练描述',
     `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '状态：pending/running/paused/completed/terminated',
     `start_time` DATETIME DEFAULT NULL COMMENT '实际开始时间',
     `end_time` DATETIME DEFAULT NULL COMMENT '实际结束时间',

@@ -47,14 +47,24 @@
           <el-form-item label="演练名称" prop="name">
             <el-input v-model="form.name" placeholder="请输入演练名称" maxlength="50" show-word-limit />
           </el-form-item>
-          <el-form-item label="描述" prop="description">
+          <el-form-item label="注意事项" prop="description">
             <el-input
               v-model="form.description"
               type="textarea"
-              :rows="4"
-              placeholder="请输入演练描述（可选）"
-              maxlength="200"
+              :rows="3"
+              placeholder="演练注意事项、风险提示等（可选）"
+              maxlength="500"
               show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="计划启动时间" prop="planned_start">
+            <el-date-picker
+              v-model="form.planned_start"
+              type="datetime"
+              placeholder="选择计划启动时间（可选）"
+              format="YYYY/MM/DD HH:mm"
+              value-format="YYYY-MM-DDTHH:mm:ssZ"
+              style="width: 100%"
             />
           </el-form-item>
         </el-form>
@@ -71,8 +81,11 @@
             <el-descriptions-item label="演练名称">
               {{ form.name }}
             </el-descriptions-item>
-            <el-descriptions-item label="演练描述">
+            <el-descriptions-item label="注意事项">
               {{ form.description || '无' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="计划启动时间">
+              {{ form.planned_start || '未指定' }}
             </el-descriptions-item>
             <el-descriptions-item label="步骤数量">
               {{ selectedTemplate?.steps.length }} 个步骤
@@ -89,7 +102,7 @@
         <el-button v-if="currentStep < 2" type="primary" @click="nextStep">
           下一步
         </el-button>
-        <el-button v-else type="primary" @click="confirmCreate">
+        <el-button v-else type="primary" :loading="submitting" @click="confirmCreate">
           确认创建
         </el-button>
       </div>
@@ -108,6 +121,7 @@ import { drillApi } from '@/api/modules/drill'
 const router = useRouter()
 
 const currentStep = ref(0)
+const submitting = ref(false)
 const templates = ref<DrillTemplate[]>([])
 const selectedTemplate = ref<DrillTemplate | null>(null)
 const formRef = ref<FormInstance>()
@@ -115,6 +129,7 @@ const formRef = ref<FormInstance>()
 const form = reactive({
   name: '',
   description: '',
+  planned_start: '',
 })
 
 const rules: FormRules = {
@@ -189,17 +204,21 @@ async function confirmCreate() {
     ElMessage.warning('信息不完整，无法创建')
     return
   }
+  submitting.value = true
   try {
     await drillApi.create({
       template_id: selectedTemplate.value.id,
       name: form.name.trim(),
       description: form.description?.trim() || '',
+      planned_start: form.planned_start || '',
     })
     ElMessage.success('演练创建成功')
     router.push('/director/drills')
   } catch (error) {
     ElMessage.error('创建失败')
     console.error('Failed to create drill:', error)
+  } finally {
+    submitting.value = false
   }
 }
 
