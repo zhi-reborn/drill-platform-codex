@@ -14,14 +14,14 @@ import (
 )
 
 type DrillService struct {
-	drillRepo             *repository.DrillRepo
-	templateRepo          *repository.TemplateRepo
-	stepRepo              *repository.StepRepo
-	userRepo              *repository.UserRepo
-	engine                *flowengine.Engine
-	adapter               *DrillFlowAdapter
-	wsManager             *websocket.Manager
-	notificationService   *NotificationService
+	drillRepo           *repository.DrillRepo
+	templateRepo        *repository.TemplateRepo
+	stepRepo            *repository.StepRepo
+	userRepo            *repository.UserRepo
+	engine              *flowengine.Engine
+	adapter             *DrillFlowAdapter
+	wsManager           *websocket.Manager
+	notificationService *NotificationService
 }
 
 func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.TemplateRepo, stepRepo *repository.StepRepo, userRepo *repository.UserRepo) *DrillService {
@@ -170,23 +170,23 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		}
 
 		step := entity.StepInstance{
-			DrillInstanceID:      drill.ID,
-			StepTemplateID:       stepTpl.ID,
-			Name:                 stepTpl.Name,
-			Seq:                  stepTpl.Seq,
-			Status:               "pending",
-			AssigneeIDs:          assigneeIDs,
-			StepType:             stepTpl.StepType,
-			TimeoutMinutes:       stepTpl.TimeoutMinutes,
-			ParentStepID:         nil,
-			PreStepIDs:           "[]",
-			Phase:                stepTpl.Phase,
-			PhaseStep:            stepTpl.PhaseStep,
-			DefaultAssigneeRole: stepTpl.DefaultAssigneeRole,
-			ExecutorTeam:        stepTpl.ExecutorTeam,
+			DrillInstanceID:          drill.ID,
+			StepTemplateID:           stepTpl.ID,
+			Name:                     stepTpl.Name,
+			Seq:                      stepTpl.Seq,
+			Status:                   "pending",
+			AssigneeIDs:              assigneeIDs,
+			StepType:                 stepTpl.StepType,
+			TimeoutMinutes:           stepTpl.TimeoutMinutes,
+			ParentStepID:             nil,
+			PreStepIDs:               "[]",
+			Phase:                    stepTpl.Phase,
+			PhaseStep:                stepTpl.PhaseStep,
+			DefaultAssigneeRole:      stepTpl.DefaultAssigneeRole,
+			ExecutorTeam:             stepTpl.ExecutorTeam,
 			EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
 			EstimatedStartOffset:     stepTpl.EstimatedStartOffset,
-			JSONAttributes:       stepTpl.JSONAttributes,
+			JSONAttributes:           stepTpl.JSONAttributes,
 		}
 		if err := repository.DB.Create(&step).Error; err != nil {
 			log.Printf("[ERROR] Failed to create step instance for template step %d: %v", stepTpl.ID, err)
@@ -279,17 +279,6 @@ func (s *DrillService) Start(id uint64) error {
 		Content:         "演练已启动",
 	})
 
-	// WebSocket 广播
-	if s.wsManager != nil {
-		payload := websocket.DrillStatusPayload{
-			DrillID:        uint(drill.ID),
-			DrillName:      drill.Name,
-			PreviousStatus: "pending",
-			NewStatus:      "running",
-		}
-		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
-	}
-
 	return s.engine.Start(int64(drill.ID))
 }
 
@@ -302,7 +291,7 @@ func (s *DrillService) Pause(id uint64) error {
 		return errors.New("只有运行中的演练才能暂停")
 	}
 	prevStatus := drill.Status
-	
+
 	if err := s.drillRepo.UpdateStatus(id, "paused"); err != nil {
 		return err
 	}
@@ -338,12 +327,12 @@ func (s *DrillService) Pause(id uint64) error {
 	// 创建通知（自己操作不通知自己）
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   drill.CreatedBy,
-			Type:     "drill_paused",
-			Title:    "演练已暂停",
-			Content:  drill.Name + " 已暂停",
-			DrillID:  &drill.ID,
-			IsRead:   false,
+			UserID:  drill.CreatedBy,
+			Type:    "drill_paused",
+			Title:   "演练已暂停",
+			Content: drill.Name + " 已暂停",
+			DrillID: &drill.ID,
+			IsRead:  false,
 		}, drill.CreatedBy)
 	}
 
@@ -359,7 +348,7 @@ func (s *DrillService) Resume(id uint64) error {
 		return errors.New("只有已暂停的演练才能继续")
 	}
 	prevStatus := drill.Status
-	
+
 	if err := s.drillRepo.UpdateStatus(id, "running"); err != nil {
 		return err
 	}
@@ -378,7 +367,7 @@ func (s *DrillService) Resume(id uint64) error {
 		Action:          "resume",
 		OperatorID:      drill.CreatedBy,
 		OperatorName:    operatorName,
-		Content:         "演练已恢复执行",
+		Content:         "演练已恢复",
 	})
 
 	// WebSocket 广播
@@ -395,12 +384,12 @@ func (s *DrillService) Resume(id uint64) error {
 	// 创建通知
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   drill.CreatedBy,
-			Type:     "drill_resumed",
-			Title:    "演练已恢复",
-			Content:  drill.Name + " 已恢复执行",
-			DrillID:  &drill.ID,
-			IsRead:   false,
+			UserID:  drill.CreatedBy,
+			Type:    "drill_resumed",
+			Title:   "演练已恢复",
+			Content: drill.Name + " 已恢复执行",
+			DrillID: &drill.ID,
+			IsRead:  false,
 		}, drill.CreatedBy)
 	}
 
@@ -419,11 +408,11 @@ func (s *DrillService) Terminate(id uint64) error {
 		return errors.New("演练已终止，无法重复操作")
 	}
 	prevStatus := drill.Status
-	
+
 	now := time.Now()
 	repository.DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"status":    "terminated",
-		"end_time":  &now,
+		"status":   "terminated",
+		"end_time": &now,
 	})
 
 	// 查询操作人姓名
@@ -457,12 +446,12 @@ func (s *DrillService) Terminate(id uint64) error {
 	// 创建通知
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   drill.CreatedBy,
-			Type:     "drill_terminated",
-			Title:    "演练已终止",
-			Content:  drill.Name + " 已终止",
-			DrillID:  &drill.ID,
-			IsRead:   false,
+			UserID:  drill.CreatedBy,
+			Type:    "drill_terminated",
+			Title:   "演练已终止",
+			Content: drill.Name + " 已终止",
+			DrillID: &drill.ID,
+			IsRead:  false,
 		}, drill.CreatedBy)
 	}
 

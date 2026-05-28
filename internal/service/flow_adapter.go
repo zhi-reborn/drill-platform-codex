@@ -660,6 +660,50 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		return
 	}
 
+	log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: parent=%d name=%s status=%s", parentStepDefID, parentSI.Name, parentSI.Status)
+
+	if parentSI.Status != flowengine.StepStatusRunning {
+		log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: parent NOT running, status=%s, skip engine.CompleteStep", parentSI.Status)
+		repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
+			"status":   string(flowengine.StepStatusCompleted),
+			"end_time": &now,
+		})
+		repository.DB.Create(&entity.DrillInstanceLog{
+		DrillInstanceID: drillID,
+		StepInstanceID:  &parentInst.ID,
+		Action:          "auto_complete",
+		Content:         fmt.Sprintf("【%s】%s 子任务全部完成，自动完成", parentInst.Phase, parentInst.Name),
+			CreatedAt:       now,
+	})
+
+	log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: DB updated to completed, now calling engine.CompleteStep")
+
+	if err := a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成"); err != nil {
+		log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: engine.CompleteStep FAILED: %v, err)
+		parentSI.Status = flowengine.StepStatusCompleted
+		parentSI.EndTime = &now
+		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+	}
+
+	if a.wsManager != nil {
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+		DrillID:        uint(drillID),
+		StepID:         uint(parentInst.ID),
+		StepName:       parentInst.Name,
+		PhaseName:      parentInst.Phase,
+		PhaseStepName: parentInst.PhaseStep,
+		PreviousStatus: string(flowengine.StepStatusRunning),
+		NewStatus:      string(flowengine.StepStatusCompleted),
+	})
+}
+
+}
+
+	parentSI, exists := inst.Steps[parentStepDefID]
+	if !exists {
+		return
+	}
+
 	switch parentSI.Status {
 	case flowengine.StepStatusCompleted:
 	case flowengine.StepStatusSkipped:

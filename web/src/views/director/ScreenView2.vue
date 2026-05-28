@@ -84,33 +84,13 @@
             </div>
             <div class="rp-body">
               <div v-if="runningSteps.length === 0" class="rp-empty">无进行中的任务</div>
-              <div v-for="s in runningSteps.slice(0, 5)" :key="s.id" class="task-row" :class="[{ 'task-timeout': s.status === 'timeout' }, canOperateTask ? 'clickable' : '']" @click="canOperateTask && openTaskDialog(s)">
+              <div v-for="s in runningSteps" :key="s.id" class="task-row" :class="[{ 'task-timeout': s.status === 'timeout' }]">
                 <span class="task-status" :class="'ts-' + s.status" />
                 <span class="task-name">{{ s.name }}</span>
-                <span v-if="s.assignee_names" class="task-user">{{ s.assignee_names }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 任务操作弹框 -->
-          <div v-if="selectedTask" class="task-dialog-overlay" @click.self="selectedTask = null">
-            <div class="task-dialog">
-              <div class="td-hd">
-                <span>{{ selectedTask.name }}</span>
-                <button class="td-close" @click="selectedTask = null">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-              <div class="td-body">
-                <div class="td-info">
-                  <div>状态: <span :class="'td-status-' + selectedTask.status">{{ selectedTask.status }}</span></div>
-                  <div>执行人: {{ selectedTask.assignee_names || selectedTask.executor_team || '--' }}</div>
-                  <div v-if="selectedTask.estimated_duration_minutes">预计: {{ selectedTask.estimated_duration_minutes }}分钟</div>
-                </div>
-                <div class="td-actions">
-                  <button v-if="selectedTask.status === 'running' && canActOn(selectedTask)" class="td-btn done" @click="actOnTask('complete')">✓ 完成</button>
-                  <button v-if="selectedTask.status === 'running' && canActOn(selectedTask)" class="td-btn skip" @click="actOnTask('skip')">↷ 跳过</button>
-                </div>
+                <template v-if="isDirector && !isParentStep(s)">
+                  <button class="task-btn task-btn-skip" title="跳过" @click="skipTask(s)">↷</button>
+                  <button class="task-btn task-btn-done" title="强制完成" @click="forceCompleteTask(s)">✓</button>
+                </template>
               </div>
             </div>
           </div>
@@ -208,7 +188,6 @@ const wsConnected = ref(false)
 // 计时器
 const now = ref(Date.now())
 const stepRemaining = ref(0)
-const selectedTask = ref<StepInstance | null>(null)
 let timerInterval: ReturnType<typeof setInterval> | null = null
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 
@@ -262,6 +241,16 @@ const runningSteps = computed(() => {
   }
   return tasks
 })
+
+const parentStepIds = computed(() => {
+  const ids = new Set<number>()
+  for (const s of steps.value) {
+    if (s.parent_step_id) ids.add(s.parent_step_id)
+  }
+  return ids
+})
+
+const isParentStep = (s: StepInstance) => parentStepIds.value.has(s.id)
 
 const currentRunningStep = computed(() => steps.value.find(s => s.status === 'running'))
 
@@ -326,8 +315,19 @@ const scheduleText = computed(() => {
 })
 
 // 实时日志（最近 8 条）
-const displayLogs = computed(() => logs.value.slice(0, 8))
+const maxVisibleLogs = ref(8)
+const LOG_ROW_H = 26
 const logContainerRef = ref<HTMLElement | null>(null)
+
+function updateMaxVisibleLogs() {
+  const el = logContainerRef.value
+  if (el) {
+    const h = el.clientHeight
+    maxVisibleLogs.value = Math.max(3, Math.floor(h / LOG_ROW_H))
+  }
+}
+
+const displayLogs = computed(() => logs.value.slice(0, maxVisibleLogs.value))
 
 // ======== 阶段 Tab ========
 
@@ -1169,19 +1169,24 @@ function handleWSMessage(msg: any) {
   const phaseName = payload.phase_name || payload.phaseName || ''
 
   if (['drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated'].includes(event)) {
-    fetchDrillData()
+    scheduleRefresh('drill')
     if (event === 'drill_started') addLog('info', '▶', '演练已开始')
     else if (event === 'drill_paused') addLog('warn', '⏸', '演练已暂停')
     else if (event === 'drill_resumed') addLog('info', '▶', '演练已恢复')
     else if (event === 'drill_completed') addLog('info', '✓', '演练已完成')
-    else if (event === 'drill_terminated') addLog('warn', '⏹', '演练已结束')
+    else if (event === 'drill_terminated') addLog('error', '⏹', '演练已结束')
   }
 
-  if (['step_started', 'step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
-    fetchSteps()
+  if (['step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
+    scheduleRefresh('steps')
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
     const label = logLabel(event)
-    addLog(event === 'step_timeout' || event === 'step_issue' ? 'warn' : 'info', logIcon(event), `${phasePrefix}${stepName} ${label}`)
+    const logType = event === 'step_timeout' ? 'warn' : event === 'step_issue' ? 'error' : 'info'
+    addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
+  }
+
+  if (event === 'step_started') {
+    scheduleRefresh('steps')
   }
 
   if (event === 'timeout_warning') {
@@ -1229,6 +1234,23 @@ function scrollLogs() {
 
 // ======== 数据加载 ========
 
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let pendingRefresh: Set<'drill' | 'steps' | 'logs'> = new Set()
+
+function scheduleRefresh(...kinds: ('drill' | 'steps' | 'logs')[]) {
+  for (const k of kinds) pendingRefresh.add(k)
+  if (refreshTimer) return
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null
+    const tasks: Promise<void>[] = []
+    if (pendingRefresh.has('drill')) tasks.push(fetchDrillData())
+    if (pendingRefresh.has('steps')) tasks.push(fetchSteps())
+    if (pendingRefresh.has('logs')) tasks.push(fetchLogs())
+    pendingRefresh.clear()
+    await Promise.all(tasks)
+  }, 500)
+}
+
 async function fetchDrillData() {
   try {
     instance.value = await drillApi.getDetail(drillId.value)
@@ -1250,14 +1272,19 @@ async function fetchLogs() {
   try {
     const data = await drillApi.getLogs(drillId.value)
     const logData = (data || [])
-    const items = logData.slice(-8).reverse().map((l: Record<string, unknown>) => {
-      const action = (l.Action || l.action || l.Content || '') as string
+    const items = logData.slice(0, 8).map((l: Record<string, unknown>) => {
+      const action = (l.Action || l.action || '') as string
+      const content = (l.Content || l.content || '') as string
+      const msg = content || action
+      const logType = action === 'timeout' || action === 'pause' ? 'warn'
+        : action === 'issue' || action === 'terminate' ? 'error'
+        : 'info'
       return {
         id: (l.ID || l.id) as number,
         time: fmtTime((l.CreatedAt || l.created_at) as string),
-        icon: '●',
-        type: action.includes('timeout') ? 'warn' : 'info',
-        msg: action,
+        icon: logType === 'error' ? '⚠' : logType === 'warn' ? '⏸' : action === 'start' ? '▶' : '●',
+        type: logType,
+        msg,
       }
     })
     logs.value = items
@@ -1294,16 +1321,16 @@ function toggleFullscreen() {
 }
 
 async function handleStart() {
-  try { await drillApi.start(drillId.value); fetchDrillData(); fetchSteps() } catch { /* */ }
+  try { await drillApi.start(drillId.value); scheduleRefresh('drill', 'steps') } catch { /* */ }
 }
 async function handlePause() {
-  try { await drillApi.pause(drillId.value); fetchDrillData() } catch { /* */ }
+  try { await drillApi.pause(drillId.value); scheduleRefresh('drill') } catch { /* */ }
 }
 async function handleResume() {
-  try { await drillApi.resume(drillId.value); fetchDrillData() } catch { /* */ }
+  try { await drillApi.resume(drillId.value); scheduleRefresh('drill') } catch { /* */ }
 }
 async function handleTerminate() {
-  try { await drillApi.terminate(drillId.value); fetchDrillData() } catch { /* */ }
+  try { await drillApi.terminate(drillId.value); scheduleRefresh('drill') } catch { /* */ }
 }
 
 function canActOn(step: StepInstance): boolean {
@@ -1313,25 +1340,18 @@ function canActOn(step: StepInstance): boolean {
   return userDept.value === taskTeam
 }
 
-function openTaskDialog(step: StepInstance) {
-  selectedTask.value = step
+async function skipTask(step: StepInstance) {
+  try {
+    await drillApi.skipStep(drillId.value, step.step_template_id || step.id, '指挥跳过')
+    scheduleRefresh('steps', 'drill')
+  } catch { /* */ }
 }
 
-async function actOnTask(action: string) {
-  if (!selectedTask.value) return
-  const step = selectedTask.value
+async function forceCompleteTask(step: StepInstance) {
   try {
-    if (action === 'complete') {
-      await drillApi.completeStep(drillId.value, step.step_template_id || step.id, '大屏快速完成')
-    } else if (action === 'skip') {
-      await drillApi.skipStep(drillId.value, step.step_template_id || step.id, '大屏跳过')
-    }
-    selectedTask.value = null
-    fetchSteps()
-    fetchDrillData()
-  } catch {
-    // 静默失败
-  }
+    await drillApi.forceCompleteStep(drillId.value, step.step_template_id || step.id, '指挥强制完成')
+    scheduleRefresh('steps', 'drill')
+  } catch { /* */ }
 }
 
 // ======== 计时更新 ========
@@ -1361,11 +1381,12 @@ onMounted(() => {
     initCanvas()
     drawFlowTree()
     animFrameId = requestAnimationFrame(animateLoop)
+    updateMaxVisibleLogs()
   })
   connectWS()
   timerInterval = setInterval(updateTimer, 1000)
   pollingTimer = setInterval(() => {
-    if (!wsConnected.value) fetchDrillData()
+    if (!wsConnected.value) scheduleRefresh('drill')
   }, 30000)
   window.addEventListener('resize', onResize)
 
@@ -1391,6 +1412,7 @@ onUnmounted(() => {
 
 function onResize() {
   initCanvas()
+  updateMaxVisibleLogs()
 }
 
 // 侦听 steps 变化重绘 Canvas
@@ -1886,17 +1908,44 @@ function fmtTime(ts: string): string {
   transition: background 0.15s;
 }
 
-.task-row.clickable {
-  cursor: pointer;
-}
-
-.task-row.clickable:hover {
-  background: rgba(0, 150, 255, 0.08);
-}
-
 .task-row.task-timeout {
   background: rgba(255, 68, 68, 0.08);
   border-left-color: #FF4444;
+}
+
+.task-row:hover {
+  background: rgba(0, 150, 255, 0.06);
+}
+
+.task-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 180, 255, 0.3);
+  background: rgba(0, 25, 50, 0.5);
+  color: #8AC0E0;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.task-btn:hover {
+  background: rgba(0, 40, 80, 0.8);
+}
+
+.task-btn-skip:hover {
+  color: #FFD700;
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.task-btn-done:hover {
+  color: #00FF88;
+  border-color: rgba(0, 255, 136, 0.5);
 }
 
 .task-status {
@@ -1962,6 +2011,8 @@ function fmtTime(ts: string): string {
   word-break: break-all;
 }
 
+.log-info .log-msg { color: #00BFFF; }
+.log-info .log-icon { color: #00BFFF; }
 .log-warn .log-msg { color: #FFD700; }
 .log-warn .log-icon { color: #FFD700; }
 .log-error .log-msg { color: #FF6B6B; }
@@ -2104,94 +2155,6 @@ function fmtTime(ts: string): string {
 }
 
 /* 任务弹框 */
-.task-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.task-dialog {
-  background: #0F1A2E;
-  border: 1px solid rgba(0, 180, 255, 0.3);
-  border-radius: 8px;
-  width: 320px;
-  box-shadow: 0 0 30px rgba(0, 100, 200, 0.2);
-}
-
-.td-hd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0, 150, 255, 0.15);
-  font-size: 14px;
-  color: #E8F0F8;
-  font-weight: 600;
-}
-
-.td-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  color: #5A7A9A;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.td-close:hover { color: #FF6666; background: rgba(255, 100, 100, 0.1); }
-
-.td-body {
-  padding: 16px;
-}
-
-.td-info {
-  font-size: 12px;
-  color: #7B93AB;
-  line-height: 2;
-}
-
-.td-status-running { color: #00FF88; }
-.td-status-timeout { color: #FFD700; }
-
-.td-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.td-btn {
-  flex: 1;
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.td-btn.done {
-  background: rgba(0, 200, 100, 0.12);
-  border-color: rgba(0, 200, 100, 0.4);
-  color: #00FF88;
-}
-
-.td-btn.done:hover { background: rgba(0, 200, 100, 0.25); }
-
-.td-btn.skip {
-  background: rgba(255, 180, 0, 0.12);
-  border-color: rgba(255, 180, 0, 0.4);
-  color: #FFD700;
-}
-
-.td-btn.skip:hover { background: rgba(255, 180, 0, 0.25); }
 </style>
 
 <style>

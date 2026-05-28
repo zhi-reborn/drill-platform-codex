@@ -67,7 +67,8 @@ func (m *Manager) BroadcastToUserRaw(userID uint, data []byte) {
 }
 
 func (m *Manager) SendStepChange(drillID uint, payload StepChangePayload) {
-	msg := NewMessage(EventStepComplete, drillID, payload)
+	eventType := stepStatusToEvent(payload.NewStatus)
+	msg := NewMessage(eventType, drillID, payload)
 	m.BroadcastToDrill(drillID, msg)
 }
 
@@ -78,13 +79,65 @@ func (m *Manager) SendTimeoutWarning(drillID uint, userID uint, payload TimeoutW
 }
 
 func (m *Manager) SendDrillStatus(drillID uint, payload DrillStatusPayload) {
-	msg := NewMessage(EventDrillStarted, drillID, payload)
+	eventType := drillStatusToEvent(payload.NewStatus, payload.PreviousStatus)
+	msg := NewMessage(eventType, drillID, payload)
 	m.BroadcastToDrill(drillID, msg)
 }
 
 func (m *Manager) SendControlEvent(drillID uint, payload ControlPayload) {
-	msg := NewMessage(EventControlPause, drillID, payload)
+	eventType := controlActionToEvent(payload.Action)
+	msg := NewMessage(eventType, drillID, payload)
 	m.BroadcastToDrill(drillID, msg)
+}
+
+func drillStatusToEvent(newStatus, prevStatus string) string {
+	switch newStatus {
+	case "running":
+		if prevStatus == "paused" {
+			return EventDrillResumed
+		}
+		return EventDrillStarted
+	case "paused":
+		return EventDrillPaused
+	case "completed":
+		return EventDrillCompleted
+	case "terminated":
+		return EventDrillTerminated
+	default:
+		return EventDrillStarted
+	}
+}
+
+func stepStatusToEvent(status string) string {
+	switch status {
+	case "running":
+		return EventStepStarted
+	case "completed":
+		return EventStepComplete
+	case "timeout":
+		return EventStepTimeout
+	case "skipped":
+		return EventStepSkipped
+	case "issue":
+		return EventStepIssue
+	default:
+		return EventStepComplete
+	}
+}
+
+func controlActionToEvent(action string) string {
+	switch action {
+	case "pause":
+		return EventControlPause
+	case "resume":
+		return EventControlResume
+	case "terminate":
+		return EventControlTerminate
+	case "comment":
+		return EventControlComment
+	default:
+		return EventControlPause
+	}
 }
 
 func (m *Manager) SendTaskUpdate(userID uint, payload TaskAssignPayload) {
