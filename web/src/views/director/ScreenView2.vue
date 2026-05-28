@@ -411,7 +411,6 @@ const treeData = computed<TreeNodePhase[]>(() => {
 // ======== Canvas 流程树 ========
 
 const flowCanvasRef = ref<HTMLCanvasElement | null>(null)
-let animFrameId = 0
 let animTime = 0
 
 // 阶段管道布局常量
@@ -435,7 +434,7 @@ const PS_MAX_W = 500          // 子阶段标题最大宽度（放大3倍）
 const PS_PAD = 28             // 子阶段标题内边距（放大）
 
 // 过渡动画状态
-let transitionProgress = 1    // 0→1，1=稳定态
+let transitionProgress = 1    // 直接显示，不做渐变
 let prevCurrentPSIdx = -1     // 上一帧的当前子阶段索引
 const TRANSITION_SPEED = 0.03 // 每帧推进量
 
@@ -518,7 +517,7 @@ const currentPSIdx = computed(() => {
 // 检测子阶段切换 → 触发过渡动画
 watch(currentPSIdx, (newIdx) => {
   if (prevCurrentPSIdx >= 0 && newIdx !== prevCurrentPSIdx) {
-    transitionProgress = 0  // 开始过渡
+    transitionProgress = 1  // 切换阶段时直接显示
   }
   prevCurrentPSIdx = newIdx
 })
@@ -1091,10 +1090,8 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
-function animateLoop() {
-  animTime++
+function redrawCanvas() {
   drawFlowTree()
-  animFrameId = requestAnimationFrame(animateLoop)
 }
 
 function handleCanvasClick(e: MouseEvent) {
@@ -1380,11 +1377,13 @@ onMounted(() => {
   loadAllData().then(() => {
     initCanvas()
     drawFlowTree()
-    animFrameId = requestAnimationFrame(animateLoop)
     updateMaxVisibleLogs()
   })
   connectWS()
-  timerInterval = setInterval(updateTimer, 1000)
+  timerInterval = setInterval(() => {
+    updateTimer()
+    redrawCanvas()
+  }, 1000)
   pollingTimer = setInterval(() => {
     if (!wsConnected.value) scheduleRefresh('drill')
   }, 30000)
@@ -1400,7 +1399,6 @@ onUnmounted(() => {
   document.documentElement.style.overflow = ''
   document.body.style.overflow = ''
 
-  cancelAnimationFrame(animFrameId)
   if (ws) { ws.close(); ws = null }
   if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
   if (timerInterval) clearInterval(timerInterval)
@@ -1415,10 +1413,10 @@ function onResize() {
   updateMaxVisibleLogs()
 }
 
-// 侦听 steps 变化重绘 Canvas
+// 侦听 steps 变化重绘 Canvas（不重设尺寸，避免闪黑）
 watch([steps, () => instance.value?.progress_pct], () => {
   nextTick(() => {
-    initCanvas()
+    drawFlowTree()
   })
 }, { deep: false })
 
