@@ -135,9 +135,10 @@ const selectedUser = ref<number | null>(null)
 const devUsers = ref<DevUser[]>([])
 
 async function fetchDevUsers() {
+  const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
   const urls = [
-    'http://localhost:8080/api/v1/auth/dev-users',
-    'http://host.docker.internal:8080/api/v1/auth/dev-users',
+    `${baseUrl}/api/v1/auth/dev-users`,
+    `${baseUrl.replace('localhost', 'host.docker.internal')}/api/v1/auth/dev-users`,
     '/api/v1/auth/dev-users',
   ]
   let lastError = null
@@ -191,7 +192,7 @@ async function handleDevLogin() {
   try {
     const user = devUsers.value.find(u => u.id === selectedUser.value)!
     const { username } = user
-    const baseUrl = 'http://localhost:8080'
+    const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
     const response = await axios.post(`${baseUrl}/api/v1/auth/login`, {
       username,
       password: 'admin123'
