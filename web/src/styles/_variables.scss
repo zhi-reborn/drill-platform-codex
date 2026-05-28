@@ -39,9 +39,9 @@ $text-secondary: #4E5969;
 $text-tertiary: #86909C;
 $text-disabled: #C9CDD4;
 
-// 字体
-$font-family-ui: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-$font-family-mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+// 字体（使用系统字体，适合内网部署）
+$font-family-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+$font-family-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
 
 // 字号
 $font-size-xs: 12px;
