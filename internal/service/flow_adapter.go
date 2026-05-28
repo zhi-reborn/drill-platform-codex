@@ -23,14 +23,14 @@ type drillContext struct {
 }
 
 type DrillFlowAdapter struct {
-	templateRepo   *repository.TemplateRepo
-	drillRepo      *repository.DrillRepo
-	stepRepo       *repository.StepRepo
-	notificationRepo *repository.NotificationRepo
-	userRepo       *repository.UserRepo
-	wsManager      *websocket.Manager
+	templateRepo        *repository.TemplateRepo
+	drillRepo           *repository.DrillRepo
+	stepRepo            *repository.StepRepo
+	notificationRepo    *repository.NotificationRepo
+	userRepo            *repository.UserRepo
+	wsManager           *websocket.Manager
 	notificationService *NotificationService
-	engine         *flowengine.Engine
+	engine              *flowengine.Engine
 
 	mu       sync.RWMutex
 	contexts map[int64]drillContext
@@ -46,14 +46,14 @@ func NewDrillFlowAdapter(
 	notificationService *NotificationService,
 ) *DrillFlowAdapter {
 	return &DrillFlowAdapter{
-		templateRepo:      templateRepo,
-		drillRepo:         drillRepo,
-		stepRepo:          stepRepo,
-		notificationRepo:  notificationRepo,
-		userRepo:          userRepo,
-		wsManager:         wsManager,
+		templateRepo:        templateRepo,
+		drillRepo:           drillRepo,
+		stepRepo:            stepRepo,
+		notificationRepo:    notificationRepo,
+		userRepo:            userRepo,
+		wsManager:           wsManager,
 		notificationService: notificationService,
-		contexts:          make(map[int64]drillContext),
+		contexts:            make(map[int64]drillContext),
 	}
 }
 
@@ -263,13 +263,13 @@ func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newS
 		}
 		if title != "" {
 			a.notificationService.CreateNotification(&entity.Notification{
-				UserID:   drillID,
-				Type:     entity.NotificationType(title),
-				Title:    title,
-				Content:  content,
-				DrillID:  &drillID,
+				UserID:    drillID,
+				Type:      entity.NotificationType(title),
+				Title:     title,
+				Content:   content,
+				DrillID:   &drillID,
 				DrillName: &drillName,
-				IsRead:   false,
+				IsRead:    false,
 			})
 		}
 	}
@@ -660,50 +660,6 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		return
 	}
 
-	log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: parent=%d name=%s status=%s", parentStepDefID, parentSI.Name, parentSI.Status)
-
-	if parentSI.Status != flowengine.StepStatusRunning {
-		log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: parent NOT running, status=%s, skip engine.CompleteStep", parentSI.Status)
-		repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
-			"status":   string(flowengine.StepStatusCompleted),
-			"end_time": &now,
-		})
-		repository.DB.Create(&entity.DrillInstanceLog{
-		DrillInstanceID: drillID,
-		StepInstanceID:  &parentInst.ID,
-		Action:          "auto_complete",
-		Content:         fmt.Sprintf("【%s】%s 子任务全部完成，自动完成", parentInst.Phase, parentInst.Name),
-			CreatedAt:       now,
-	})
-
-	log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: DB updated to completed, now calling engine.CompleteStep")
-
-	if err := a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成"); err != nil {
-		log.Printf("[FLOW-ADAPTER] autoCompleteParentStep: engine.CompleteStep FAILED: %v, err)
-		parentSI.Status = flowengine.StepStatusCompleted
-		parentSI.EndTime = &now
-		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
-	}
-
-	if a.wsManager != nil {
-		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-		DrillID:        uint(drillID),
-		StepID:         uint(parentInst.ID),
-		StepName:       parentInst.Name,
-		PhaseName:      parentInst.Phase,
-		PhaseStepName: parentInst.PhaseStep,
-		PreviousStatus: string(flowengine.StepStatusRunning),
-		NewStatus:      string(flowengine.StepStatusCompleted),
-	})
-}
-
-}
-
-	parentSI, exists := inst.Steps[parentStepDefID]
-	if !exists {
-		return
-	}
-
 	switch parentSI.Status {
 	case flowengine.StepStatusCompleted:
 	case flowengine.StepStatusSkipped:
@@ -883,13 +839,13 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 		stepIDForNotif := stepInst.ID
 		if a.notificationService != nil {
 			a.notificationService.CreateNotification(&entity.Notification{
-				UserID:   userID,
-				Type:     entity.NotificationTypeStepTimeout,
-				Title:    "步骤超时",
-				Content:  fmt.Sprintf("[%s] 的步骤 [%s] 已超时", drillName, stepInst.Name),
-				DrillID:  &drillIDForNotif,
-				StepID:   &stepIDForNotif,
-				IsRead:   false,
+				UserID:  userID,
+				Type:    entity.NotificationTypeStepTimeout,
+				Title:   "步骤超时",
+				Content: fmt.Sprintf("[%s] 的步骤 [%s] 已超时", drillName, stepInst.Name),
+				DrillID: &drillIDForNotif,
+				StepID:  &stepIDForNotif,
+				IsRead:  false,
 			})
 		}
 	}
@@ -977,12 +933,12 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 
 	if a.notificationService != nil {
 		a.notificationService.CreateNotification(&entity.Notification{
-			UserID:   uint64(operatorID),
-			Type:     entity.NotificationTypeStepTimeout,
-			Title:    "步骤异常上报",
-			Content:  fmt.Sprintf("[%s] 的步骤 [%s] 已上报异常", drillName, stepInst.Name),
-			DrillID:  &drillIDForLog,
-			IsRead:   false,
+			UserID:  uint64(operatorID),
+			Type:    entity.NotificationTypeStepTimeout,
+			Title:   "步骤异常上报",
+			Content: fmt.Sprintf("[%s] 的步骤 [%s] 已上报异常", drillName, stepInst.Name),
+			DrillID: &drillIDForLog,
+			IsRead:  false,
 		}, uint64(operatorID))
 	}
 
@@ -999,12 +955,12 @@ func (a *DrillFlowAdapter) handleFlowComplete(evt flowengine.Event) {
 
 	if a.notificationService != nil {
 		a.notificationService.CreateNotification(&entity.Notification{
-			UserID:   drillID,
-			Type:     entity.NotificationTypeDrillCompleted,
-			Title:    "演练已全部完成",
-			Content:  fmt.Sprintf("[%s] 所有步骤已完成", drillName),
-			DrillID:  &drillID,
-			IsRead:   false,
+			UserID:  drillID,
+			Type:    entity.NotificationTypeDrillCompleted,
+			Title:   "演练已全部完成",
+			Content: fmt.Sprintf("[%s] 所有步骤已完成", drillName),
+			DrillID: &drillID,
+			IsRead:  false,
 		})
 	}
 }
