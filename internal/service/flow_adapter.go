@@ -468,11 +468,13 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 
 	if a.wsManager != nil {
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:       uint(drillID),
-			StepID:        uint(stepInst.ID),
-			StepName:      stepInst.Name,
+			DrillID:        uint(drillID),
+			StepID:         uint(stepInst.ID),
+			StepName:       stepInst.Name,
+			PhaseName:      stepInst.Phase,
+			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusPending),
-			NewStatus:     string(flowengine.StepStatusRunning),
+			NewStatus:      string(flowengine.StepStatusRunning),
 		})
 	}
 
@@ -542,19 +544,29 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 
 	if a.wsManager != nil {
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:       uint(drillID),
-			StepID:        uint(stepInst.ID),
-			StepName:      stepInst.Name,
+			DrillID:        uint(drillID),
+			StepID:         uint(stepInst.ID),
+			StepName:       stepInst.Name,
+			PhaseName:      stepInst.Phase,
+			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
-			NewStatus:     string(flowengine.StepStatusCompleted),
+			NewStatus:      string(flowengine.StepStatusCompleted),
 		})
 	}
 
 	logDrillID := drillID
 	logStepID := stepInst.ID
 	logContent := ""
-	if remark, ok := payload["remark"].(string); ok {
+	if remark, ok := payload["remark"].(string); ok && remark != "" {
 		logContent = remark
+	}
+	// 构建格式化日志：优先含阶段名
+	if logContent == "" {
+		if stepInst.Phase != "" {
+			logContent = fmt.Sprintf("【%s】%s 已完成", stepInst.Phase, stepInst.Name)
+		} else {
+			logContent = fmt.Sprintf("%s 已完成", stepInst.Name)
+		}
 	}
 	var operatorName string
 	if a.userRepo != nil {
@@ -774,11 +786,17 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 	})
 
 	// 写操作日志
+	timeoutContent := ""
+	if stepInst.Phase != "" {
+		timeoutContent = fmt.Sprintf("【%s】%s 已超时", stepInst.Phase, stepInst.Name)
+	} else {
+		timeoutContent = fmt.Sprintf("%s 已超时", stepInst.Name)
+	}
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: drillID,
 		StepInstanceID:  &stepInst.ID,
 		Action:          "timeout",
-		Content:         fmt.Sprintf("[%s] 步骤已超时", stepInst.Name),
+		Content:         timeoutContent,
 		CreatedAt:       now,
 	})
 
@@ -790,11 +808,13 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 
 	if a.wsManager != nil {
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:       uint(drillID),
-			StepID:        uint(stepInst.ID),
-			StepName:      stepInst.Name,
+			DrillID:        uint(drillID),
+			StepID:         uint(stepInst.ID),
+			StepName:       stepInst.Name,
+			PhaseName:      stepInst.Phase,
+			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
-			NewStatus:     string(flowengine.StepStatusTimeout),
+			NewStatus:      string(flowengine.StepStatusTimeout),
 		})
 	}
 
@@ -857,11 +877,13 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 
 	if a.wsManager != nil {
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:       uint(drillID),
-			StepID:        uint(stepInst.ID),
-			StepName:      stepInst.Name,
+			DrillID:        uint(drillID),
+			StepID:         uint(stepInst.ID),
+			StepName:       stepInst.Name,
+			PhaseName:      stepInst.Phase,
+			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
-			NewStatus:     string(flowengine.StepStatusIssue),
+			NewStatus:      string(flowengine.StepStatusIssue),
 		})
 	}
 
@@ -892,13 +914,21 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 			operatorName = u.RealName
 		}
 	}
+	issueLogContent := issueDesc
+	if issueLogContent == "" {
+		if stepInst.Phase != "" {
+			issueLogContent = fmt.Sprintf("【%s】%s 异常", stepInst.Phase, stepInst.Name)
+		} else {
+			issueLogContent = fmt.Sprintf("%s 异常", stepInst.Name)
+		}
+	}
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: drillIDForLog,
 		StepInstanceID:  &stepIDForLog,
 		Action:          "issue",
 		OperatorID:      uint64(operatorID),
 		OperatorName:    operatorName,
-		Content:         issueDesc,
+		Content:         issueLogContent,
 	})
 
 	if a.notificationService != nil {

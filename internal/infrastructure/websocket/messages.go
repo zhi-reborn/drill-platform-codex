@@ -95,13 +95,15 @@ const (
 
 // 步骤状态变更 Payload 结构
 type StepChangePayload struct {
-	DrillID       uint   `json:"drill_id"`
-	StepID        uint   `json:"step_id"`
-	StepName      string `json:"step_name"`
+	DrillID        uint   `json:"drill_id"`
+	StepID         uint   `json:"step_id"`
+	StepName       string `json:"step_name"`
+	PhaseName      string `json:"phase_name,omitempty"`
+	PhaseStepName  string `json:"phase_step_name,omitempty"`
 	PreviousStatus string `json:"previous_status"`
-	NewStatus     string `json:"new_status"`
-	Executor      string `json:"executor,omitempty"`
-	Comment       string `json:"comment,omitempty"`
+	NewStatus      string `json:"new_status"`
+	Executor       string `json:"executor,omitempty"`
+	Comment        string `json:"comment,omitempty"`
 }
 
 // 超时预警 Payload 结构

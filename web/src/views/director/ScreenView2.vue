@@ -329,6 +329,44 @@ const scheduleText = computed(() => {
 const displayLogs = computed(() => logs.value.slice(0, 8))
 const logContainerRef = ref<HTMLElement | null>(null)
 
+// ======== 阶段 Tab ========
+
+// 找到包含 running 步骤的阶段名
+function findActivePhaseName(): string | null {
+  for (const s of steps.value) {
+    if (s.status === 'running') {
+      return s.phase || null
+    }
+  }
+  return null
+}
+
+// 阶段整体状态：done / running / pending
+function getPhaseStatus(phase: TreeNodePhase): string {
+  const all = phase.phaseSteps.flatMap(ps => ps.stepNodes)
+  if (all.some(s => s.status === 'running' || s.status === 'timeout')) return 'running'
+  if (all.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
+  return 'pending'
+}
+
+// 当前选中的阶段索引，默认跟随活动阶段
+const selectedPhaseIdx = ref(0)
+
+// 当前阶段的数据（仅展示选中阶段）
+const currentPhaseData = computed<TreeNodePhase | null>(() => {
+  if (!treeData.value.length) return null
+  const idx = selectedPhaseIdx.value
+  if (idx < 0 || idx >= treeData.value.length) return treeData.value[0]
+  return treeData.value[idx]
+})
+
+// 活动阶段自动切换 Tab
+watch(() => findActivePhaseName(), (name) => {
+  if (!name) return
+  const idx = treeData.value.findIndex(p => p.name === name)
+  if (idx >= 0) selectedPhaseIdx.value = idx
+})
+
 // ======== 树结构 ========
 
 interface TreeNodePhase {
@@ -376,17 +414,125 @@ const flowCanvasRef = ref<HTMLCanvasElement | null>(null)
 let animFrameId = 0
 let animTime = 0
 
-// 横向布局常量（紧凑）
-const PHASE_X = 20
-const PHASE_W = 110
-const COL_GAP = 30
-const PS_X = PHASE_X + PHASE_W + COL_GAP
-const PS_W = 100
-const STEP_X = PS_X + PS_W + COL_GAP
-const STEP_W = 100
-const STEP_GAP_Y = 42
-const PS_GAP_Y = 46
-const expandedPhaseSteps = ref<Set<string>>(new Set())
+// 阶段管道布局常量
+const PIPE_Y = 30          // 管道节点中心 Y
+const PIPE_NODE_W = 130    // 管道节点宽度
+const PIPE_NODE_H = 40     // 管道节点高度
+const PIPE_ARROW_LEN = 36  // 箭头长度（节点间距留空）
+const TREE_OFFSET_Y = 90   // 子树区域起始 Y
+
+// ======== 子阶段轮式布局常量 ========
+const LEFT_COL_RATIO = 0.18   // 左侧列占比
+const COL_GAP = 16            // 左右列间距
+const LEFT_ROW_H = 42         // 左侧已完成子阶段行高（放大3倍）
+const NEXT_ROW_H = 42         // 左侧"下一个"行高
+const STEP_ROW_H = 26         // 右侧步骤行高
+const PS_ROW_H = 42          // 左侧最近已完成/下一个行高
+const STEP_ROW_MAX_W = 500    // 步骤行最大宽度
+const PS_HEADER_H = 56        // 右侧当前子阶段标题区高度（放大）
+const PS_MIN_W = 140          // 子阶段标题最小宽度（放大3倍）
+const PS_MAX_W = 500          // 子阶段标题最大宽度（放大3倍）
+const PS_PAD = 28             // 子阶段标题内边距（放大）
+
+// 过渡动画状态
+let transitionProgress = 1    // 0→1，1=稳定态
+let prevCurrentPSIdx = -1     // 上一帧的当前子阶段索引
+const TRANSITION_SPEED = 0.03 // 每帧推进量
+
+// 子阶段的状态
+function getPhaseStepStatus(ps: TreeNodePhaseStep): string {
+  if (ps.stepNodes.some(s => s.status === 'running' || s.status === 'timeout')) return 'running'
+  if (ps.stepNodes.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
+  return 'pending'
+}
+
+// 已完成子阶段的耗时
+function getPhaseStepElapsed(ps: TreeNodePhaseStep): string | null {
+  const starts = ps.stepNodes.map(s => s.start_time).filter(Boolean) as string[]
+  const ends = ps.stepNodes.map(s => s.end_time).filter(Boolean) as string[]
+  if (!starts.length || !ends.length) return null
+  const minStart = Math.min(...starts.map(t => new Date(t).getTime()))
+  const maxEnd = Math.max(...ends.map(t => new Date(t).getTime()))
+  const diffMs = Math.max(0, maxEnd - minStart)
+  const totalSec = Math.floor(diffMs / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return `${h}h${m}m`
+  if (m > 0) return `${m}m${s}s`
+  return `${s}s`
+}
+
+// 三区子阶段数据：已完成列表、当前触发的、下一个待触发
+const wheelData = computed(() => {
+  const phase = currentPhaseData.value
+  if (!phase) return { completed: [], current: null, next: null }
+
+  const allPS = phase.phaseSteps
+  const completed: TreeNodePhaseStep[] = []
+  let current: TreeNodePhaseStep | null = null
+  let next: TreeNodePhaseStep | null = null
+
+  // 找到当前触发的子阶段（running/timeout）
+  for (const ps of allPS) {
+    if (ps.stepNodes.some(s => s.status === 'running' || s.status === 'timeout')) {
+      current = ps
+      break
+    }
+  }
+
+  // 已完成 = 所有 done 子阶段
+  for (const ps of allPS) {
+    if (getPhaseStepStatus(ps) === 'done') completed.push(ps)
+  }
+
+  // 下一个 = current 之后第一个 pending
+  if (current) {
+    const idx = allPS.indexOf(current)
+    for (let i = idx + 1; i < allPS.length; i++) {
+      if (getPhaseStepStatus(allPS[i]) === 'pending') { next = allPS[i]; break }
+    }
+  } else if (completed.length > 0 && !current) {
+    // 无 running 时（如演练已完成），下一个 = 第一个还没完成的
+    const lastDoneIdx = allPS.indexOf(completed[completed.length - 1])
+    for (let i = lastDoneIdx + 1; i < allPS.length; i++) {
+      if (getPhaseStepStatus(allPS[i]) === 'pending') { next = allPS[i]; break }
+    }
+  } else if (!completed.length && !current) {
+    // 全部 pending，下一个 = 第一个子阶段
+    next = allPS[0]
+  }
+
+  return { completed, current, next }
+})
+
+// 当前子阶段索引（用于过渡动画检测）
+const currentPSIdx = computed(() => {
+  const wd = wheelData.value
+  if (!wd.current) return -1
+  const phase = currentPhaseData.value
+  if (!phase) return -1
+  return phase.phaseSteps.indexOf(wd.current)
+})
+
+// 检测子阶段切换 → 触发过渡动画
+watch(currentPSIdx, (newIdx) => {
+  if (prevCurrentPSIdx >= 0 && newIdx !== prevCurrentPSIdx) {
+    transitionProgress = 0  // 开始过渡
+  }
+  prevCurrentPSIdx = newIdx
+})
+
+// 用 ctx 测量文字宽度
+function calcNodeWidth(ctx: CanvasRenderingContext2D, label: string, extraText?: string): number {
+  ctx.font = 'bold 13px "PingFang SC", "Microsoft YaHei", sans-serif'
+  let textW = ctx.measureText(label).width
+  if (extraText) {
+    ctx.font = '11px "PingFang SC", sans-serif'
+    textW = Math.max(textW, ctx.measureText(extraText).width)
+  }
+  return Math.min(PS_MAX_W, Math.max(PS_MIN_W, textW + PS_PAD * 2))
+}
 
 function initCanvas() {
   const canvas = flowCanvasRef.value
@@ -396,36 +542,16 @@ function initCanvas() {
   const dpr = window.devicePixelRatio || 1
   const rect = parent.getBoundingClientRect()
   const w = rect.width
-  // 按内容计算所需高度
-  const contentH = calcContentHeight() + 40
-  const h = Math.max(rect.height, contentH)
+  const h = Math.max(rect.height, PIPE_Y + PIPE_NODE_H / 2 + 20 + rect.height * 0.8)
   canvas.width = w * dpr
   canvas.height = h * dpr
   canvas.style.width = w + 'px'
   canvas.style.height = h + 'px'
 }
 
-// 计算树内容需要的总高度
+// 内容高度现在由画布区域固定（不再动态展开）
 function calcContentHeight(): number {
-  const data = treeData.value
-  const aps = findActivePhaseStepName()
-  if (!data.length) return 200
-  const avgRegionH = 200 / data.length
-  let total = 0
-  for (const phase of data) {
-    const psHeights = phase.phaseSteps.map(ps => {
-      const isExpanded = ps.stepNodes.some(s => s.status === 'running') ||
-        (aps && ps.name === aps) ||
-        expandedPhaseSteps.value.has(ps.name)
-      if (!isExpanded || ps.stepNodes.length === 0) return PS_GAP_Y
-      const topN = ps.stepNodes.filter(s => !s.parent_step_id).length
-      const subN = ps.stepNodes.filter(s => s.parent_step_id).length
-      const gap = topN > 0 && subN > 0 ? 14 : 0
-      return topN * STEP_GAP_Y + gap + subN * STEP_GAP_Y + PS_GAP_Y
-    })
-    total += Math.max(psHeights.reduce((a, b) => a + b, 0), avgRegionH)
-  }
-  return total
+  return 800  // 画布由 flow-area 的 overflow-y:auto 处理
 }
 
 // 找到活动的 PhaseStep（包含 running 步骤的环节）
@@ -438,239 +564,517 @@ function findActivePhaseStepName(): string | null {
   return null
 }
 
+// 阶段间的箭头颜色
+function arrowColor(fromPhase: TreeNodePhase): string {
+  const status = getPhaseStatus(fromPhase)
+  if (status === 'done') return '#00BFFF'
+  if (status === 'running') return '#00FFFF'
+  return '#3A5A7A'
+}
+
 function drawFlowTree() {
   const canvas = flowCanvasRef.value
-  if (!canvas || !treeData.value.length) return
+  if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const dpr = window.devicePixelRatio || 1
+  const canvasW = canvas.width / dpr
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  const H = canvas.height / dpr
   ctx.save()
   ctx.scale(dpr, dpr)
 
   const data = treeData.value
-  const activePSName = findActivePhaseStepName()
+  const phase = currentPhaseData.value
+  if (!data.length || !phase) { ctx.restore(); return }
 
-  // 先算每个 phase 的 ps 总高
-  const phaseSizes = data.map(phase => {
-    const psHeights = phase.phaseSteps.map(ps => {
-      const isExpanded = ps.stepNodes.some(s => s.status === 'running') ||
-        (activePSName && ps.name === activePSName) ||
-        expandedPhaseSteps.value.has(ps.name)
-      if (!isExpanded || ps.stepNodes.length === 0) return PS_GAP_Y
-      const topN = ps.stepNodes.filter(s => !s.parent_step_id).length
-      const subN = ps.stepNodes.filter(s => s.parent_step_id).length
-      const gap = topN > 0 && subN > 0 ? 14 : 0
-      return topN * STEP_GAP_Y + gap + subN * STEP_GAP_Y + PS_GAP_Y
-    })
-    return psHeights.reduce((a, b) => a + b, 0)
+  // ========== 顶部阶段管道 ==========
+
+  const n = data.length
+  // 均匀铺开：每个节点中心 X = (i + 0.5) * (canvasW / n)
+  const spacing = canvasW / n
+  const nodeCenters: { x: number; y: number }[] = []
+
+  data.forEach((p, i) => {
+    const cx = (i + 0.5) * spacing
+    const cy = PIPE_Y
+    nodeCenters.push({ x: cx, y: cy })
+    const status = getPhaseStatus(p)
+    const isSelected = selectedPhaseIdx.value === i
+
+    // 绘制阶段节点
+    drawPipelineNode(ctx, cx, cy, p.name, status, isSelected)
   })
 
-  let yCursor = 10
-  const phaseNodes: { x: number; y: number; phase: TreeNodePhase }[] = []
-
-  data.forEach((phase, pi) => {
-    const regionTop = yCursor
-    const regionH = phaseSizes[pi]
-    const phaseCenterY = regionTop + regionH / 2
-    yCursor += regionH
-
-    drawNode(ctx, PHASE_X + PHASE_W / 2, phaseCenterY, phase.name, 'phase')
-    phaseNodes.push({ x: PHASE_X + PHASE_W, y: phaseCenterY, phase })
-
-    const psHeights = phase.phaseSteps.map(ps => {
-      const isExpanded = ps.stepNodes.some(s => s.status === 'running') ||
-        (activePSName && ps.name === activePSName) ||
-        expandedPhaseSteps.value.has(ps.name)
-      if (!isExpanded || ps.stepNodes.length === 0) return PS_GAP_Y
-      const topN = ps.stepNodes.filter(s => !s.parent_step_id).length
-      const subN = ps.stepNodes.filter(s => s.parent_step_id).length
-      const gap = topN > 0 && subN > 0 ? 14 : 0
-      return topN * STEP_GAP_Y + gap + subN * STEP_GAP_Y + PS_GAP_Y
-    })
-    const totalPSH = psHeights.reduce((a, b) => a + b, 0)
-    let psCursor = regionTop + (regionH - totalPSH) / 2
-
-    // 右侧：PhaseStep 节点（动态间距）
-    phase.phaseSteps.forEach((ps, psi) => {
-      const psY = psCursor + psHeights[psi] / 2
-      psCursor += psHeights[psi]
-      const isActive = ps.stepNodes.some(s => s.status === 'running') ||
-        (activePSName && ps.name === activePSName)
-      const isExpanded = isActive || expandedPhaseSteps.value.has(ps.name)
-
-      // 连线 Phase → PhaseStep
-      const connColor = getConnColor(ps.stepNodes)
-      drawHCurve(ctx, PHASE_X + PHASE_W, phaseCenterY, PS_X, psY, connColor)
-
-      if (isExpanded && ps.stepNodes.length > 0) {
-        drawNode(ctx, PS_X + PS_W / 2, psY, ps.name, 'phase-step')
-        const steps = ps.stepNodes
-        const topLevel = steps.filter(s => !s.parent_step_id)
-        const subSteps = steps.filter(s => s.parent_step_id)
-        const indentX = 30
-
-        // 计算总高度并居中
-        const topH = topLevel.length > 0 ? topLevel.length * STEP_GAP_Y : 0
-        const gapH = (topLevel.length > 0 && subSteps.length > 0) ? 14 : 0
-        const subH = subSteps.length > 0 ? subSteps.length * STEP_GAP_Y : 0
-        const totalH = topH + gapH + subH
-        const startY = psY - totalH / 2
-
-        // 顶层步骤
-        topLevel.forEach((step, si) => {
-          const sy = startY + si * STEP_GAP_Y + STEP_GAP_Y / 2
-          const color = step.status === 'running' ? '#00FFFF'
-            : step.status === 'completed' || step.status === 'skipped' ? '#00BFFF'
-            : '#1A2A3A'
-          drawHCurve(ctx, PS_X + PS_W, psY, STEP_X, sy, color)
-          drawStepNode(ctx, STEP_X + STEP_W / 2, sy, step)
-        })
-
-        // 子步骤（缩进，留空隙）
-        if (subSteps.length > 0) {
-          const subStartY = startY + topH + gapH
-          subSteps.forEach((step, si) => {
-            const sy = subStartY + si * STEP_GAP_Y + STEP_GAP_Y / 2
-            const color = step.status === 'running' ? '#00FFFF'
-              : step.status === 'completed' || step.status === 'skipped' ? '#00BFFF'
-              : '#1A2A3A'
-            drawHCurve(ctx, PS_X + PS_W, psY, STEP_X + indentX, sy, color)
-            drawStepNode(ctx, STEP_X + indentX + STEP_W / 2, sy, step)
-          })
-        }
-      } else {
-        // 非活动分支：折叠显示
-        drawCollapsedNode(ctx, PS_X + PS_W / 2, psY, ps.name, ps.stepNodes.length, ps.stepNodes.some(s => s.status === 'running'))
-      }
-    })
-  })
-
-  ctx.restore()
-}
-
-// 折叠节点（显示环节名 + 步骤数量）
-function drawCollapsedNode(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, stepCount: number, isActive: boolean) {
-  const w = PS_W
-  const h = 28
-  const r = 6
-  ctx.save()
-  ctx.shadowColor = isActive ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0, 180, 255, 0.2)'
-  ctx.shadowBlur = isActive ? 8 : 3
-  ctx.fillStyle = isActive ? 'rgba(0, 40, 60, 0.95)' : 'rgba(5, 20, 50, 0.9)'
-  ctx.strokeStyle = isActive ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 180, 255, 0.3)'
-  ctx.lineWidth = 1
-  roundRect(ctx, x - w / 2, y - h / 2, w, h, r)
-  ctx.fill()
-  ctx.stroke()
-  ctx.shadowBlur = 0
-  ctx.fillStyle = isActive ? '#00FFFF' : '#4A7A9A'
-  ctx.font = '11px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(label, x, y - 3)
-  ctx.fillStyle = '#3A5A6A'
-  ctx.font = '9px "PingFang SC", sans-serif'
-  ctx.fillText('▸ ' + stepCount + ' steps', x, y + 8)
-  ctx.restore()
-}
-
-// 横向贝塞尔曲线
-function drawHCurve(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string) {
-  ctx.save()
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1.5
-  ctx.shadowColor = color
-  ctx.shadowBlur = 2
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  const cpX = (x1 + x2) / 2
-  ctx.bezierCurveTo(cpX, y1, cpX, y2, x2, y2)
-  ctx.stroke()
-  ctx.shadowBlur = 0
-  ctx.restore()
-}
-
-function drawNode(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, type: string) {
-  const isPhase = type === 'phase'
-  const w = isPhase ? 140 : 120
-  const h = isPhase ? 36 : 30
-  const r = 6
-  ctx.save()
-  ctx.shadowColor = 'rgba(0, 180, 255, 0.4)'
-  ctx.shadowBlur = isPhase ? 12 : 6
-  ctx.fillStyle = 'rgba(5, 20, 50, 0.95)'
-  ctx.strokeStyle = 'rgba(0, 180, 255, 0.6)'
-  ctx.lineWidth = 1
-  roundRect(ctx, x - w / 2, y - h / 2, w, h, r)
-  ctx.fill()
-  ctx.stroke()
-  ctx.shadowBlur = 0
-  ctx.fillStyle = '#00BFFF'
-  ctx.font = `${isPhase ? 13 : 11}px "Courier New", monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(label, x, y)
-  ctx.restore()
-}
-
-function drawStepNode(ctx: CanvasRenderingContext2D, x: number, y: number, step: StepInstance) {
-  const w = 110
-  const h = 32
-  const r = 4
-  const isRunning = step.status === 'running'
-  const isDone = step.status === 'completed' || step.status === 'skipped'
-  const isPending = step.status === 'pending'
-
-  ctx.save()
-
-  if (isRunning) {
-    const pulse = Math.sin(animTime * 0.05) * 0.3 + 0.7
-    ctx.shadowColor = 'rgba(0, 255, 255, ' + (0.6 * pulse) + ')'
-    ctx.shadowBlur = 15 * pulse
-    ctx.strokeStyle = '#00FFFF'
-    ctx.lineWidth = 2
-    ctx.fillStyle = 'rgba(0, 40, 60, 0.95)'
-  } else if (isDone) {
-    ctx.shadowColor = 'rgba(0, 200, 100, 0.3)'
-    ctx.shadowBlur = 4
-    ctx.strokeStyle = 'rgba(0, 180, 255, 0.5)'
-    ctx.lineWidth = 1
-    ctx.fillStyle = 'rgba(0, 25, 40, 0.9)'
-  } else {
-    ctx.shadowBlur = 0
-    ctx.strokeStyle = '#1A2A3A'
-    ctx.lineWidth = 1
-    ctx.fillStyle = 'rgba(5, 12, 24, 0.9)'
+  // 阶段间箭头
+  for (let i = 0; i < n - 1; i++) {
+    const fromX = nodeCenters[i].x + PIPE_NODE_W / 2
+    const fromY = nodeCenters[i].y
+    const toX = nodeCenters[i + 1].x - PIPE_NODE_W / 2
+    const toY = nodeCenters[i + 1].y
+    const color = arrowColor(data[i])
+    drawArrow(ctx, fromX, fromY, toX, toY, color)
   }
 
-  roundRect(ctx, x - w / 2, y - h / 2, w, h, r)
-  ctx.fill()
-  ctx.stroke()
-  ctx.shadowBlur = 0
+  // ========== 下方：子阶段轮式三区布局 ==========
 
-  // 名称
-  const textColor = isRunning ? '#00FFFF' : isDone ? '#00BFFF' : '#4A5568'
-  ctx.fillStyle = textColor
-  ctx.font = '10px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  const name = step.name.length > 8 ? step.name.slice(0, 7) + '..' : step.name
-  ctx.fillText(name, x, y - 4)
+  const wd = wheelData.value
+  const areaTop = TREE_OFFSET_Y
+  const areaH = canvas.height / dpr - areaTop - 10
+  const leftW = canvasW * LEFT_COL_RATIO
+  const rightX = leftW + COL_GAP
+  const rightW = canvasW - leftW - COL_GAP - 10
 
-  // 执行人
-  ctx.fillStyle = isPending ? '#2A3A4A' : '#5A7A9A'
-  ctx.font = '8px "PingFang SC", sans-serif'
-  ctx.fillText(step.assignee_names || step.executor_team || '--', x, y + 8)
+  // 推进过渡动画
+  if (transitionProgress < 1) {
+    transitionProgress = Math.min(1, transitionProgress + TRANSITION_SPEED)
+  }
+  const tp = transitionProgress  // 0=刚切换, 1=稳定
+
+  // ===== 左侧列 =====
+  drawLeftColumn(ctx, 0, areaTop, leftW, areaH, wd, tp)
+
+  // ===== 右侧详情区 =====
+  drawRightArea(ctx, rightX, areaTop, rightW, areaH, wd, tp)
 
   ctx.restore()
 }
 
-function getConnColor(nodes: StepInstance[]): string {
-  if (nodes.some(s => s.status === 'running')) return '#00FFFF'
-  if (nodes.every(s => s.status === 'completed' || s.status === 'skipped')) return '#00BFFF'
-  return '#1A2A3A'
+// 左侧列：已完成计数 → 最近已完成 → 当前名称 → 待执行计数 → 下一个
+function drawLeftColumn(ctx: CanvasRenderingContext2D, x: number, yTop: number, w: number, h: number, wd: { completed: TreeNodePhaseStep[], current: TreeNodePhaseStep | null, next: TreeNodePhaseStep | null }, tp: number) {
+  const pad = 10
+  const phase = currentPhaseData.value
+  const totalPS = phase ? phase.phaseSteps.length : 0
+  const doneCount = wd.completed.length
+  const remaining = totalPS - doneCount - (wd.current ? 1 : 0)
+
+  // 背景
+  ctx.save()
+  ctx.fillStyle = 'rgba(5, 15, 30, 0.5)'
+  roundRect(ctx, x, yTop, w, h, 6)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0, 150, 255, 0.12)'
+  ctx.lineWidth = 1
+  roundRect(ctx, x, yTop, w, h, 6)
+  ctx.stroke()
+  ctx.restore()
+
+  let cursorY = yTop + pad
+
+  // 上方计数：已完成 N
+  ctx.save()
+  ctx.fillStyle = '#00BFFF'
+  ctx.font = 'bold 20px "PingFang SC", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${doneCount}`, x + w / 2, cursorY + 10)
+  ctx.fillStyle = '#4A90B0'
+  ctx.font = '10px "PingFang SC", sans-serif'
+  ctx.fillText('已完成', x + w / 2, cursorY + 26)
+  ctx.restore()
+  cursorY += 38
+
+  // 最近已完成子阶段（紧跟已完成计数下方）
+  if (wd.completed.length > 0) {
+    const lastDone = wd.completed[wd.completed.length - 1]
+    const elapsed = getPhaseStepElapsed(lastDone)
+    drawRecentRow(ctx, x + pad, cursorY + PS_ROW_H / 2, w - pad * 2, lastDone.name, elapsed, 'done')
+    cursorY += PS_ROW_H + 6
+  }
+
+  // 当前子阶段名称 — 垂直居中（中间主区域）
+  if (wd.current) {
+    const elapsedStr = getPhaseStepElapsed(wd.current)
+    drawCurrentName(ctx, x, yTop + h * 0.45, w, wd.current.name, elapsedStr, tp)
+  }
+
+  // 下方区域：待执行计数 + 下一个（固定在底部）
+  const bottomStart = yTop + h - 38 - (wd.next ? PS_ROW_H + 4 : 0) - pad
+
+  // 待执行计数
+  ctx.save()
+  ctx.fillStyle = '#6A8AAA'
+  ctx.font = 'bold 20px "PingFang SC", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${remaining}`, x + w / 2, bottomStart + 10)
+  ctx.fillStyle = '#5A7A9A'
+  ctx.font = '10px "PingFang SC", sans-serif'
+  ctx.fillText('待执行', x + w / 2, bottomStart + 26)
+  ctx.restore()
+
+  // 下一个待触发子阶段
+  if (wd.next) {
+    drawRecentRow(ctx, x + pad, bottomStart + 38 + PS_ROW_H / 2, w - pad * 2, wd.next.name, null, 'pending')
+  }
+}
+
+// 当前子阶段名称（左栏垂直居中，大字发光）
+function drawCurrentName(ctx: CanvasRenderingContext2D, x: number, cy: number, w: number, name: string, elapsed: string | null, tp: number) {
+  ctx.save()
+  const opacity = Math.min(1, tp * 1.5)
+  ctx.globalAlpha = opacity
+
+  const pulse = Math.sin(animTime * 0.04) * 0.2 + 0.8
+  ctx.shadowColor = 'rgba(0, 255, 255, ' + (0.6 * pulse) + ')'
+  ctx.shadowBlur = 16 * pulse
+
+  // 名称（大字，居中，可两行）
+  ctx.fillStyle = '#00FFFF'
+  ctx.font = 'bold 16px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // 计算单行能放多少字
+  ctx.font = 'bold 16px "PingFang SC", "Microsoft YaHei", sans-serif'
+  const singleLineW = ctx.measureText(name).width
+  const maxW = w - 10
+
+  if (singleLineW > maxW && name.length > 8) {
+    // 分两行
+    const mid = Math.ceil(name.length * 0.5)
+    ctx.fillText(name.slice(0, mid), x + w / 2, cy - 8)
+    ctx.fillText(name.slice(mid), x + w / 2, cy + 10)
+  } else {
+    ctx.fillText(name, x + w / 2, cy - 4)
+  }
+  ctx.shadowBlur = 0
+
+  // 实时耗时标签：已耗时 x min（自增）
+  ctx.font = '11px "PingFang SC", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  if (elapsed) {
+    ctx.fillStyle = '#4A90B0'
+    ctx.fillText(`已耗时 ${elapsed}`, x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
+  } else {
+    // 实时计算耗时：从最早 start_time 到当前
+    const currentPS = wheelData.value.current
+    if (currentPS) {
+      const starts = currentPS.stepNodes.map(s => s.start_time).filter(Boolean) as string[]
+      if (starts.length) {
+        const minStart = Math.min(...starts.map(t => new Date(t).getTime()))
+        const nowMs = Date.now()
+        const diffMs = Math.max(0, nowMs - minStart)
+        const totalSec = Math.floor(diffMs / 1000)
+        const m = Math.floor(totalSec / 60)
+        const s = totalSec % 60
+        ctx.fillStyle = '#00FF88'
+        ctx.fillText(`已耗时 ${m}m${s}s`, x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
+      } else {
+        ctx.fillStyle = '#00FF88'
+        ctx.fillText('执行中', x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
+      }
+    }
+  }
+
+  ctx.globalAlpha = 1
+  ctx.restore()
+}
+
+// 最近已完成/下一个行（一样大，两行显示，2行放不下省略）
+function drawRecentRow(ctx: CanvasRenderingContext2D, x: number, cy: number, w: number, name: string, elapsed: string | null, kind: 'done' | 'pending') {
+  const rowH = PS_ROW_H - 4
+  const r = 4
+  ctx.save()
+
+  // 背景
+  if (kind === 'done') {
+    ctx.fillStyle = 'rgba(0, 25, 45, 0.5)'
+    ctx.strokeStyle = 'rgba(0, 180, 255, 0.25)'
+  } else {
+    ctx.fillStyle = 'rgba(10, 22, 40, 0.7)'
+    ctx.strokeStyle = 'rgba(0, 120, 200, 0.2)'
+  }
+  ctx.lineWidth = 1
+  roundRect(ctx, x, cy - rowH / 2, w, rowH, r)
+  ctx.fill()
+  ctx.stroke()
+
+  // 小圆点图标（已完成蓝色，待执行灰色）
+  const dotR = 4
+  const dotX = x + 10
+  ctx.beginPath()
+  ctx.arc(dotX, cy - 4, dotR, 0, Math.PI * 2)
+  ctx.fillStyle = kind === 'done' ? '#00BFFF' : '#4A5568'
+  ctx.fill()
+  if (kind === 'done') {
+    ctx.shadowColor = '#00BFFF'
+    ctx.shadowBlur = 3
+    ctx.beginPath()
+    ctx.arc(dotX, cy - 4, dotR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+  }
+
+  // 名称（可两行，2行放不下省略）
+  ctx.fillStyle = kind === 'done' ? '#8AC0E0' : '#6A8AAA'
+  ctx.font = '12px "PingFang SC", sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  const nameX = x + 20
+  const nameW = w - 24
+  const maxCharsPerLine = Math.floor(nameW / 12)  // 大约每字12px宽度
+  const maxLines = elapsed ? 1 : 2  // 有耗时只能放1行名称
+
+  if (name.length > maxCharsPerLine * maxLines) {
+    if (maxLines >= 2 && name.length > maxCharsPerLine) {
+      const line1 = name.slice(0, maxCharsPerLine - 1)
+      const line2 = name.slice(maxCharsPerLine - 1, maxCharsPerLine * 2 - 2)
+      ctx.fillText(line1, nameX, cy - 4)
+      ctx.fillText(line2.length > maxCharsPerLine - 1 ? line2.slice(0, maxCharsPerLine - 2) + '..' : line2, nameX, cy + 8)
+    } else {
+      ctx.fillText(name.slice(0, maxCharsPerLine - 1) + '..', nameX, cy - 4)
+    }
+  } else if (name.length > maxCharsPerLine) {
+    const line1 = name.slice(0, maxCharsPerLine)
+    ctx.fillText(line1, nameX, cy - 4)
+    ctx.fillText(name.slice(maxCharsPerLine), nameX, cy + 8)
+  } else {
+    ctx.fillText(name, nameX, cy - 4)
+  }
+
+  // 耗时（靠右）
+  if (elapsed) {
+    ctx.fillStyle = '#4A90B0'
+    ctx.font = '10px "PingFang SC", sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText(elapsed, x + w - 4, cy + 8)
+  }
+
+  ctx.restore()
+}
+
+// 右侧详情区：仅步骤列表（标题已移到左栏）
+function drawRightArea(ctx: CanvasRenderingContext2D, x: number, yTop: number, w: number, h: number, wd: { completed: TreeNodePhaseStep[], current: TreeNodePhaseStep | null, next: TreeNodePhaseStep | null }, tp: number) {
+  ctx.save()
+
+  // 背景
+  ctx.fillStyle = 'rgba(5, 15, 30, 0.3)'
+  roundRect(ctx, x, yTop, w, h, 6)
+  ctx.fill()
+
+  const currentPS = wd.current
+  if (!currentPS) {
+    ctx.fillStyle = '#5A7A9A'
+    ctx.font = '14px "PingFang SC", sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const msg = wd.completed.length ? '当前阶段已全部完成' : '等待启动'
+    ctx.fillText(msg, x + w / 2, yTop + h / 2)
+    ctx.restore()
+    return
+  }
+
+  // 过渡动画
+  const opacity = Math.min(1, tp * 1.5)
+  ctx.globalAlpha = opacity
+
+  // 步骤列表（区分顶层步骤和子步骤缩进）
+  const pad = 16
+  const rowW = Math.min(STEP_ROW_MAX_W, w - pad * 2)
+  const SUB_INDENT = 24  // 子步骤缩进量
+
+  // 按序排列步骤：顶层在前，子步骤在后（带缩进）
+  const topLevel = currentPS.stepNodes.filter(s => !s.parent_step_id)
+  const subSteps = currentPS.stepNodes.filter(s => s.parent_step_id)
+  const orderedSteps = [...topLevel, ...subSteps]
+
+  const maxVisible = Math.floor((h - pad * 2) / STEP_ROW_H)
+  const steps = orderedSteps.slice(0, maxVisible)
+
+  let rowY = yTop + pad + STEP_ROW_H / 2
+  steps.forEach((step) => {
+    const isSub = !!step.parent_step_id
+    const stepX = isSub ? x + pad + SUB_INDENT : x + pad
+    const stepRowW = isSub ? rowW - SUB_INDENT : rowW
+    drawStepRow(ctx, stepX, rowY, step, stepRowW)
+    rowY += STEP_ROW_H
+  })
+
+  // 溢出提示
+  if (orderedSteps.length > maxVisible) {
+    ctx.fillStyle = '#5A7A9A'
+    ctx.font = '10px "PingFang SC", sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText(`+${orderedSteps.length - maxVisible} 更多步骤`, x + pad, rowY + 4)
+  }
+
+  ctx.globalAlpha = 1
+  ctx.restore()
+}
+
+// 管道上的阶段节点
+function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number, label: string, status: string, selected: boolean) {
+  const w = PIPE_NODE_W
+  const h = PIPE_NODE_H
+  const r = 8
+  ctx.save()
+
+  if (selected) {
+    const pulse = Math.sin(animTime * 0.04) * 0.2 + 0.8
+    ctx.shadowColor = status === 'running'
+      ? 'rgba(0, 255, 255, ' + (0.6 * pulse) + ')'
+      : 'rgba(0, 180, 255, ' + (0.4 * pulse) + ')'
+    ctx.shadowBlur = 12 * pulse
+  } else if (status === 'done') {
+    ctx.shadowColor = 'rgba(0, 180, 255, 0.2)'
+    ctx.shadowBlur = 4
+  } else if (status === 'running') {
+    ctx.shadowColor = 'rgba(0, 255, 255, 0.15)'
+    ctx.shadowBlur = 6
+  } else {
+    ctx.shadowColor = 'rgba(0, 150, 255, 0.08)'
+    ctx.shadowBlur = 2
+  }
+
+  const bg = selected
+    ? 'rgba(0, 40, 60, 0.95)'
+    : status === 'done' ? 'rgba(0, 25, 45, 0.85)'
+    : status === 'running' ? 'rgba(0, 35, 55, 0.9)'
+    : 'rgba(10, 22, 40, 0.9)'
+  ctx.fillStyle = bg
+
+  const border = selected
+    ? (status === 'running' ? '#00FFFF' : '#00BFFF')
+    : status === 'done' ? 'rgba(0, 180, 255, 0.5)'
+    : status === 'running' ? 'rgba(0, 255, 255, 0.4)'
+    : 'rgba(0, 120, 200, 0.35)'
+  ctx.strokeStyle = border
+  ctx.lineWidth = selected ? 2 : 1
+
+  roundRect(ctx, cx - w / 2, cy - h / 2, w, h, r)
+  ctx.fill()
+  ctx.stroke()
+  ctx.shadowBlur = 0
+
+  ctx.fillStyle = selected
+    ? '#00FFFF'
+    : status === 'done' ? '#00BFFF'
+    : status === 'running' ? '#8AFFFF'
+    : '#6A8AAA'
+  ctx.font = 'bold 13px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, cx, cy - 5)
+
+  const statusText = status === 'done' ? '已完成' : status === 'running' ? '执行中' : '待执行'
+  ctx.fillStyle = selected
+    ? (status === 'running' ? '#00FF88' : '#00BFFF')
+    : status === 'done' ? '#4A90B0'
+    : status === 'running' ? '#00FF88'
+    : '#5A7A9A'
+  ctx.font = '10px "PingFang SC", sans-serif'
+  ctx.fillText(statusText, cx, cy + 10)
+
+  ctx.restore()
+}
+
+// 横向箭头（阶段间）
+function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string) {
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.shadowColor = color
+  ctx.shadowBlur = 3
+
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+
+  const arrowSize = 8
+  const angle = Math.atan2(y2 - y1, x2 - x1)
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(x2, y2)
+  ctx.lineTo(x2 - arrowSize * Math.cos(angle - Math.PI / 6), y2 - arrowSize * Math.sin(angle - Math.PI / 6))
+  ctx.lineTo(x2 - arrowSize * Math.cos(angle + Math.PI / 6), y2 - arrowSize * Math.sin(angle + Math.PI / 6))
+  ctx.closePath()
+  ctx.fill()
+
+  ctx.shadowBlur = 0
+  ctx.restore()
+}
+
+// 步骤列表行
+function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step: StepInstance, rowW: number) {
+  const isRunning = step.status === 'running'
+  const isDone = step.status === 'completed' || step.status === 'skipped'
+  const isTimeout = step.status === 'timeout'
+  const rowH = STEP_ROW_H - 2
+  const r = 3
+
+  ctx.save()
+
+  // 行背景
+  if (isRunning) {
+    const pulse = Math.sin(animTime * 0.05) * 0.15 + 0.85
+    ctx.shadowColor = 'rgba(0, 255, 255, ' + (0.35 * pulse) + ')'
+    ctx.shadowBlur = 8 * pulse
+    ctx.fillStyle = 'rgba(0, 40, 60, 0.7)'
+  } else if (isTimeout) {
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.15)'
+    ctx.shadowBlur = 3
+    ctx.fillStyle = 'rgba(50, 40, 10, 0.4)'
+  } else if (isDone) {
+    ctx.shadowBlur = 0
+    ctx.fillStyle = 'rgba(0, 20, 35, 0.35)'
+  } else {
+    ctx.shadowBlur = 0
+    ctx.fillStyle = 'rgba(8, 18, 30, 0.25)'
+  }
+  roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
+  ctx.fill()
+
+  // running/timeout 边框
+  if (isRunning) {
+    ctx.strokeStyle = '#00FFFF'
+    ctx.lineWidth = 1.5
+    roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
+    ctx.stroke()
+  } else if (isTimeout) {
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)'
+    ctx.lineWidth = 1
+    roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
+    ctx.stroke()
+  }
+  ctx.shadowBlur = 0
+
+  // 状态圆点（放大）
+  const dotR = 5
+  const dotX = x + 14
+  const dotColor = isRunning ? '#00FFFF' : isTimeout ? '#FFD700' : isDone ? '#00BFFF' : '#4A5568'
+  ctx.beginPath()
+  ctx.arc(dotX, cy, dotR, 0, Math.PI * 2)
+  ctx.fillStyle = dotColor
+  ctx.fill()
+  if (isRunning) {
+    ctx.shadowColor = '#00FFFF'
+    ctx.shadowBlur = 6
+    ctx.beginPath()
+    ctx.arc(dotX, cy, dotR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+  }
+
+  // 步骤名称
+  const nameX = x + 28
+  ctx.fillStyle = isRunning ? '#00FFFF' : isTimeout ? '#FFD700' : isDone ? '#00BFFF' : '#6A8AAA'
+  ctx.font = (isRunning ? 'bold ' : '') + '11px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  const name = step.name.length > 22 ? step.name.slice(0, 21) + '..' : step.name
+  ctx.fillText(name, nameX, cy)
+
+  // 状态文字（靠右）
+  const statusX = x + rowW - 60
+  const statusLabel = isRunning ? '执行中' : isTimeout ? '超时' : isDone ? '已完成' : '待执行'
+  ctx.fillStyle = isRunning ? '#00FF88' : isTimeout ? '#FFD700' : isDone ? '#4A90B0' : '#3A4A5A'
+  ctx.font = '10px "PingFang SC", sans-serif'
+  ctx.fillText(statusLabel, statusX, cy)
+
+  ctx.restore()
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -697,46 +1101,23 @@ function handleCanvasClick(e: MouseEvent) {
   const canvas = flowCanvasRef.value
   if (!canvas || !treeData.value.length) return
   const rect = canvas.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const canvasW = canvas.width / dpr
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
 
   const data = treeData.value
-  const aps = findActivePhaseStepName()
-  let pyCursor = 10
+  const n = data.length
+  const spacing = canvasW / n
 
-  for (let pi = 0; pi < data.length; pi++) {
-    const phase = data[pi]
-    const psHeights = phase.phaseSteps.map(ps => {
-      const isExpanded = ps.stepNodes.some(s => s.status === 'running') ||
-        (aps && ps.name === aps) ||
-        expandedPhaseSteps.value.has(ps.name)
-      if (!isExpanded || ps.stepNodes.length === 0) return PS_GAP_Y
-      const topN = ps.stepNodes.filter(s => !s.parent_step_id).length
-      const subN = ps.stepNodes.filter(s => s.parent_step_id).length
-      const gap = topN > 0 && subN > 0 ? 14 : 0
-      return topN * STEP_GAP_Y + gap + subN * STEP_GAP_Y + PS_GAP_Y
-    })
-    const regionH = psHeights.reduce((a, b) => a + b, 0)
-    const regionTop = pyCursor
-    pyCursor += regionH
-
-    const totalPSH = psHeights.reduce((a, b) => a + b, 0)
-    let psCursor = regionTop + (regionH - totalPSH) / 2
-
-    for (let psi = 0; psi < phase.phaseSteps.length; psi++) {
-      const psY = psCursor + psHeights[psi] / 2
-      psCursor += psHeights[psi]
-      if (Math.abs(x - (PS_X + PS_W / 2)) < PS_W / 2 && Math.abs(y - psY) < 15) {
-        const ps = phase.phaseSteps[psi]
-        if (!ps.stepNodes.some(s => s.status === 'running') && ps.stepNodes.length > 0) {
-          const next = new Set(expandedPhaseSteps.value)
-          next.has(ps.name) ? next.delete(ps.name) : next.add(ps.name)
-          expandedPhaseSteps.value = next
-          // 展开后重新计算画布大小
-          nextTick(() => initCanvas())
-        }
-        return
-      }
+  // 点击阶段管道节点 → 切换阶段
+  for (let i = 0; i < n; i++) {
+    const cx = (i + 0.5) * spacing
+    const cy = PIPE_Y
+    if (Math.abs(x - cx) < PIPE_NODE_W / 2 && Math.abs(y - cy) < PIPE_NODE_H / 2) {
+      selectedPhaseIdx.value = i
+      nextTick(() => initCanvas())
+      return
     }
   }
 }
@@ -782,22 +1163,31 @@ function scheduleReconnect() {
 }
 
 function handleWSMessage(msg: any) {
-  const event = msg.event || msg.type || ''
+  const event = msg.event_type || msg.event || msg.type || ''
   const payload = msg.payload || msg.data || msg
   const stepName = payload.step_name || payload.stepName || ''
+  const phaseName = payload.phase_name || payload.phaseName || ''
 
   if (['drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated'].includes(event)) {
     fetchDrillData()
+    if (event === 'drill_started') addLog('info', '▶', '演练已开始')
+    else if (event === 'drill_paused') addLog('warn', '⏸', '演练已暂停')
+    else if (event === 'drill_resumed') addLog('info', '▶', '演练已恢复')
+    else if (event === 'drill_completed') addLog('info', '✓', '演练已完成')
+    else if (event === 'drill_terminated') addLog('warn', '⏹', '演练已结束')
   }
 
-  if (['step_started', 'step_complete', 'step_timeout', 'step_skipped'].includes(event)) {
+  if (['step_started', 'step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
     fetchSteps()
-    addLog(event === 'step_timeout' ? 'warn' : 'info', logIcon(event), `${stepName} ${logLabel(event)}`)
+    const phasePrefix = phaseName ? `【${phaseName}】` : ''
+    const label = logLabel(event)
+    addLog(event === 'step_timeout' || event === 'step_issue' ? 'warn' : 'info', logIcon(event), `${phasePrefix}${stepName} ${label}`)
   }
 
   if (event === 'timeout_warning') {
     const remaining = payload.remaining_sec || 0
-    addLog('warn', '⏰', `${stepName} 剩余 ${remaining} 秒`)
+    const phasePrefix = phaseName ? `【${phaseName}】` : ''
+    addLog('warn', '⏰', `${phasePrefix}${stepName} 剩余 ${remaining} 秒`)
   }
 }
 
@@ -807,6 +1197,7 @@ function logLabel(event: string): string {
     step_complete: '已完成',
     step_timeout: '已超时',
     step_skipped: '已跳过',
+    step_issue: '异常',
     drill_started: '演练开始',
     drill_paused: '已暂停',
     drill_resumed: '已恢复',
