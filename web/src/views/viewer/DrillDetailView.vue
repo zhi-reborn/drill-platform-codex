@@ -18,10 +18,10 @@
           </div>
           <div class="info-progress">
             <span class="progress-label">
-              进度：{{ instance.completed_steps }} / {{ instance.total_steps }}
+              进度：{{ instance?.completed_steps ?? 0 }} / {{ instance?.total_steps ?? 0 }}
             </span>
             <el-progress
-              :percentage="Math.round(instance.completed_steps / instance.total_steps * 100)"
+              :percentage="Math.round((instance?.completed_steps ?? 0) / (instance?.total_steps ?? 1) * 100)"
               :stroke-width="8"
               :status="instance.status === 'completed' ? 'success' : undefined"
             />
@@ -129,7 +129,7 @@ const drillId = computed(() => {
 })
 
 const drillSteps = computed(() => {
-  return steps.value.filter(s => s.drill_instance_id === drillId.value || s.drill_id === drillId.value).sort((a, b) => {
+  return steps.value.filter(s => s.drill_instance_id === drillId.value).sort((a, b) => {
     const ai = (a as any).order_index ?? a.seq ?? 0
     const bi = (b as any).order_index ?? b.seq ?? 0
     return ai - bi
@@ -207,10 +207,10 @@ function isParentStep(row: StepWithChildren): boolean {
 
 const timelineData = computed(() => {
   return drillSteps.value.map(step => ({
-    name: step.step_name,
+    name: step.name,
     items: [{
-      startTime: step.started_at || new Date().toISOString(),
-      endTime: step.completed_at,
+      startTime: step.start_time || new Date().toISOString(),
+      endTime: step.end_time ?? undefined,
       status: step.status as TimelineItem['status'],
     }],
   }))
@@ -274,8 +274,9 @@ function formatTime(dateStr: string): string {
 
 async function loadDrillData() {
   try {
-    instance.value = (instancesData.find(i => i.id === drillId.value) as DrillInstance) || null
-    steps.value = stepsData as StepInstance[]
+    const mockInstance = instancesData.find(i => i.id === drillId.value)
+    instance.value = mockInstance ? mockInstance as unknown as DrillInstance : null
+    steps.value = stepsData as unknown as StepInstance[]
     if (!instance.value) {
       ElMessage.error('演练不存在')
       router.back()

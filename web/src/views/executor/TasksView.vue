@@ -217,7 +217,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import type { StepInstance } from '@/types/task'
+import type { StepInstance } from '@/types/instance'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
@@ -237,16 +237,16 @@ const currentDrill = ref<DrillInstance | null>(null)
 
 // 统计
 const myTasksCount = computed(() => tasks.value.length)
-const pendingTasksCount = computed(() => tasks.value.filter(t => t.status === 'pending').length)
-const inProgressTasksCount = computed(() => tasks.value.filter(t => t.status === 'running').length)
-const completedTasksCount = computed(() => tasks.value.filter(t => t.status === 'completed').length)
+const pendingTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'pending').length)
+const inProgressTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'running').length)
+const completedTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'completed').length)
 
 // 活跃演练（带任务统计）
 const activeDrillsWithTasks = computed(() => {
   return instances.value
     .filter(i => i.status === 'running' || i.status === 'paused')
     .map(drill => {
-      const drillTasks = tasks.value.filter(t => t.drill_instance_id === drill.id)
+      const drillTasks = tasks.value.filter((t: StepInstance) => t.drill_instance_id === drill.id)
       return {
         id: drill.id,
         name: drill.name,
@@ -254,7 +254,7 @@ const activeDrillsWithTasks = computed(() => {
         completedSteps: drill.progress_pct,
         totalSteps: 100,
         myTasksCount: drillTasks.length,
-        pendingTasksCount: drillTasks.filter(t => t.status === 'pending' || t.status === 'running').length,
+        pendingTasksCount: drillTasks.filter((t: StepInstance) => t.status === 'pending' || t.status === 'running').length,
       }
     })
 })
@@ -262,10 +262,10 @@ const activeDrillsWithTasks = computed(() => {
 const filteredTasks = computed(() => {
   let result = tasks.value
   if (selectedDrillId.value) {
-    result = result.filter(t => t.drill_instance_id === selectedDrillId.value)
+    result = result.filter((t: StepInstance) => t.drill_instance_id === selectedDrillId.value)
   }
   if (filterStatus.value) {
-    result = result.filter(t => t.status === filterStatus.value)
+    result = result.filter((t: StepInstance) => t.status === filterStatus.value)
   }
   return result
 })

@@ -117,15 +117,15 @@
           <div class="panel-body logs-list">
             <div
               v-for="(log, idx) in recentLogs"
-              :key="log.id || idx"
+              :key="log.ID || idx"
               class="log-item"
-              :class="'log-' + (log.action || '').split('_')[0]"
+              :class="'log-' + (log.Action || '').split('_')[0]"
             >
               <div class="log-border" />
               <div class="log-body">
-                <div class="log-action">{{ formatLogAction(log.action) }}</div>
-                <div v-if="log.content" class="log-text">{{ log.content }}</div>
-                <div class="log-time">{{ formatTime(log.created_at) }}</div>
+                <div class="log-action">{{ formatLogAction(log.Action) }}</div>
+                <div v-if="log.Remark" class="log-text">{{ log.Remark }}</div>
+                <div class="log-time">{{ formatTime(log.CreatedAt) }}</div>
               </div>
             </div>
             <div v-if="recentLogs.length === 0" class="log-empty">暂无日志</div>

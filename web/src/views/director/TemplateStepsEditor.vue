@@ -447,7 +447,7 @@ function buildTreeFromSteps(steps: StepTemplate[]): StepTreeNode[] {
     const parentId = node.parent_step_id
     if (parentId && parentId > 0 && nodeMap.has(parentId)) {
       const parent = nodeMap.get(parentId)!
-      parent.children.push(node)
+      parent.children!.push(node)
       parent.hasChildren = true
     } else {
       roots.push(node)
@@ -867,7 +867,6 @@ async function handleEditStep() {
   step.name = singleStepForm.name.trim()
   step.description = singleStepForm.description.trim()
   step.step_type = singleStepForm.step_type as StepType
-  step.seq = singleStepEditIndex.value! + 1
   step.order_index = singleStepEditIndex.value! + 1
   step.timeout_minutes = singleStepForm.timeout_minutes
   step.default_assignee_role = singleStepForm.default_assignee_role
@@ -893,7 +892,6 @@ async function handleEditStep() {
         executor_team: singleStepForm.executor_team,
         phase: step.phase || activePhaseName.value,
         phase_step: singleStepForm.phase_step || '',
-        parent_step_id: singleStepForm.parent_step_id,
         estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
         estimated_start_offset: singleStepForm.estimated_start_offset,
         attributes: JSON.stringify(singleStepForm.attributes),
@@ -905,7 +903,7 @@ async function handleEditStep() {
       return
     }
   } else {
-    const isNew = singleStepEditIndex.value === steps.length - 1 || !step.seq
+    const isNew = singleStepEditIndex.value === steps.length - 1 || !step.order_index
     ElMessage.success(isNew ? '步骤已添加' : '步骤已更新')
   }
 
@@ -983,7 +981,13 @@ async function handleSaveSteps() {
 
   try {
     await templateApi.updateSteps(templateId.value, allSteps.map((s, idx) => {
-      const payload: Record<string, unknown> = {
+      const payload: {
+        name: string; seq: number; step_type: string; timeout_minutes?: number;
+        guide_content?: string; default_assignee_role?: string; executor_team?: string;
+        phase?: string; phase_step?: string; parent_step_id?: number;
+        estimated_duration_minutes?: number; estimated_start_offset?: number;
+        attributes?: string; id?: number;
+      } = {
         name: s.name,
         seq: s.order_index || (idx + 1),
         step_type: s.step_type || 'serial',
@@ -1126,7 +1130,7 @@ function exportSteps() {
         stepTypeLabels[step.step_type] || step.step_type || '串行',
         step.estimated_duration_minutes ?? '',
         step.timeout_minutes ?? 5,
-        assigneeRoleLabels[step.default_assignee_role] || step.default_assignee_role || '执行组',
+        assigneeRoleLabels[step.default_assignee_role || ''] || step.default_assignee_role || '执行组',
         step.executor_team || '',
         attrs.responsible_department || '',
         attrs.cooperating_department || '',
@@ -1311,7 +1315,7 @@ function handleExcelUpload(file: File) {
       // 激活第一个有数据的阶段
       if (phaseStepsMap.size > 0) {
         const firstPhase = phaseStepsMap.keys().next().value
-        activePhaseName.value = firstPhase
+        if (firstPhase) activePhaseName.value = firstPhase
       }
       buildAndSyncTree()
       ElMessage.success(`成功导入 ${totalImported} 个步骤到 ${phaseStepsMap.size} 个阶段`)

@@ -154,6 +154,7 @@ import { userApi } from '@/api'
 const router = useRouter()
 
 interface CategoryItem {
+  id?: number
   value: string
   label: string
   tagType: 'primary' | 'success' | 'warning' | 'danger' | 'info'
