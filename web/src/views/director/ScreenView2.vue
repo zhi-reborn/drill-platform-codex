@@ -134,6 +134,23 @@
         </aside>
       </main>
 
+      <!-- 任务完成弹窗 -->
+      <Transition name="modal">
+        <div v-if="completionModal.visible" class="completion-modal" @click="completionModal.visible = false">
+          <div class="completion-modal-content" @click.stop>
+            <div class="completion-icon">✓</div>
+            <div class="completion-text">
+              <div class="completion-title">任务完成</div>
+              <div class="completion-step">{{ completionModal.stepName }}</div>
+              <div v-if="completionModal.phaseName" class="completion-phase">{{ completionModal.phaseName }}</div>
+            </div>
+            <div class="completion-progress">
+              <div class="completion-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
       <!-- 底部公告栏 -->
       <footer class="bottom-bar">
         <div class="bb-line" />
@@ -175,6 +192,26 @@ const isViewer = computed(() => role.value === 'viewer')
 const canControl = computed(() => isDirector.value)
 const canOperateTask = computed(() => isDirector.value || isExecutor.value)
 const drillId = computed(() => Number(route.params.id))
+
+// 任务完成弹窗
+const completionModal = ref({
+  visible: false,
+  stepName: '',
+  phaseName: '',
+  timer: null as ReturnType<typeof setTimeout> | null
+})
+
+function showCompletionModal(stepName: string, phaseName: string) {
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+  }
+  completionModal.value.visible = true
+  completionModal.value.stepName = stepName
+  completionModal.value.phaseName = phaseName
+  completionModal.value.timer = setTimeout(() => {
+    completionModal.value.visible = false
+  }, 3000)
+}
 
 // ======== 数据状态 ========
 
@@ -316,7 +353,7 @@ const scheduleText = computed(() => {
 
 // 实时日志（最近 8 条）
 const maxVisibleLogs = ref(8)
-const LOG_ROW_H = 26
+const LOG_ROW_H = 28
 const logContainerRef = ref<HTMLElement | null>(null)
 
 function updateMaxVisibleLogs() {
@@ -416,22 +453,22 @@ let animTime = 0
 // 阶段管道布局常量
 const PIPE_Y = 30          // 管道节点中心 Y
 const PIPE_NODE_W = 130    // 管道节点宽度
-const PIPE_NODE_H = 40     // 管道节点高度
+const PIPE_NODE_H = 48     // 管道节点高度（增高以提升可读性）
 const PIPE_ARROW_LEN = 36  // 箭头长度（节点间距留空）
-const TREE_OFFSET_Y = 90   // 子树区域起始 Y
+const TREE_OFFSET_Y = 100  // 子树区域起始 Y（为增高管道节点留空间）
 
 // ======== 子阶段轮式布局常量 ========
 const LEFT_COL_RATIO = 0.18   // 左侧列占比
 const COL_GAP = 16            // 左右列间距
-const LEFT_ROW_H = 42         // 左侧已完成子阶段行高（放大3倍）
-const NEXT_ROW_H = 42         // 左侧"下一个"行高
-const STEP_ROW_H = 26         // 右侧步骤行高
-const PS_ROW_H = 42          // 左侧最近已完成/下一个行高
+const LEFT_ROW_H = 48         // 左侧已完成子阶段行高
+const NEXT_ROW_H = 48         // 左侧"下一个"行高
+const STEP_ROW_H = 36         // 右侧步骤行高（增大以提升可读性）
+const PS_ROW_H = 48           // 左侧最近已完成/下一个行高
 const STEP_ROW_MAX_W = 500    // 步骤行最大宽度
-const PS_HEADER_H = 56        // 右侧当前子阶段标题区高度（放大）
-const PS_MIN_W = 140          // 子阶段标题最小宽度（放大3倍）
-const PS_MAX_W = 500          // 子阶段标题最大宽度（放大3倍）
-const PS_PAD = 28             // 子阶段标题内边距（放大）
+const PS_HEADER_H = 56        // 右侧当前子阶段标题区高度
+const PS_MIN_W = 140          // 子阶段标题最小宽度
+const PS_MAX_W = 500          // 子阶段标题最大宽度
+const PS_PAD = 28             // 子阶段标题内边距
 
 // 过渡动画状态
 let transitionProgress = 1    // 直接显示，不做渐变
@@ -566,8 +603,8 @@ function findActivePhaseStepName(): string | null {
 // 阶段间的箭头颜色
 function arrowColor(fromPhase: TreeNodePhase): string {
   const status = getPhaseStatus(fromPhase)
-  if (status === 'done') return '#00BFFF'
-  if (status === 'running') return '#00FFFF'
+  if (status === 'done') return '#38BDF8'
+  if (status === 'running') return '#67E8F9'
   return '#3A5A7A'
 }
 
@@ -661,7 +698,7 @@ function drawLeftColumn(ctx: CanvasRenderingContext2D, x: number, yTop: number, 
 
   // 上方计数：已完成 N
   ctx.save()
-  ctx.fillStyle = '#00BFFF'
+  ctx.fillStyle = '#38BDF8'
   ctx.font = 'bold 20px "PingFang SC", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -714,11 +751,11 @@ function drawCurrentName(ctx: CanvasRenderingContext2D, x: number, cy: number, w
   ctx.globalAlpha = opacity
 
   const pulse = Math.sin(animTime * 0.04) * 0.2 + 0.8
-  ctx.shadowColor = 'rgba(0, 255, 255, ' + (0.6 * pulse) + ')'
-  ctx.shadowBlur = 16 * pulse
+  ctx.shadowColor = 'rgba(103, 232, 249, ' + (0.6 * pulse) + ')'
+  ctx.shadowBlur =16 * pulse
 
   // 名称（大字，居中，可两行）
-  ctx.fillStyle = '#00FFFF'
+  ctx.fillStyle = '#67E8F9'
   ctx.font = 'bold 16px "PingFang SC", "Microsoft YaHei", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -757,10 +794,10 @@ function drawCurrentName(ctx: CanvasRenderingContext2D, x: number, cy: number, w
         const totalSec = Math.floor(diffMs / 1000)
         const m = Math.floor(totalSec / 60)
         const s = totalSec % 60
-        ctx.fillStyle = '#00FF88'
+        ctx.fillStyle = '#4ADE80'
         ctx.fillText(`已耗时 ${m}m${s}s`, x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
       } else {
-        ctx.fillStyle = '#00FF88'
+        ctx.fillStyle = '#4ADE80'
         ctx.fillText('执行中', x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
       }
     }
@@ -794,10 +831,10 @@ function drawRecentRow(ctx: CanvasRenderingContext2D, x: number, cy: number, w: 
   const dotX = x + 10
   ctx.beginPath()
   ctx.arc(dotX, cy - 4, dotR, 0, Math.PI * 2)
-  ctx.fillStyle = kind === 'done' ? '#00BFFF' : '#4A5568'
+  ctx.fillStyle = kind === 'done' ? '#38BDF8' : '#4A5568'
   ctx.fill()
   if (kind === 'done') {
-    ctx.shadowColor = '#00BFFF'
+    ctx.shadowColor = '#38BDF8'
     ctx.shadowBlur = 3
     ctx.beginPath()
     ctx.arc(dotX, cy - 4, dotR, 0, Math.PI * 2)
@@ -913,17 +950,17 @@ function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   if (selected) {
     const pulse = Math.sin(animTime * 0.04) * 0.2 + 0.8
     ctx.shadowColor = status === 'running'
-      ? 'rgba(0, 255, 255, ' + (0.6 * pulse) + ')'
-      : 'rgba(0, 180, 255, ' + (0.4 * pulse) + ')'
+      ? 'rgba(103, 232, 249, ' + (0.6 * pulse) + ')'
+      : 'rgba(56, 189, 248, ' + (0.4 * pulse) + ')'
     ctx.shadowBlur = 12 * pulse
   } else if (status === 'done') {
-    ctx.shadowColor = 'rgba(0, 180, 255, 0.2)'
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.2)'
     ctx.shadowBlur = 4
   } else if (status === 'running') {
-    ctx.shadowColor = 'rgba(0, 255, 255, 0.15)'
+    ctx.shadowColor = 'rgba(103, 232, 249, 0.15)'
     ctx.shadowBlur = 6
   } else {
-    ctx.shadowColor = 'rgba(0, 150, 255, 0.08)'
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.08)'
     ctx.shadowBlur = 2
   }
 
@@ -935,10 +972,10 @@ function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   ctx.fillStyle = bg
 
   const border = selected
-    ? (status === 'running' ? '#00FFFF' : '#00BFFF')
-    : status === 'done' ? 'rgba(0, 180, 255, 0.5)'
-    : status === 'running' ? 'rgba(0, 255, 255, 0.4)'
-    : 'rgba(0, 120, 200, 0.35)'
+    ? (status === 'running' ? '#67E8F9' : '#38BDF8')
+    : status === 'done' ? 'rgba(56, 189, 248, 0.5)'
+    : status === 'running' ? 'rgba(103, 232, 249, 0.4)'
+    : 'rgba(56, 189, 248, 0.35)'
   ctx.strokeStyle = border
   ctx.lineWidth = selected ? 2 : 1
 
@@ -948,9 +985,9 @@ function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   ctx.shadowBlur = 0
 
   ctx.fillStyle = selected
-    ? '#00FFFF'
-    : status === 'done' ? '#00BFFF'
-    : status === 'running' ? '#8AFFFF'
+    ? '#67E8F9'
+    : status === 'done' ? '#38BDF8'
+    : status === 'running' ? '#7DD3FC'
     : '#6A8AAA'
   ctx.font = 'bold 13px "PingFang SC", "Microsoft YaHei", sans-serif'
   ctx.textAlign = 'center'
@@ -959,9 +996,9 @@ function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number,
 
   const statusText = status === 'done' ? '已完成' : status === 'running' ? '执行中' : '待执行'
   ctx.fillStyle = selected
-    ? (status === 'running' ? '#00FF88' : '#00BFFF')
+    ? (status === 'running' ? '#4ADE80' : '#38BDF8')
     : status === 'done' ? '#4A90B0'
-    : status === 'running' ? '#00FF88'
+    : status === 'running' ? '#4ADE80'
     : '#5A7A9A'
   ctx.font = '10px "PingFang SC", sans-serif'
   ctx.fillText(statusText, cx, cy + 10)
@@ -1009,7 +1046,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
   // 行背景
   if (isRunning) {
     const pulse = Math.sin(animTime * 0.05) * 0.15 + 0.85
-    ctx.shadowColor = 'rgba(0, 255, 255, ' + (0.35 * pulse) + ')'
+    ctx.shadowColor = 'rgba(103, 232, 249, ' + (0.35 * pulse) + ')'
     ctx.shadowBlur = 8 * pulse
     ctx.fillStyle = 'rgba(0, 40, 60, 0.7)'
   } else if (isTimeout) {
@@ -1028,7 +1065,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
 
   // running/timeout 边框
   if (isRunning) {
-    ctx.strokeStyle = '#00FFFF'
+    ctx.strokeStyle = '#67E8F9'
     ctx.lineWidth = 1.5
     roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
     ctx.stroke()
@@ -1043,13 +1080,13 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
   // 状态圆点（放大）
   const dotR = 5
   const dotX = x + 14
-  const dotColor = isRunning ? '#00FFFF' : isTimeout ? '#FFD700' : isDone ? '#00BFFF' : '#4A5568'
+  const dotColor = isRunning ? '#67E8F9' : isTimeout ? '#FFD700' : isDone ? '#38BDF8' : '#4A5568'
   ctx.beginPath()
   ctx.arc(dotX, cy, dotR, 0, Math.PI * 2)
   ctx.fillStyle = dotColor
   ctx.fill()
   if (isRunning) {
-    ctx.shadowColor = '#00FFFF'
+    ctx.shadowColor = '#67E8F9'
     ctx.shadowBlur = 6
     ctx.beginPath()
     ctx.arc(dotX, cy, dotR, 0, Math.PI * 2)
@@ -1059,7 +1096,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
 
   // 步骤名称
   const nameX = x + 28
-  ctx.fillStyle = isRunning ? '#00FFFF' : isTimeout ? '#FFD700' : isDone ? '#00BFFF' : '#6A8AAA'
+  ctx.fillStyle = isRunning ? '#67E8F9' : isTimeout ? '#FFD700' : isDone ? '#38BDF8' : '#6A8AAA'
   ctx.font = (isRunning ? 'bold ' : '') + '11px "PingFang SC", "Microsoft YaHei", sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
@@ -1069,7 +1106,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
   // 状态文字（靠右）
   const statusX = x + rowW - 60
   const statusLabel = isRunning ? '执行中' : isTimeout ? '超时' : isDone ? '已完成' : '待执行'
-  ctx.fillStyle = isRunning ? '#00FF88' : isTimeout ? '#FFD700' : isDone ? '#4A90B0' : '#3A4A5A'
+  ctx.fillStyle = isRunning ? '#4ADE80' : isTimeout ? '#FFD700' : isDone ? '#4A90B0' : '#3A4A5A'
   ctx.font = '10px "PingFang SC", sans-serif'
   ctx.fillText(statusLabel, statusX, cy)
 
@@ -1189,6 +1226,9 @@ function handleWSMessage(msg: any) {
       const label = logLabel(event)
       const logType = event === 'step_timeout' ? 'warn' : event === 'step_issue' ? 'error' : 'info'
       addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
+      if (event === 'step_complete') {
+        showCompletionModal(stepName, phaseName)
+      }
     }
     return
   }
@@ -1478,7 +1518,7 @@ function fmtTime(ts: string): string {
 .screen-root {
   margin: -24px;
   height: calc(100vh - 56px);
-  background: #080E1A;
+  background: #0B1121;
   color: #C0CDE0;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
   display: grid;
@@ -1496,14 +1536,14 @@ function fmtTime(ts: string): string {
 /* 流程区滚动条深色风格 */
 .screen-root .flow-area::-webkit-scrollbar { width: 5px; }
 .screen-root .flow-area::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
-.screen-root .flow-area::-webkit-scrollbar-thumb { background: rgba(0, 150, 255, 0.3); border-radius: 3px; }
+.screen-root .flow-area::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 3px; }
 
 .bg-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0, 150, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 150, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
   background-size: 60px 60px;
   pointer-events: none;
   z-index: 0;
@@ -1523,13 +1563,13 @@ function fmtTime(ts: string): string {
 .bg-glow-tl {
   top: -150px;
   left: -100px;
-  background: #0044FF;
+  background: #1E40AF;
 }
 
 .bg-glow-br {
   bottom: -150px;
   right: -100px;
-  background: #00AAFF;
+  background: #38BDF8;
 }
 
 /* ===== 加载与错误 ===== */
@@ -1549,7 +1589,7 @@ function fmtTime(ts: string): string {
   width: 48px;
   height: 48px;
   border: 3px solid rgba(0, 150, 255, 0.2);
-  border-top-color: #00BFFF;
+  border-top-color: #38BDF8;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1567,16 +1607,16 @@ function fmtTime(ts: string): string {
 
 .btn-retry {
   padding: 8px 24px;
-  background: rgba(0, 150, 255, 0.15);
-  border: 1px solid rgba(0, 150, 255, 0.4);
-  color: #00BFFF;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38BDF8;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
 }
 
 .btn-retry:hover {
-  background: rgba(0, 150, 255, 0.25);
+  background: rgba(56, 189, 248, 0.25);
 }
 
 @keyframes spin {
@@ -1601,7 +1641,7 @@ function fmtTime(ts: string): string {
   left: 28px;
   right: 28px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 180, 255, 0.3) 20%, rgba(0, 255, 255, 0.5) 50%, rgba(0, 180, 255, 0.3) 80%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.3) 20%, rgba(103, 232, 249, 0.5) 50%, rgba(56, 189, 248, 0.3) 80%, transparent);
 }
 
 .tb-left {
@@ -1613,7 +1653,7 @@ function fmtTime(ts: string): string {
 .elapsed-time {
   font-size: 24px;
   font-weight: 700;
-  color: #00FFFF;
+  color: #67E8F9;
   font-family: 'Courier New', monospace;
   letter-spacing: 2px;
 }
@@ -1648,9 +1688,9 @@ function fmtTime(ts: string): string {
 }
 
 .st-pending  { color: #5A7A9A; background: rgba(90, 122, 154, 0.15); }
-.st-running  { color: #00FF88; background: rgba(0, 255, 136, 0.1); }
+.st-running  { color: #4ADE80; background: rgba(74, 222, 128, 0.1); }
 .st-paused   { color: #FFD700; background: rgba(255, 215, 0, 0.1); }
-.st-completed { color: #00BFFF; background: rgba(0, 191, 255, 0.1); }
+.st-completed { color: #38BDF8; background: rgba(56, 189, 248, 0.1); }
 .st-terminated { color: #FF6666; background: rgba(255, 102, 102, 0.1); }
 
 .progress-wrap {
@@ -1672,9 +1712,9 @@ function fmtTime(ts: string): string {
 .progress-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #0066FF, #00FFFF);
+  background: linear-gradient(90deg, #0066FF, #67E8F9);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 8px rgba(0, 180, 255, 0.4);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
 }
 
 .progress-glow {
@@ -1682,17 +1722,17 @@ function fmtTime(ts: string): string {
   top: -4px;
   width: 14px;
   height: 14px;
-  background: rgba(0, 255, 255, 0.8);
+  background: rgba(103, 232, 249, 0.8);
   border-radius: 50%;
   transform: translateX(-50%);
-  box-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 12px rgba(103, 232, 249, 0.6);
   transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .progress-text {
   font-size: 16px;
   font-weight: 700;
-  color: #00FFFF;
+  color: #67E8F9;
   min-width: 40px;
   text-align: right;
 }
@@ -1719,8 +1759,8 @@ function fmtTime(ts: string): string {
 }
 
 .btn-fullscreen:hover {
-  border-color: rgba(0, 200, 255, 0.5);
-  color: #00BFFF;
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38BDF8;
   background: rgba(0, 40, 80, 0.8);
 }
 
@@ -1737,14 +1777,14 @@ function fmtTime(ts: string): string {
 }
 
 .btn-ctrl.start {
-  background: rgba(0, 200, 100, 0.15);
-  border-color: rgba(0, 200, 100, 0.4);
-  color: #00FF88;
+  background: rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #4ADE80;
 }
 
 .btn-ctrl.start:hover {
-  background: rgba(0, 200, 100, 0.3);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+  background: rgba(74, 222, 128, 0.3);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
 }
 
 .btn-ctrl.pause {
@@ -1759,14 +1799,14 @@ function fmtTime(ts: string): string {
 }
 
 .btn-ctrl.resume {
-  background: rgba(0, 200, 100, 0.15);
-  border-color: rgba(0, 200, 100, 0.4);
-  color: #00FF88;
+  background: rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #4ADE80;
 }
 
 .btn-ctrl.resume:hover {
-  background: rgba(0, 200, 100, 0.3);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+  background: rgba(74, 222, 128, 0.3);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
 }
 
 .btn-ctrl.end {
@@ -1809,7 +1849,7 @@ function fmtTime(ts: string): string {
 
 .flow-label {
   font-size: 12px;
-  color: #00BFFF;
+  color: #38BDF8;
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -1838,8 +1878,8 @@ function fmtTime(ts: string): string {
   border-radius: 50%;
 }
 
-.lg-done { background: #00BFFF; box-shadow: 0 0 4px #00BFFF; }
-.lg-running { background: #00FFFF; box-shadow: 0 0 8px #00FFFF; animation: pulse-dot 1.5s ease-in-out infinite; }
+.lg-done { background: #38BDF8; box-shadow: 0 0 4px #38BDF8; }
+.lg-running { background: #67E8F9; box-shadow: 0 0 8px #67E8F9; animation: pulse-dot 1.5s ease-in-out infinite; }
 .lg-pending { background: #4A5568; }
 
 @keyframes pulse-dot {
@@ -1854,14 +1894,14 @@ function fmtTime(ts: string): string {
   flex-direction: column;
   gap: 0;
   background: rgba(5, 15, 30, 0.7);
-  border-left: 1px solid rgba(0, 150, 255, 0.15);
+  border-left: 1px solid rgba(56, 189, 248, 0.15);
   backdrop-filter: blur(8px);
 }
 
 .rp-block {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid rgba(0, 150, 255, 0.1);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.1);
   min-height: 0;
   overflow: hidden;
 }
@@ -1878,19 +1918,19 @@ function fmtTime(ts: string): string {
   padding: 10px 14px;
   font-size: 12px;
   font-weight: 600;
-  color: #00BFFF;
+  color: #38BDF8;
   background: rgba(0, 20, 50, 0.5);
 }
 
 .rp-ico {
   flex-shrink: 0;
-  color: #00BFFF;
+  color: #38BDF8;
 }
 
 .rp-badge {
   margin-left: auto;
   background: rgba(0, 180, 255, 0.2);
-  color: #00FFFF;
+  color: #67E8F9;
   padding: 1px 7px;
   border-radius: 10px;
   font-size: 10px;
@@ -1942,7 +1982,7 @@ function fmtTime(ts: string): string {
 }
 
 .task-row:hover {
-  background: rgba(0, 150, 255, 0.06);
+  background: rgba(56, 189, 248, 0.06);
 }
 
 .task-btn {
@@ -1950,7 +1990,7 @@ function fmtTime(ts: string): string {
   width: 22px;
   height: 22px;
   border-radius: 3px;
-  border: 1px solid rgba(0, 180, 255, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   background: rgba(0, 25, 50, 0.5);
   color: #8AC0E0;
   font-size: 11px;
@@ -1963,7 +2003,7 @@ function fmtTime(ts: string): string {
 }
 
 .task-btn:hover {
-  background: rgba(0, 40, 80, 0.8);
+  background: rgba(56, 189, 248, 0.15);
 }
 
 .task-btn-skip:hover {
@@ -1972,8 +2012,8 @@ function fmtTime(ts: string): string {
 }
 
 .task-btn-done:hover {
-  color: #00FF88;
-  border-color: rgba(0, 255, 136, 0.5);
+  color: #4ADE80;
+  border-color: rgba(74, 222, 128, 0.5);
 }
 
 .task-status {
@@ -1984,7 +2024,7 @@ function fmtTime(ts: string): string {
   background: #4A5568;
 }
 
-.ts-running { background: #00FF88; }
+.ts-running { background: #4ADE80; }
 .ts-timeout { background: #FFD700; }
 
 .task-name {
@@ -2051,8 +2091,8 @@ function fmtTime(ts: string): string {
   word-break: break-all;
 }
 
-.log-info .log-msg { color: #00BFFF; }
-.log-info .log-icon { color: #00BFFF; }
+.log-info .log-msg { color: #38BDF8; }
+.log-info .log-icon { color: #38BDF8; }
 .log-warn .log-msg { color: #FFD700; }
 .log-warn .log-icon { color: #FFD700; }
 .log-error .log-msg { color: #FF6B6B; }
@@ -2084,7 +2124,7 @@ function fmtTime(ts: string): string {
 .timer-countdown {
   font-size: 32px;
   font-weight: 700;
-  color: #00FFFF;
+  color: #67E8F9;
   font-family: 'Courier New', monospace;
   letter-spacing: 3px;
 }
@@ -2123,7 +2163,7 @@ function fmtTime(ts: string): string {
 .timer-ov-fill {
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #0066FF, #00FFFF);
+  background: linear-gradient(90deg, #0066FF, #67E8F9);
   transition: width 0.6s ease;
 }
 
@@ -2145,7 +2185,7 @@ function fmtTime(ts: string): string {
   align-items: center;
   justify-content: space-between;
   background: rgba(0, 15, 35, 0.8);
-  border-top: 1px solid rgba(0, 150, 255, 0.15);
+  border-top: 1px solid rgba(56, 189, 248, 0.15);
   z-index: 1;
   padding: 0 28px;
 }
@@ -2156,7 +2196,7 @@ function fmtTime(ts: string): string {
   left: 28px;
   right: 28px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 180, 255, 0.3) 20%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 180, 255, 0.3) 80%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.3) 20%, rgba(103, 232, 249, 0.3) 50%, rgba(56, 189, 248, 0.3) 80%, transparent);
 }
 
 .bb-item {
@@ -2195,6 +2235,104 @@ function fmtTime(ts: string): string {
 }
 
 /* 任务弹框 */
+
+/* 完成弹窗 */
+.completion-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.completion-modal-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 16px;
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 0 40px rgba(74, 222, 128, 0.2);
+  min-width: 300px;
+}
+
+.completion-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(74, 222, 128, 0.15);
+  border: 2px solid #4ADE80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: #4ADE80;
+}
+
+.completion-text {
+  text-align: center;
+}
+
+.completion-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #F8FAFC;
+  margin-bottom: 8px;
+}
+
+.completion-step {
+  font-size: 16px;
+  color: #4ADE80;
+}
+
+.completion-phase {
+  font-size: 12px;
+  color: #64748B;
+  margin-top: 4px;
+}
+
+.completion-progress {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.completion-progress-bar {
+  height: 100%;
+  background: #4ADE80;
+  animation: progress-shrink 3s linear forwards;
+}
+
+@keyframes progress-shrink {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* 弹窗动画 */
+.modal-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.modal-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.modal-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.modal-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
 </style>
 
 <style>
