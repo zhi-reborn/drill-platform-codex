@@ -230,13 +230,37 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		for _, s := range template.Steps {
 			tplStepMap[s.ID] = s
 		}
+		// 批量更新 parent_step_id，避免 N 次单条 UPDATE
+		type parentUpdate struct {
+			ID           uint64
+			ParentStepID uint64
+		}
+		var parentUpdates []parentUpdate
 		for i := range instanceSteps {
 			tpl := tplStepMap[instanceSteps[i].StepTemplateID]
 			if tpl.ParentStepID != nil && *tpl.ParentStepID > 0 {
 				if instParentID, ok := tplIDtoInstID[*tpl.ParentStepID]; ok {
 					instanceSteps[i].ParentStepID = &instParentID
-					tx.Model(&instanceSteps[i]).Update("parent_step_id", instParentID)
+					parentUpdates = append(parentUpdates, parentUpdate{
+						ID:           instanceSteps[i].ID,
+						ParentStepID: instParentID,
+					})
 				}
+			}
+		}
+		if len(parentUpdates) > 0 {
+			caseSQL := "UPDATE `drill_instance_step` SET `parent_step_id` = CASE `id` "
+			var args []interface{}
+			var allIDs []uint64
+			for _, u := range parentUpdates {
+				caseSQL += "WHEN ? THEN ? "
+				args = append(args, u.ID, u.ParentStepID)
+				allIDs = append(allIDs, u.ID)
+			}
+			caseSQL += "ELSE `parent_step_id` END WHERE `id` IN ?"
+			args = append(args, allIDs)
+			if err := tx.Exec(caseSQL, args...).Error; err != nil {
+				return err
 			}
 		}
 

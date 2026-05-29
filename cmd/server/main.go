@@ -94,7 +94,7 @@ func main() {
 	defer repository.Close()
 	log.Println("数据库连接成功")
 
-	_, err = redis.NewClient(&redis.Config{
+	redisClient, err := redis.NewClient(&redis.Config{
 		Host:     cfg.Redis.Host,
 		Port:     cfg.Redis.Port,
 		Password: cfg.Redis.Password,
@@ -105,6 +105,7 @@ func main() {
 		log.Printf("Redis连接失败 (可忽略): %v", err)
 	} else {
 		log.Println("Redis连接成功")
+		defer redisClient.Close()
 	}
 
 	wsManager := websocket.NewManager()

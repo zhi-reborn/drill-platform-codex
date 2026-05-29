@@ -4,6 +4,7 @@ import (
 	"drill-platform/internal/domain/entity"
 	"sort"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TemplateRepo struct{}
@@ -128,11 +129,15 @@ func (r *TemplateRepo) Clone(id uint64) (*entity.DrillTemplate, error) {
 			return err
 		}
 
-		for _, step := range template.Steps {
+		steps := make([]entity.StepTemplate, len(template.Steps))
+		for i, step := range template.Steps {
 			s := step
 			s.ID = 0
 			s.DrillTemplateID = clone.ID
-			if err := tx.Create(&s).Error; err != nil {
+			steps[i] = s
+		}
+		if len(steps) > 0 {
+			if err := tx.Create(&steps).Error; err != nil {
 				return err
 			}
 		}
@@ -171,25 +176,12 @@ func (r *TemplateRepo) SaveCategories(categories []entity.TemplateCategory) erro
 			return err
 		}
 		
-		// 更新或创建传入的分类
-		for i := range categories {
-			var existing entity.TemplateCategory
-			result := tx.Where("value = ?", categories[i].Value).First(&existing)
-			
-			if result.Error == nil {
-				// 已存在，更新
-				existing.Label = categories[i].Label
-				existing.TagType = categories[i].TagType
-				existing.SortOrder = categories[i].SortOrder
-				if err := tx.Save(&existing).Error; err != nil {
-					return err
-				}
-			} else {
-				// 不存在，创建
-				if err := tx.Create(&categories[i]).Error; err != nil {
-					return err
-				}
-			}
+		// 批量 upsert：INSERT ... ON DUPLICATE KEY UPDATE
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "value"}},
+			DoUpdates: clause.AssignmentColumns([]string{"label", "tag_type", "sort_order"}),
+		}).Create(&categories).Error; err != nil {
+			return err
 		}
 		
 		return nil
