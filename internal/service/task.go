@@ -16,6 +16,7 @@ type TaskService struct {
 	wsManager             *websocket.Manager
 	notificationService   *NotificationService
 	userRepo              *repository.UserRepo
+	redis                 RedisClient
 }
 
 func NewTaskService(stepRepo *repository.StepRepo) *TaskService {
@@ -36,6 +37,10 @@ func (s *TaskService) SetWebSocketManager(wsManager *websocket.Manager) {
 
 func (s *TaskService) SetNotificationService(ns *NotificationService) {
 	s.notificationService = ns
+}
+
+func (s *TaskService) SetRedis(redis RedisClient) {
+	s.redis = redis
 }
 
 func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*entity.StepInstance, error) {
@@ -71,6 +76,13 @@ func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
 			userID, "running").
 		Find(&steps).Error
 	return steps, err
+}
+
+func (s *TaskService) EnrichStepsWithAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
+	if s.drillService != nil {
+		return s.drillService.EnrichStepsWithAssigneeNames(steps)
+	}
+	return steps
 }
 
 func (s *TaskService) GetTaskDetail(stepID uint64) (*entity.StepInstance, error) {
@@ -120,12 +132,28 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 	})
 
 	if s.wsManager != nil {
+		startTimeStr := ""
+		if step.StartTime != nil {
+			startTimeStr = step.StartTime.Format(time.RFC3339)
+		}
+		endTimeStr := now.Format(time.RFC3339)
 		s.wsManager.SendStepChange(uint(step.DrillInstanceID), websocket.StepChangePayload{
 			DrillID:        uint(step.DrillInstanceID),
 			StepID:         uint(stepID),
 			StepName:       step.Name,
 			PreviousStatus: "running",
 			NewStatus:      "completed",
+			StartTime:      &startTimeStr,
+			EndTime:        &endTimeStr,
+			Remark:         remark,
+			AssigneeNames:  step.AssigneeNames,
+		})
+		PatchCachedStep(s.redis, step.DrillInstanceID, uint(stepID), map[string]interface{}{
+			"status":         "completed",
+			"start_time":     &startTimeStr,
+			"end_time":       &endTimeStr,
+			"remark":         remark,
+			"assignee_names": step.AssigneeNames,
 		})
 	}
 
@@ -181,12 +209,28 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 	})
 
 	if s.wsManager != nil {
+		startTimeStr := ""
+		if step.StartTime != nil {
+			startTimeStr = step.StartTime.Format(time.RFC3339)
+		}
+		nowStr := time.Now().Format(time.RFC3339)
 		s.wsManager.SendStepChange(uint(step.DrillInstanceID), websocket.StepChangePayload{
 			DrillID:        uint(step.DrillInstanceID),
 			StepID:         uint(stepID),
 			StepName:       step.Name,
 			PreviousStatus: step.Status,
 			NewStatus:      "issue",
+			StartTime:      &startTimeStr,
+			EndTime:        &nowStr,
+			IssueDesc:      issueDesc,
+			AssigneeNames:  step.AssigneeNames,
+		})
+		PatchCachedStep(s.redis, step.DrillInstanceID, uint(stepID), map[string]interface{}{
+			"status":         "issue",
+			"start_time":     &startTimeStr,
+			"end_time":       &nowStr,
+			"issue_desc":     issueDesc,
+			"assignee_names": step.AssigneeNames,
 		})
 	}
 

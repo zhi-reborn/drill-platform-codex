@@ -111,7 +111,7 @@ func main() {
 	wsManager := websocket.NewManager()
 	go wsManager.Run()
 
-	services := service.NewServices(wsManager)
+	services := service.NewServices(wsManager, redisClient)
 	services.AuthService.SetJWTConfig(cfg.JWT.Secret, cfg.JWT.Expire)
 
 	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret)

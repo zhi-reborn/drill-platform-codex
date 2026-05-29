@@ -92,7 +92,7 @@ func (h *Handler) GetSteps(c *gin.Context) {
 		return
 	}
 
-	steps = repository.EnrichAssigneeNames(steps)
+	steps = h.drillService.EnrichStepsWithAssigneeNames(steps)
 	response.Success(c, steps)
 }
 

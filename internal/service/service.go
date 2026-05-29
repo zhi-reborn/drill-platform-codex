@@ -17,7 +17,7 @@ type Services struct {
 	wsManager         *websocket.Manager
 }
 
-func NewServices(wsManager *websocket.Manager) *Services {
+func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Services {
 	userRepo := repository.NewUserRepo()
 	templateRepo := repository.NewTemplateRepo()
 	drillRepo := repository.NewDrillRepo()
@@ -36,16 +36,23 @@ func NewServices(wsManager *websocket.Manager) *Services {
 		wsManager,
 		notificationService,
 	)
+	adapter.SetRedis(redisClient)
 
 	engine.SetCallbacks(adapter)
 	engine.SetStepLoader(adapter)
 	adapter.SetupEventSubscriptions(engine)
 
+	drillService := NewDrillService(drillRepo, templateRepo, stepRepo, userRepo)
+	drillService.SetRedis(redisClient)
+
+	taskService := NewTaskService(stepRepo)
+	taskService.SetRedis(redisClient)
+
 	s := &Services{
 		AuthService:       NewAuthService(userRepo),
 		TemplateService:   NewTemplateService(templateRepo),
-		DrillService:      NewDrillService(drillRepo, templateRepo, stepRepo, userRepo),
-		TaskService:       NewTaskService(stepRepo),
+		DrillService:      drillService,
+		TaskService:       taskService,
 		DisplayService:    NewDisplayService(drillRepo, stepRepo),
 		ReportService:     NewReportService(drillRepo, stepRepo),
 		NotificationService: notificationService,

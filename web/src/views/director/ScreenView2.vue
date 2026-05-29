@@ -1167,8 +1167,11 @@ function handleWSMessage(msg: any) {
   const stepName = payload.step_name || payload.stepName || ''
   const phaseName = payload.phase_name || payload.phaseName || ''
 
+  // 心跳忽略
+  if (event === 'ping' || event === 'pong') return
+
   if (['drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated'].includes(event)) {
-    scheduleRefresh('drill')
+    scheduleRefresh('drill', 'logs')
     if (event === 'drill_started') addLog('info', '▶', '演练已开始')
     else if (event === 'drill_paused') addLog('warn', '⏸', '演练已暂停')
     else if (event === 'drill_resumed') addLog('info', '▶', '演练已恢复')
@@ -1176,16 +1179,18 @@ function handleWSMessage(msg: any) {
     else if (event === 'drill_terminated') addLog('error', '⏹', '演练已结束')
   }
 
-  if (['step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
-    scheduleRefresh('steps')
+  // 步骤事件：增量更新本地数据，不调 API
+  if (event.startsWith('step_')) {
+    patchLocalStep(payload)
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
-    const label = logLabel(event)
-    const logType = event === 'step_timeout' ? 'warn' : event === 'step_issue' ? 'error' : 'info'
-    addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
-  }
-
-  if (event === 'step_started') {
-    scheduleRefresh('steps')
+    if (event === 'step_started') {
+      addLog('info', '●', `${phasePrefix}${stepName} 已开始`)
+    } else if (['step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
+      const label = logLabel(event)
+      const logType = event === 'step_timeout' ? 'warn' : event === 'step_issue' ? 'error' : 'info'
+      addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
+    }
+    return
   }
 
   if (event === 'timeout_warning') {
@@ -1193,6 +1198,29 @@ function handleWSMessage(msg: any) {
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
     addLog('warn', '⏰', `${phasePrefix}${stepName} 剩余 ${remaining} 秒`)
   }
+}
+
+// 增量更新本地步骤数据（不调 API）
+function patchLocalStep(payload: any) {
+  const stepId = payload.step_id || payload.stepId
+  if (!stepId) return
+
+  const newStatus = payload.new_status || payload.newStatus
+  if (!newStatus) return
+
+  const idx = steps.value.findIndex((s: StepInstance) => s.id === stepId)
+  if (idx === -1) return
+
+  const step = { ...steps.value[idx] }
+  step.status = newStatus
+  if (payload.start_time) step.start_time = payload.start_time
+  if (payload.end_time) step.end_time = payload.end_time
+  if (payload.executor) step.assignee_names = payload.executor
+  if (payload.comment) step.remark = payload.comment
+
+  const newSteps = [...steps.value]
+  newSteps[idx] = step
+  steps.value = newSteps
 }
 
 function logLabel(event: string): string {
@@ -1964,6 +1992,18 @@ function fmtTime(ts: string): string {
   color: #C8D6E5;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-user {
+  color: #5A7A9A;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* 日志 */
+.rp-logs {
+  flex: 1;
   white-space: nowrap;
 }
 

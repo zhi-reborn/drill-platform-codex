@@ -624,7 +624,9 @@ function getCountdown(timeoutAt: string): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-// WebSocket 实时刷新
+// WebSocket 实时刷新 — 区分事件类型，步骤事件增量更新
+let logDebounceTimer: number | null = null
+
 function connectWebSocket() {
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
@@ -632,8 +634,14 @@ function connectWebSocket() {
   const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
 
   ws = new WebSocket(wsUrl)
-  ws.onmessage = () => {
-    loadDrillData()
+  ws.onmessage = (ev: MessageEvent) => {
+    try {
+      const msg = JSON.parse(ev.data)
+      handleWSMessage(msg)
+    } catch {
+      // 解析失败时兜底全量刷新
+      loadDrillData()
+    }
   }
   ws.onerror = () => {
     startFallbackPolling()
@@ -643,6 +651,75 @@ function connectWebSocket() {
       startFallbackPolling()
     }
   }
+}
+
+function handleWSMessage(msg: { event_type?: string; event?: string; payload?: any }) {
+  const event = msg.event_type || msg.event || ''
+  const payload = msg.payload || {}
+
+  // 心跳忽略
+  if (event === 'ping' || event === 'pong') return
+
+  // 步骤事件：增量更新本地步骤数据
+  if (event.startsWith('step_')) {
+    patchLocalStep(payload)
+    // 日志防抖刷新（300ms 内合并多次步骤变更）
+    if (logDebounceTimer) clearTimeout(logDebounceTimer)
+    logDebounceTimer = window.setTimeout(() => {
+      logDebounceTimer = null
+      refreshLogs()
+    }, 300)
+    return
+  }
+
+  // 演练状态变更：刷新实例详情 + 日志
+  if (event.startsWith('drill_')) {
+    refreshInstanceDetail()
+    refreshLogs()
+    return
+  }
+
+  // 其他事件：只刷新日志
+  refreshLogs()
+}
+
+// 增量更新本地步骤数据（不调 API）
+function patchLocalStep(payload: any) {
+  const stepId = payload.step_id || payload.stepId
+  if (!stepId) return
+
+  const idx = steps.value.findIndex(s => s.id === stepId)
+  if (idx === -1) return
+
+  const newStatus = payload.new_status || payload.newStatus
+  if (!newStatus) return
+
+  const step = { ...steps.value[idx] }
+  step.status = newStatus
+  if (payload.start_time) step.start_time = payload.start_time
+  if (payload.end_time) step.end_time = payload.end_time
+  if (payload.timeout_at) step.timeout_at = payload.timeout_at
+  if (payload.assignee_names) step.assignee_names = payload.assignee_names
+  if (payload.remark) step.remark = payload.remark
+  if (payload.issue_desc) step.issue_desc = payload.issue_desc
+
+  const newSteps = [...steps.value]
+  newSteps[idx] = step
+  steps.value = newSteps
+}
+
+// 只刷新实例详情（1 个 API）
+async function refreshInstanceDetail() {
+  try {
+    instance.value = await drillApi.getDetail(drillId.value)
+  } catch { /* 静默失败 */ }
+}
+
+// 只刷新日志（1 个 API）
+async function refreshLogs() {
+  try {
+    logs.value = await drillApi.getLogs(drillId.value)
+  } catch { /* 静默失败 */ }
 }
 
 function startFallbackPolling() {

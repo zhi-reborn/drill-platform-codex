@@ -93,7 +93,7 @@ const (
 	MaxMessageSize = 4096             // 最大消息大小 (4KB)
 )
 
-// 步骤状态变更 Payload 结构
+// 步骤状态变更 Payload 结构（携带完整步骤数据，支持前端增量更新）
 type StepChangePayload struct {
 	DrillID        uint   `json:"drill_id"`
 	StepID         uint   `json:"step_id"`
@@ -104,6 +104,14 @@ type StepChangePayload struct {
 	NewStatus      string `json:"new_status"`
 	Executor       string `json:"executor,omitempty"`
 	Comment        string `json:"comment,omitempty"`
+
+	// 扩展字段：支持前端增量更新，无需额外 API 请求
+	StartTime   *string `json:"start_time,omitempty"`   // ISO8601
+	EndTime     *string `json:"end_time,omitempty"`     // ISO8601
+	TimeoutAt   *string `json:"timeout_at,omitempty"`   // ISO8601
+	Remark      string  `json:"remark,omitempty"`
+	IssueDesc   string  `json:"issue_desc,omitempty"`
+	AssigneeNames string `json:"assignee_names,omitempty"`
 }
 
 // 超时预警 Payload 结构

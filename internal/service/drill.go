@@ -24,6 +24,7 @@ type DrillService struct {
 	adapter             *DrillFlowAdapter
 	wsManager           *websocket.Manager
 	notificationService *NotificationService
+	redis               RedisClient
 }
 
 func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.TemplateRepo, stepRepo *repository.StepRepo, userRepo *repository.UserRepo) *DrillService {
@@ -33,6 +34,10 @@ func NewDrillService(drillRepo *repository.DrillRepo, templateRepo *repository.T
 		stepRepo:     stepRepo,
 		userRepo:     userRepo,
 	}
+}
+
+func (s *DrillService) SetRedis(redis RedisClient) {
+	s.redis = redis
 }
 
 func (s *DrillService) SetEngine(engine *flowengine.Engine, adapter *DrillFlowAdapter) {
@@ -121,7 +126,77 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 }
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
-	return s.stepRepo.FindStepsByDrillID(id)
+	if steps, ok := GetCachedSteps(s.redis, id); ok {
+		return steps, nil
+	}
+	steps, err := s.stepRepo.FindStepsByDrillID(id)
+	if err != nil {
+		return nil, err
+	}
+	SetCachedSteps(s.redis, id, steps)
+	return steps, nil
+}
+
+func (s *DrillService) EnrichStepsWithAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
+	allIDs := make(map[uint64]bool)
+	for i := range steps {
+		if steps[i].AssigneeIDs == "" || steps[i].AssigneeIDs == "[]" {
+			continue
+		}
+		var ids []uint64
+		if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil {
+			for _, id := range ids {
+				allIDs[id] = true
+			}
+		}
+	}
+	if len(allIDs) == 0 {
+		return steps
+	}
+
+	ids := make([]uint64, 0, len(allIDs))
+	for id := range allIDs {
+		ids = append(ids, id)
+	}
+
+	nameMap := GetCachedUserNames(s.redis, ids)
+	if nameMap == nil {
+		var users []entity.User
+		repository.DB.Where("id IN ?", ids).Find(&users)
+		nameMap = make(map[uint64]string, len(users))
+		for _, u := range users {
+			nameMap[u.ID] = u.RealName
+		}
+		SetCachedUserNames(s.redis, users)
+	}
+
+	for i := range steps {
+		if steps[i].AssigneeIDs == "" || steps[i].AssigneeIDs == "[]" {
+			continue
+		}
+		var ids []uint64
+		if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil && len(ids) > 0 {
+			var names []string
+			for _, id := range ids {
+				if n, ok := nameMap[id]; ok {
+					names = append(names, n)
+				}
+			}
+			steps[i].AssigneeNames = namesJoin(names)
+		}
+	}
+	return steps
+}
+
+func namesJoin(names []string) string {
+	result := ""
+	for i, n := range names {
+		if i > 0 {
+			result += ", "
+		}
+		result += n
+	}
+	return result
 }
 
 func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*entity.DrillInstance, error) {

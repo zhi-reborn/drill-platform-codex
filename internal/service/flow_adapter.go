@@ -31,6 +31,7 @@ type DrillFlowAdapter struct {
 	wsManager           *websocket.Manager
 	notificationService *NotificationService
 	engine              *flowengine.Engine
+	redis               RedisClient
 
 	mu       sync.RWMutex
 	contexts map[int64]drillContext
@@ -55,6 +56,10 @@ func NewDrillFlowAdapter(
 		notificationService: notificationService,
 		contexts:            make(map[int64]drillContext),
 	}
+}
+
+func (a *DrillFlowAdapter) SetRedis(redis RedisClient) {
+	a.redis = redis
 }
 
 func (a *DrillFlowAdapter) RegisterDrillContext(flowInstID int64, ctx drillContext) {
@@ -467,6 +472,12 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 	_ = gin.H{}
 
 	if a.wsManager != nil {
+		startTimeStr := now.Format(time.RFC3339)
+		var timeoutAtStr *string
+		if timeoutAt != nil && !timeoutAt.IsZero() {
+			s := timeoutAt.Format(time.RFC3339)
+			timeoutAtStr = &s
+		}
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(stepInst.ID),
@@ -475,6 +486,15 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusPending),
 			NewStatus:      string(flowengine.StepStatusRunning),
+			StartTime:      &startTimeStr,
+			TimeoutAt:      timeoutAtStr,
+			AssigneeNames:  stepInst.AssigneeNames,
+		})
+		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
+			"status":         string(flowengine.StepStatusRunning),
+			"start_time":     &startTimeStr,
+			"timeout_at":     timeoutAtStr,
+			"assignee_names": stepInst.AssigneeNames,
 		})
 	}
 
@@ -543,6 +563,12 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 	}
 
 	if a.wsManager != nil {
+		startTimeStr := ""
+		if stepInst.StartTime != nil {
+			startTimeStr = stepInst.StartTime.Format(time.RFC3339)
+		}
+		endTimeStr := now.Format(time.RFC3339)
+		remarkStr, _ := payload["remark"].(string)
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(stepInst.ID),
@@ -551,6 +577,17 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusCompleted),
+			StartTime:      &startTimeStr,
+			EndTime:        &endTimeStr,
+			Remark:         remarkStr,
+			AssigneeNames:  stepInst.AssigneeNames,
+		})
+		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
+			"status":         string(flowengine.StepStatusCompleted),
+			"start_time":     &startTimeStr,
+			"end_time":       &endTimeStr,
+			"remark":         remarkStr,
+			"assignee_names": stepInst.AssigneeNames,
 		})
 	}
 
@@ -695,12 +732,14 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 	}
 
 	if a.wsManager != nil {
+		endTimeStr := now.Format(time.RFC3339)
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(parentInst.ID),
 			StepName:       parentInst.Name,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusCompleted),
+			EndTime:        &endTimeStr,
 		})
 	}
 
@@ -748,12 +787,14 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 	})
 
 	if a.wsManager != nil {
+		endTimeStr := at.Format(time.RFC3339)
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(parentInst.ID),
 			StepName:       parentInst.Name,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(status),
+			EndTime:        &endTimeStr,
 		})
 	}
 
@@ -807,6 +848,11 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 	}
 
 	if a.wsManager != nil {
+		startTimeStr := ""
+		if stepInst.StartTime != nil {
+			startTimeStr = stepInst.StartTime.Format(time.RFC3339)
+		}
+		endTimeStr := now.Format(time.RFC3339)
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(stepInst.ID),
@@ -815,6 +861,15 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusTimeout),
+			StartTime:      &startTimeStr,
+			EndTime:        &endTimeStr,
+			AssigneeNames:  stepInst.AssigneeNames,
+		})
+		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
+			"status":         string(flowengine.StepStatusTimeout),
+			"start_time":     &startTimeStr,
+			"end_time":       &endTimeStr,
+			"assignee_names": stepInst.AssigneeNames,
 		})
 	}
 
@@ -875,7 +930,14 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 		drillName = ctx.Name
 	}
 
+	nw := time.Now()
+
 	if a.wsManager != nil {
+		startTimeStr := ""
+		if stepInst.StartTime != nil {
+			startTimeStr = stepInst.StartTime.Format(time.RFC3339)
+		}
+		endTimeStr := nw.Format(time.RFC3339)
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(stepInst.ID),
@@ -884,10 +946,20 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusIssue),
+			StartTime:      &startTimeStr,
+			EndTime:        &endTimeStr,
+			IssueDesc:      issueDesc,
+			AssigneeNames:  stepInst.AssigneeNames,
+		})
+		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
+			"status":         string(flowengine.StepStatusIssue),
+			"start_time":     &startTimeStr,
+			"end_time":       &endTimeStr,
+			"issue_desc":     issueDesc,
+			"assignee_names": stepInst.AssigneeNames,
 		})
 	}
 
-	nw := time.Now()
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(map[string]interface{}{
 		"status":     string(flowengine.StepStatusIssue),
 		"issue_desc": issueDesc,
