@@ -11,7 +11,6 @@ import (
 
 type Manager struct {
 	Channels   map[string]*Channel
-	Broadcast  chan []byte
 	Register   chan *Client
 	Unregister chan *Client
 	Mu         sync.RWMutex
@@ -24,7 +23,6 @@ func NewManager() *Manager {
 			ChannelTasks:   NewChannel(ChannelTasks),
 			ChannelControl: NewChannel(ChannelControl),
 		},
-		Broadcast:  make(chan []byte, 256),
 		Register:   make(chan *Client, 256),
 		Unregister: make(chan *Client, 256),
 	}
@@ -51,20 +49,6 @@ func (m *Manager) Run() {
 				log.Printf("客户端 [%s] 从通道 [%s] 注销", client.ID, client.Type)
 			}
 			m.Mu.Unlock()
-
-		case message := <-m.Broadcast:
-			m.Mu.RLock()
-			for _, ch := range m.Channels {
-				for _, client := range ch.clients {
-					select {
-					case client.Send <- message:
-					default:
-						close(client.Send)
-						ch.RemoveClient(client)
-					}
-				}
-			}
-			m.Mu.RUnlock()
 		}
 	}
 }
@@ -81,18 +65,18 @@ func (m *Manager) GetStats() map[string]interface{} {
 }
 
 func extractUserID(c *gin.Context) uint {
-	userID, exists := c.Get("userID")
-	if !exists {
-		return 0
+	// JWTAuth 中间件将 userID 存入 "user_id_int"（uint64 类型）
+	if v, exists := c.Get("user_id_int"); exists {
+		switch val := v.(type) {
+		case uint64:
+			return uint(val)
+		case uint:
+			return val
+		case float64:
+			return uint(val)
+		}
 	}
-	switch v := userID.(type) {
-	case uint:
-		return v
-	case float64:
-		return uint(v)
-	default:
-		return 0
-	}
+	return 0
 }
 
 func generateClientID() string {

@@ -94,6 +94,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	}
 
 	ws := r.Group("/ws")
+	ws.Use(jwtAuth)
 	{
 		ws.GET("/display/:drillId", wsManager.HandleDisplay)
 		ws.GET("/tasks", wsManager.HandleTasks)
@@ -109,7 +110,27 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// 允许同源请求和常见开发来源
+		allowedOrigins := []string{
+			"http://localhost:5173",
+			"http://localhost:8080",
+			"https://localhost:5173",
+			"https://localhost:8080",
+			"http://127.0.0.1:5173",
+			"http://127.0.0.1:8080",
+		}
+		// 同源请求：Origin 与 Host 匹配
+		if origin == "" || origin == "http://"+c.Request.Host || origin == "https://"+c.Request.Host {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			for _, allowed := range allowedOrigins {
+				if origin == allowed {
+					c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {

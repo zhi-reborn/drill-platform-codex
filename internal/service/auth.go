@@ -22,7 +22,7 @@ type AuthService struct {
 func NewAuthService(userRepo *repository.UserRepo) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
-		jwtSecret: "your-secret-key-change-in-production",
+		jwtSecret: "",
 		jwtExpire: 24 * time.Hour,
 	}
 }
@@ -43,17 +43,6 @@ func (s *AuthService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, errors.New("密码错误")
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, errors.New("密码错误")
-	}
-
-	if user.Status != 1 {
-		return nil, errors.New("账户已被禁用")
 	}
 
 	if user.Status != 1 {

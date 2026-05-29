@@ -64,10 +64,10 @@ func main() {
 		"../../configs/config.yaml",
 		"/data/opencode/drill-platform/configs/config.yaml",
 	}
-	
+
 	var cfg *Config
 	var err error
-	
+
 	for _, path := range configPaths {
 		cfg, err = loadConfig(path)
 		if err == nil {
@@ -75,7 +75,7 @@ func main() {
 			break
 		}
 	}
-	
+
 	if err != nil {
 		log.Fatalf("加载配置失败：%v", err)
 	}

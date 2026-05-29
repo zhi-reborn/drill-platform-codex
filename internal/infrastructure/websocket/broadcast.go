@@ -2,16 +2,6 @@ package websocket
 
 import "encoding/json"
 
-func (m *Manager) BroadcastMessage(msg WSMessage) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	m.Broadcast <- data
-	return nil
-}
-
 func (m *Manager) BroadcastToDrill(drillID uint, msg WSMessage) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -24,7 +14,8 @@ func (m *Manager) BroadcastToDrill(drillID uint, msg WSMessage) error {
 
 func (m *Manager) BroadcastToDrillRaw(drillID uint, data []byte) {
 	m.Mu.RLock()
-	defer m.Mu.RUnlock()
+	// 先收集需要慢速删除的客户端，避免在 RLock 下修改 map
+	var slowClients []*Client
 
 	for _, ch := range m.Channels {
 		clients := ch.GetClientsByDrill(drillID)
@@ -32,10 +23,22 @@ func (m *Manager) BroadcastToDrillRaw(drillID uint, data []byte) {
 			select {
 			case c.Send <- data:
 			default:
-				close(c.Send)
-				delete(ch.clients, c.ID)
+				// 慢客户端：不关闭 Send channel（避免 WritePump panic），只标记待移除
+				slowClients = append(slowClients, c)
 			}
 		}
+	}
+	m.Mu.RUnlock()
+
+	// 释放 RLock 后，再处理慢客户端移除（需要写锁）
+	if len(slowClients) > 0 {
+		m.Mu.Lock()
+		for _, c := range slowClients {
+			if ch, ok := m.Channels[c.Type]; ok {
+				ch.RemoveClient(c)
+			}
+		}
+		m.Mu.Unlock()
 	}
 }
 
@@ -51,7 +54,7 @@ func (m *Manager) BroadcastToUser(userID uint, msg WSMessage) error {
 
 func (m *Manager) BroadcastToUserRaw(userID uint, data []byte) {
 	m.Mu.RLock()
-	defer m.Mu.RUnlock()
+	var slowClients []*Client
 
 	if ch, ok := m.Channels[ChannelTasks]; ok {
 		clients := ch.GetClientsByUser(userID)
@@ -59,10 +62,20 @@ func (m *Manager) BroadcastToUserRaw(userID uint, data []byte) {
 			select {
 			case c.Send <- data:
 			default:
-				close(c.Send)
+				slowClients = append(slowClients, c)
+			}
+		}
+	}
+	m.Mu.RUnlock()
+
+	if len(slowClients) > 0 {
+		m.Mu.Lock()
+		for _, c := range slowClients {
+			if ch, ok := m.Channels[c.Type]; ok {
 				ch.RemoveClient(c)
 			}
 		}
+		m.Mu.Unlock()
 	}
 }
 

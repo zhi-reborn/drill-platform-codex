@@ -99,7 +99,33 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		// 验证 Origin 头，防止跨站 WebSocket 劫持
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// 非浏览器或无 Origin 头的请求，默认放行
+			return true
+		}
+		// 同源检查（代理场景下 Host 可能已变更，故同时检查白名单）
+		host := r.Host
+		if origin == "https://"+host || origin == "http://"+host ||
+			origin == "https://"+host+"/" || origin == "http://"+host+"/" {
+			return true
+		}
+		// 开发环境来源白名单
+		allowedOrigins := []string{
+			"http://localhost:5173",
+			"http://localhost:8080",
+			"https://localhost:5173",
+			"https://localhost:8080",
+			"http://127.0.0.1:5173",
+			"http://127.0.0.1:8080",
+		}
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				return true
+			}
+		}
+		return false
 	},
 }
 

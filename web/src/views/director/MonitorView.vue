@@ -353,6 +353,7 @@ import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
+import { useAuthStore } from '@/stores/auth'
 
 const activePhase = ref<string>('')
 const selectedStep = ref<StepInstance | null>(null)
@@ -627,7 +628,8 @@ function getCountdown(timeoutAt: string): string {
 function connectWebSocket() {
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}`
+  const authStore = useAuthStore()
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
 
   ws = new WebSocket(wsUrl)
   ws.onmessage = () => {

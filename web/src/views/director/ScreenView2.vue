@@ -1126,8 +1126,10 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let wsReconnectCount = 0
 
 function connectWS() {
+  const id = drillId.value
+  if (!id || isNaN(id)) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const url = `${proto}://${location.host}/ws/display/${drillId.value}`
+  const url = `${proto}://${location.host}/ws/display/${id}?token=${authStore.token}`
   ws = new WebSocket(url)
 
   ws.onopen = () => {

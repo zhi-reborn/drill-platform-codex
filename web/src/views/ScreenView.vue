@@ -150,6 +150,7 @@ import * as echarts from 'echarts'
 import type { StepInstance, StepInstanceLog } from '@/types/instance'
 import type { DrillInstance } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const loading = ref(true)
@@ -313,7 +314,8 @@ function handleRetry() {
 function connectWebSocket() {
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}`
+  const authStore = useAuthStore()
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
 
   ws = new WebSocket(wsUrl)
   ws.onmessage = (event) => {
