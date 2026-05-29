@@ -104,7 +104,12 @@ func (r *TemplateRepo) UpdateSteps(templateID uint64, steps []entity.StepTemplat
 }
 
 func (r *TemplateRepo) Delete(id uint64) error {
-	return DB.Delete(&entity.DrillTemplate{}, id).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("drill_template_id = ?", id).Delete(&entity.StepTemplate{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&entity.DrillTemplate{}, id).Error
+	})
 }
 
 func (r *TemplateRepo) Clone(id uint64) (*entity.DrillTemplate, error) {

@@ -1,4 +1,6 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+// Full import kept — 7 chart types used (line/bar/pie/gauge/radar/heatmap/custom)
+// plus many components make tree-shaking ROI marginal. Already isolated in manualChunk.
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { useElementSize } from '@vueuse/core'

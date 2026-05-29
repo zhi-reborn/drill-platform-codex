@@ -33,10 +33,10 @@ type StepInstance struct {
 	ID              uint64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	DrillInstanceID uint64     `gorm:"type:bigint unsigned;not null;column:drill_instance_id;index:idx_drill_step" json:"drill_instance_id"`
 	ParentStepID    *uint64    `gorm:"type:bigint unsigned;column:parent_step_id" json:"parent_step_id"`
-	StepTemplateID  uint64     `gorm:"type:bigint unsigned;not null;column:step_template_id" json:"step_template_id"`
+	StepTemplateID  uint64     `gorm:"type:bigint unsigned;not null;column:step_template_id;index:idx_step_template_id" json:"step_template_id"`
 	Name            string     `gorm:"type:varchar(128);not null;column:name" json:"name"`
 	Seq             int        `gorm:"type:int;not null;column:seq" json:"seq"`
-	Status          string     `gorm:"type:varchar(32);not null;default:pending;column:status;index:idx_drill_step" json:"status"`
+	Status          string     `gorm:"type:varchar(32);not null;default:pending;column:status;index:idx_drill_step;index:idx_step_status" json:"status"`
 	AssigneeIDs     string     `gorm:"type:json;not null;column:assignee_ids" json:"assignee_ids"`
 	ActualOperator  *uint64    `gorm:"type:bigint unsigned;column:actual_operator" json:"actual_operator"`
 	AssigneeNames   string     `gorm:"-" json:"assignee_names"`

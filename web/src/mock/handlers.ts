@@ -117,7 +117,7 @@ async function handleMockRequest(
       return createErrorResponse('用户不存在', 401)
     }
 
-    if (password !== 'admin123' && password !== 'password123') {
+    if (!password || password.length < 1) {
       return createErrorResponse('密码错误', 401)
     }
 

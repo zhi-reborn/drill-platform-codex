@@ -35,7 +35,6 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	{
 		v1.POST("/auth/login", authHandler.Login)
 		v1.GET("/auth/dev-users", authHandler.ListUsers)
-
 		v1.Use(jwtAuth)
 		{
 			v1.GET("/auth/me", authHandler.GetCurrentUser)

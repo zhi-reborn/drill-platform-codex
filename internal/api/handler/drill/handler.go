@@ -43,9 +43,17 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
+	userIDs := make([]uint64, 0, len(drills))
+	for _, d := range drills {
+		if d.CreatedBy > 0 {
+			userIDs = append(userIDs, d.CreatedBy)
+		}
+	}
+	userMap, _ := h.drillService.GetUsersByIDs(userIDs)
+
 	for i := range drills {
-		if user, err := h.drillService.GetUserByID(drills[i].CreatedBy); err == nil {
-			drills[i].CreatedByName = user.RealName
+		if u, ok := userMap[drills[i].CreatedBy]; ok {
+			drills[i].CreatedByName = u.RealName
 		}
 		if drills[i].Template.ID != 0 {
 			drills[i].TemplateName = drills[i].Template.Name
@@ -97,7 +105,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	drill, err := h.drillService.Create(&req, middleware.GetUserID(c))
 	if err != nil {
-		response.InternalError(c, "创建演练失败："+err.Error())
+		response.InternalError(c, "创建演练失败")
 		return
 	}
 
@@ -112,7 +120,7 @@ func (h *Handler) Start(c *gin.Context) {
 	}
 
 	if err := h.drillService.Start(id); err != nil {
-		response.BadRequest(c, err.Error())
+		response.BadRequest(c, "请求参数错误")
 		return
 	}
 
@@ -127,7 +135,7 @@ func (h *Handler) Pause(c *gin.Context) {
 	}
 
 	if err := h.drillService.Pause(id); err != nil {
-		response.BadRequest(c, err.Error())
+		response.BadRequest(c, "请求参数错误")
 		return
 	}
 
@@ -142,7 +150,7 @@ func (h *Handler) Resume(c *gin.Context) {
 	}
 
 	if err := h.drillService.Resume(id); err != nil {
-		response.BadRequest(c, err.Error())
+		response.BadRequest(c, "请求参数错误")
 		return
 	}
 
@@ -157,7 +165,7 @@ func (h *Handler) Terminate(c *gin.Context) {
 	}
 
 	if err := h.drillService.Terminate(id); err != nil {
-		response.BadRequest(c, err.Error())
+		response.BadRequest(c, "请求参数错误")
 		return
 	}
 
@@ -188,7 +196,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.drillService.Delete(id); err != nil {
-		response.InternalError(c, "删除演练失败："+err.Error())
+		response.InternalError(c, "删除演练失败")
 		return
 	}
 
@@ -226,15 +234,15 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 		err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
 		if err == flowengine.ErrInstanceNotFound {
 			if recErr := h.drillService.Recover(id); recErr != nil {
-				response.InternalError(c, "恢复演练状态失败："+recErr.Error())
+				response.InternalError(c, "恢复演练状态失败")
 				return
 			}
 			if err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
-				response.InternalError(c, err.Error())
+				response.InternalError(c, "内部错误")
 				return
 			}
 		} else if err != nil {
-			response.InternalError(c, err.Error())
+			response.InternalError(c, "内部错误")
 			return
 		}
 	}
@@ -278,15 +286,15 @@ func (h *Handler) SkipStep(c *gin.Context) {
 	err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败："+recErr.Error())
+			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
 		if err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, err.Error())
+			response.InternalError(c, "内部错误")
 			return
 		}
 	} else if err != nil {
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 
@@ -332,15 +340,15 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 	err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败："+recErr.Error())
+			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
 		if err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, err.Error())
+			response.InternalError(c, "内部错误")
 			return
 		}
 	} else if err != nil {
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 
@@ -436,15 +444,15 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 	err = h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败："+recErr.Error())
+			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
 		if err = h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, err.Error())
+			response.InternalError(c, "内部错误")
 			return
 		}
 	} else if err != nil {
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 

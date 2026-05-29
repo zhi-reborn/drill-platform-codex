@@ -35,7 +35,7 @@ func (h *Handler) Login(c *gin.Context) {
 		case "账户已被禁用":
 			response.Forbidden(c, "账户已被禁用")
 		default:
-			response.InternalError(c, err.Error())
+			response.InternalError(c, "内部错误")
 		}
 		return
 	}
@@ -65,7 +65,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 
 	users, total, err := h.authService.ListUsersPaginated(query.Page, query.PageSize, query.Role)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, gin.H{
@@ -79,7 +79,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 func (h *Handler) GetDepartments(c *gin.Context) {
 	departments, err := h.authService.GetDepartments()
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, departments)
@@ -98,7 +98,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 			response.NotFound(c, "用户不存在")
 			return
 		}
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, user)
@@ -117,7 +117,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 			response.BadRequest(c, "用户名已存在")
 			return
 		}
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, user)
@@ -142,7 +142,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 			response.NotFound(c, "用户不存在")
 			return
 		}
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, user)
@@ -160,7 +160,7 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 			response.NotFound(c, "用户不存在")
 			return
 		}
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 	response.Success(c, nil)
@@ -186,9 +186,9 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 			response.NotFound(c, "用户不存在")
 			return
 		}
-		response.InternalError(c, err.Error())
+		response.InternalError(c, "内部错误")
 		return
 	}
 
-	response.SuccessWithMessage(c, "密码已重置为: "+req.Password, nil)
+	response.Success(c, nil)
 }

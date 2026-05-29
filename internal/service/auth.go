@@ -101,6 +101,10 @@ func (s *AuthService) GetUserByID(id uint64) (*entity.User, error) {
 	return user, err
 }
 
+func (s *AuthService) GetUsersByIDs(ids []uint64) (map[uint64]*entity.User, error) {
+	return s.userRepo.FindByIDs(ids)
+}
+
 func (s *AuthService) CreateUser(req *dto.CreateUserRequest) (*entity.User, error) {
 	existing, _ := s.userRepo.FindByUsername(req.Username)
 	if existing != nil {

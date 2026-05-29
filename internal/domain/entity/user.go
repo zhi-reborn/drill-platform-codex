@@ -9,8 +9,8 @@ type User struct {
 	RealName     string    `gorm:"type:varchar(64);not null;column:real_name" json:"real_name"`
 	PasswordHash string    `gorm:"type:varchar(256);not null;column:password_hash" json:"-"`
 	Email        string    `gorm:"type:varchar(128);column:email" json:"email"`
-	Role         string    `gorm:"type:varchar(32);not null;column:role" json:"role"`
-	Department   string    `gorm:"type:varchar(64);column:department" json:"department"`
+	Role         string    `gorm:"type:varchar(32);not null;column:role;index:idx_role" json:"role"`
+	Department   string    `gorm:"type:varchar(64);column:department;index:idx_department" json:"department"`
 	Phone        string    `gorm:"type:varchar(20);column:phone" json:"phone"`
 	Status       int8      `gorm:"type:tinyint;not null;default:1;column:status" json:"status"`
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`

@@ -30,7 +30,7 @@ func (h *Handler) List(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	result, err := h.notificationService.GetList(userID, &query)
 	if err != nil {
-		response.InternalError(c, "获取通知列表失败："+err.Error())
+		response.InternalError(c, "获取通知列表失败")
 		return
 	}
 
@@ -48,7 +48,7 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	notification, err := h.notificationService.MarkAsRead(userID, id)
 	if err != nil {
-		response.NotFound(c, err.Error())
+		response.NotFound(c, "通知不存在")
 		return
 	}
 
@@ -58,7 +58,7 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 func (h *Handler) MarkAllAsRead(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if err := h.notificationService.MarkAllAsRead(userID); err != nil {
-		response.InternalError(c, "标记全部已读失败："+err.Error())
+		response.InternalError(c, "标记全部已读失败")
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	userID := middleware.GetUserID(c)
 	if err := h.notificationService.Delete(userID, id); err != nil {
-		response.NotFound(c, err.Error())
+		response.NotFound(c, "通知不存在")
 		return
 	}
 

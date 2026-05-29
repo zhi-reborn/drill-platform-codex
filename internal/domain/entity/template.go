@@ -23,9 +23,9 @@ type DrillTemplate struct {
 	Name        string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
 	Category    string    `gorm:"type:varchar(64);not null;column:category;index:idx_category" json:"category"`
 	Description string    `gorm:"type:text;column:description" json:"description"`
-	Status      int8      `gorm:"type:tinyint;not null;default:1;column:status" json:"status"`
+	Status      int8      `gorm:"type:tinyint;not null;default:1;column:status;index:idx_status" json:"status"`
 	StatusLabel string    `gorm:"-" json:"status_label"`
-	CreatedBy      uint64    `gorm:"type:bigint unsigned;not null;column:created_by" json:"created_by"`
+	CreatedBy      uint64    `gorm:"type:bigint unsigned;not null;column:created_by;index:idx_created_by" json:"created_by"`
 	CreatedByName  string    `gorm:"-" json:"created_by_name"`
 	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`

@@ -35,12 +35,18 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
+	userIDs := make([]uint64, 0, len(templates))
+	for _, t := range templates {
+		if t.CreatedBy > 0 {
+			userIDs = append(userIDs, t.CreatedBy)
+		}
+	}
+	userMap, _ := h.authService.GetUsersByIDs(userIDs)
+
 	for i := range templates {
 		templates[i].StatusLabel = statusToLabel(templates[i].Status)
-		if templates[i].CreatedBy > 0 {
-			if user, err := h.authService.GetUserByID(templates[i].CreatedBy); err == nil && user != nil {
-				templates[i].CreatedByName = user.RealName
-			}
+		if u, ok := userMap[templates[i].CreatedBy]; ok {
+			templates[i].CreatedByName = u.RealName
 		}
 	}
 
@@ -83,7 +89,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	template, err := h.templateService.Create(&req, middleware.GetUserID(c))
 	if err != nil {
-		response.InternalError(c, "创建模板失败："+err.Error())
+		response.InternalError(c, "创建模板失败")
 		return
 	}
 
@@ -175,7 +181,7 @@ func (h *Handler) ToggleStatus(c *gin.Context) {
 	}
 
 	if err := h.templateService.ToggleStatus(id); err != nil {
-		response.InternalError(c, "切换状态失败："+err.Error())
+		response.InternalError(c, "切换状态失败")
 		return
 	}
 
@@ -237,7 +243,7 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 	}
 
 	if err := h.templateService.UpdateSteps(id, steps); err != nil {
-		response.InternalError(c, "更新步骤失败："+err.Error())
+		response.InternalError(c, "更新步骤失败")
 		return
 	}
 
@@ -263,7 +269,7 @@ func (h *Handler) UpdateStepSingle(c *gin.Context) {
 	}
 
 	if err := h.templateService.UpdateStep(templateID, stepID, req); err != nil {
-		response.InternalError(c, "更新步骤失败："+err.Error())
+		response.InternalError(c, "更新步骤失败")
 		return
 	}
 

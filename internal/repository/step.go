@@ -39,14 +39,48 @@ func (r *StepRepo) CreateLogs(logs []entity.DrillInstanceLog) error {
 }
 
 func EnrichAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
+	allIDs := make(map[uint64]bool)
 	for i := range steps {
-		if steps[i].AssigneeIDs != "" && steps[i].AssigneeIDs != "[]" {
-			var ids []uint64
-			if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil && len(ids) > 0 {
-				var names []string
-				DB.Model(&entity.User{}).Where("id IN ?", ids).Pluck("real_name", &names)
-				steps[i].AssigneeNames = namesStr(names)
+		if steps[i].AssigneeIDs == "" || steps[i].AssigneeIDs == "[]" {
+			continue
+		}
+		var ids []uint64
+		if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil {
+			for _, id := range ids {
+				allIDs[id] = true
 			}
+		}
+	}
+
+	if len(allIDs) == 0 {
+		return steps
+	}
+
+	ids := make([]uint64, 0, len(allIDs))
+	for id := range allIDs {
+		ids = append(ids, id)
+	}
+
+	var users []entity.User
+	DB.Where("id IN ?", ids).Find(&users)
+	nameMap := make(map[uint64]string, len(users))
+	for _, u := range users {
+		nameMap[u.ID] = u.RealName
+	}
+
+	for i := range steps {
+		if steps[i].AssigneeIDs == "" || steps[i].AssigneeIDs == "[]" {
+			continue
+		}
+		var ids []uint64
+		if json.Unmarshal([]byte(steps[i].AssigneeIDs), &ids) == nil && len(ids) > 0 {
+			var names []string
+			for _, id := range ids {
+				if n, ok := nameMap[id]; ok {
+					names = append(names, n)
+				}
+			}
+			steps[i].AssigneeNames = namesStr(names)
 		}
 	}
 	return steps

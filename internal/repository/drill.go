@@ -58,9 +58,12 @@ func (r *DrillRepo) CreateLog(log *entity.DrillInstanceLog) error {
 	return DB.Create(log).Error
 }
 
-func (r *DrillRepo) GetLogs(drillID uint64) ([]entity.DrillInstanceLog, error) {
+func (r *DrillRepo) GetLogs(drillID uint64, limit int) ([]entity.DrillInstanceLog, error) {
+	if limit <= 0 {
+		limit = 200
+	}
 	var logs []entity.DrillInstanceLog
-	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC, id DESC").Find(&logs).Error
+	err := DB.Where("drill_instance_id = ?", drillID).Order("created_at DESC, id DESC").Limit(limit).Find(&logs).Error
 	return logs, err
 }
 

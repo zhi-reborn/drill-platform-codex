@@ -7,6 +7,8 @@ import (
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 type stepInfo struct {
@@ -17,6 +19,10 @@ type stepInfo struct {
 }
 
 func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInstance, _ []entity.StepTemplate) {
+	s.computeInstancePreStepIDsTx(instanceSteps, nil, repository.DB)
+}
+
+func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepInstance, _ []entity.StepTemplate, db *gorm.DB) {
 	if len(instanceSteps) == 0 {
 		return
 	}
@@ -46,7 +52,7 @@ func (s *DrillService) computeInstancePreStepIDs(instanceSteps []entity.StepInst
 			ids = []uint64{}
 		}
 		b, _ := json.Marshal(ids)
-		repository.DB.Model(&entity.StepInstance{}).Where("id = ?", id).Update("pre_step_ids", string(b))
+		db.Model(&entity.StepInstance{}).Where("id = ?", id).Update("pre_step_ids", string(b))
 	}
 
 	type group struct {

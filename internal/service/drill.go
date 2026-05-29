@@ -11,6 +11,8 @@ import (
 	"drill-platform/internal/infrastructure/websocket"
 	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 type DrillService struct {
@@ -110,6 +112,10 @@ func (s *DrillService) GetUserByID(id uint64) (*entity.User, error) {
 	return s.userRepo.FindByID(id)
 }
 
+func (s *DrillService) GetUsersByIDs(ids []uint64) (map[uint64]*entity.User, error) {
+	return s.userRepo.FindByIDs(ids)
+}
+
 func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 	return s.drillRepo.FindByID(id)
 }
@@ -128,6 +134,25 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		return nil, errors.New("模板已禁用，无法创建演练")
 	}
 
+	departments := make(map[string]bool)
+	for _, stepTpl := range template.Steps {
+		if _, ok := req.Assignees[stepTpl.ID]; ok {
+			continue
+		}
+		if stepTpl.ExecutorTeam != "" {
+			departments[stepTpl.ExecutorTeam] = true
+		}
+	}
+
+	var deptUsers map[string][]entity.User
+	if len(departments) > 0 {
+		deptList := make([]string, 0, len(departments))
+		for d := range departments {
+			deptList = append(deptList, d)
+		}
+		deptUsers, _ = s.userRepo.FindByDepartments(deptList)
+	}
+
 	drill := &entity.DrillInstance{
 		TemplateID:  req.TemplateID,
 		Name:        req.Name,
@@ -143,78 +168,86 @@ func (s *DrillService) Create(req *dto.CreateDrillRequest, createdBy uint64) (*e
 		}
 	}
 
-	if err := s.drillRepo.Create(drill); err != nil {
-		return nil, err
-	}
+	err = repository.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(drill).Error; err != nil {
+			return err
+		}
 
-	for _, stepTpl := range template.Steps {
-		assigneeIDs := "[]"
-		// 优先使用手动指定的 assignees
-		if userIDs, ok := req.Assignees[stepTpl.ID]; ok && len(userIDs) > 0 {
-			if bytes, _ := json.Marshal(userIDs); bytes != nil {
-				assigneeIDs = string(bytes)
-			}
-		} else if stepTpl.ExecutorTeam != "" {
-			// 按执行组部门自动分配：查找该部门下所有活跃用户
-			var deptUsers []entity.User
-			repository.DB.Where("department = ? AND status = 1", stepTpl.ExecutorTeam).Find(&deptUsers)
-			if len(deptUsers) > 0 {
-				userIDs := make([]uint64, len(deptUsers))
-				for i, u := range deptUsers {
-					userIDs[i] = u.ID
-				}
+		for _, stepTpl := range template.Steps {
+			assigneeIDs := "[]"
+			if userIDs, ok := req.Assignees[stepTpl.ID]; ok && len(userIDs) > 0 {
 				if bytes, _ := json.Marshal(userIDs); bytes != nil {
 					assigneeIDs = string(bytes)
 				}
+			} else if stepTpl.ExecutorTeam != "" {
+				if users, ok := deptUsers[stepTpl.ExecutorTeam]; ok && len(users) > 0 {
+					userIDs := make([]uint64, len(users))
+					for i, u := range users {
+						userIDs[i] = u.ID
+					}
+					if bytes, _ := json.Marshal(userIDs); bytes != nil {
+						assigneeIDs = string(bytes)
+					}
+				}
+			}
+
+			step := entity.StepInstance{
+				DrillInstanceID:          drill.ID,
+				StepTemplateID:           stepTpl.ID,
+				Name:                     stepTpl.Name,
+				Seq:                      stepTpl.Seq,
+				Status:                   "pending",
+				AssigneeIDs:              assigneeIDs,
+				StepType:                 stepTpl.StepType,
+				TimeoutMinutes:           stepTpl.TimeoutMinutes,
+				ParentStepID:             nil,
+				PreStepIDs:               "[]",
+				Phase:                    stepTpl.Phase,
+				PhaseStep:                stepTpl.PhaseStep,
+				DefaultAssigneeRole:      stepTpl.DefaultAssigneeRole,
+				ExecutorTeam:             stepTpl.ExecutorTeam,
+				EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
+				EstimatedStartOffset:     stepTpl.EstimatedStartOffset,
+				JSONAttributes:           stepTpl.JSONAttributes,
+			}
+			if err := tx.Create(&step).Error; err != nil {
+				log.Printf("[ERROR] Failed to create step instance for template step %d: %v", stepTpl.ID, err)
+				return err
 			}
 		}
 
-		step := entity.StepInstance{
-			DrillInstanceID:          drill.ID,
-			StepTemplateID:           stepTpl.ID,
-			Name:                     stepTpl.Name,
-			Seq:                      stepTpl.Seq,
-			Status:                   "pending",
-			AssigneeIDs:              assigneeIDs,
-			StepType:                 stepTpl.StepType,
-			TimeoutMinutes:           stepTpl.TimeoutMinutes,
-			ParentStepID:             nil,
-			PreStepIDs:               "[]",
-			Phase:                    stepTpl.Phase,
-			PhaseStep:                stepTpl.PhaseStep,
-			DefaultAssigneeRole:      stepTpl.DefaultAssigneeRole,
-			ExecutorTeam:             stepTpl.ExecutorTeam,
-			EstimatedDurationMinutes: stepTpl.EstimatedDurationMinutes,
-			EstimatedStartOffset:     stepTpl.EstimatedStartOffset,
-			JSONAttributes:           stepTpl.JSONAttributes,
+		var instanceSteps []entity.StepInstance
+		if err := tx.Where("drill_instance_id = ?", drill.ID).Order("seq ASC").Find(&instanceSteps).Error; err != nil {
+			return err
 		}
-		if err := repository.DB.Create(&step).Error; err != nil {
-			log.Printf("[ERROR] Failed to create step instance for template step %d: %v", stepTpl.ID, err)
-			return nil, err
+
+		tplIDtoInstID := make(map[uint64]uint64)
+		for _, si := range instanceSteps {
+			tplIDtoInstID[si.StepTemplateID] = si.ID
 		}
-	}
 
-	instanceSteps, _ := s.stepRepo.FindStepsByDrillID(drill.ID)
-	tplIDtoInstID := make(map[uint64]uint64)
-	for _, si := range instanceSteps {
-		tplIDtoInstID[si.StepTemplateID] = si.ID
-	}
-
-	tplStepMap := make(map[uint64]entity.StepTemplate)
-	for _, s := range template.Steps {
-		tplStepMap[s.ID] = s
-	}
-	for i := range instanceSteps {
-		tpl := tplStepMap[instanceSteps[i].StepTemplateID]
-		if tpl.ParentStepID != nil && *tpl.ParentStepID > 0 {
-			if instParentID, ok := tplIDtoInstID[*tpl.ParentStepID]; ok {
-				instanceSteps[i].ParentStepID = &instParentID
-				repository.DB.Model(&instanceSteps[i]).Update("parent_step_id", instParentID)
+		tplStepMap := make(map[uint64]entity.StepTemplate)
+		for _, s := range template.Steps {
+			tplStepMap[s.ID] = s
+		}
+		for i := range instanceSteps {
+			tpl := tplStepMap[instanceSteps[i].StepTemplateID]
+			if tpl.ParentStepID != nil && *tpl.ParentStepID > 0 {
+				if instParentID, ok := tplIDtoInstID[*tpl.ParentStepID]; ok {
+					instanceSteps[i].ParentStepID = &instParentID
+					tx.Model(&instanceSteps[i]).Update("parent_step_id", instParentID)
+				}
 			}
 		}
-	}
 
-	s.computeInstancePreStepIDs(instanceSteps, template.Steps)
+		s.computeInstancePreStepIDsTx(instanceSteps, template.Steps, tx)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return s.drillRepo.FindByID(drill.ID)
 }
@@ -459,7 +492,7 @@ func (s *DrillService) Terminate(id uint64) error {
 }
 
 func (s *DrillService) GetLogs(id uint64) ([]entity.DrillInstanceLog, error) {
-	return s.drillRepo.GetLogs(id)
+	return s.drillRepo.GetLogs(id, 0) // 0 → 默认 200 条
 }
 
 func (s *DrillService) Delete(id uint64) error {
