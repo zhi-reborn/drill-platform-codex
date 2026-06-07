@@ -340,7 +340,7 @@ const rootSteps = computed(() => {
 
 // === KPI 计算 ===
 const completedCount = computed(() =>
-  leafSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
+  leafSteps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
 )
 const totalCount = computed(() => leafSteps.value.length)
 const progressPercent = computed(() => {
@@ -388,22 +388,20 @@ const stages = computed(() => {
     return roots.map((root, idx) => {
       const directChildren = childMap.value.get(root.id) || []
       const leaves = collectLeaves(root.id)
+      // 终态判断（completed/skipped/timeout/issue 都视为已结束）
+      const isTerminal = (s: StepInstance) => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)
       // 环节统计：直接子节点（环节级别）
-      const completedPhases = directChildren.filter(c => c.status === 'completed' || c.status === 'skipped').length
+      const completedPhases = directChildren.filter(c => isTerminal(c)).length
       const totalPhases = directChildren.length
       // 步骤统计：叶子节点（实际操作步骤）
-      const completedLeaves = leaves.filter(s => s.status === 'completed' || s.status === 'skipped').length
+      const finishedLeaves = leaves.filter(s => isTerminal(s)).length
       const totalLeaves = leaves.length
       const running = leaves.some(s => s.status === 'running')
       const hasIssue = leaves.some(s => s.status === 'issue' || s.status === 'timeout')
-      const allDone = completedLeaves === totalLeaves && totalLeaves > 0
-      // 前面阶段都完成 → 当前阶段为进行中
-      const prevDone = roots.slice(0, idx).every(r => {
-        const rl = collectLeaves(r.id)
-        return rl.length > 0 && rl.every(l => l.status === 'completed' || l.status === 'skipped')
-      })
-      const isActive = !allDone && prevDone
-      const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (isActive ? 'running' : 'pending')))
+      const allDone = leaves.every(s => isTerminal(s)) && totalLeaves > 0
+      // 部分完成：有已完成的叶子步骤，但不是全部
+      const hasProgress = finishedLeaves > 0 && !allDone
+      const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (hasProgress ? 'running' : 'pending')))
       // 时间范围
       const started = leaves.find(s => s.start_time)?.start_time
       const ended = [...leaves].reverse().find(s => s.end_time)?.end_time
@@ -417,8 +415,8 @@ const stages = computed(() => {
       const segCount = 18
       const segs: string[] = []
       for (let i = 0; i < segCount; i++) {
-        if (i < completedLeaves) segs.push('done')
-        else if (i === completedLeaves && running) segs.push('active')
+        if (i < finishedLeaves) segs.push('done')
+        else if (i === finishedLeaves && running) segs.push('active')
         else if (i < totalLeaves) segs.push('todo')
         else segs.push('empty')
       }
@@ -431,7 +429,7 @@ const stages = computed(() => {
         timeRange,
         completedPhases,
         totalPhases,
-        completedSteps: completedLeaves,
+        completedSteps: finishedLeaves,
         totalSteps: totalLeaves,
         segments: segs,
         team,
@@ -443,22 +441,15 @@ const stages = computed(() => {
   const total = allSteps.length
   const stageCount = Math.min(4, total)
   const perStage = Math.ceil(total / stageCount)
-  const prevAllDone = (idx: number) => {
-    for (let i = 0; i < idx; i++) {
-      const s = allSteps.slice(i * perStage, (i + 1) * perStage)
-      if (!s.length) continue
-      if (!s.every(st => st.status === 'completed' || st.status === 'skipped')) return false
-    }
-    return true
-  }
+  const isTerminal = (s: StepInstance) => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)
   return Array.from({ length: stageCount }).map((_, idx) => {
     const slice = allSteps.slice(idx * perStage, (idx + 1) * perStage)
-    const completed = slice.filter(s => s.status === 'completed' || s.status === 'skipped').length
+    const finished = slice.filter(s => isTerminal(s)).length
     const running = slice.some(s => s.status === 'running')
     const hasIssue = slice.some(s => s.status === 'issue' || s.status === 'timeout')
-    const allDone = completed === slice.length && slice.length > 0
-    const isActive = !allDone && prevAllDone(idx)
-    const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (isActive ? 'running' : 'pending')))
+    const allDone = slice.every(s => isTerminal(s)) && slice.length > 0
+    const hasProgress = finished > 0 && !allDone
+    const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (hasProgress ? 'running' : 'pending')))
     const started = slice.find(s => s.start_time)?.start_time
     const ended = slice.find(s => s.end_time)?.end_time
     let endStr: string | null = ended ?? null
@@ -470,8 +461,8 @@ const stages = computed(() => {
     const segCount = 18
     const segs: string[] = []
     for (let i = 0; i < segCount; i++) {
-      if (i < completed) segs.push('done')
-      else if (i === completed && running) segs.push('active')
+      if (i < finished) segs.push('done')
+      else if (i === finished && running) segs.push('active')
       else if (i < slice.length) segs.push('todo')
       else segs.push('empty')
     }
@@ -484,7 +475,7 @@ const stages = computed(() => {
       timeRange,
       completedPhases: 0,
       totalPhases: 0,
-      completedSteps: completed,
+      completedSteps: finished,
       totalSteps: slice.length,
       segments: segs,
       team,
@@ -674,7 +665,10 @@ async function loadData() {
     loading.value = false
     error.value = null
     tick()
-    connectWebSocket()
+    // 仅在 WebSocket 未连接时建立连接，避免刷新数据时重连导致循环
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      connectWebSocket()
+    }
   } catch (err: any) {
     if (componentDestroyed) return
     error.value = err.message || '加载数据失败'
@@ -720,18 +714,8 @@ function connectWebSocket() {
       const eventType = data.type || data.event_type
       if (!eventType) return
 
-      // 步骤事件：尝试增量更新，避免重拉 3 个 API
-      if (eventType.startsWith('step_')) {
-        applyStepEvent(eventType, data.payload || data.data || {})
-        return
-      }
-      // 演练状态变化：本地更新状态
-      if (eventType.startsWith('drill_')) {
-        applyDrillEvent(eventType, data.payload || data.data || {})
-        return
-      }
-      // 其他需要全量刷新的事件
-      if (REFRESH_EVENTS.has(eventType)) {
+      // 步骤/演练状态变化：全量刷新，确保级联状态（父步骤、阶段）正确更新
+      if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
         loadData()
       }
     } catch (e) { /* ignore */ }

@@ -27,10 +27,38 @@
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+        <!-- 雷达扫描渐变（35° 扇形，从前缘亮到后缘透明） -->
+        <linearGradient id="radar-sweep-grad" gradientUnits="userSpaceOnUse"
+          :x1="cx + outerR * 1.05 * Math.cos(Math.PI / 2 - Math.PI / 7)"
+          :y1="cy - outerR * 1.05 * Math.sin(Math.PI / 2 - Math.PI / 7)"
+          :x2="cx + outerR * 1.05 * Math.cos(Math.PI / 2)"
+          :y2="cy - outerR * 1.05 * Math.sin(Math.PI / 2)">
+          <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.38" />
+          <stop offset="40%" stop-color="#00d4ff" stop-opacity="0.15" />
+          <stop offset="100%" stop-color="#00d4ff" stop-opacity="0" />
+        </linearGradient>
       </defs>
 
       <!-- 中心光晕 -->
       <circle :cx="cx" :cy="cy" :r="innerR" fill="url(#center-glow)" />
+
+      <!-- 同心装饰环 -->
+      <g class="concentric-rings" opacity="0.18">
+        <circle :cx="cx" :cy="cy" :r="innerR * 1.4" fill="none" stroke="#00d4ff" stroke-width="0.5" stroke-dasharray="3 6" />
+        <circle :cx="cx" :cy="cy" :r="(innerR + segR) / 2" fill="none" stroke="#00d4ff" stroke-width="0.5" />
+        <circle :cx="cx" :cy="cy" :r="segR" fill="none" stroke="#00d4ff" stroke-width="0.5" stroke-dasharray="2 4" />
+        <circle :cx="cx" :cy="cy" :r="outerR * 0.92" fill="none" stroke="#00d4ff" stroke-width="0.3" stroke-dasharray="1 5" />
+      </g>
+
+      <!-- 径向网格线（12 条，每 30°） -->
+      <g class="radial-grid" opacity="0.10">
+        <line v-for="i in 12" :key="'rl' + i"
+          :x1="cx + innerR * Math.cos(((i - 1) / 12) * Math.PI * 2)"
+          :y1="cy + innerR * Math.sin(((i - 1) / 12) * Math.PI * 2)"
+          :x2="cx + outerR * 0.96 * Math.cos(((i - 1) / 12) * Math.PI * 2)"
+          :y2="cy + outerR * 0.96 * Math.sin(((i - 1) / 12) * Math.PI * 2)"
+          stroke="#00d4ff" stroke-width="0.5" />
+      </g>
 
       <!-- 外圈装饰刻度（240 条短线） -->
       <g class="ticks">
@@ -57,6 +85,19 @@
           fill="none"
           :stroke-linecap="'butt'"
           :opacity="seg.opacity"
+        />
+      </g>
+
+      <!-- 雷达扫描光束 -->
+      <g class="radar-sweep">
+        <path
+          :d="`M ${cx} ${cy} L ${cx} ${cy - outerR * 1.02} A ${outerR * 1.02} ${outerR * 1.02} 0 0 1 ${cx + outerR * 1.02 * Math.sin(Math.PI / 7)} ${cy - outerR * 1.02 * Math.cos(Math.PI / 7)} Z`"
+          fill="url(#radar-sweep-grad)"
+        />
+        <line
+          :x1="cx" :y1="cy"
+          :x2="cx" :y2="cy - outerR * 1.02"
+          stroke="#00d4ff" stroke-width="1.8" opacity="0.7"
         />
       </g>
 
@@ -282,6 +323,33 @@ function chineseNum(n: number): string {
 @keyframes node-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; filter: drop-shadow(0 0 8px #ff7a00); }
+}
+
+// 雷达扫描旋转（由浏览器合成器线程处理，无需 GPU 硬件）
+.radar-sweep {
+  transform-origin: center;
+  transform-box: view-box;
+  animation: radar-rotate 5s linear infinite;
+  will-change: transform;
+}
+@keyframes radar-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+// 同心环微脉冲
+.concentric-rings {
+  animation: ring-pulse 6s ease-in-out infinite;
+}
+@keyframes ring-pulse {
+  0%, 100% { opacity: 0.18; }
+  50% { opacity: 0.09; }
+}
+
+// 无障碍：减少动画
+@media (prefers-reduced-motion: reduce) {
+  .radar-sweep { animation: none; opacity: 0.3; }
+  .concentric-rings { animation: none; }
 }
 
 .phase-label {

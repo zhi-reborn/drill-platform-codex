@@ -202,121 +202,146 @@
         </div>
       </el-card>
 
-      <!-- 步骤列表 (按 phase 分组) -->
+      <!-- 步骤列表 (树状展示) -->
       <el-card class="steps-card">
         <template #header>
-          <span class="card-title">步骤列表</span>
+          <div class="steps-card-header">
+            <span class="card-title">步骤列表</span>
+            <div class="steps-card-actions">
+              <el-button size="small" @click="expandAllSteps">全部展开</el-button>
+              <el-button size="small" @click="collapseAllSteps">全部折叠</el-button>
+            </div>
+          </div>
         </template>
-        <el-tabs v-model="activePhase" type="card" class="phase-tabs">
-          <el-tab-pane
-            v-for="(group, phase) in phaseGroups"
-            :key="phase"
-            :name="phase"
-          >
-            <template #label>
-              <span class="tab-label">
-                {{ phase }}
-                <el-tag size="small" type="info">{{ group.length }} 步</el-tag>
-              </span>
+        <el-table
+          ref="stepsTableRef"
+          :data="drillStepTree"
+          row-key="id"
+          :tree-props="{ children: 'children' }"
+          :default-expand-all="true"
+          style="width: 100%"
+          size="small"
+        >
+          <el-table-column prop="seq" label="序号" width="55" align="center">
+            <template #default="{ row }">
+              {{ isParentStep(row) && !row._isGroup ? '-' : row.seq }}
             </template>
-            <el-table :data="group" row-key="id" :tree-props="{ children: 'children' }" style="width: 100%" size="small">
-              <el-table-column prop="seq" label="序号" width="55" align="center" />
-              <el-table-column prop="name" label="步骤名" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="step_type" label="类型" width="70" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+          </el-table-column>
+          <el-table-column prop="name" label="步骤名" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-tag v-if="row._isGroup" :type="row._groupType === 'phase' ? '' : 'info'" size="small" class="group-tag">
+                {{ row._groupType === 'phase' ? '阶段' : '环节' }}
+              </el-tag>
+              <el-tag v-else-if="isParentStep(row)" type="info" size="small" class="group-tag">
+                {{ getParentStepLabel(row) }}
+              </el-tag>
+              <span :class="{ 'group-name': row._isGroup || isParentStep(row) }">{{ row.name }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="step_type" label="类型" width="70" align="center">
+            <template #default="{ row }">
+              <template v-if="row._isGroup">-</template>
+              <template v-else>
+                <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+              </template>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="140" align="center">
+            <template #default="{ row }">
+              <template v-if="isParentStep(row)">
+                <span class="parent-status-text">{{ getStepStatusText(row).text }}</span>
+              </template>
+              <template v-else>
+                <DrillStatusBadge :status="row.status" type="step" />
+              </template>
+            </template>
+          </el-table-column>
+          <el-table-column prop="estimated_duration_minutes" label="预计耗时" width="80" align="center">
+            <template #default="{ row }">
+              {{ isParentStep(row) ? '-' : (row.estimated_duration_minutes ? `${row.estimated_duration_minutes}m` : '-') }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
+            <template #default="{ row }">
+              <template v-if="row._isGroup">-</template>
+              <template v-else>
+                <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
+                  {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+                </el-tag>
+              </template>
+            </template>
+          </el-table-column>
+          <el-table-column prop="attributes" label="操作人" width="90" align="center" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ isParentStep(row) ? '-' : (row.attributes?.operator || '-') }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="attributes" label="复核人" width="90" align="center" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ isParentStep(row) ? '-' : (row.attributes?.reviewer || '-') }}
+            </template>
+          </el-table-column>
+          <el-table-column label="实际耗时" width="85" align="center">
+            <template #default="{ row }">
+              {{ isParentStep(row) ? '-' : calculateDuration(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" align="center" fixed="right">
+            <template #default="{ row }">
+              <template v-if="!row._isGroup">
+                <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
+                <template v-if="!isParentStep(row)">
+                  <el-popconfirm
+                    v-if="row.status === 'pending' && row.default_assignee_role === 'director'"
+                    title="确认开始此步骤？"
+                    @confirm="handleStartStep(row)"
+                  >
+                    <template #reference>
+                      <el-button type="primary" link size="small">开始</el-button>
+                    </template>
+                  </el-popconfirm>
+                  <el-button
+                    v-if="['pending', 'running'].includes(row.status)"
+                    type="success"
+                    link
+                    size="small"
+                    @click="handleDirectorComplete(row)"
+                  >完成</el-button>
+                  <el-popconfirm
+                    v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                    title="确认跳过此步骤？"
+                    @confirm="handleSkipStep(row)"
+                  >
+                    <template #reference>
+                      <el-button type="warning" link size="small">跳过</el-button>
+                    </template>
+                  </el-popconfirm>
+                  <el-popconfirm
+                    v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                    title="确认强制完成此步骤？"
+                    @confirm="handleForceComplete(row)"
+                  >
+                    <template #reference>
+                      <el-button type="danger" link size="small">强制完成</el-button>
+                    </template>
+                  </el-popconfirm>
+                  <el-popconfirm
+                    v-if="['timeout', 'completed', 'skipped'].includes(row.status)"
+                    title="确认重新派发此步骤？"
+                    @confirm="handleResumeTask(row)"
+                  >
+                    <template #reference>
+                      <el-button type="primary" link size="small">重新派发</el-button>
+                    </template>
+                  </el-popconfirm>
                 </template>
-              </el-table-column>
-              <el-table-column prop="status" label="状态" width="140" align="center">
-                <template #default="{ row }">
-                  <template v-if="row.children && row.children.length > 0">
-                    {{ getStepStatusText(row).text }}
-                  </template>
-                  <template v-else>
-                    <DrillStatusBadge :status="row.status" type="step" />
-                  </template>
-                </template>
-              </el-table-column>
-              <el-table-column prop="estimated_duration_minutes" label="预计耗时" width="80" align="center">
-                <template #default="{ row }">
-                  {{ row.estimated_duration_minutes ? `${row.estimated_duration_minutes}m` : '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
-                    {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="attributes" label="操作人" width="90" align="center" show-overflow-tooltip>
-                <template #default="{ row }">
-                  {{ row.attributes?.operator || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="attributes" label="复核人" width="90" align="center" show-overflow-tooltip>
-                <template #default="{ row }">
-                  {{ row.attributes?.reviewer || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column label="实际耗时" width="85" align="center">
-                <template #default="{ row }">
-                  {{ calculateDuration(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="220" align="center" fixed="right">
-                <template #default="{ row }">
-                  <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
-                  <template v-if="!isParentStep(row)">
-                    <el-popconfirm
-                      v-if="row.status === 'pending' && row.default_assignee_role === 'director'"
-                      title="确认开始此步骤？"
-                      @confirm="handleStartStep(row)"
-                    >
-                      <template #reference>
-                        <el-button type="primary" link size="small">开始</el-button>
-                      </template>
-                    </el-popconfirm>
-                    <el-button
-                      v-if="['pending', 'running'].includes(row.status)"
-                      type="success"
-                      link
-                      size="small"
-                      @click="handleDirectorComplete(row)"
-                    >完成</el-button>
-                    <el-popconfirm
-                      v-if="['pending', 'running', 'timeout'].includes(row.status)"
-                      title="确认跳过此步骤？"
-                      @confirm="handleSkipStep(row)"
-                    >
-                      <template #reference>
-                        <el-button type="warning" link size="small">跳过</el-button>
-                      </template>
-                    </el-popconfirm>
-                    <el-popconfirm
-                      v-if="['pending', 'running', 'timeout'].includes(row.status)"
-                      title="确认强制完成此步骤？"
-                      @confirm="handleForceComplete(row)"
-                    >
-                      <template #reference>
-                        <el-button type="danger" link size="small">强制完成</el-button>
-                      </template>
-                    </el-popconfirm>
-                    <el-popconfirm
-                      v-if="['timeout', 'completed', 'skipped'].includes(row.status)"
-                      title="确认重新派发此步骤？"
-                      @confirm="handleResumeTask(row)"
-                    >
-                      <template #reference>
-                        <el-button type="primary" link size="small">重新派发</el-button>
-                      </template>
-                    </el-popconfirm>
-                  </template>
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-tab-pane>
-        </el-tabs>
+                <span v-else class="parent-hint">
+                  父任务 · 子任务全部完成后自动完成
+                </span>
+              </template>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
 
       <!-- 步骤详情弹窗 -->
@@ -496,7 +521,7 @@ import { drillApi } from '@/api/modules/drill'
 import { userApi } from '@/api/modules/user'
 import { useAuthStore } from '@/stores/auth'
 
-const activePhase = ref<string>('')
+const stepsTableRef = ref()
 const selectedStep = ref<StepInstance | null>(null)
 const detailVisible = ref(false)
 const detailEditing = ref(false)
@@ -572,100 +597,182 @@ const drillSteps = computed(() => {
   return steps.value.sort((a, b) => a.seq - b.seq)
 })
 
-// 将扁平步骤数据转换为树形结构
-const drillStepTree = computed(() => {
-  const sorted = steps.value.sort((a, b) => a.seq - b.seq)
-  const stepMap = new Map<number, StepInstance & { children?: StepInstance[] }>()
+// 递归收集所有叶子步骤（用于状态聚合）
+function collectLeafSteps(node: any): StepInstance[] {
+  if (!node.children || node.children.length === 0) {
+    return [node]
+  }
+  const leaves: StepInstance[] = []
+  for (const child of node.children) {
+    leaves.push(...collectLeafSteps(child))
+  }
+  return leaves
+}
 
-  // 第一步：初始化所有步骤到 map
+// 将扁平步骤数据转换为树形结构
+// 优先使用 parent_step_id 建立真实的层级关系
+// 仅当数据无层级关系时，才退回到 phase/phase_step 虚拟分组
+const drillStepTree = computed(() => {
+  const sorted = [...steps.value].sort((a, b) => a.seq - b.seq)
+
+  // 建立 step → node 映射
+  const stepMap = new Map<number, any>()
   for (const step of sorted) {
     stepMap.set(step.id, { ...step })
   }
 
-  const roots: (StepInstance & { children?: StepInstance[] })[] = []
-
-  // 第二步：建立父子关系
+  // 通过 parent_step_id 建立父子关系
+  const childIds = new Set<number>()
   for (const step of sorted) {
-    const node = stepMap.get(step.id)!
     if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
       const parent = stepMap.get(step.parent_step_id)!
-      if (!parent.children) {
-        parent.children = []
-      }
-      parent.children.push(node)
-    } else {
-      roots.push(node)
+      if (!parent.children) parent.children = []
+      parent.children.push(stepMap.get(step.id)!)
+      childIds.add(step.id)
     }
+  }
+
+  // 根步骤
+  const rootSteps = sorted.filter(s => !childIds.has(s.id)).map(s => stepMap.get(s.id)!)
+
+  // 判断数据是否已有真实层级：有 parent_step_id 关系的步骤数 > 0
+  const hasHierarchy = childIds.size > 0
+
+  if (hasHierarchy) {
+    // 数据本身有层级结构，直接用 parent_step_id 构建的树
+    return rootSteps
+  }
+
+  // 无层级数据：退回 phase → phase_step 虚拟分组
+  const phaseMap = new Map<string, any>()
+  const roots: any[] = []
+  let virtualSeq = -1
+
+  for (const step of rootSteps) {
+    const phase = step.phase || '未分类'
+
+    if (!phaseMap.has(phase)) {
+      const phaseNode = {
+        id: `__phase__${phase}`,
+        name: phase,
+        seq: virtualSeq--,
+        status: '',
+        step_type: 'phase',
+        timeout_minutes: 0,
+        default_assignee_role: '',
+        estimated_duration_minutes: 0,
+        attributes: {},
+        start_time: null,
+        end_time: null,
+        timeout_at: null,
+        assignee_names: '',
+        remark: '',
+        issue_desc: '',
+        executor_team: '',
+        step_template_id: 0,
+        drill_instance_id: 0,
+        children: [] as any[],
+        _isGroup: true,
+        _groupType: 'phase' as const,
+      }
+      phaseMap.set(phase, phaseNode)
+      roots.push(phaseNode)
+    }
+
+    const phaseNode = phaseMap.get(phase)!
+    const phaseStep = step.phase_step || '默认'
+
+    let phaseStepNode = phaseNode.children.find(
+      (c: any) => c._isGroup && c._groupType === 'phaseStep' && c.name === phaseStep
+    )
+    if (!phaseStepNode) {
+      phaseStepNode = {
+        id: `__phaseStep__${phase}__${phaseStep}`,
+        name: phaseStep,
+        seq: virtualSeq--,
+        status: '',
+        step_type: 'phaseStep',
+        timeout_minutes: 0,
+        default_assignee_role: '',
+        estimated_duration_minutes: 0,
+        attributes: {},
+        start_time: null,
+        end_time: null,
+        timeout_at: null,
+        assignee_names: '',
+        remark: '',
+        issue_desc: '',
+        executor_team: '',
+        step_template_id: 0,
+        drill_instance_id: 0,
+        children: [] as any[],
+        _isGroup: true,
+        _groupType: 'phaseStep' as const,
+      }
+      phaseNode.children.push(phaseStepNode)
+    }
+
+    phaseStepNode.children.push(step)
   }
 
   return roots
 })
 
-// 按 phase 分组（支持树形结构）
-const phaseGroups = computed(() => {
-  const groups: Record<string, (StepInstance & { children?: StepInstance[] })[]> = {}
-  const sorted = steps.value.sort((a, b) => a.seq - b.seq)
-  const stepMap = new Map<number, StepInstance & { children?: StepInstance[] }>()
-
-  // 第一步：初始化所有步骤到 map
-  for (const step of sorted) {
-    stepMap.set(step.id, { ...step })
-  }
-
-  // 第二步：建立父子关系
-  for (const step of sorted) {
-    const node = stepMap.get(step.id)!
-    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
-      const parent = stepMap.get(step.parent_step_id)!
-      if (!parent.children) {
-        parent.children = []
-      }
-      parent.children.push(node)
-    }
-  }
-
-  // 第三步：按 phase 分组，仅处理根步骤（tree roots）
-  for (const step of sorted) {
-    const node = stepMap.get(step.id)!
-    // 只处理根步骤（没有 parent_step_id 或 parent 不存在）
-    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
-      continue
-    }
-    const phase = node.phase || '未分类'
-    if (!groups[phase]) {
-      groups[phase] = []
-    }
-    groups[phase].push(node)
-  }
-
-  return groups
-})
-
-// 初始化 activePhase，默认选中第一个 phase
-function initActivePhase() {
-  const phases = Object.keys(phaseGroups.value)
-  if (phases.length > 0) {
-    activePhase.value = phases[0]
-  }
+// 全部展开/折叠
+function expandAllSteps() {
+  toggleExpandAll(drillStepTree.value, true)
 }
 
-// 父步骤状态聚合显示
-function getStepStatusText(row: StepInstance & { children?: StepInstance[] }): { text: string; isParent: boolean } {
+function collapseAllSteps() {
+  toggleExpandAll(drillStepTree.value, false)
+}
+
+function toggleExpandAll(data: any[], expand: boolean) {
+  data.forEach(item => {
+    stepsTableRef.value?.toggleRowExpansion(item, expand)
+    if (item.children && item.children.length > 0) {
+      toggleExpandAll(item.children, expand)
+    }
+  })
+}
+
+// 父步骤/分组状态聚合显示
+function getStepStatusText(row: any): { text: string; isParent: boolean } {
   if (!row.children || row.children.length === 0) {
     return { text: row.status, isParent: false }
   }
-  const total = row.children.length
-  const completed = row.children.filter(c => c.status === 'completed' || c.status === 'skipped').length
-  return { text: `${completed}/${total} 子任务已完成`, isParent: true }
+  const leaves = collectLeafSteps(row)
+  const total = leaves.length
+  const completed = leaves.filter(c => ['completed', 'skipped', 'timeout', 'issue'].includes(c.status)).length
+  const label = row._isGroup ? '已完成' : '子任务已完成'
+  return { text: `${completed}/${total} ${label}`, isParent: true }
 }
 
-// 检查是否为父步骤（有其他步骤的 parent_step_id 指向它）
-function isParentStep(step: StepInstance): boolean {
+// 检查是否为父步骤（虚拟分组节点 或 有子步骤的真实步骤）
+function isParentStep(step: any): boolean {
+  if (step._isGroup) return true
   return steps.value.some(s => s.parent_step_id === step.id)
 }
 
+// 获取父步骤层级标签（阶段/环节/任务）
+function getParentStepLabel(step: any): string {
+  if (step._isGroup) return step._groupType === 'phase' ? '阶段' : '环节'
+  // 计算该步骤在树中的深度（0=根）
+  let depth = 0
+  let current = step
+  while (current.parent_step_id) {
+    depth++
+    const parent = steps.value.find(s => s.id === current.parent_step_id)
+    if (!parent) break
+    current = parent
+  }
+  // depth=0→阶段, depth=1→环节, depth=2→任务
+  const labels = ['阶段', '环节', '任务']
+  return labels[Math.min(depth, labels.length - 1)] || '任务'
+}
+
 const completedSteps = computed(() => {
-  return steps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
+  return steps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
 })
 
 const totalSteps = computed(() => {
@@ -873,15 +980,9 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return
 
-  // 步骤事件：增量更新本地步骤数据
+  // 步骤事件：全量刷新步骤数据（步骤完成会级联更新父步骤状态）
   if (event.startsWith('step_')) {
-    patchLocalStep(payload)
-    // 日志防抖刷新（300ms 内合并多次步骤变更）
-    if (logDebounceTimer) clearTimeout(logDebounceTimer)
-    logDebounceTimer = window.setTimeout(() => {
-      logDebounceTimer = null
-      refreshLogs()
-    }, 300)
+    loadDrillData()
     return
   }
 
@@ -985,11 +1086,11 @@ async function loadDrillData() {
     if (componentDestroyed) return
     logs.value = logsData
 
-    // 初始化展开所有 phase 面板
-    initActivePhase()
-
     // 连接 WebSocket，演练运行中自动刷新状态
-    connectWebSocket()
+    // 仅在 WebSocket 未连接时建立连接，避免刷新数据时重连导致循环
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      connectWebSocket()
+    }
   } catch (error: any) {
     if (componentDestroyed) return
     if (error?.response?.status === 404) {
@@ -1423,12 +1524,29 @@ onUnmounted(() => {
     }
   }
 
-  .phase-tabs {
-    .tab-label {
+  .steps-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .steps-card-actions {
       display: flex;
-      align-items: center;
-      gap: $spacing-xs;
+      gap: 4px;
     }
+  }
+
+  .parent-status-text {
+    font-size: 12px;
+    color: $text-secondary;
+  }
+
+  .group-tag {
+    margin-right: 6px;
+  }
+
+  .group-name {
+    font-weight: $font-weight-semibold;
+    color: $text-primary;
   }
 
   .sub-task-content {
