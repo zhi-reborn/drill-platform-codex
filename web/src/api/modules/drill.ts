@@ -11,6 +11,9 @@ export const drillApi = {
   },
 
   getDetail: (id: number) => {
+    if (!Number.isFinite(id) || id <= 0) {
+      return Promise.reject(new Error('无效的演练 ID'))
+    }
     return apiRequest<DrillInstance>({
       url: `/v1/drills/${id}`,
       method: 'GET',
@@ -18,6 +21,9 @@ export const drillApi = {
   },
 
   getSteps: (id: number) => {
+    if (!Number.isFinite(id) || id <= 0) {
+      return Promise.reject(new Error('无效的演练 ID'))
+    }
     return apiRequest<StepInstance[]>({
       url: `/v1/drills/${id}/steps`,
       method: 'GET',
@@ -25,6 +31,9 @@ export const drillApi = {
   },
 
   getLogs: (id: number) => {
+    if (!Number.isFinite(id) || id <= 0) {
+      return Promise.reject(new Error('无效的演练 ID'))
+    }
     return apiRequest<any[]>({
       url: `/v1/drills/${id}/logs`,
       method: 'GET',
@@ -82,6 +91,14 @@ export const drillApi = {
     })
   },
 
+  startStep: (drillId: number, stepId: number, remark?: string) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/start`,
+      method: 'POST',
+      data: { step_id: stepId, remark },
+    })
+  },
+
   completeStep: (drillId: number, stepId: number, remark?: string) => {
     return apiRequest<void>({
       url: `/v1/drills/${drillId}/steps/complete`,
@@ -111,6 +128,21 @@ export const drillApi = {
       url: `/v1/drills/${drillId}/steps/assign`,
       method: 'POST',
       data: { step_id: stepId, user_ids: userIds },
+    })
+  },
+
+  updateStepInfo: (
+    drillId: number,
+    stepId: number,
+    payload: {
+      attributes?: Record<string, string>
+      remark?: string
+    }
+  ) => {
+    return apiRequest<void>({
+      url: `/v1/drills/${drillId}/steps/info`,
+      method: 'PUT',
+      data: { step_id: stepId, ...payload },
     })
   },
 }

@@ -264,9 +264,54 @@
                   {{ calculateDuration(row) }}
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="70" align="center" fixed="right">
+              <el-table-column label="操作" width="220" align="center" fixed="right">
                 <template #default="{ row }">
                   <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
+                  <template v-if="!isParentStep(row)">
+                    <el-popconfirm
+                      v-if="row.status === 'pending' && row.default_assignee_role === 'director'"
+                      title="确认开始此步骤？"
+                      @confirm="handleStartStep(row)"
+                    >
+                      <template #reference>
+                        <el-button type="primary" link size="small">开始</el-button>
+                      </template>
+                    </el-popconfirm>
+                    <el-button
+                      v-if="['pending', 'running'].includes(row.status)"
+                      type="success"
+                      link
+                      size="small"
+                      @click="handleDirectorComplete(row)"
+                    >完成</el-button>
+                    <el-popconfirm
+                      v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                      title="确认跳过此步骤？"
+                      @confirm="handleSkipStep(row)"
+                    >
+                      <template #reference>
+                        <el-button type="warning" link size="small">跳过</el-button>
+                      </template>
+                    </el-popconfirm>
+                    <el-popconfirm
+                      v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                      title="确认强制完成此步骤？"
+                      @confirm="handleForceComplete(row)"
+                    >
+                      <template #reference>
+                        <el-button type="danger" link size="small">强制完成</el-button>
+                      </template>
+                    </el-popconfirm>
+                    <el-popconfirm
+                      v-if="['timeout', 'completed', 'skipped'].includes(row.status)"
+                      title="确认重新派发此步骤？"
+                      @confirm="handleResumeTask(row)"
+                    >
+                      <template #reference>
+                        <el-button type="primary" link size="small">重新派发</el-button>
+                      </template>
+                    </el-popconfirm>
+                  </template>
                 </template>
               </el-table-column>
             </el-table>
@@ -277,38 +322,132 @@
       <!-- 步骤详情弹窗 -->
       <el-dialog v-model="detailVisible" :title="`步骤详情：${selectedStep?.name || ''}`" width="720px" destroy-on-close>
         <template v-if="selectedStep">
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="序号">{{ selectedStep.seq }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <DrillStatusBadge :status="selectedStep.status" type="step" />
-            </el-descriptions-item>
-            <el-descriptions-item label="步骤类型">
-              <el-tag :type="getStepTypeTag(selectedStep.step_type)" size="small">{{ getStepTypeLabel(selectedStep.step_type) }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="阶段">{{ selectedStep.phase || '未分类' }}</el-descriptions-item>
-            <el-descriptions-item label="阶段内步骤">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? `${selectedStep.estimated_duration_minutes} 分钟` : '-' }}</el-descriptions-item>
-            <el-descriptions-item label="预计启动偏移">{{ selectedStep.estimated_start_offset ? `${selectedStep.estimated_start_offset} 秒` : '-' }}</el-descriptions-item>
-            <el-descriptions-item label="执行角色">
-              <el-tag :type="selectedStep.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
-                {{ selectedStep.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="超时时间">{{ selectedStep.timeout_minutes ? `${selectedStep.timeout_minutes} 分钟` : '-' }}</el-descriptions-item>
-            <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="分配人员">{{ selectedStep.assignee_names || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="操作说明" :span="2">{{ selectedStep.attributes?.operation_guide || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="验证方式" :span="2">{{ selectedStep.attributes?.verification_method || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="兜底措施" :span="2">{{ selectedStep.attributes?.fallback_measures || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="实际耗时">{{ calculateDuration(selectedStep) }}</el-descriptions-item>
-            <el-descriptions-item label="开始时间">{{ selectedStep.start_time ? formatTime(selectedStep.start_time) : '-' }}</el-descriptions-item>
-            <el-descriptions-item label="结束时间">{{ selectedStep.end_time ? formatTime(selectedStep.end_time) : '-' }}</el-descriptions-item>
-            <el-descriptions-item label="超时时间">{{ selectedStep.timeout_at ? formatTime(selectedStep.timeout_at) : '-' }}</el-descriptions-item>
-          </el-descriptions>
+          <div class="detail-toolbar">
+            <el-button v-if="!detailEditing" type="primary" link @click="enterEditMode">
+              <el-icon><Edit /></el-icon>编辑
+            </el-button>
+            <template v-else>
+              <el-button @click="cancelEditMode">取消</el-button>
+              <el-button type="primary" :loading="detailSaving" @click="saveStepInfo">保存</el-button>
+            </template>
+          </div>
+          <el-form v-if="!detailEditing" :column="2" border size="small" label-position="left" label-width="100px">
+            <el-row :gutter="0">
+              <el-col :span="12">
+                <el-form-item label="序号">{{ selectedStep.seq }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="状态">
+                  <DrillStatusBadge :status="selectedStep.status" type="step" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="步骤类型">
+                  <el-tag :type="getStepTypeTag(selectedStep.step_type)" size="small">{{ getStepTypeLabel(selectedStep.step_type) }}</el-tag>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="执行角色">
+                  <el-tag :type="selectedStep.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
+                    {{ selectedStep.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
+                  </el-tag>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="阶段">{{ selectedStep.phase || '未分类' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="阶段内步骤">{{ selectedStep.phase_step || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? `${selectedStep.estimated_duration_minutes} 分钟` : '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="预计启动偏移">{{ selectedStep.estimated_start_offset ? `${selectedStep.estimated_start_offset} 秒` : '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="超时时间(分钟)">{{ selectedStep.timeout_minutes || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="分配人员">{{ selectedStep.assignee_names || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="操作说明">{{ selectedStep.attributes?.operation_guide || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="验证方式">{{ selectedStep.attributes?.verification_method || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="兜底措施">{{ selectedStep.attributes?.fallback_measures || '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="实际耗时">{{ calculateDuration(selectedStep) }}</el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="开始时间">{{ selectedStep.start_time ? formatTime(selectedStep.start_time) : '-' }}</el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="结束时间">{{ selectedStep.end_time ? formatTime(selectedStep.end_time) : '-' }}</el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+          <el-form v-else ref="editFormRef" :model="editForm" label-position="left" label-width="100px" size="default">
+            <el-form-item label="责任部门">
+              <el-input v-model="editForm.attributes.responsible_department" placeholder="责任部门" clearable />
+            </el-form-item>
+            <el-form-item label="配合部门">
+              <el-input v-model="editForm.attributes.cooperating_department" placeholder="配合部门" clearable />
+            </el-form-item>
+            <el-form-item label="操作人">
+              <el-autocomplete
+                :model-value="editForm.attributes.operator"
+                @update:model-value="(v: string) => (editForm.attributes.operator = v ?? '')"
+                :fetch-suggestions="userQuerySearch"
+                placeholder="输入或选择操作人"
+                clearable
+                style="width: 100%"
+                @focus="ensureUserOptions"
+              />
+            </el-form-item>
+            <el-form-item label="复核人">
+              <el-autocomplete
+                :model-value="editForm.attributes.reviewer"
+                @update:model-value="(v: string) => (editForm.attributes.reviewer = v ?? '')"
+                :fetch-suggestions="userQuerySearch"
+                placeholder="输入或选择复核人"
+                clearable
+                style="width: 100%"
+                @focus="ensureUserOptions"
+              />
+            </el-form-item>
+            <el-form-item label="操作说明">
+              <el-input v-model="editForm.attributes.operation_guide" type="textarea" :rows="3" placeholder="操作说明" />
+            </el-form-item>
+            <el-form-item label="验证方式">
+              <el-input v-model="editForm.attributes.verification_method" type="textarea" :rows="2" placeholder="验证方式" />
+            </el-form-item>
+            <el-form-item label="兜底措施">
+              <el-input v-model="editForm.attributes.fallback_measures" type="textarea" :rows="2" placeholder="兜底措施" />
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="editForm.remark" type="textarea" :rows="2" placeholder="本次编辑备注" />
+            </el-form-item>
+          </el-form>
         </template>
       </el-dialog>
 
@@ -345,19 +484,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
+import { userApi } from '@/api/modules/user'
 import { useAuthStore } from '@/stores/auth'
 
 const activePhase = ref<string>('')
 const selectedStep = ref<StepInstance | null>(null)
 const detailVisible = ref(false)
+const detailEditing = ref(false)
+const detailSaving = ref(false)
+const editFormRef = ref()
+
+const editForm = reactive({
+  timeout_minutes: 0,
+  executor_team: '',
+  assignee_names: '',
+  remark: '',
+  attributes: {
+    operation_guide: '',
+    verification_method: '',
+    fallback_measures: '',
+    responsible_department: '',
+    cooperating_department: '',
+    operator: '',
+    reviewer: '',
+  },
+})
+
+// 用户列表(用于操作人/复核人模糊匹配)
+const userOptions = ref<{ value: string; label: string }[]>([])
+let userOptionsLoaded = false
+
+async function ensureUserOptions() {
+  if (userOptionsLoaded) return
+  try {
+    const res = await userApi.getList({ page: 1, page_size: 200 })
+    const items = (res as any)?.items || (res as any)?.data?.items || []
+    userOptions.value = items.map((u: any) => {
+      const name = u.real_name || u.RealName || u.username || u.Username || ''
+      return { value: name, label: name }
+    }).filter((o: any) => o.value)
+    userOptionsLoaded = true
+  } catch (e) {
+    // 静默失败,降级为普通输入框
+    userOptions.value = []
+  }
+}
+
+function userQuerySearch(queryString: string, cb: any) {
+  if (!queryString) {
+    cb(userOptions.value)
+    return
+  }
+  const q = queryString.toLowerCase()
+  const results = userOptions.value.filter(u => u.value.toLowerCase().includes(q))
+  cb(results)
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -372,8 +562,11 @@ let refreshTimer: number | null = null
 
 const drillId = computed(() => {
   const id = route.params.id
-  return typeof id === 'string' ? parseInt(id, 10) : 0
+  const parsed = typeof id === 'string' ? parseInt(id, 10) : 0
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
+
+const isValidDrill = computed(() => drillId.value > 0)
 
 const drillSteps = computed(() => {
   return steps.value.sort((a, b) => a.seq - b.seq)
@@ -643,6 +836,7 @@ let logDebounceTimer: number | null = null
 
 function connectWebSocket() {
   if (ws) ws.close()
+  if (!isValidDrill.value) return
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const authStore = useAuthStore()
   const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
@@ -755,8 +949,18 @@ function stopFallbackPolling() {
 }
 
 async function loadDrillData() {
+  if (!isValidDrill.value) {
+    // 静默重定向,避免在用户点击侧边栏导航时弹出"演练 ID 无效"的脏错误
+    router.replace('/director/drills')
+    return
+  }
   try {
     instance.value = await drillApi.getDetail(drillId.value)
+    if (!instance.value) {
+      ElMessage.error('演练不存在')
+      router.back()
+      return
+    }
     let stepsData = await drillApi.getSteps(drillId.value)
     // 解析 attributes JSON 字符串为对象
     stepsData = stepsData.map((step: StepInstance) => ({
@@ -768,18 +972,18 @@ async function loadDrillData() {
     const logsData = await drillApi.getLogs(drillId.value)
     logs.value = logsData
 
-    if (!instance.value) {
-      ElMessage.error('演练不存在')
-      router.back()
-    }
-
     // 初始化展开所有 phase 面板
     initActivePhase()
 
     // 连接 WebSocket，演练运行中自动刷新状态
     connectWebSocket()
-  } catch (error) {
-    ElMessage.error('加载数据失败')
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      ElMessage.error('演练不存在或已删除')
+      router.back()
+    } else {
+      ElMessage.error(error?.message || '加载数据失败')
+    }
     console.error('Failed to load drill data:', error)
   }
 }
@@ -824,6 +1028,16 @@ async function handleTerminate() {
   }
 }
 
+async function handleStartStep(step: StepInstance) {
+  try {
+    await drillApi.startStep(drillId.value, getStepOperationId(step))
+    ElMessage.success('步骤已开始')
+    loadDrillData()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '操作失败')
+  }
+}
+
 async function handleSkipStep(step: StepInstance) {
   try {
     await drillApi.skipStep(drillId.value, getStepOperationId(step), 'director skipped')
@@ -846,8 +1060,14 @@ async function handleResumeTask(step: StepInstance) {
 
 async function handleDirectorComplete(step: StepInstance) {
   try {
-    await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
-    ElMessage.success('步骤已完成')
+    // pending 状态下后端 CompleteStep 会校验失败,自动降级为强制完成
+    if (step.status === 'pending') {
+      await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组完成任务：${step.name}`)
+      ElMessage.success(`步骤「${step.name}」已完成`)
+    } else {
+      await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
+      ElMessage.success('步骤已完成')
+    }
     loadDrillData()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
@@ -866,7 +1086,65 @@ async function handleForceComplete(step: StepInstance) {
 
 function showStepDetail(step: StepInstance) {
   selectedStep.value = step
+  detailEditing.value = false
   detailVisible.value = true
+}
+
+function enterEditMode() {
+  if (!selectedStep.value) return
+  const s = selectedStep.value
+  // 逐字段赋值(避免直接替换 reactive 对象丢失响应性)
+  editForm.timeout_minutes = s.timeout_minutes || 0
+  editForm.executor_team = s.executor_team || ''
+  editForm.assignee_names = s.assignee_names || ''
+  editForm.remark = ''
+  const attrs = s.attributes || {}
+  editForm.attributes.operation_guide = attrs.operation_guide || ''
+  editForm.attributes.verification_method = attrs.verification_method || ''
+  editForm.attributes.fallback_measures = attrs.fallback_measures || ''
+  editForm.attributes.responsible_department = attrs.responsible_department || ''
+  editForm.attributes.cooperating_department = attrs.cooperating_department || ''
+  editForm.attributes.operator = attrs.operator || ''
+  editForm.attributes.reviewer = attrs.reviewer || ''
+  detailEditing.value = true
+  ensureUserOptions()
+}
+
+function cancelEditMode() {
+  detailEditing.value = false
+}
+
+async function saveStepInfo() {
+  if (!selectedStep.value) return
+  const s = selectedStep.value
+  const opId = getStepOperationId(s)
+  detailSaving.value = true
+  try {
+    // reactive 对象直接读取,无需 .value
+    const cleanedAttrs: Record<string, string> = {}
+    Object.entries(editForm.attributes).forEach(([k, v]) => {
+      if (v && String(v).trim()) cleanedAttrs[k] = String(v).trim()
+    })
+    console.log('[StepEdit] cleanedAttrs =', cleanedAttrs, 'remark =', editForm.remark)
+    await drillApi.updateStepInfo(drillId.value, opId, {
+      attributes: cleanedAttrs,
+      remark: editForm.remark,
+    })
+    ElMessage.success('步骤信息已保存')
+    detailEditing.value = false
+    await loadDrillData()
+    // 强制清缓存:重新从最新数据里拿一份
+    const refreshed = steps.value.find(x => x.id === s.id)
+    if (refreshed) {
+      // 显式拷贝,避免引用旧对象
+      selectedStep.value = { ...refreshed }
+    }
+  } catch (error: any) {
+    console.error('[StepEdit] save error', error)
+    ElMessage.error(error.response?.data?.message || '保存失败')
+  } finally {
+    detailSaving.value = false
+  }
 }
 
 onMounted(() => {
@@ -885,6 +1163,15 @@ onUnmounted(() => {
 <style scoped lang="scss">
 @use '@/styles/layout' as *;
 @use '@/styles/variables' as *;
+
+.detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e6e8eb;
+}
 
 .page-container {
   @include page-container;

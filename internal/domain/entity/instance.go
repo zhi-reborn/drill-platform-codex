@@ -54,7 +54,7 @@ type StepInstance struct {
 	PreStepIDs               string     `gorm:"type:json;column:pre_step_ids" json:"pre_step_ids"`
 	EstimatedDurationMinutes *int       `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
 	EstimatedStartOffset     *int       `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
-	JSONAttributes           string     `gorm:"type:json;column:attributes" json:"attributes"`
+	JSONAttributes           string     `gorm:"type:json;column:action_params" json:"attributes"`
 	CreatedAt                time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillInstance DrillInstance      `gorm:"foreignKey:DrillInstanceID;references:ID" json:"drill_instance,omitempty"`

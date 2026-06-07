@@ -130,6 +130,32 @@ func (h *Handler) GetDetail(c *gin.Context) {
 		return
 	}
 
+	// 兜底: 重新从数据库拉取每个 step 的 action_params 并合并到 attributes
+	if len(drill.Steps) > 0 {
+		ids := make([]uint64, 0, len(drill.Steps))
+		for _, s := range drill.Steps {
+			ids = append(ids, s.ID)
+		}
+		type row struct {
+			ID          uint64
+			ActionParam string
+		}
+		var rows []row
+		repository.DB.Table("drill_instance_step").
+			Select("id, action_params").
+			Where("id IN ?", ids).
+			Scan(&rows)
+		m := make(map[uint64]string, len(rows))
+		for _, r := range rows {
+			m[r.ID] = r.ActionParam
+		}
+		for i := range drill.Steps {
+			if v, ok := m[drill.Steps[i].ID]; ok && v != "" && v != "null" {
+				drill.Steps[i].JSONAttributes = v
+			}
+		}
+	}
+
 	response.Success(c, drill)
 }
 
@@ -255,6 +281,107 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	response.SuccessWithMessage(c, "演练已删除", nil)
+}
+
+func (h *Handler) StartStep(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	var req struct {
+		StepID uint64 `json:"step_id" binding:"required"`
+		Remark string `json:"remark"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误："+err.Error())
+		return
+	}
+
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
+		response.InternalError(c, "步骤实例不存在")
+		return
+	}
+
+	if target.step.Status == "completed" || target.step.Status == "skipped" {
+		response.BadRequest(c, "步骤已是终态,无法开始")
+		return
+	}
+
+	now := time.Now()
+	repository.DB.Model(&entity.StepInstance{}).
+		Where("id = ?", target.step.ID).
+		Updates(map[string]interface{}{
+			"status":     "running",
+			"started_at": &now,
+			"remark":     req.Remark,
+		})
+
+	response.SuccessWithMessage(c, "步骤已开始", nil)
+}
+
+// UpdateStepInfo 编辑步骤实例的可维护字段
+// 注意:数据库实际列名为 action_params(代替 attributes)/ started_at/ completed_at 等
+func (h *Handler) UpdateStepInfo(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
+
+	var req struct {
+		StepID     uint64                 `json:"step_id" binding:"required"`
+		Attributes map[string]interface{} `json:"attributes"` // 业务属性,合并到 action_params
+		Remark     string                 `json:"remark"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误："+err.Error())
+		return
+	}
+
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
+		response.InternalError(c, "步骤实例不存在")
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.Remark != "" {
+		updates["remark"] = req.Remark
+	}
+	if len(req.Attributes) > 0 {
+		// 读取现有 action_params,合并新属性(用原生 SQL 避免依赖实体字段)
+		var actionParams string
+		if err := repository.DB.Model(&entity.StepInstance{}).
+			Select("action_params").
+			Where("id = ?", target.step.ID).
+			Scan(&actionParams).Error; err != nil {
+			response.InternalError(c, "读取步骤失败: "+err.Error())
+			return
+		}
+		merged := map[string]interface{}{}
+		if actionParams != "" && actionParams != "null" {
+			_ = json.Unmarshal([]byte(actionParams), &merged)
+		}
+		for k, v := range req.Attributes {
+			if v != nil && fmt.Sprintf("%v", v) != "" {
+				merged[k] = v
+			}
+		}
+		buf, _ := json.Marshal(merged)
+		updates["action_params"] = string(buf)
+	}
+	if len(updates) == 0 {
+		response.BadRequest(c, "没有需要更新的字段")
+		return
+	}
+
+	if err := repository.DB.Model(&entity.StepInstance{}).
+		Where("id = ?", target.step.ID).
+		Updates(updates).Error; err != nil {
+		response.InternalError(c, "保存失败: "+err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "步骤信息已更新", nil)
 }
 
 func (h *Handler) CompleteStep(c *gin.Context) {

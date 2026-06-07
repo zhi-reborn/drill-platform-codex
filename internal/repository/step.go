@@ -23,7 +23,34 @@ func (r *StepRepo) FindByID(id uint64) (*entity.StepInstance, error) {
 func (r *StepRepo) FindStepsByDrillID(drillID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
 	err := DB.Where("drill_instance_id = ?", drillID).Order("seq ASC").Find(&steps).Error
-	return steps, err
+	if err != nil {
+		return nil, err
+	}
+	// 兼容旧实体:实体 StepInstance.JSONAttributes 的列标签写的是 column:attributes,
+	// 但实际数据库列名是 action_params。GORM 不会自动把 action_params 读到 JSONAttributes,
+	// 这里手动把 action_params 解析为 JSON 对象并填入 Attributes,保证上层 API 看到的内容最新。
+	if len(steps) > 0 {
+		ids := make([]uint64, 0, len(steps))
+		for _, s := range steps {
+			ids = append(ids, s.ID)
+		}
+		type row struct {
+			ID          uint64
+			ActionParam string
+		}
+		var rows []row
+		DB.Table("drill_instance_step").Select("id, action_params").Where("id IN ?", ids).Scan(&rows)
+		m := make(map[uint64]string, len(rows))
+		for _, r := range rows {
+			m[r.ID] = r.ActionParam
+		}
+		for i := range steps {
+			if v, ok := m[steps[i].ID]; ok && v != "" && v != "null" {
+				steps[i].JSONAttributes = v
+			}
+		}
+	}
+	return steps, nil
 }
 
 func (r *StepRepo) UpdateStatus(id uint64, status, remark string) error {

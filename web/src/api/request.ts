@@ -32,6 +32,8 @@ request.interceptors.response.use(
   },
   (error) => {
     const status = error.response?.status
+    const data = error.response?.data
+    const message = data?.message
     switch (status) {
       case 401:
         // 不要对登录 API 的 401 执行跳转（已在登录页面）
@@ -41,10 +43,16 @@ request.interceptors.response.use(
         }
         break
       case 403:
-        ElMessage.error('没有权限执行此操作')
+        ElMessage.error(message || '没有权限执行此操作')
+        break
+      case 404:
+        // 404 时透传后端业务消息（如"演练不存在"），避免上层误判
+        if (message) {
+          error.message = message
+        }
         break
       case 500:
-        ElMessage.error('服务器错误')
+        ElMessage.error(message || '服务器错误')
         break
     }
     return Promise.reject(error)

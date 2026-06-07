@@ -73,9 +73,11 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.DELETE("/drills/:id", middleware.RequireDirectorOrAbove(), drillHandler.Delete)
 			v1.POST("/drills/:id/steps/complete", middleware.RequireDirectorOrAbove(), drillHandler.CompleteStep)
 			v1.POST("/drills/:id/steps/skip", middleware.RequireDirectorOrAbove(), drillHandler.SkipStep)
+			v1.POST("/drills/:id/steps/start", middleware.RequireDirectorOrAbove(), drillHandler.StartStep)
 			v1.POST("/drills/:id/steps/force-complete", middleware.RequireDirectorOrAbove(), drillHandler.ForceCompleteStep)
 			v1.POST("/drills/:id/steps/resume-task", middleware.RequireDirectorOrAbove(), drillHandler.ResumeTask)
 			v1.POST("/drills/:id/steps/assign", middleware.RequireDirectorOrAbove(), drillHandler.AssignStep)
+			v1.PUT("/drills/:id/steps/info", middleware.RequireDirectorOrAbove(), drillHandler.UpdateStepInfo)
 
 			v1.GET("/tasks/my", taskHandler.GetMyTasks)
 			v1.GET("/tasks/:stepId", taskHandler.GetDetail)

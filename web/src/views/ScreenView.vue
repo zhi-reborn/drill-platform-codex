@@ -28,7 +28,7 @@
       <header class="screen-header">
         <div class="header-deco header-deco-left" />
         <div class="header-title-block">
-          <h1 class="drill-title">故障演练指挥中心</h1>
+          <h1 class="drill-title">容灾演练指挥中心</h1>
         </div>
         <div class="header-meta">
           <span class="meta-label">系统时间</span>
@@ -219,8 +219,10 @@
             <div class="panel-body logs-wrap">
               <div class="log-thead">
                 <span class="col-time">时间</span>
-                <span class="col-status">节点状态</span>
-                <span class="col-desc">节点描述</span>
+                <span class="col-step">节点名称</span>
+                <span class="col-operator">操作人</span>
+                <span class="col-status">状态</span>
+                <span class="col-desc">描述</span>
               </div>
               <div class="log-tbody">
                 <div
@@ -230,6 +232,8 @@
                   :class="'log-' + logActionClass(log.Action)"
                 >
                   <span class="col-time">{{ formatTime(log.CreatedAt) }}</span>
+                  <span class="col-step" :title="resolveStepName(log)">{{ resolveStepName(log) }}</span>
+                  <span class="col-operator" :title="log.OperatorName || '-'">{{ log.OperatorName || '-' }}</span>
                   <span class="col-status">
                     <span class="log-status-tag" :class="'tag-' + logActionClass(log.Action)">
                       {{ logActionShort(log.Action) }}
@@ -256,7 +260,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { CircleClose, FullScreen } from '@element-plus/icons-vue'
-import type { StepInstance, StepInstanceLog, DrillInstance } from '@/types/instance'
+import type { StepInstance, StepInstanceLog, DrillInstance, StepStatus, DrillStatus } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import PhaseRing from '@/components/screen/PhaseRing.vue'
@@ -495,6 +499,15 @@ function logActionLabel(action: string): string {
   }
   return map[action] || action
 }
+
+// 根据 log 中的 StepInstanceID 在 drillSteps 中查节点名称
+function resolveStepName(log: StepInstanceLog): string {
+  const id = log?.StepInstanceID
+  if (!id) return '-'
+  const step = drillSteps.value.find(s => s.id === id)
+  if (step?.name) return step.name
+  return `步骤 #${id}`
+}
 function stageBadgeLabel(status: string): string {
   const map: Record<string, string> = {
     done: '已完成', running: '进行中', pending: '待开始', issue: '异常',
@@ -546,7 +559,7 @@ async function loadData() {
     drillSteps.value = steps.sort((a, b) => a.seq - b.seq)
 
     const logs = await drillApi.getLogs(drillId.value)
-    recentLogs.value = logs.slice(0, 20)
+    recentLogs.value = logs.slice(0, 30)
 
     loading.value = false
     error.value = null
@@ -563,6 +576,25 @@ function handleRetry() {
 }
 
 // WebSocket
+const REFRESH_EVENTS = new Set([
+  'step_change', 'drill_status',
+  'step_started', 'step_complete', 'step_issue', 'step_skipped', 'step_timeout',
+  'drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated',
+  'timeout_warning', 'timeout_alert',
+])
+const LOG_EVENTS: Record<string, string> = {
+  step_started: 'step_start',
+  step_complete: 'step_complete',
+  step_issue: 'step_issue',
+  step_skipped: 'step_skip',
+  step_timeout: 'step_timeout',
+  drill_started: 'drill_started',
+  drill_paused: 'drill_paused',
+  drill_resumed: 'drill_resumed',
+  drill_completed: 'drill_completed',
+  drill_terminated: 'drill_terminated',
+}
+
 function connectWebSocket() {
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
@@ -572,7 +604,21 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
-      if (data.type === 'step_change' || data.type === 'drill_status') {
+      const eventType = data.type || data.event_type
+      if (!eventType) return
+
+      // 步骤事件：尝试增量更新，避免重拉 3 个 API
+      if (eventType.startsWith('step_')) {
+        applyStepEvent(eventType, data.payload || data.data || {})
+        return
+      }
+      // 演练状态变化：本地更新状态
+      if (eventType.startsWith('drill_')) {
+        applyDrillEvent(eventType, data.payload || data.data || {})
+        return
+      }
+      // 其他需要全量刷新的事件
+      if (REFRESH_EVENTS.has(eventType)) {
         loadData()
       }
     } catch (e) { /* ignore */ }
@@ -582,6 +628,89 @@ function connectWebSocket() {
     if (currentDrill.value?.status === 'running') startFallbackPolling()
   }
 }
+
+// 增量应用步骤事件,避免每次都重拉 3 个 API
+function applyStepEvent(eventType: string, payload: any) {
+  if (!payload) return
+  const stepId = Number(payload.step_id ?? payload.id)
+  if (!stepId) {
+    loadData()
+    return
+  }
+  const idx = drillSteps.value.findIndex(s => s.id === stepId)
+  if (idx === -1) {
+    // 找不到对应步骤,降级为全量刷新
+    loadData()
+    return
+  }
+  const target = drillSteps.value[idx]
+  const newStatus = payload.new_status || mapEventToStatus(eventType)
+  if (newStatus) target.status = newStatus as StepStatus
+  if (payload.start_time) target.start_time = payload.start_time
+  if (payload.end_time) target.end_time = payload.end_time
+  if (payload.timeout_at) target.timeout_at = payload.timeout_at
+  if (payload.remark) target.remark = payload.remark
+  if (payload.issue_desc) target.issue_desc = payload.issue_desc
+  if (payload.assignee_names) target.assignee_names = payload.assignee_names
+
+  // 推入一条本地日志
+  const logAction = LOG_EVENTS[eventType] || eventType
+  const newLog: StepInstanceLog = {
+    ID: Date.now(),
+    StepInstanceID: stepId,
+    Action: logAction,
+    OperatorID: 0,
+    OperatorName: payload.executor || '系统',
+    Remark: payload.remark || payload.comment || payload.issue_desc || '',
+    CreatedAt: new Date().toISOString(),
+  }
+  recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
+
+  // 重新计算 KPI
+  recomputeKpis()
+}
+
+function applyDrillEvent(eventType: string, payload: any) {
+  if (!payload) return
+  if (currentDrill.value) {
+    const newStatus = payload.new_status || mapEventToStatus(eventType)
+    if (newStatus) currentDrill.value.status = newStatus as DrillStatus
+  }
+  const newLog: StepInstanceLog = {
+    ID: Date.now(),
+    StepInstanceID: 0,
+    Action: LOG_EVENTS[eventType] || eventType,
+    OperatorID: 0,
+    OperatorName: payload.operator || '系统',
+    Remark: payload.remark || '',
+    CreatedAt: new Date().toISOString(),
+  }
+  recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
+  recomputeKpis()
+}
+
+function mapEventToStatus(eventType: string): string {
+  const map: Record<string, string> = {
+    step_started: 'running',
+    step_complete: 'completed',
+    step_issue: 'issue',
+    step_skipped: 'skipped',
+    step_timeout: 'timeout',
+    drill_started: 'running',
+    drill_paused: 'paused',
+    drill_resumed: 'running',
+    drill_completed: 'completed',
+    drill_terminated: 'terminated',
+  }
+  return map[eventType] || ''
+}
+
+function recomputeKpis() {
+  // 触发 drillSteps / currentDrill 的依赖计算
+  // Vue 的响应式系统会自动重算
+  tick()
+}
+
 function startFallbackPolling() {
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = window.setInterval(() => {
@@ -1251,13 +1380,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex; flex-direction: column; padding: 0;
 }
 .log-thead {
-  display: grid; grid-template-columns: 80px 80px 1fr;
+  display: grid; grid-template-columns: 72px 1.4fr 80px 64px 1.4fr;
   padding: 6px 12px;
   background: rgba(0, 60, 130, 0.42);
   border-bottom: 1px solid $line;
   font-family: $font-display; font-size: 10px;
   color: $neon; letter-spacing: 1.5px;
   .col-status { text-align: center; }
+  .col-step, .col-operator { text-align: left; padding-left: 6px; }
 }
 .log-tbody {
   flex: 1; overflow-y: auto; padding: 4px 0;
@@ -1266,13 +1396,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
 }
 .log-row {
-  display: grid; grid-template-columns: 80px 80px 1fr;
+  display: grid; grid-template-columns: 72px 1.4fr 80px 64px 1.4fr;
   align-items: center;
   padding: 7px 12px;
   border-bottom: 1px solid rgba(111, 151, 220, 0.16);
   font-size: 12px;
   .col-time { font-family: $font-mono; color: $text-dim; font-size: 11px; }
   .col-status { text-align: center; }
+  .col-step {
+    color: $text;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding-left: 6px;
+  }
+  .col-operator {
+    color: $text-dim;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding-left: 6px;
+  }
   .col-desc {
     color: $text;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
