@@ -25,6 +25,39 @@ jwt:
   secret: "your-secret-key-change-in-production"
   expire: 24  # hours
 
+auth:
+  mode: cas_ldap  # local, cas_ldap
+  autoCreateUser: true
+  defaultRole: viewer
+  roleMappings:
+    admin: "drill-admin"
+    director: "drill-director"
+    executor: "drill-executor"
+    viewer: "drill-viewer"
+
+cas:
+  enabled: true
+  serverURL: "http://host.docker.internal:9091/cas"
+  publicURL: "http://127.0.0.1:9091/cas"
+  serviceURL: "http://127.0.0.1:5173/api/v1/auth/cas/callback"
+
+ldap:
+  enabled: true
+  url: "http://host.docker.internal:9091/ldap"
+  bindDN: "cn=readonly,dc=example,dc=com"
+  bindPassword: "change-me"
+  baseDN: "ou=users,dc=example,dc=com"
+  userFilter: "(uid=%s)"
+  usernameAttribute: "uid"
+  realNameAttribute: "cn"
+  emailAttribute: "mail"
+  phoneAttribute: "mobile"
+  departmentAttribute: "department"
+  groupBaseDN: "ou=groups,dc=example,dc=com"
+  groupFilter: "(memberUid=%s)"
+  groupNameAttribute: "cn"
+  timeoutSeconds: 10
+
 oss:
   provider: local  # local, aliyun, qiniu
   endpoint: ""

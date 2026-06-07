@@ -17,8 +17,37 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("无法打开内存数据库: %v", err)
 	}
-	if err := db.AutoMigrate(&entity.StepInstance{}); err != nil {
-		t.Fatalf("数据库迁移失败: %v", err)
+	err = db.Exec(`
+		CREATE TABLE drill_instance_step (
+			id integer PRIMARY KEY,
+			drill_instance_id integer NOT NULL,
+			parent_step_id integer NULL,
+			step_template_id integer NOT NULL,
+			name text NOT NULL,
+			seq integer NOT NULL,
+			status text NOT NULL,
+			assignee_ids text NOT NULL,
+			actual_operator integer NULL,
+			start_time datetime NULL,
+			end_time datetime NULL,
+			timeout_at datetime NULL,
+			remark text,
+			issue_desc text,
+			step_type text,
+			timeout_minutes integer,
+			default_assignee_role text,
+			executor_team text,
+			phase text,
+			phase_step text,
+			pre_step_ids text,
+			estimated_duration_minutes integer NULL,
+			estimated_start_offset integer NULL,
+			attributes text,
+			created_at datetime
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("创建测试表失败: %v", err)
 	}
 	return db
 }
@@ -236,6 +265,30 @@ func TestComputeInstancePreStepIDs_EdgeCases(t *testing.T) {
 			},
 			expected: map[uint64][]uint64{
 				1: {}, 2: {1}, 3: {1}, 4: {3}, 5: {1}, 6: {1}, 7: {2, 5},
+			},
+		},
+		{
+			name: "阶段环节任务操作步骤四级树",
+			setup: func() []entity.StepInstance {
+				return []entity.StepInstance{
+					{ID: 10, DrillInstanceID: 5, StepTemplateID: 10, Name: "阶段1", Seq: 1, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 20, DrillInstanceID: 5, ParentStepID: ptrUint64(10), StepTemplateID: 20, Name: "环节1.1", Seq: 2, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 30, DrillInstanceID: 5, ParentStepID: ptrUint64(20), StepTemplateID: 30, Name: "任务1.1.1", Seq: 3, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 40, DrillInstanceID: 5, ParentStepID: ptrUint64(30), StepTemplateID: 40, Name: "操作1.1.1.1", Seq: 4, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 41, DrillInstanceID: 5, ParentStepID: ptrUint64(30), StepTemplateID: 41, Name: "操作1.1.1.2", Seq: 5, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 42, DrillInstanceID: 5, ParentStepID: ptrUint64(30), StepTemplateID: 42, Name: "操作1.1.1.3", Seq: 6, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 31, DrillInstanceID: 5, ParentStepID: ptrUint64(20), StepTemplateID: 31, Name: "任务1.1.2", Seq: 7, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 21, DrillInstanceID: 5, ParentStepID: ptrUint64(10), StepTemplateID: 21, Name: "环节1.2", Seq: 8, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 32, DrillInstanceID: 5, ParentStepID: ptrUint64(21), StepTemplateID: 32, Name: "任务1.2.1", Seq: 9, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 11, DrillInstanceID: 5, StepTemplateID: 11, Name: "阶段2", Seq: 10, StepType: "serial", AssigneeIDs: "[]"},
+				}
+			},
+			expected: map[uint64][]uint64{
+				10: {},
+				20: {}, 21: {},
+				30: {}, 32: {},
+				40: {}, 41: {40}, 42: {40}, 31: {30},
+				11: {10},
 			},
 		},
 	}

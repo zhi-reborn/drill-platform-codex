@@ -53,8 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
     return userPerms.includes('*') || userPerms.includes(permission)
   }
 
-  async function loginWithCredentials(credentials: LoginCredentials): Promise<void> {
-    const response = await authApi.login(credentials)
+  function applyTokenResponse(response: TokenResponse): void {
     token.value = response.token
     refreshToken.value = response.token
     user.value = {
@@ -70,6 +69,11 @@ export const useAuthStore = defineStore('auth', () => {
       refresh_token: response.token,
     }))
     localStorage.setItem('drill_user', JSON.stringify(user.value))
+  }
+
+  async function loginWithCredentials(credentials: LoginCredentials): Promise<void> {
+    const response = await authApi.login(credentials)
+    applyTokenResponse(response)
   }
 
   async function loginWithUser(userObj: User): Promise<void> {
@@ -128,7 +132,7 @@ export const useAuthStore = defineStore('auth', () => {
     token, refreshToken, user, isAuthenticated,
     role, userName, userInitial, userDept, roleName, roleType,
     hasRole, hasPermission,
-    loginWithCredentials, loginWithUser, casLogin,
+    loginWithCredentials, loginWithUser, casLogin, applyTokenResponse,
     fetchCurrentUser, logout, restoreSession,
   }
 })

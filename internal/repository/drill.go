@@ -2,6 +2,7 @@ package repository
 
 import (
 	"drill-platform/internal/domain/entity"
+
 	"gorm.io/gorm"
 )
 
@@ -48,7 +49,7 @@ func (r *DrillRepo) UpdateStatus(id uint64, status string) error {
 
 func (r *DrillRepo) GetCurrentStepID(id uint64) (*uint64, error) {
 	var drill entity.DrillInstance
-	if err := DB.Select("current_step_id").First(&drill, id).Error; err != nil {
+	if err := DB.Select("current_task_id").First(&drill, id).Error; err != nil {
 		return nil, err
 	}
 	return drill.CurrentStepID, nil
@@ -77,9 +78,9 @@ func (r *DrillRepo) Delete(id uint64) error {
 			return err
 		}
 
-		// 删除步骤日志（step_instance_id 不为空的记录）
+		// 删除步骤日志（task_instance_id 不为空的记录）
 		if len(stepIDs) > 0 {
-			if err := tx.Where("drill_instance_id = ? AND step_instance_id IN ?", id, stepIDs).
+			if err := tx.Where("drill_instance_id = ? AND task_instance_id IN ?", id, stepIDs).
 				Delete(&entity.DrillInstanceLog{}).Error; err != nil {
 				return err
 			}

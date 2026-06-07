@@ -179,7 +179,7 @@ func (a *DrillFlowAdapter) GetAllStepDefs(flowDefID int64) ([]*flowengine.StepDe
 func (a *DrillFlowAdapter) GetCurrentStepStatus(flowInstID, stepDefID int64) (*flowengine.StepInst, error) {
 	var stepInst entity.StepInstance
 	err := repository.DB.
-		Where("drill_instance_id = ? AND step_template_id = ?", uint64(flowInstID), uint64(stepDefID)).
+		Where("drill_instance_id = ? AND template_step_id = ?", uint64(flowInstID), uint64(stepDefID)).
 		First(&stepInst).Error
 	if err != nil {
 		return nil, err
@@ -422,7 +422,7 @@ func (a *DrillFlowAdapter) SetupEventSubscriptions(engine *flowengine.Engine) {
 func (a *DrillFlowAdapter) findStepInstance(drillID uint64, stepDefID int64) (*entity.StepInstance, error) {
 	var stepInst entity.StepInstance
 	err := repository.DB.
-		Where("drill_instance_id = ? AND step_template_id = ?", drillID, uint64(stepDefID)).
+		Where("drill_instance_id = ? AND template_step_id = ?", drillID, uint64(stepDefID)).
 		First(&stepInst).Error
 	if err != nil {
 		return nil, fmt.Errorf("step instance not found: drillID=%d, stepDefID=%d", drillID, stepDefID)

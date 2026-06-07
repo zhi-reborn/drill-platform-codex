@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strconv"
 	"time"
 
 	"drill-platform/internal/domain/dto"
@@ -70,13 +71,17 @@ func (s *DrillService) Recover(id uint64) error {
 	}
 	inst.Status = flowengine.FlowStatus(drill.Status)
 
-	// 同步内存中步骤实例的 ID 到数据库 ID
-	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
-
 	steps, err := s.stepRepo.FindStepsByDrillID(id)
 	if err != nil {
 		return err
 	}
+
+	if err := s.backfillMissingStepTemplateIDs(drill.ID, template.Steps, steps); err != nil {
+		return err
+	}
+
+	// 同步内存中步骤实例的 ID 到数据库 ID
+	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
 
 	for _, step := range steps {
 		si, exists := inst.Steps[int64(step.StepTemplateID)]
@@ -99,6 +104,45 @@ func (s *DrillService) Recover(id uint64) error {
 	}
 
 	return nil
+}
+
+func (s *DrillService) backfillMissingStepTemplateIDs(drillID uint64, templateSteps []entity.StepTemplate, steps []entity.StepInstance) error {
+	bySeqName := make(map[string]uint64, len(templateSteps))
+	bySeq := make(map[int]uint64, len(templateSteps))
+	templateIDs := make(map[uint64]struct{}, len(templateSteps))
+	for _, step := range templateSteps {
+		bySeqName[stepTemplateKey(step.Seq, step.Name)] = step.ID
+		if _, exists := bySeq[step.Seq]; !exists {
+			bySeq[step.Seq] = step.ID
+		}
+		templateIDs[step.ID] = struct{}{}
+	}
+
+	for i := range steps {
+		// 已存在且指向有效模板步骤则跳过；否则按 seq+name 重新匹配
+		if _, ok := templateIDs[steps[i].StepTemplateID]; ok {
+			continue
+		}
+		stepTemplateID, exists := bySeqName[stepTemplateKey(steps[i].Seq, steps[i].Name)]
+		if !exists {
+			stepTemplateID, exists = bySeq[steps[i].Seq]
+		}
+		if !exists {
+			return errors.New("步骤模板映射不存在")
+		}
+		steps[i].StepTemplateID = stepTemplateID
+		if err := repository.DB.Model(&entity.StepInstance{}).
+			Where("drill_instance_id = ? AND id = ?", drillID, steps[i].ID).
+			Update("template_step_id", stepTemplateID).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func stepTemplateKey(seq int, name string) string {
+	return strconv.Itoa(seq) + "\x00" + name
 }
 
 func (s *DrillService) SetWebSocketManager(wsManager *websocket.Manager) {

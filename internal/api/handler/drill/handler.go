@@ -21,11 +21,65 @@ type Handler struct {
 	userService  *service.AuthService
 }
 
+type stepOperationTarget struct {
+	step      entity.StepInstance
+	stepDefID uint64
+}
+
 func NewHandler(drillService *service.DrillService, authService *service.AuthService) *Handler {
 	return &Handler{
 		drillService: drillService,
 		userService:  authService,
 	}
+}
+
+func resolveStepOperationTarget(drillID, requestedID uint64) (*stepOperationTarget, error) {
+	var step entity.StepInstance
+	if err := repository.DB.Where("drill_instance_id = ? AND template_step_id = ?", drillID, requestedID).First(&step).Error; err != nil {
+		if err := repository.DB.Where("drill_instance_id = ? AND id = ?", drillID, requestedID).First(&step).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	if step.StepTemplateID == 0 {
+		stepTemplateID, err := inferStepTemplateID(drillID, step)
+		if err != nil {
+			return nil, err
+		}
+		step.StepTemplateID = stepTemplateID
+		if err := repository.DB.Model(&entity.StepInstance{}).
+			Where("id = ?", step.ID).
+			Update("template_step_id", stepTemplateID).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return &stepOperationTarget{
+		step:      step,
+		stepDefID: step.StepTemplateID,
+	}, nil
+}
+
+func inferStepTemplateID(drillID uint64, step entity.StepInstance) (uint64, error) {
+	var drill entity.DrillInstance
+	if err := repository.DB.Select("template_id").First(&drill, drillID).Error; err != nil {
+		return 0, err
+	}
+
+	var stepTemplate entity.StepTemplate
+	err := repository.DB.
+		Where("drill_template_id = ? AND seq = ? AND name = ?", drill.TemplateID, step.Seq, step.Name).
+		First(&stepTemplate).Error
+	if err == nil {
+		return stepTemplate.ID, nil
+	}
+
+	if err := repository.DB.
+		Where("drill_template_id = ? AND seq = ?", drill.TemplateID, step.Seq).
+		First(&stepTemplate).Error; err != nil {
+		return 0, err
+	}
+	return stepTemplate.ID, nil
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -219,25 +273,30 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 		return
 	}
 
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
+		response.InternalError(c, "步骤实例不存在")
+		return
+	}
+
 	now := time.Now()
 	repository.DB.Model(&entity.StepInstance{}).
-		Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
+		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":          "completed",
-			"actual_operator": middleware.GetUserID(c),
-			"end_time":        &now,
-			"remark":          req.Remark,
+			"status":       "completed",
+			"completed_at": &now,
+			"remark":       req.Remark,
 		})
 
 	// 通知引擎该步骤已完成
 	if h.drillService.Engine() != nil {
-		err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
+		err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
 		if err == flowengine.ErrInstanceNotFound {
 			if recErr := h.drillService.Recover(id); recErr != nil {
 				response.InternalError(c, "恢复演练状态失败")
 				return
 			}
-			if err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
+			if err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
 				response.InternalError(c, "内部错误")
 				return
 			}
@@ -276,20 +335,20 @@ func (h *Handler) SkipStep(c *gin.Context) {
 		contentSkip = "指挥员手动操作跳过"
 	}
 
-	var stepInst entity.StepInstance
-	if err := repository.DB.Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).First(&stepInst).Error; err != nil {
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
 
 	nowS := time.Now()
-	err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
+	err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
 			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
-		if err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
+		if err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
 			response.InternalError(c, "内部错误")
 			return
 		}
@@ -299,11 +358,11 @@ func (h *Handler) SkipStep(c *gin.Context) {
 	}
 
 	repository.DB.Model(&entity.StepInstance{}).
-		Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
+		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":   "skipped",
-			"end_time": &nowS,
-			"remark":   contentSkip,
+			"status":       "skipped",
+			"completed_at": &nowS,
+			"remark":       contentSkip,
 		})
 
 	response.SuccessWithMessage(c, "步骤已跳过", nil)
@@ -330,20 +389,20 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 		return
 	}
 
-	var stepInst entity.StepInstance
-	if err := repository.DB.Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).First(&stepInst).Error; err != nil {
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
 
 	nowFC := time.Now()
-	err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(req.StepID), int64(middleware.GetUserID(c)))
+	err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
 			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
-		if err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(req.StepID), int64(middleware.GetUserID(c))); err != nil {
+		if err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
 			response.InternalError(c, "内部错误")
 			return
 		}
@@ -353,12 +412,11 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 	}
 
 	repository.DB.Model(&entity.StepInstance{}).
-		Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
+		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":          "completed",
-			"actual_operator": middleware.GetUserID(c),
-			"end_time":        &nowFC,
-			"remark":          req.Remark,
+			"status":       "completed",
+			"completed_at": &nowFC,
+			"remark":       req.Remark,
 		})
 
 	response.SuccessWithMessage(c, "步骤已强制完成", nil)
@@ -386,7 +444,7 @@ func (h *Handler) AssignStep(c *gin.Context) {
 	}
 	if bytes, err := json.Marshal(req.UserIDs); err == nil {
 		repository.DB.Model(&entity.StepInstance{}).
-			Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
+			Where("drill_instance_id = ? AND template_step_id = ?", id, req.StepID).
 			Update("assignee_ids", string(bytes))
 
 		now := time.Now()
@@ -431,13 +489,16 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 		return
 	}
 
-	stepDefID := int64(req.StepID)
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
+		response.InternalError(c, "步骤实例不存在")
+		return
+	}
+	stepDefID := int64(target.stepDefID)
 
-	var stepDB entity.StepInstance
-	repository.DB.Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).First(&stepDB)
 	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
 		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(stepDB.Status)
+			si.Status = flowengine.StepStatus(target.step.Status)
 		}
 	}
 
@@ -462,13 +523,10 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 		contentRT = "指挥员手动重新派发任务"
 	}
 	repository.DB.Model(&entity.StepInstance{}).
-		Where("drill_instance_id = ? AND step_template_id = ?", id, req.StepID).
+		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":          "running",
-			"start_time":      time.Now(),
-			"end_time":        nil,
-			"timeout_at":      nil,
-			"actual_operator": nil,
+			"status":     "running",
+			"started_at": time.Now(),
 		})
 
 	nowRT := time.Now()

@@ -15,10 +15,20 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	Redis    RedisConfig    `yaml:"redis"`
-	JWT      JWTConfig      `yaml:"jwt"`
+	Server   ServerConfig       `yaml:"server"`
+	Database DatabaseConfig     `yaml:"database"`
+	Redis    RedisConfig        `yaml:"redis"`
+	JWT      JWTConfig          `yaml:"jwt"`
+	Auth     AuthConfig         `yaml:"auth"`
+	CAS      service.CASConfig  `yaml:"cas"`
+	LDAP     service.LDAPConfig `yaml:"ldap"`
+}
+
+type AuthConfig struct {
+	Mode           string            `yaml:"mode"`
+	AutoCreateUser bool              `yaml:"autoCreateUser"`
+	DefaultRole    string            `yaml:"defaultRole"`
+	RoleMappings   map[string]string `yaml:"roleMappings"`
 }
 
 type ServerConfig struct {
@@ -113,6 +123,13 @@ func main() {
 
 	services := service.NewServices(wsManager, redisClient)
 	services.AuthService.SetJWTConfig(cfg.JWT.Secret, cfg.JWT.Expire)
+	services.AuthService.SetExternalAuthConfig(service.ExternalAuthConfig{
+		AutoCreateUser: cfg.Auth.AutoCreateUser,
+		DefaultRole:    cfg.Auth.DefaultRole,
+		RoleMappings:   cfg.Auth.RoleMappings,
+	})
+	services.AuthService.SetCASConfig(cfg.CAS)
+	services.AuthService.SetLDAPConfig(cfg.LDAP)
 
 	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret)
 

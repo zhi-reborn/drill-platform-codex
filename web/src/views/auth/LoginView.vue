@@ -229,9 +229,11 @@ async function handleDevLogin() {
 }
 
 async function handleLocalLogin() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
   loading.value = true
   error.value = ''
-  form.password = ''  // 清空密码框
   try {
     await authStore.loginWithCredentials(form)
     ElMessage.success('登录成功')
@@ -246,6 +248,7 @@ async function handleLocalLogin() {
       error.value = '登录失败'
     }
   } finally {
+    form.password = ''
     loading.value = false
   }
 }
@@ -439,7 +442,45 @@ onMounted(async () => {
 }
 
 :deep(.el-input__wrapper) {
-  background-color: #1A1F2E !important;
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(203, 213, 225, 0.72) !important;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2) !important;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  border-color: #55c3d3 !important;
+  box-shadow: 0 0 0 1px rgba(85, 195, 211, 0.6), 0 0 18px rgba(85, 195, 211, 0.18) !important;
+}
+
+:deep(.el-input__inner) {
+  color: #f8fafc !important;
+  font-weight: 600;
+}
+
+:deep(.el-input__inner::placeholder) {
+  color: #cbd5e1 !important;
+  opacity: 0.88;
+}
+
+:deep(.el-input__prefix .el-icon),
+:deep(.el-input__suffix .el-icon) {
+  color: #cbd5e1 !important;
+}
+
+:deep(.el-checkbox__label) {
+  color: #dbeafe !important;
+  font-weight: 600;
+}
+
+:deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: #f8fafc !important;
+}
+
+:deep(.el-button.is-disabled.login-btn) {
+  color: rgba(15, 23, 42, 0.78) !important;
+  background-color: #93c5fd !important;
+  border-color: #93c5fd !important;
+  opacity: 0.72;
 }
 
 :deep(.el-form-item) {

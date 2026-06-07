@@ -119,7 +119,7 @@ function viewDetail(instance: DrillInstance) {
 }
 
 function viewScreen(instance: DrillInstance) {
-  router.push(`/director/screen/${instance.id}`)
+  router.push(`/screen/${instance.id}`)
 }
 
 function handleFilterChange() {

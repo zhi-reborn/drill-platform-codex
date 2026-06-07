@@ -34,6 +34,8 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/auth/login", authHandler.Login)
+		v1.GET("/auth/cas", authHandler.CASLogin)
+		v1.GET("/auth/cas/callback", authHandler.CASCallback)
 		v1.GET("/auth/dev-users", authHandler.ListUsers)
 		v1.Use(jwtAuth)
 		{

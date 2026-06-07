@@ -376,7 +376,7 @@ function goToTaskDetail(taskId: number) {
 
 // 查看大屏
 function viewScreen(drillId: number) {
-  router.push(`/executor/screen/${drillId}`)
+  router.push(`/screen/${drillId}`)
 }
 
 // 加载数据

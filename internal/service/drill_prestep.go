@@ -29,7 +29,7 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 
 	all := make(map[uint64]*stepInfo)
 	childrenOf := make(map[uint64][]uint64)
-	roots := make([]uint64, 0)
+	const rootParentID uint64 = 0
 
 	for i := range instanceSteps {
 		si := &instanceSteps[i]
@@ -40,12 +40,16 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 			p.parentID = *si.ParentStepID
 			childrenOf[p.parentID] = append(childrenOf[p.parentID], p.id)
 		} else {
-			roots = append(roots, p.id)
+			childrenOf[rootParentID] = append(childrenOf[rootParentID], p.id)
 		}
 		all[p.id] = p
 	}
 
-	sort.Slice(roots, func(i, j int) bool { return all[roots[i]].seq < all[roots[j]].seq })
+	for parentID := range childrenOf {
+		ids := childrenOf[parentID]
+		sort.Slice(ids, func(i, j int) bool { return all[ids[i]].seq < all[ids[j]].seq })
+		childrenOf[parentID] = ids
+	}
 
 	writePre := func(id uint64, ids []uint64) {
 		if ids == nil {
@@ -55,141 +59,53 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 		db.Model(&entity.StepInstance{}).Where("id = ?", id).Update("pre_step_ids", string(b))
 	}
 
-	type group struct {
-		rootIDs     []uint64
-		consecutive bool
-	}
-	groupOf := make(map[uint64]*group)
-	processed := make(map[uint64]bool)
-
-	for i := 0; i < len(roots); i++ {
-		ri := all[roots[i]]
-		if ri.stepType != "parallel" {
-			continue
-		}
-		j := i + 1
-		for j < len(roots) && all[roots[j]].stepType == "parallel" {
-			j++
-		}
-		consecutive := j > i+1
-		for k := i; k < j-1; k++ {
-			if all[roots[k+1]].seq-all[roots[k]].seq != 1 {
-				consecutive = false
-				break
-			}
-		}
-		g := &group{consecutive: consecutive}
-		for k := i; k < j; k++ {
-			g.rootIDs = append(g.rootIDs, roots[k])
-			groupOf[roots[k]] = g
-		}
-		i = j - 1
-	}
-
-	for _, rid := range roots {
-		if _, ok := groupOf[rid]; !ok {
-			groupOf[rid] = &group{rootIDs: []uint64{rid}}
-		}
-	}
-
-	type wave struct {
-		groups  []*group
-		grouped bool
-	}
-	waves := []*wave{}
-	var cur *wave
-
-	for _, rid := range roots {
-		if processed[rid] {
-			continue
-		}
-		g := groupOf[rid]
-		for _, mid := range g.rootIDs {
-			processed[mid] = true
-		}
-		ri := all[rid]
-
-		isNewWave := false
-		if cur != nil && ri.stepType != "parallel" {
-			isNewWave = true
-		}
-
-		if isNewWave || cur == nil {
-			if cur != nil {
-				waves = append(waves, cur)
-			}
-			cur = &wave{groups: []*group{g}, grouped: g.consecutive}
-			if ri.stepType != "parallel" {
-				waves = append(waves, cur)
-				cur = nil
-			}
-		} else {
-			cur.groups = append(cur.groups, g)
-		}
-	}
-	if cur != nil {
-		waves = append(waves, cur)
-	}
-
 	computed := make(map[uint64][]uint64)
 
-	var resolve func(id uint64, waveIdx int) []uint64
-	resolve = func(id uint64, waveIdx int) []uint64 {
-		if v, ok := computed[id]; ok {
-			return v
+	copyIDs := func(ids []uint64) []uint64 {
+		if len(ids) == 0 {
+			return nil
 		}
-		p := all[id]
-
-		var result []uint64
-		if p.parentID > 0 {
-			siblings := childrenOf[p.parentID]
-			sort.Slice(siblings, func(i, j int) bool { return all[siblings[i]].seq < all[siblings[j]].seq })
-			if siblings[0] == p.id {
-				result = resolve(p.parentID, waveIdx)
-			} else {
-				for idx := range siblings {
-					if siblings[idx] == p.id && idx > 0 {
-						result = append(result, siblings[idx-1])
-						break
-					}
-				}
-			}
-		} else {
-			if waveIdx == 0 {
-				result = nil
-			} else {
-				prevWave := waves[waveIdx-1]
-				for _, g := range prevWave.groups {
-					result = append(result, g.rootIDs...)
-				}
-			}
-		}
-
-		computed[id] = result
-		return result
+		out := make([]uint64, len(ids))
+		copy(out, ids)
+		return out
 	}
 
-	waveOf := make(map[uint64]int)
-	for wi, w := range waves {
-		for _, g := range w.groups {
-			for _, rid := range g.rootIDs {
-				waveOf[rid] = wi
+	var computeLevel func(parentID uint64, inherited []uint64)
+	computeLevel = func(parentID uint64, inherited []uint64) {
+		siblings := childrenOf[parentID]
+		for i := 0; i < len(siblings); {
+			id := siblings[i]
+			if all[id].stepType == "parallel" {
+				j := i + 1
+				for j < len(siblings) && all[siblings[j]].stepType == "parallel" {
+					j++
+				}
+				groupIDs := make([]uint64, 0, j-i)
+				for _, gid := range siblings[i:j] {
+					computed[gid] = copyIDs(inherited)
+					computeLevel(gid, computed[gid])
+					groupIDs = append(groupIDs, gid)
+				}
+				inherited = groupIDs
+				i = j
+				continue
 			}
+
+			computed[id] = copyIDs(inherited)
+			computeLevel(id, computed[id])
+			inherited = []uint64{id}
+			i++
 		}
 	}
+	computeLevel(rootParentID, nil)
 
-	for _, rid := range roots {
-		wi := waveOf[rid]
-		writePre(rid, resolve(rid, wi))
-		for _, ch := range childrenOf[rid] {
-			var walk func(cid uint64)
-			walk = func(cid uint64) {
-				writePre(cid, resolve(cid, wi))
-				for _, gch := range childrenOf[cid] {
-					walk(gch)
-				}
-			}
-			walk(ch)
+	for id, ids := range computed {
+		writePre(id, ids)
+	}
+
+	for id := range all {
+		if _, ok := computed[id]; !ok {
+			writePre(id, nil)
 		}
 	}
 }

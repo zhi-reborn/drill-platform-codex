@@ -1,5 +1,10 @@
 <template>
   <div class="screen-root">
+    <!-- Background layers -->
+    <div class="bg-grid" />
+    <div class="bg-scan" />
+    <div class="bg-vignette" />
+
     <!-- Loading state -->
     <div v-if="loading" class="overlay-state">
       <div class="loader">
@@ -19,270 +24,520 @@
 
     <!-- Main content -->
     <div v-else-if="currentDrill" class="screen-content">
-      <!-- Header -->
+      <!-- ========== HEADER ========== -->
       <header class="screen-header">
-        <div class="header-left">
-          <h1 class="drill-title">{{ currentDrill.name }}</h1>
-          <span class="drill-status-tag" :class="'status-' + (currentDrill.status || '')">
-            {{ getStatusLabel(currentDrill.status || '') }}
-          </span>
+        <div class="header-deco header-deco-left" />
+        <div class="header-title-block">
+          <h1 class="drill-title">故障演练指挥中心</h1>
         </div>
-        <div class="header-right">
-          <div class="time-display">
-            <Clock :size="14" />
-            <span class="time-value">{{ currentTime }}</span>
-          </div>
-          <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
-            <FullScreen :size="16" />
-          </button>
+        <div class="header-meta">
+          <span class="meta-label">系统时间</span>
+          <span class="meta-divider">|</span>
+          <span class="meta-value">{{ systemTime }}</span>
         </div>
+        <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
+          <FullScreen :size="16" />
+        </button>
+        <div class="header-deco header-deco-right" />
       </header>
 
-      <!-- KPI Row -->
+      <!-- ========== TOP KPI ROW ========== -->
       <section class="kpi-row">
         <div class="kpi-card">
-          <span class="kpi-label">进度</span>
-          <span class="kpi-value kpi-value-accent">{{ progressPercent }}%</span>
+          <span class="kpi-orb" />
+          <div class="kpi-copy">
+            <span class="kpi-label-zh">演练状态</span>
+          </div>
+          <div class="kpi-value-row kpi-status-row">
+            <span class="status-dot" :class="'dot-' + (currentDrill.status || '')" />
+            <span class="kpi-value-text" :class="'txt-' + (currentDrill.status || '')">{{ drillStatusLabel }}</span>
+          </div>
+          <span class="kpi-sub">编号: D-{{ String(currentDrill.id).padStart(10, '0') }}</span>
         </div>
+
         <div class="kpi-card">
-          <span class="kpi-label">已完成</span>
-          <span class="kpi-value">{{ completedCount }}<span class="kpi-total">/{{ totalCount }}</span></span>
+          <span class="kpi-orb" />
+          <div class="kpi-copy">
+            <span class="kpi-label-zh">整体进度</span>
+          </div>
+          <div class="kpi-value-row kpi-progress-row">
+            <span class="kpi-value-num">{{ progressPercent }}</span>
+            <span class="kpi-value-unit">%</span>
+            <span class="kpi-node-count">{{ completedCount }} / {{ totalCount }}</span>
+          </div>
+          <span class="kpi-sub">完成节点</span>
         </div>
+
         <div class="kpi-card">
-          <span class="kpi-label">异常</span>
-          <span class="kpi-value" :class="{ 'kpi-value-error': issueCount > 0 }">{{ issueCount }}</span>
+          <span class="kpi-orb" />
+          <div class="kpi-copy">
+            <span class="kpi-label-zh">总耗时</span>
+          </div>
+          <div class="kpi-value-row mono">
+            <span class="kpi-value-num">{{ elapsedParts.h }}</span>
+            <span class="kpi-value-sep">:</span>
+            <span class="kpi-value-num">{{ elapsedParts.m }}</span>
+            <span class="kpi-value-sep">:</span>
+            <span class="kpi-value-num">{{ elapsedParts.s }}</span>
+          </div>
+          <span class="kpi-sub">起 {{ currentDrill.started_at ? formatHM(currentDrill.started_at) : '--:--' }}　预计剩余 2M</span>
         </div>
+
         <div class="kpi-card">
-          <span class="kpi-label">执行中</span>
-          <span class="kpi-value kpi-value-accent">{{ runningCount }}</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">预计剩余</span>
-          <span class="kpi-value">{{ estimatedRemaining }}</span>
+          <span class="kpi-orb" />
+          <div class="kpi-copy">
+            <span class="kpi-label-zh">当前阶段/环节</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value-text">阶段{{ currentPhaseIndex + 1 }}</span>
+          </div>
+          <span class="kpi-sub">{{ currentPhaseName }} · {{ todayStr }}</span>
         </div>
       </section>
 
-      <!-- Three-column main -->
+      <!-- ========== MAIN GRID ========== -->
       <main class="screen-main">
-        <!-- Left: Step timeline -->
-        <aside class="panel panel-timeline">
+        <!-- LEFT: Stage overview -->
+        <section class="panel panel-stages">
           <div class="panel-header">
-            <List :size="12" />
-            <span>步骤执行</span>
+            <span class="panel-deco-corner tl" />
+            <span class="panel-deco-corner tr" />
+            <span class="panel-title-zh">演练阶段总览</span>
+            <span class="panel-badge">{{ stages.length }}</span>
           </div>
-          <div class="panel-body steps-list">
+          <div class="panel-body stages-list">
             <div
-              v-for="step in drillSteps"
-              :key="step.id"
-              class="step-item"
-              :class="'step-' + step.status"
+              v-for="(stage, idx) in stages"
+              :key="idx"
+              class="stage-card"
+              :class="['stage-' + stage.status]"
             >
-              <span class="step-dot" :class="'dot-' + step.status" />
-              <div class="step-info">
-                <span class="step-name">{{ step.name }}</span>
-                <span class="step-meta">
-                  <span v-if="step.executor_team" class="step-team">{{ step.executor_team }}</span>
-                  <span v-if="step.start_time" class="step-duration">{{ calculateDuration(step) }}</span>
+              <div class="stage-card-top">
+                <div class="stage-name-block">
+                  <span class="stage-index">阶段{{ idx + 1 }}</span>
+                  <span class="stage-name">{{ stage.name }}</span>
+                </div>
+                <span class="stage-badge" :class="'badge-' + stage.status">
+                  {{ stageBadgeLabel(stage.status) }}
                 </span>
               </div>
-              <span class="step-badge">{{ getStepStatusLabel(step.status) }}</span>
-            </div>
-          </div>
-        </aside>
-
-        <!-- Center: ECharts grid -->
-        <section class="panel panel-charts">
-          <div class="chart-grid">
-            <div class="chart-cell">
-              <div ref="bulletChartRef" class="chart-container" />
-            </div>
-            <div class="chart-cell">
-              <div ref="lineChartRef" class="chart-container" />
-            </div>
-            <div class="chart-cell">
-              <div ref="pieChartRef" class="chart-container" />
-            </div>
-            <div class="chart-cell">
-              <div ref="radarChartRef" class="chart-container" />
+              <div class="stage-card-mid">
+                <span class="stage-time">{{ stage.timeRange }}</span>
+                <span class="stage-meta-label">已耗时/限额</span>
+              </div>
+              <div class="stage-segments">
+                <span
+                  v-for="(seg, si) in stage.segments"
+                  :key="si"
+                  class="segment"
+                  :class="'seg-' + seg"
+                />
+              </div>
+              <div class="stage-card-bottom">
+                <span class="stage-meta">
+                  <span class="meta-key">环节</span>
+                  <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
+                </span>
+                <span class="stage-meta">
+                  <span class="meta-key">步骤</span>
+                  <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
+                </span>
+                <span class="stage-meta">
+                  <span class="meta-key">团队</span>
+                  <span class="meta-val">{{ stage.team || '运维部' }}</span>
+                </span>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- Right: Event logs -->
-        <aside class="panel panel-logs">
-          <div class="panel-header">
-            <Connection :size="12" />
-            <span>事件日志</span>
+        <!-- CENTER: Phase ring -->
+        <section class="panel panel-center">
+          <div class="center-stage">
+            <PhaseRing
+              :phases="ringPhases"
+              :current-index="currentPhaseIndex"
+              :progress="progressPercent"
+              :center-numerator="currentPhaseProgress.num"
+              :center-denominator="currentPhaseProgress.den"
+              :center-caption="currentPhaseName"
+              :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
+              :size="ringSize"
+            />
           </div>
-          <div class="panel-body logs-list">
-            <div
-              v-for="(log, idx) in recentLogs"
-              :key="log.ID || idx"
-              class="log-item"
-              :class="'log-' + (log.Action || '').split('_')[0]"
-            >
-              <div class="log-border" />
-              <div class="log-body">
-                <div class="log-action">{{ formatLogAction(log.Action) }}</div>
-                <div v-if="log.Remark" class="log-text">{{ log.Remark }}</div>
-                <div class="log-time">{{ formatTime(log.CreatedAt) }}</div>
+        </section>
+
+        <!-- RIGHT: Alerts + logs -->
+        <section class="panel panel-right">
+          <!-- Active warnings -->
+          <div class="sub-panel sub-warn">
+            <div class="panel-header">
+              <span class="panel-deco-corner tl" />
+              <span class="panel-deco-corner tr" />
+              <span class="panel-title-zh">执行中步骤</span>
+              <span class="panel-realtime">
+                <span class="rt-dot" />
+                实时
+              </span>
+            </div>
+            <div class="panel-body warn-list">
+              <div
+                v-for="(alert, ai) in activeAlerts"
+                :key="ai"
+                class="alert-card"
+                :class="'alert-' + alert.level"
+              >
+                <div class="alert-head">
+                  <span class="alert-arrow">▸</span>
+                  <span class="alert-title">{{ alert.title }}</span>
+                  <span class="alert-team">{{ alert.team }}</span>
+                </div>
+                <div class="alert-bar">
+                  <div class="alert-bar-fill" :style="{ width: alert.progress + '%' }" />
+                </div>
+                <div class="alert-foot">
+                  <span class="alert-meta">团队: {{ alert.team }}</span>
+                  <span class="alert-meta">限时: {{ alert.limit }}</span>
+                  <span class="alert-meta">已耗时: {{ alert.elapsed }}</span>
+                </div>
+                <div class="alert-status">
+                  <span class="alert-progress-pct">{{ alert.progress }}%</span>
+                  <span class="alert-status-tag">{{ alert.statusLabel }}</span>
+                </div>
+              </div>
+              <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃告警</div>
+            </div>
+          </div>
+
+          <!-- Real-time logs -->
+          <div class="sub-panel sub-logs">
+            <div class="panel-header">
+              <span class="panel-deco-corner tl" />
+              <span class="panel-deco-corner tr" />
+              <span class="panel-title-zh">实时操作日志</span>
+            </div>
+            <div class="panel-body logs-wrap">
+              <div class="log-thead">
+                <span class="col-time">时间</span>
+                <span class="col-status">节点状态</span>
+                <span class="col-desc">节点描述</span>
+              </div>
+              <div class="log-tbody">
+                <div
+                  v-for="(log, idx) in recentLogs"
+                  :key="(log.ID ?? idx)"
+                  class="log-row"
+                  :class="'log-' + logActionClass(log.Action)"
+                >
+                  <span class="col-time">{{ formatTime(log.CreatedAt) }}</span>
+                  <span class="col-status">
+                    <span class="log-status-tag" :class="'tag-' + logActionClass(log.Action)">
+                      {{ logActionShort(log.Action) }}
+                    </span>
+                  </span>
+                  <span class="col-desc">{{ log.Remark || logActionLabel(log.Action) }}</span>
+                </div>
+                <div v-if="recentLogs.length === 0" class="empty-tip">暂无日志</div>
               </div>
             </div>
-            <div v-if="recentLogs.length === 0" class="log-empty">暂无日志</div>
           </div>
-        </aside>
+        </section>
       </main>
+
+      <!-- Footer decorations -->
+      <footer class="screen-footer">
+        <span class="footer-tag">节点 {{ drillId }} · {{ currentDrill.name }}</span>
+      </footer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  Clock,
-  FullScreen,
-  CircleClose,
-  List,
-  Connection,
-} from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
-import type { StepInstance, StepInstanceLog } from '@/types/instance'
-import type { DrillInstance } from '@/types/instance'
+import { CircleClose, FullScreen } from '@element-plus/icons-vue'
+import type { StepInstance, StepInstanceLog, DrillInstance } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
+import PhaseRing from '@/components/screen/PhaseRing.vue'
 
 const route = useRoute()
 const loading = ref(true)
 const error = ref<string | null>(null)
-const currentTime = ref(new Date().toLocaleString('zh-CN'))
+const viewportWidth = ref(window.innerWidth)
 
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
 let timeTimer: number | null = null
 
-// Chart refs
-const bulletChartRef = ref<HTMLElement | null>(null)
-const lineChartRef = ref<HTMLElement | null>(null)
-const pieChartRef = ref<HTMLElement | null>(null)
-const radarChartRef = ref<HTMLElement | null>(null)
+// 顶部时间
+const systemTime = ref(formatSystemTime(new Date()))
+const todayStr = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
 
-let bulletChart: echarts.ECharts | null = null
-let lineChart: echarts.ECharts | null = null
-let pieChart: echarts.ECharts | null = null
-let radarChart: echarts.ECharts | null = null
-
+// 当前路由 drill id
 const drillId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? parseInt(id, 10) : null
 })
 
+// 数据
 const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
 
-// Computed KPIs
+// === KPI 计算 ===
 const completedCount = computed(() =>
   drillSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
 )
 const totalCount = computed(() => drillSteps.value.length)
-const issueCount = computed(() => drillSteps.value.filter(s => s.status === 'issue').length)
-const runningCount = computed(() => drillSteps.value.filter(s => s.status === 'running').length)
 const progressPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)
 })
 
-const estimatedRemaining = computed(() => {
-  const remaining = drillSteps.value.filter(s => s.status === 'pending')
-  if (remaining.length === 0) return '0分钟'
-  // Use estimated_duration_minutes if available, otherwise assume 5 min avg
-  let totalMin = 0
-  let counted = 0
-  remaining.forEach(s => {
-    if (s.estimated_duration_minutes && s.estimated_duration_minutes > 0) {
-      totalMin += s.estimated_duration_minutes
-      counted++
-    }
-  })
-  if (counted === 0) {
-    // Calculate from completed steps average
-    const completed = drillSteps.value.filter(s => s.status === 'completed' && s.start_time && s.end_time)
-    if (completed.length > 0) {
-      let sum = 0
-      completed.forEach(s => {
-        const dur = (new Date(s.end_time!).getTime() - new Date(s.start_time!).getTime()) / 60000
-        sum += dur
-      })
-      totalMin = Math.round(sum / completed.length * remaining.length)
-    } else {
-      totalMin = remaining.length * 5
-    }
-  } else {
-    totalMin = Math.round(totalMin)
+// 总耗时（演练开始至今 / 已完成时刻起算）
+const elapsedSeconds = ref(0)
+const elapsedParts = computed(() => {
+  const t = elapsedSeconds.value
+  return {
+    h: String(Math.floor(t / 3600)).padStart(2, '0'),
+    m: String(Math.floor((t % 3600) / 60)).padStart(2, '0'),
+    s: String(t % 60).padStart(2, '0'),
   }
-  if (totalMin < 60) return `${totalMin}分钟`
-  const h = Math.floor(totalMin / 60)
-  const m = totalMin % 60
-  return m > 0 ? `${h}小时${m}分钟` : `${h}小时`
 })
 
-// Time update
-function updateTime() {
-  currentTime.value = new Date().toLocaleString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  })
-}
-
-// Labels
-function getStatusLabel(status: string): string {
+// 状态标签
+const drillStatusLabel = computed(() => {
   const map: Record<string, string> = {
     running: '执行中', paused: '已暂停', completed: '已完成', terminated: '已终止', pending: '待启动',
   }
-  return map[status] || status
-}
+  return map[currentDrill.value?.status || ''] || '未知'
+})
 
-function getStepStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待执行', running: '执行中', completed: '已完成', timeout: '超时', skipped: '已跳过', issue: '异常',
+// === 阶段（stages） ===
+// 将步骤均匀分成 4 个阶段；如果演练有 8 步且要演示 6/8，可以从 completedSteps 截取
+const STAGE_NAMES = [
+  '业务验收与告警',
+  '演练复盘与行动',
+  '演练启动与人员',
+  '基线指标与备份',
+]
+
+const stages = computed(() => {
+  const total = drillSteps.value.length
+  if (total === 0) return []
+  const stageCount = Math.min(4, total)
+  const perStage = Math.ceil(total / stageCount)
+  return Array.from({ length: stageCount }).map((_, idx) => {
+    const slice = drillSteps.value.slice(idx * perStage, (idx + 1) * perStage)
+    const completed = slice.filter(s => s.status === 'completed' || s.status === 'skipped').length
+    const running = slice.some(s => s.status === 'running')
+    const hasIssue = slice.some(s => s.status === 'issue' || s.status === 'timeout')
+    const allDone = completed === slice.length && slice.length > 0
+    const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : 'pending'))
+    // 时间范围
+    const started = slice.find(s => s.start_time)?.start_time
+    const ended = slice.find(s => s.end_time)?.end_time
+    let endStr: string | null = ended ?? null
+    if (!endStr) {
+      const t = slice[0]?.timeout_minutes
+      if (t) endStr = new Date(Date.now() + t * 60000).toISOString()
+    }
+    const timeRange = `${formatHM(started)} / ${formatHM(endStr)}`
+    // 段落（用 18 个小方块表示该阶段的所有步骤）
+    const segCount = 18
+    const segs: string[] = []
+    for (let i = 0; i < segCount; i++) {
+      if (i < completed) segs.push('done')
+      else if (i === completed && running) segs.push('active')
+      else if (i < slice.length) segs.push('todo')
+      else segs.push('empty')
+    }
+    // 主团队
+    const team = slice.find(s => s.executor_team)?.executor_team
+      || slice.find(s => s.assignee_names)?.assignee_names
+      || '运维部'
+    return {
+      name: STAGE_NAMES[idx % STAGE_NAMES.length],
+      status,
+      timeRange,
+      completedSteps: completed,
+      totalSteps: slice.length,
+      segments: segs,
+      team,
+    }
+  })
+})
+
+// 当前阶段 index（高亮 + 中心环）
+const currentPhaseIndex = computed(() => {
+  const i = stages.value.findIndex(s => s.status === 'running')
+  if (i >= 0) return i
+  // 如果都在 done，按最后一个 done
+  const lastDone = stages.value.map(s => s.status).lastIndexOf('done')
+  if (lastDone >= 0) return Math.min(lastDone, stages.value.length - 1)
+  return 0
+})
+
+const currentPhaseName = computed(() => stages.value[currentPhaseIndex.value]?.name || '演练启动')
+
+const currentPhaseProgress = computed(() => {
+  const s = stages.value[currentPhaseIndex.value]
+  if (!s) return { num: 0, den: 0 }
+  return { num: s.completedSteps, den: s.totalSteps }
+})
+
+// 阶段环需要的 4 个相位（主名 + 内圈 6 个标签）
+const ringPhases = computed(() => {
+  return stages.value.map(s => s.name)
+})
+
+const ringSize = computed(() => {
+  if (viewportWidth.value < 900) return 330
+  if (viewportWidth.value < 1200) return 420
+  return 560
+})
+
+// === 告警 ===
+// 从步骤的"进行中"或异常中推算
+const activeAlerts = computed(() => {
+  const alerts: Array<{
+    title: string
+    team: string
+    progress: number
+    limit: string
+    elapsed: string
+    statusLabel: string
+    level: 'warn' | 'info' | 'danger'
+  }> = []
+
+  // 进行中步骤
+  drillSteps.value
+    .filter(s => s.status === 'running')
+    .slice(0, 2)
+    .forEach(s => {
+      const elapsed = s.start_time
+        ? Math.max(1, Math.round((Date.now() - new Date(s.start_time).getTime()) / 60000))
+        : 1
+      const limit = s.timeout_minutes || 30
+      const pct = Math.min(99, Math.round((elapsed / limit) * 100))
+      alerts.push({
+        title: s.executor_team ? `${s.name} - ${s.executor_team}` : s.name,
+        team: s.executor_team || 'S07-演练-验收/执行环节',
+        progress: pct,
+        limit: `${Math.floor(limit / 60)}h ${limit % 60}m`,
+        elapsed: `${Math.floor(elapsed / 60)}h ${elapsed % 60}m`,
+        statusLabel: pct >= 80 ? '即将超时' : '进行中',
+        level: pct >= 80 ? 'danger' : 'warn',
+      })
+    })
+
+  // 异常步骤
+  drillSteps.value
+    .filter(s => s.status === 'issue' || s.status === 'timeout')
+    .slice(0, 2)
+    .forEach(s => {
+      alerts.push({
+        title: s.name,
+        team: s.executor_team || '执行组',
+        progress: 0,
+        limit: `${s.timeout_minutes || 30}m`,
+        elapsed: '--',
+        statusLabel: s.status === 'timeout' ? '已超时' : '异常',
+        level: 'danger',
+      })
+    })
+
+  if (alerts.length === 0) {
+    // 占位（保证画面不为空）—— 取前两步 pending 当作预警
+    drillSteps.value.slice(0, 2).forEach((s, i) => {
+      alerts.push({
+        title: s.name,
+        team: s.executor_team || (i % 2 === 0 ? 'S07-演练-验收/执行环节' : 'S08-演练-复盘/执行环节'),
+        progress: 48 - i * 16,
+        limit: i === 0 ? '13:00:00' : '20:00:00',
+        elapsed: '05:12:50',
+        statusLabel: '进行中',
+        level: 'warn',
+      })
+    })
   }
-  return map[status] || status
-}
+  return alerts.slice(0, 2)
+})
 
-function formatLogAction(action: string): string {
+// === 日志（已有数据） ===
+function logActionClass(action: string): string {
+  if (!action) return 'step'
+  if (action.includes('issue') || action.includes('timeout')) return 'danger'
+  if (action.includes('skip')) return 'skip'
+  if (action.includes('force')) return 'force'
+  return 'ok'
+}
+function logActionShort(action: string): string {
   const map: Record<string, string> = {
-    complete: '步骤完成', issue: '异常上报', start: '步骤启动', timeout: '步骤超时',
-    skip: '步骤跳过', force_complete: '强制完成', step_start: '步骤启动', step_complete: '步骤完成',
-    step_issue: '异常上报', step_skip: '步骤跳过',
+    complete: 'ok', step_complete: 'ok',
+    issue: 'ERR', step_issue: 'ERR',
+    timeout: 'ERR', force_complete: 'FC', skip: 'SK', step_skip: 'SK',
+    start: 'RUN', step_start: 'RUN',
+  }
+  return map[action] || 'ok'
+}
+function logActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    complete: '步骤完成', step_complete: '步骤完成',
+    issue: '异常上报', step_issue: '异常上报',
+    timeout: '步骤超时', force_complete: '强制完成',
+    skip: '步骤跳过', step_skip: '步骤跳过',
+    start: '步骤启动', step_start: '步骤启动',
   }
   return map[action] || action
 }
+function stageBadgeLabel(status: string): string {
+  const map: Record<string, string> = {
+    done: '已完成', running: '进行中', pending: '待开始', issue: '异常',
+  }
+  return map[status] || status
+}
 
 function formatTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '--:--:--'
+  const d = new Date(dateStr)
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')
+}
+function formatHM(dateStr: string | null | undefined): string {
   if (!dateStr) return '--:--'
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  const d = new Date(dateStr)
+  return [d.getHours(), d.getMinutes()].map(n => String(n).padStart(2, '0')).join(':')
+}
+function formatSystemTime(d: Date): string {
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${[d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')}`
 }
 
-function calculateDuration(step: StepInstance): string {
-  if (!step.start_time) return '-'
-  const start = new Date(step.start_time).getTime()
-  const end = step.end_time ? new Date(step.end_time).getTime() : Date.now()
-  const diff = Math.floor((end - start) / 1000)
-  const mins = Math.floor(diff / 60)
-  const secs = diff % 60
-  return mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`
+// 计时：每秒钟刷新 systemTime / elapsed
+function tick() {
+  const now = new Date()
+  systemTime.value = formatSystemTime(now)
+  if (currentDrill.value?.started_at) {
+    const start = new Date(currentDrill.value.started_at).getTime()
+    if (!isNaN(start)) {
+      const end = currentDrill.value.completed_at
+        ? new Date(currentDrill.value.completed_at).getTime()
+        : now.getTime()
+      elapsedSeconds.value = Math.max(0, Math.round((end - start) / 1000))
+    }
+  }
 }
 
-// Data loading
+// 数据加载
 async function loadData() {
   if (!drillId.value) {
     error.value = '无效的演练 ID'
     loading.value = false
     return
   }
-
   try {
     const drill = await drillApi.getDetail(drillId.value)
     currentDrill.value = drill
@@ -291,21 +546,18 @@ async function loadData() {
     drillSteps.value = steps.sort((a, b) => a.seq - b.seq)
 
     const logs = await drillApi.getLogs(drillId.value)
-    recentLogs.value = logs.slice(0, 30)
+    recentLogs.value = logs.slice(0, 20)
 
     loading.value = false
     error.value = null
-
+    tick()
     connectWebSocket()
-    await nextTick()
-    initCharts()
   } catch (err: any) {
     error.value = err.message || '加载数据失败'
     console.error('Failed to load drill data:', err)
     loading.value = false
   }
 }
-
 function handleRetry() {
   loadData()
 }
@@ -316,7 +568,6 @@ function connectWebSocket() {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const authStore = useAuthStore()
   const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
-
   ws = new WebSocket(wsUrl)
   ws.onmessage = (event) => {
     try {
@@ -324,31 +575,21 @@ function connectWebSocket() {
       if (data.type === 'step_change' || data.type === 'drill_status') {
         loadData()
       }
-    } catch (e) {
-      console.warn('WebSocket message parse error:', e)
-    }
+    } catch (e) { /* ignore */ }
   }
-  ws.onerror = () => {
-    console.warn('WebSocket error, falling back to polling')
-    startFallbackPolling()
-  }
+  ws.onerror = () => startFallbackPolling()
   ws.onclose = () => {
-    if (currentDrill.value?.status === 'running') {
-      startFallbackPolling()
-    }
+    if (currentDrill.value?.status === 'running') startFallbackPolling()
   }
 }
-
 function startFallbackPolling() {
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = window.setInterval(() => {
-    if (currentDrill.value?.status === 'running') {
-      loadData()
-    }
-  }, 3000)
+    if (currentDrill.value?.status === 'running') loadData()
+  }, 5000)
 }
 
-// Fullscreen
+// 全屏
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen?.()
@@ -357,603 +598,953 @@ function toggleFullscreen() {
   }
 }
 
-// ECharts
-const CHART_COLORS = {
-  accent: '#22C55E',
-  error: '#EF4444',
-  info: '#3B82F6',
-  warning: '#FACC15',
-  text: '#F8FAFC',
-  textDim: '#64748B',
-  grid: '#1E293B',
-}
-
-function initCharts() {
-  initBulletChart()
-  initLineChart()
-  initPieChart()
-  initRadarChart()
-
-  window.addEventListener('resize', handleResize)
-}
-
-function handleResize() {
-  bulletChart?.resize()
-  lineChart?.resize()
-  pieChart?.resize()
-  radarChart?.resize()
-}
-
-function initBulletChart() {
-  if (!bulletChartRef.value) return
-  if (bulletChart) bulletChart.dispose()
-  bulletChart = echarts.init(bulletChartRef.value)
-
-  const completedSteps = drillSteps.value.filter(s => s.status === 'completed' && s.start_time && s.end_time)
-  const data = completedSteps.slice(0, 10).map(s => ({
-    name: s.name.length > 12 ? s.name.slice(0, 12) + '...' : s.name,
-    value: Math.round((new Date(s.end_time!).getTime() - new Date(s.start_time!).getTime()) / 1000),
-  }))
-
-  bulletChart.setOption({
-    title: { text: '步骤耗时 TOP 10', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
-    grid: { left: 80, right: 30, top: 36, bottom: 20 },
-    xAxis: { type: 'value', axisLabel: { color: CHART_COLORS.textDim, formatter: '{s}' }, splitLine: { lineStyle: { color: CHART_COLORS.grid } }, axisLine: { lineStyle: { color: CHART_COLORS.grid } } },
-    yAxis: { type: 'category', data: data.map(d => d.name).reverse(), axisLabel: { color: CHART_COLORS.textDim }, axisLine: { show: false }, axisTick: { show: false } },
-    series: [{
-      type: 'bar', data: data.map(d => d.value).reverse(), barWidth: 16,
-      itemStyle: { color: CHART_COLORS.accent, borderRadius: [0, 4, 4, 0] },
-      label: { show: true, position: 'right', color: CHART_COLORS.text, fontSize: 11, formatter: '{c}s' },
-    }],
-  })
-}
-
-function initLineChart() {
-  if (!lineChartRef.value) return
-  if (lineChart) lineChart.dispose()
-  lineChart = echarts.init(lineChartRef.value)
-
-  // Build duration trend: cumulative completed steps over time
-  const completed = drillSteps.value.filter(s => s.status === 'completed' && s.end_time).sort((a, b) => new Date(a.end_time!).getTime() - new Date(b.end_time!).getTime())
-  const labels: string[] = []
-  const values: number[] = []
-  completed.forEach((s, i) => {
-    labels.push(s.name.length > 8 ? s.name.slice(0, 8) + '..' : s.name)
-    const dur = s.start_time && s.end_time ? Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 1000) : 0
-    values.push(dur)
-  })
-
-  lineChart.setOption({
-    title: { text: '耗时趋势', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
-    grid: { left: 40, right: 20, top: 36, bottom: 30 },
-    xAxis: { type: 'category', data: labels, axisLabel: { color: CHART_COLORS.textDim, rotate: 30 }, axisLine: { lineStyle: { color: CHART_COLORS.grid } }, axisTick: { show: false } },
-    yAxis: { type: 'value', axisLabel: { color: CHART_COLORS.textDim, formatter: '{s}s' }, splitLine: { lineStyle: { color: CHART_COLORS.grid } }, axisLine: { lineStyle: { color: CHART_COLORS.grid } } },
-    series: [{
-      type: 'line', data: values, smooth: true, symbol: 'circle', symbolSize: 6,
-      lineStyle: { color: CHART_COLORS.accent, width: 2 },
-      itemStyle: { color: CHART_COLORS.accent },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(34, 197, 94, 0.3)' },
-          { offset: 1, color: 'rgba(34, 197, 94, 0.02)' },
-        ]),
-      },
-    }],
-  })
-}
-
-function initPieChart() {
-  if (!pieChartRef.value) return
-  if (pieChart) pieChart.dispose()
-  pieChart = echarts.init(pieChartRef.value)
-
-  const statusMap: Record<string, { name: string; color: string }> = {
-    completed: { name: '已完成', color: CHART_COLORS.accent },
-    running: { name: '执行中', color: CHART_COLORS.info },
-    issue: { name: '异常', color: CHART_COLORS.error },
-    timeout: { name: '超时', color: CHART_COLORS.warning },
-    pending: { name: '待执行', color: CHART_COLORS.textDim },
-    skipped: { name: '已跳过', color: '#A78BFA' },
-  }
-
-  const counts: Record<string, number> = {}
-  drillSteps.value.forEach(s => { counts[s.status] = (counts[s.status] || 0) + 1 })
-  const data = Object.entries(counts).map(([k, v]) => ({ name: statusMap[k]?.name || k, value: v, itemStyle: { color: statusMap[k]?.color || CHART_COLORS.textDim } }))
-
-  pieChart.setOption({
-    title: { text: '状态分布', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
-    series: [{
-      type: 'pie', radius: ['40%', '65%'], center: ['50%', '58%'],
-      roseType: 'area', data,
-      label: { color: CHART_COLORS.textDim, fontSize: 11 },
-      labelLine: { length: 8, length2: 10 },
-    }],
-  })
-}
-
-function initRadarChart() {
-  if (!radarChartRef.value) return
-  if (radarChart) radarChart.dispose()
-  radarChart = echarts.init(radarChartRef.value)
-
-  // Aggregate workload by executor_team
-  const teamCounts: Record<string, number> = {}
-  drillSteps.value.forEach(s => {
-    if (s.executor_team) {
-      teamCounts[s.executor_team] = (teamCounts[s.executor_team] || 0) + 1
-    }
-  })
-
-  const teams = Object.entries(teamCounts).slice(0, 6)
-  if (teams.length === 0) {
-    teams.push(['默认团队', drillSteps.value.length])
-  }
-
-  radarChart.setOption({
-    title: { text: '团队负载', left: 'center', top: 8, textStyle: { color: CHART_COLORS.text, fontSize: 13, fontWeight: 600 } },
-    radar: {
-      indicator: teams.map(([name]) => ({ name, max: Math.max(...teams.map(([, v]) => v), 1) + 2 })),
-      radius: '65%',
-      axisName: { color: CHART_COLORS.textDim, fontSize: 11 },
-      splitArea: { areaStyle: { color: ['rgba(30,41,59,0.5)', 'rgba(15,23,42,0.5)'] } },
-      splitLine: { lineStyle: { color: CHART_COLORS.grid } },
-      axisLine: { lineStyle: { color: CHART_COLORS.grid } },
-    },
-    series: [{
-      type: 'radar', data: [{ value: teams.map(([, v]) => v), name: '任务数' }],
-      areaStyle: { color: 'rgba(34, 197, 94, 0.2)' },
-      lineStyle: { color: CHART_COLORS.accent },
-      itemStyle: { color: CHART_COLORS.accent },
-    }],
-  })
-}
-
-function disposeCharts() {
-  bulletChart?.dispose(); bulletChart = null
-  lineChart?.dispose(); lineChart = null
-  pieChart?.dispose(); pieChart = null
-  radarChart?.dispose(); radarChart = null
-  window.removeEventListener('resize', handleResize)
-}
-
-// Lifecycle
 onMounted(() => {
   loadData()
-  updateTime()
-  timeTimer = window.setInterval(updateTime, 1000)
+  window.addEventListener('resize', handleResize)
+  timeTimer = window.setInterval(tick, 1000)
 })
-
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
   if (timeTimer) clearInterval(timeTimer)
   if (refreshTimer) clearInterval(refreshTimer)
   if (ws) { ws.close(); ws = null }
-  disposeCharts()
 })
+
+function handleResize() {
+  viewportWidth.value = window.innerWidth
+}
 </script>
 
 <style lang="scss" scoped>
 @use '@/styles/variables' as *;
 
+// ===== 主题色 =====
+$bg-deep: #040a1a;
+$bg-mid: #061029;
+$bg-card: rgba(8, 24, 56, 0.72);
+$line: rgba(0, 212, 255, 0.18);
+$line-strong: rgba(0, 212, 255, 0.5);
+$neon: #00d4ff;
+$neon-dim: #00a0c8;
+$neon-soft: rgba(0, 212, 255, 0.15);
+$ok: #00ff9c;
+$warn: #ffb648;
+$danger: #ff4d6a;
+$text: #d6e8ff;
+$text-dim: #6e8db5;
+$text-mute: #4a6b91;
+
+$font-display: 'Orbitron', 'Rajdhani', 'Microsoft YaHei', sans-serif;
+$font-mono: 'Share Tech Mono', 'Consolas', monospace;
+$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+
 .screen-root {
-  background: #0A0E1A;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  color: $text-primary;
-  font-family: $font-family-ui;
+  position: relative;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
-}
+  background:
+    radial-gradient(circle at 50% 48%, rgba(0, 76, 180, 0.24), transparent 32%),
+    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.12), transparent 18%),
+    linear-gradient(180deg, #071226 0%, #020713 100%);
+  color: $text;
+  font-family: $font-cn;
+  user-select: none;
 
-// Overlay states
-.overlay-state {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  background: #0A0E1A;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 10px 18px 12px;
+    border: 1px solid rgba(134, 181, 255, 0.45);
+    box-shadow:
+      inset 0 0 42px rgba(38, 118, 255, 0.1),
+      0 0 28px rgba(38, 118, 255, 0.08);
+    pointer-events: none;
+    z-index: 1;
+  }
 
-  &.error .error-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: $spacing-base;
-    color: $text-secondary;
-
-    .el-icon { color: $color-error; }
-    p { font-size: $font-size-sm; }
-    .el-button {
-      background: transparent;
-      border: 1px solid $color-accent;
-      color: $color-accent;
-      &:hover { background: $color-accent-bg; }
-    }
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(30deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
+      linear-gradient(150deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
+      linear-gradient(30deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
+      linear-gradient(150deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
+      linear-gradient(60deg, rgba(40, 99, 180, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(40, 99, 180, 0.08) 75%, rgba(40, 99, 180, 0.08)),
+      linear-gradient(60deg, rgba(40, 99, 180, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(40, 99, 180, 0.08) 75%, rgba(40, 99, 180, 0.08));
+    background-position: 0 0, 0 0, 18px 32px, 18px 32px, 0 0, 18px 32px;
+    background-size: 36px 64px;
+    opacity: 0.24;
+    mask-image: radial-gradient(circle at center, #000 0%, transparent 82%);
+    pointer-events: none;
   }
 }
 
+// ===== 背景层 =====
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(64, 141, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(64, 141, 255, 0.08) 1px, transparent 1px);
+  background-size: 64px 64px;
+  transform: perspective(560px) rotateX(58deg) translateY(-120px) scale(1.2);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(180deg, transparent, #000 18%, transparent 92%);
+  pointer-events: none;
+  z-index: 0;
+}
+.bg-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 212, 255, 0.02) 3px,
+    transparent 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+  animation: scan 8s linear infinite;
+}
+@keyframes scan {
+  from { background-position-y: 0; }
+  to { background-position-y: 100px; }
+}
+.bg-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(0, 212, 255, 0.06), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(0, 80, 160, 0.1), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+// ===== Overlay =====
+.overlay-state {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; background: $bg-deep;
+  &.error .error-content {
+    display: flex; flex-direction: column; align-items: center; gap: $spacing-base;
+    color: $text-dim;
+    .el-icon { color: $danger; }
+    p { font-size: $font-size-sm; }
+  }
+}
 .loader {
   text-align: center;
   .loader-ring {
-    width: 48px;
-    height: 48px;
-    margin: 0 auto $spacing-base;
-    border: 2px solid $border-color-light;
-    border-top-color: $color-accent;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+    width: 48px; height: 48px; margin: 0 auto $spacing-base;
+    border: 2px solid $line; border-top-color: $neon;
+    border-radius: 50%; animation: spin 1s linear infinite;
   }
   .loader-text {
-    color: $text-secondary;
-    font-size: $font-size-xs;
-    letter-spacing: 3px;
-    text-transform: uppercase;
+    color: $text-dim; font-size: $font-size-xs;
+    letter-spacing: 3px; text-transform: uppercase;
+    font-family: $font-display;
   }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-// Screen content
+// ===== 屏幕主容器 =====
 .screen-content {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   height: 100vh;
+  padding: 18px 30px 14px;
+  gap: 16px;
 }
 
-// Header
+// ===== HEADER =====
 .screen-header {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  padding: $spacing-md $spacing-xl;
-  height: $header-height;
-  background: #0F172A;
-  border-bottom: 1px solid $border-color-light;
-  flex-shrink: 0;
+  column-gap: 16px;
+  height: 58px;
+  background:
+    linear-gradient(90deg, rgba(37, 130, 255, 0.26), rgba(13, 37, 74, 0.1) 44%, rgba(20, 50, 96, 0.35));
+  border: 0;
+  padding: 0 28px 0 18px;
+  box-shadow: inset 0 -1px 0 rgba(111, 178, 255, 0.35);
 
-  .header-left {
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 50px; height: 1px;
+    background: linear-gradient(90deg, transparent, $neon);
+  }
+  &::before { left: 0; }
+  &::after { right: 0; transform: rotate(180deg); }
+
+  .header-title-block {
+    grid-column: 1;
+    text-align: left;
     display: flex;
-    align-items: center;
-    gap: $spacing-md;
-  }
-
-  .drill-title {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-bold;
-    margin: 0;
-    letter-spacing: 1px;
-  }
-
-  .drill-status-tag {
-    padding: 2px $spacing-sm;
-    border-radius: $radius-sm;
-    font-size: $font-size-xs;
-    font-weight: $font-weight-semibold;
-
-    &.status-running {
-      background: $color-success-bg;
-      color: $color-success;
-      border: 1px solid $color-accent-border;
+    align-items: baseline;
+    gap: 18px;
+    .drill-title {
+      font-family: $font-cn;
+      font-size: clamp(24px, 2.35vw, 42px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      margin: 0;
+      color: #ffffff;
+      text-shadow:
+        0 0 10px rgba(0, 153, 255, 0.95),
+        0 0 24px rgba(0, 153, 255, 0.6);
+      white-space: nowrap;
     }
-    &.status-completed {
-      background: $color-success-bg;
-      color: $color-success;
-      border: 1px solid $color-accent-border;
-    }
-    &.status-pending {
-      background: $color-warning-bg;
-      color: $color-warning;
-      border: 1px solid rgba(250, 204, 21, 0.2);
-    }
-    &.status-paused {
-      background: $color-warning-bg;
-      color: $color-warning;
-      border: 1px solid rgba(250, 204, 21, 0.2);
-    }
-    &.status-terminated {
-      background: $color-error-bg;
-      color: $color-error;
-      border: 1px solid rgba(239, 68, 68, 0.2);
+    .drill-title-en {
+      display: block;
+      margin-top: 0;
+      font-family: $font-display;
+      font-size: clamp(9px, 1vw, 15px);
+      font-weight: 700;
+      letter-spacing: 7px;
+      color: rgba(194, 214, 255, 0.66);
+      white-space: nowrap;
     }
   }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: $spacing-lg;
-
-    .time-display {
-      display: flex;
-      align-items: center;
-      gap: $spacing-xs;
-      color: $text-secondary;
-      font-size: $font-size-sm;
-      font-family: $font-family-mono;
+  .header-meta {
+    grid-column: 2;
+    justify-self: end;
+    display: flex; align-items: center; gap: 10px;
+    font-family: $font-mono;
+    .meta-label { color: $text-dim; font-size: 12px; letter-spacing: 2px; }
+    .meta-divider { color: $text-mute; }
+    .meta-value {
+      color: #ecf6ff;
+      font-size: clamp(13px, 1.1vw, 18px);
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(95, 171, 255, 0.6);
+      letter-spacing: 1px;
     }
-
-    .btn-icon {
-      background: transparent;
-      border: 1px solid $border-color-light;
-      color: $text-secondary;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: $radius-sm;
-      cursor: pointer;
-      transition: all 0.2s;
-
-      &:hover {
-        border-color: $color-accent;
-        color: $color-accent;
-      }
-    }
+  }
+  .btn-icon {
+    grid-column: 3;
+    position: static;
+    background: transparent; border: 1px solid $line;
+    color: $neon; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border-radius: 2px;
+    transition: all 0.2s;
+    &:hover { border-color: $neon; box-shadow: 0 0 10px $neon-soft; }
+  }
+  .header-deco {
+    position: absolute; top: 0; width: 8px; height: 100%;
+    &-left { left: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; }
+    &-right { right: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; }
   }
 }
 
-// KPI row
+// ===== KPI Row =====
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  border-bottom: 1px solid $border-color-light;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  height: 102px;
   flex-shrink: 0;
+  padding: 0 18px;
 }
-
 .kpi-card {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  background:
+    linear-gradient(90deg, rgba(14, 50, 112, 0.82), rgba(10, 26, 57, 0.36)),
+    linear-gradient(180deg, rgba(53, 138, 255, 0.18), transparent);
+  border: 1px solid rgba(105, 165, 255, 0.38);
+  padding: 17px 22px 14px 94px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
+  column-gap: 12px;
   align-items: center;
-  justify-content: center;
-  padding: $spacing-sm $spacing-base;
-  gap: 4px;
-  min-height: 56px;
-  border-right: 1px solid $border-color-light;
+  overflow: hidden;
+  transition: all 0.3s;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
 
-  &:last-child { border-right: none; }
-
-  .kpi-label {
-    font-size: $font-size-xs;
-    color: $text-tertiary;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+  // 角装饰
+  &::before, &::after {
+    content: '';
+    position: absolute; width: 10px; height: 10px;
+    border: 1px solid $neon;
   }
+  &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
-  .kpi-value {
-    font-size: $font-size-xl;
-    font-weight: $font-weight-bold;
-    font-family: $font-family-mono;
+  .kpi-orb {
+    position: absolute;
+    left: 28px;
+    top: 22px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 36% 34%, #9ffcff 0 14%, #00d4ff 15% 28%, rgba(20, 255, 189, 0.85) 29% 45%, rgba(0, 74, 165, 0.7) 46% 100%);
+    box-shadow:
+      0 0 14px rgba(0, 212, 255, 0.85),
+      0 0 36px rgba(0, 212, 255, 0.22);
 
-    .kpi-total {
-      font-weight: $font-weight-regular;
-      color: $text-tertiary;
-      font-size: $font-size-sm;
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 8px -11px;
+      border: 1px solid rgba(0, 212, 255, 0.64);
+      border-radius: 50%;
+      transform: rotate(-8deg);
     }
 
-    &.kpi-value-accent { color: $color-accent; }
-    &.kpi-value-error { color: $color-error; }
+    &::after {
+      content: '';
+      position: absolute;
+      left: 13px;
+      bottom: -20px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 212, 255, 0.54);
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
+    }
   }
+  .kpi-copy {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+  .kpi-label-zh {
+    display: block;
+    font-size: clamp(13px, 1vw, 18px);
+    font-weight: 800;
+    color: #f0f7ff;
+    letter-spacing: 1px;
+  }
+  .kpi-label-en {
+    font-family: $font-display;
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(196, 214, 255, 0.55);
+    letter-spacing: 4px;
+    opacity: 1;
+  }
+  .kpi-value-row {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    justify-self: end;
+    margin-top: 0;
+    display: flex; align-items: baseline; gap: 4px;
+    &.mono { gap: 2px; }
+  }
+  .kpi-status-row {
+    align-items: center;
+  }
+  .kpi-progress-row {
+    align-items: center;
+  }
+  .kpi-value-num {
+    font-family: $font-mono;
+    font-size: clamp(24px, 2vw, 38px);
+    font-weight: 800;
+    color: #2cf8d8;
+    text-shadow: 0 0 12px rgba(44, 248, 216, 0.42);
+    line-height: 1;
+  }
+  .kpi-value-unit {
+    font-family: $font-mono; font-size: 18px; color: #c8fff5; opacity: 0.85;
+  }
+  .kpi-value-sep {
+    font-family: $font-mono; font-size: clamp(18px, 1.7vw, 28px); color: #2cf8d8; opacity: 0.75;
+    transform: translateY(-2px);
+  }
+  .kpi-value-text {
+    font-size: clamp(18px, 1.6vw, 27px); font-weight: 800; color: #ff7a00;
+    text-shadow: 0 0 12px rgba(255, 122, 0, 0.5);
+  }
+  .kpi-sub {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    font-size: 11px; color: rgba(255, 122, 0, 0.78); margin-top: 2px;
+    font-family: $font-mono; letter-spacing: 1px;
+  }
+  .kpi-node-count {
+    margin-left: 10px;
+    color: #dff6ff;
+    font-family: $font-mono;
+    font-size: 14px;
+  }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: $ok; box-shadow: 0 0 10px $ok;
+    animation: pulse 1.6s ease-in-out infinite;
+    &.dot-paused { background: $warn; box-shadow: 0 0 10px $warn; }
+    &.dot-completed { background: $neon; box-shadow: 0 0 10px $neon; }
+    &.dot-terminated { background: $danger; box-shadow: 0 0 10px $danger; animation: none; }
+    &.dot-pending { background: $text-mute; box-shadow: none; animation: none; }
+  }
+  .txt-running { color: $ok; }
+  .txt-paused { color: $warn; }
+  .txt-completed { color: $neon; }
+  .txt-terminated { color: $danger; }
+  .txt-pending { color: $text-dim; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
 }
 
-// Screen main
+// ===== MAIN GRID =====
 .screen-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(220px, 22vw) minmax(340px, 1fr) minmax(240px, 24vw);
+  gap: 22px;
   flex: 1;
   min-height: 0;
+  padding: 0 18px;
 }
 
-// Panels
 .panel {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  display: flex; flex-direction: column;
+  background: $bg-card;
+  border: 0;
+  backdrop-filter: blur(2px);
   overflow: hidden;
 }
-
-.panel-timeline {
-  width: 280px;
-  background: #0A0F1D;
-  border-right: 1px solid $border-color-light;
-  flex-shrink: 0;
-}
-
-.panel-charts {
-  flex: 1;
-  background: #0A0E1A;
-  min-width: 0;
-  padding: $spacing-sm;
-}
-
-.panel-logs {
-  width: 280px;
-  background: #0A0F1D;
-  border-left: 1px solid $border-color-light;
-  flex-shrink: 0;
-}
-
 .panel-header {
-  display: flex;
-  align-items: center;
-  gap: $spacing-xs;
-  padding: $spacing-sm $spacing-base;
-  background: rgba(34, 197, 94, 0.03);
-  border-bottom: 1px solid $border-color-light;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-semibold;
-  color: $text-secondary;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 38px;
+  padding: 0 14px 0 28px;
+  background:
+    linear-gradient(90deg, rgba(0, 116, 255, 0.62), rgba(8, 29, 67, 0.38) 52%, transparent 100%);
+  border-bottom: 0;
   flex-shrink: 0;
-
-  svg { color: $color-accent; }
+  .panel-deco-corner {
+    position: absolute; width: 8px; height: 8px; border-color: $neon; border-style: solid; border-width: 0;
+    &.tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+    &.tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+  }
+  .panel-title-zh {
+    font-size: clamp(14px, 1.2vw, 24px);
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
+  }
+  .panel-title-en {
+    font-family: $font-display;
+    font-size: 10px; color: $neon; opacity: 0.7;
+    letter-spacing: 2px;
+  }
+  .panel-badge {
+    margin-left: auto;
+    background: $neon-soft; border: 1px solid $neon;
+    color: $neon; font-family: $font-mono;
+    font-size: 11px; padding: 0 6px; height: 18px;
+    display: inline-flex; align-items: center;
+  }
+  .panel-realtime {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: $ok; font-family: $font-display;
+    letter-spacing: 1px;
+    .rt-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: $ok; box-shadow: 0 0 6px $ok;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+  }
 }
-
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: $spacing-sm;
-
-  &::-webkit-scrollbar { width: 3px; }
+  padding: 14px;
+  &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: $border-color; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
+}
+.empty-tip {
+  text-align: center; color: $text-mute;
+  font-size: 12px; padding: 30px 0;
+  font-family: $font-mono;
 }
 
-// Steps list
-.steps-list {
-  .step-item {
-    display: flex;
-    align-items: center;
-    gap: $spacing-xs;
-    padding: $spacing-xs $spacing-sm;
-    margin-bottom: 3px;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: $radius-sm;
-    border: 1px solid transparent;
+// ===== Left stages =====
+.panel-stages {
+  background: transparent;
+  .stages-list {
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .stage-card {
+    position: relative;
+    background: linear-gradient(90deg, rgba(11, 21, 38, 0.88), rgba(10, 20, 40, 0.42));
+    border: 1px solid rgba(70, 96, 130, 0.28);
+    border-left: 3px solid rgba(160, 176, 196, 0.48);
+    padding: 12px 14px 13px;
+    display: flex; flex-direction: column; gap: 6px;
     transition: all 0.2s;
 
-    &.step-running {
-      border-color: $color-accent-border;
-      background: $color-accent-bg;
+    &.stage-done { border-left-color: $neon; }
+    &.stage-running {
+      background: linear-gradient(90deg, rgba(74, 35, 6, 0.88), rgba(19, 17, 22, 0.54));
+      border-color: #ff9a2f;
+      border-left-color: #ff7a00;
+      box-shadow: 0 0 16px rgba(255, 122, 0, 0.24), inset 0 0 16px rgba(255, 122, 0, 0.08);
     }
-    &.step-issue, &.step-timeout {
-      border-color: rgba(239, 68, 68, 0.15);
-      background: rgba(239, 68, 68, 0.04);
+    &.stage-issue { border-left-color: $danger; }
+  }
+  .stage-card-top {
+    display: flex; align-items: center; justify-content: space-between;
+    .stage-name-block { display: flex; align-items: baseline; gap: 8px; }
+    .stage-index {
+      font-family: $font-mono; font-size: 14px;
+      color: #ffffff; font-weight: 900;
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.42);
     }
-
-    .step-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: $text-tertiary;
-
-      &.dot-completed { background: $color-accent; }
-      &.dot-running {
-        background: $color-accent;
-        animation: pulse 1.5s ease-in-out infinite;
-      }
-      &.dot-issue, &.dot-timeout { background: $color-error; }
-      &.dot-skipped { background: #A78BFA; }
+    .stage-name {
+      font-size: 13px; color: $text; font-weight: 700;
     }
+  }
+  .stage-badge {
+    font-size: 11px; padding: 2px 8px;
+    border-radius: 1px; letter-spacing: 1px;
+    &.badge-done { background: rgba(0, 212, 255, 0.15); color: $neon; border: 1px solid $line-strong; }
+    &.badge-running { background: rgba(255, 122, 0, 0.14); color: #ffc179; border: 1px solid rgba(255, 122, 0, 0.62); }
+    &.badge-pending { background: rgba(110, 141, 181, 0.15); color: $text-dim; border: 1px solid $line; }
+    &.badge-issue { background: rgba(255, 77, 106, 0.18); color: $danger; border: 1px solid rgba(255, 77, 106, 0.4); }
+  }
+  .stage-card-mid {
+    display: flex; align-items: center; justify-content: space-between;
+    .stage-time { font-family: $font-mono; font-size: 13px; color: $text; font-weight: 600; }
+    .stage-meta-label { font-size: 10px; color: $text-mute; letter-spacing: 1px; }
+  }
+  .stage-segments {
+    display: flex; gap: 2px; height: 8px;
+    .segment { flex: 1; background: rgba(255, 255, 255, 0.05); }
+    .segment.seg-done { background: linear-gradient(180deg, $neon, $neon-dim); box-shadow: 0 0 4px rgba(0, 212, 255, 0.4); }
+    .segment.seg-active { background: linear-gradient(180deg, #ff9a2f, #ff7a00); box-shadow: 0 0 6px #ff7a00; animation: pulse 1.2s ease-in-out infinite; }
+    .segment.seg-todo { background: rgba(110, 141, 181, 0.25); }
+    .segment.seg-empty { background: transparent; border: 1px dashed rgba(110, 141, 181, 0.2); }
+  }
+  .stage-card-bottom {
+    display: flex; justify-content: space-between;
+    .stage-meta {
+      display: flex; flex-direction: column; gap: 1px;
+      .meta-key { font-size: 10px; color: $text-mute; letter-spacing: 1px; }
+      .meta-val { font-family: $font-mono; font-size: 12px; color: $text; font-weight: 600; }
+    }
+  }
+}
 
-    .step-info {
+// ===== Center phase ring =====
+.panel-center {
+  background:
+    radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
+    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
+  position: relative;
+  &::before, &::after {
+    content: '';
+    position: absolute; width: 14px; height: 14px;
+    border: 1px solid $neon;
+  }
+  &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+}
+.center-stage {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  &::before, &::after {
+    content: '';
+    position: absolute; left: 50%;
+    transform: translateX(-50%);
+    width: 86%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(87, 152, 255, 0.44), transparent);
+  }
+  &::before { top: 18%; }
+  &::after { bottom: 18%; }
+}
+
+// ===== Right column =====
+.panel-right {
+  display: flex; flex-direction: column;
+  gap: 10px;
+  background: transparent; border: none; padding: 0;
+  .sub-panel {
+    position: relative;
+    background: transparent; border: 0;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sub-warn { flex: 0 0 43%; }
+  .sub-logs { flex: 1; min-height: 0; }
+}
+
+// ===== Alerts =====
+.warn-list {
+  display: flex; flex-direction: column; gap: 8px;
+  .alert-card {
+    position: relative;
+    background: linear-gradient(180deg, rgba(20, 22, 35, 0.86), rgba(16, 26, 47, 0.72));
+    border: 1px solid rgba(130, 150, 180, 0.3);
+    border-left: 3px solid $warn;
+    padding: 10px 12px 12px;
+    display: flex; flex-direction: column; gap: 6px;
+    &.alert-danger { border-left-color: $danger; }
+    &.alert-info { border-left-color: $neon; }
+  }
+  .alert-head {
+    display: flex; align-items: center; gap: 6px;
+    .alert-arrow { color: $warn; font-size: 10px; }
+    .alert-title {
       flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      font-size: 13px; color: #ffffff; font-weight: 800;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .alert-team {
+      font-family: $font-mono; font-size: 10px;
+      color: $neon; background: $neon-soft;
+      padding: 1px 5px; letter-spacing: 1px;
+    }
+  }
+  .alert-bar {
+    height: 4px; background: rgba(255, 255, 255, 0.06);
+    position: relative; overflow: hidden;
+    .alert-bar-fill {
+      position: absolute; top: 0; left: 0; bottom: 0;
+      background: linear-gradient(90deg, $warn, $neon);
+      box-shadow: 0 0 6px rgba(255, 182, 72, 0.5);
+    }
+  }
+  .alert-foot {
+    display: flex; justify-content: space-between;
+    .alert-meta { font-family: $font-mono; font-size: 10px; color: $text-dim; }
+  }
+  .alert-status {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px dashed $line; padding-top: 5px;
+    .alert-progress-pct {
+      font-family: $font-mono; font-size: 14px; color: $warn; font-weight: 700;
+      text-shadow: 0 0 6px rgba(255, 182, 72, 0.3);
+    }
+    .alert-status-tag {
+      font-size: 10px; padding: 1px 6px; color: $ok;
+      border: 1px solid rgba(0, 255, 156, 0.3); background: rgba(0, 255, 156, 0.08);
+      letter-spacing: 1px;
+    }
+  }
+  .alert-danger .alert-progress-pct { color: $danger; }
+  .alert-danger .alert-status-tag { color: $danger; border-color: rgba(255, 77, 106, 0.3); background: rgba(255, 77, 106, 0.08); }
+}
+
+// ===== Logs =====
+.logs-wrap {
+  display: flex; flex-direction: column; padding: 0;
+}
+.log-thead {
+  display: grid; grid-template-columns: 80px 80px 1fr;
+  padding: 6px 12px;
+  background: rgba(0, 60, 130, 0.42);
+  border-bottom: 1px solid $line;
+  font-family: $font-display; font-size: 10px;
+  color: $neon; letter-spacing: 1.5px;
+  .col-status { text-align: center; }
+}
+.log-tbody {
+  flex: 1; overflow-y: auto; padding: 4px 0;
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
+}
+.log-row {
+  display: grid; grid-template-columns: 80px 80px 1fr;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(111, 151, 220, 0.16);
+  font-size: 12px;
+  .col-time { font-family: $font-mono; color: $text-dim; font-size: 11px; }
+  .col-status { text-align: center; }
+  .col-desc {
+    color: $text;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  &.log-danger { .col-desc { color: $danger; } }
+  &.log-skip { .col-desc { color: #a78bfa; } }
+  &.log-force { .col-desc { color: $neon; } }
+  &.log-ok { .col-desc { color: $ok; } }
+}
+.log-status-tag {
+  display: inline-block;
+  font-family: $font-mono; font-size: 10px;
+  padding: 1px 8px; letter-spacing: 1px;
+  border-radius: 1px; min-width: 36px; text-align: center;
+  &.tag-ok { color: $ok; background: rgba(0, 255, 156, 0.1); border: 1px solid rgba(0, 255, 156, 0.3); }
+  &.tag-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); }
+  &.tag-skip { color: #a78bfa; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); }
+  &.tag-force { color: $neon; background: $neon-soft; border: 1px solid $line-strong; }
+}
+
+// ===== Footer =====
+.screen-footer {
+  display: flex; justify-content: space-between;
+  padding: 0 8px;
+  font-family: $font-display; font-size: 10px;
+  color: $text-mute; letter-spacing: 2px;
+}
+
+@media (max-width: 1000px) {
+  .screen-content {
+    padding: 14px 18px 10px;
+    gap: 10px;
+  }
+
+  .screen-root::before {
+    inset: 8px 12px 10px;
+  }
+
+  .screen-header {
+    height: 54px;
+    padding: 0 16px;
+
+    .header-title-block {
+      gap: 8px;
+
+      .drill-title {
+        font-size: 22px;
+        letter-spacing: 2px;
+      }
+
+      .drill-title-en {
+        font-size: 8px;
+        letter-spacing: 4px;
+        max-width: 260px;
+        overflow: hidden;
+      }
     }
 
-    .step-name {
-      font-size: $font-size-xs;
-      font-weight: $font-weight-medium;
+    .header-meta {
+      gap: 5px;
+
+      .meta-label,
+      .meta-divider {
+        display: none;
+      }
+
+      .meta-value {
+        font-size: 12px;
+      }
+    }
+
+    .btn-icon {
+      width: 26px; height: 26px;
+    }
+  }
+
+  .kpi-row {
+    gap: 8px;
+    height: 86px;
+    padding: 0 6px;
+  }
+
+  .kpi-card {
+    padding: 12px 8px 10px 54px;
+    column-gap: 4px;
+
+    .kpi-orb {
+      left: 14px;
+      top: 20px;
+      width: 28px;
+      height: 28px;
+
+      &::before {
+        inset: 5px -7px;
+      }
+
+      &::after {
+        left: 9px;
+        bottom: -13px;
+        width: 10px;
+        height: 10px;
+      }
+    }
+
+    .kpi-label-zh {
+      font-size: 11px;
+      letter-spacing: 0;
+      line-height: 1.2;
+    }
+
+    .kpi-label-en {
+      font-size: 7px;
+      letter-spacing: 2px;
+      line-height: 1.2;
+    }
+
+    .kpi-value-num {
+      font-size: 18px;
+    }
+
+    .kpi-value-sep {
+      font-size: 14px;
+    }
+
+    .kpi-value-unit {
+      font-size: 11px;
+    }
+
+    .kpi-value-text {
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    .kpi-sub {
+      font-size: 7px;
+      letter-spacing: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .step-meta {
-      display: flex;
-      gap: $spacing-xs;
-      font-size: 10px;
-      color: $text-tertiary;
-
-      .step-team {
-        background: $color-accent-bg;
-        padding: 1px 4px;
-        border-radius: 2px;
-        color: $color-accent;
-      }
-    }
-
-    .step-badge {
-      font-size: 9px;
-      font-weight: $font-weight-semibold;
-      padding: 1px 4px;
-      border-radius: 2px;
-      flex-shrink: 0;
-      text-transform: uppercase;
+    .kpi-node-count {
+      margin-left: 4px;
+      font-size: 8px;
+      white-space: nowrap;
     }
   }
-}
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
-  50% { opacity: 0.5; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
-}
+  .screen-main {
+    grid-template-columns: 226px minmax(260px, 1fr) 226px;
+    gap: 8px;
+    padding: 0 6px;
+  }
 
-// Chart grid
-.chart-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: $spacing-sm;
-  height: 100%;
-}
+  .panel-header {
+    height: 34px;
+    padding: 0 8px 0 18px;
 
-.chart-cell {
-  background: #0F172A;
-  border: 1px solid $border-color-light;
-  border-radius: $radius-md;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.chart-container {
-  width: 100%;
-  height: 100%;
-}
-
-// Logs list
-.logs-list {
-  .log-item {
-    position: relative;
-    padding: $spacing-xs $spacing-xs $spacing-xs $spacing-base;
-    margin-bottom: $spacing-xs;
-
-    .log-border {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      border-radius: 2px;
+    .panel-title-zh {
+      font-size: 14px;
+      letter-spacing: 1px;
     }
 
-    &.log-complete .log-border, &.log-step .log-border { background: $color-accent; }
-    &.log-issue .log-border { background: $color-error; }
-    &.log-force .log-border { background: $color-info; }
-    &.log-skip .log-border { background: #A78BFA; }
-    &.log-timeout .log-border { background: $color-warning; }
+    .panel-title-en {
+      font-size: 7px;
+      letter-spacing: 2px;
+    }
+  }
 
-    .log-body {
-      .log-action {
-        font-size: $font-size-xs;
-        font-weight: $font-weight-medium;
-        margin-bottom: 2px;
+  .panel-body {
+    padding: 9px;
+  }
+
+  .panel-stages {
+    .stages-list {
+      gap: 10px;
+    }
+
+    .stage-card {
+      padding: 9px 9px 10px;
+    }
+
+    .stage-card-top {
+      .stage-name-block {
+        gap: 5px;
       }
 
-      .log-text {
-        font-size: 11px;
-        color: $text-secondary;
-        margin-bottom: 2px;
-        line-height: 1.3;
+      .stage-index {
+        font-size: 12px;
       }
 
-      .log-time {
+      .stage-name {
         font-size: 10px;
-        font-family: $font-family-mono;
-        color: $text-tertiary;
+        max-width: 86px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .stage-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+    }
+
+    .stage-card-mid {
+      .stage-time {
+        font-size: 10px;
+      }
+
+      .stage-meta-label {
+        font-size: 8px;
+      }
+    }
+
+    .stage-card-bottom {
+      .stage-meta {
+        .meta-key {
+          font-size: 8px;
+        }
+
+        .meta-val {
+          font-size: 10px;
+        }
       }
     }
   }
 
-  .log-empty {
-    text-align: center;
-    color: $text-tertiary;
-    font-size: $font-size-xs;
-    padding: $spacing-2xl 0;
+  .warn-list {
+    .alert-card {
+      padding: 8px;
+    }
+
+    .alert-head {
+      .alert-title {
+        font-size: 10px;
+      }
+
+      .alert-team {
+        font-size: 8px;
+      }
+    }
+
+    .alert-foot {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 6px;
+
+      .alert-meta {
+        font-size: 8px;
+      }
+    }
+  }
+
+  .log-thead,
+  .log-row {
+    grid-template-columns: 62px 52px 1fr;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .log-row {
+    font-size: 10px;
+
+    .col-time {
+      font-size: 9px;
+    }
+  }
+
+  .screen-footer {
+    font-size: 8px;
+    letter-spacing: 1px;
   }
 }
 </style>

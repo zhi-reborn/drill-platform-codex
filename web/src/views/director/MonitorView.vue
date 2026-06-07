@@ -516,6 +516,20 @@ const drillLogs = computed(() => {
   }))
 })
 
+function parseStepAttributes(attributes: StepInstance['attributes'] | string | null | undefined) {
+  if (!attributes) return {}
+  if (typeof attributes !== 'string') return attributes
+  try {
+    return JSON.parse(attributes)
+  } catch {
+    return {}
+  }
+}
+
+function getStepOperationId(step: StepInstance): number {
+  return step.step_template_id || step.id
+}
+
 function calculateDuration(step: StepInstance): string {
   if (!step.start_time || !step.end_time) {
     return '-'
@@ -747,7 +761,7 @@ async function loadDrillData() {
     // 解析 attributes JSON 字符串为对象
     stepsData = stepsData.map((step: StepInstance) => ({
       ...step,
-      attributes: typeof step.attributes === 'string' ? JSON.parse(step.attributes) : step.attributes,
+      attributes: parseStepAttributes(step.attributes),
     }))
     steps.value = stepsData
 
@@ -812,7 +826,7 @@ async function handleTerminate() {
 
 async function handleSkipStep(step: StepInstance) {
   try {
-    await drillApi.skipStep(drillId.value, step.step_template_id, 'director skipped')
+    await drillApi.skipStep(drillId.value, getStepOperationId(step), 'director skipped')
     ElMessage.success('步骤已跳过')
     loadDrillData()
   } catch (error: any) {
@@ -822,7 +836,7 @@ async function handleSkipStep(step: StepInstance) {
 
 async function handleResumeTask(step: StepInstance) {
   try {
-    await drillApi.resumeTask(drillId.value, step.step_template_id)
+    await drillApi.resumeTask(drillId.value, getStepOperationId(step))
     ElMessage.success('任务已重新派发')
     loadDrillData()
   } catch (error: any) {
@@ -832,7 +846,7 @@ async function handleResumeTask(step: StepInstance) {
 
 async function handleDirectorComplete(step: StepInstance) {
   try {
-    await drillApi.completeStep(drillId.value, step.step_template_id, '指挥组完成任务')
+    await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
     ElMessage.success('步骤已完成')
     loadDrillData()
   } catch (error: any) {
@@ -842,7 +856,7 @@ async function handleDirectorComplete(step: StepInstance) {
 
 async function handleForceComplete(step: StepInstance) {
   try {
-    await drillApi.forceCompleteStep(drillId.value, step.step_template_id, `指挥组强制完成步骤：${step.name}`)
+    await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组强制完成步骤：${step.name}`)
     ElMessage.success(`步骤「${step.name}」已强制完成`)
     loadDrillData()
   } catch (error) {

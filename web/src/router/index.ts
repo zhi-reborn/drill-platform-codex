@@ -26,6 +26,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/LoginView.vue'),
     meta: { title: '登录', requiresAuth: false },
   },
+  {
+    path: '/cas/callback',
+    name: 'CasCallback',
+    component: () => import('@/views/auth/CasCallbackView.vue'),
+    meta: { title: '统一认证回调', requiresAuth: false },
+  },
 
   // Admin 路由
   {

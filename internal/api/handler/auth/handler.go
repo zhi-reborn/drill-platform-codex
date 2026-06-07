@@ -5,7 +5,10 @@ import (
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/pkg/response"
 	"drill-platform/internal/service"
+	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,8 +46,70 @@ func (h *Handler) Login(c *gin.Context) {
 	response.Success(c, res)
 }
 
+func (h *Handler) CASLogin(c *gin.Context) {
+	redirect := c.Query("redirect")
+	serviceURL := h.authService.CASServiceURL(buildCASCallbackServiceURL(c), redirect)
+	loginURL, err := h.authService.BuildCASLoginURL(serviceURL)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	c.Redirect(http.StatusFound, loginURL)
+}
+
+func (h *Handler) CASCallback(c *gin.Context) {
+	ticket := c.Query("ticket")
+	if ticket == "" {
+		response.BadRequest(c, "CAS ticket 不能为空")
+		return
+	}
+	redirect := c.Query("redirect")
+	serviceURL := h.authService.CASServiceURL(buildCASCallbackServiceURL(c), redirect)
+	res, err := h.authService.LoginWithCASTicket(ticket, serviceURL)
+	if err != nil {
+		response.Unauthorized(c, err.Error())
+		return
+	}
+	if redirect == "" {
+		response.Success(c, res)
+		return
+	}
+
+	u, err := url.Parse(redirect)
+	if err != nil {
+		response.BadRequest(c, "无效的回跳地址")
+		return
+	}
+	q := u.Query()
+	q.Set("token", res.Token)
+	q.Set("user_id", strconv.FormatUint(res.UserID, 10))
+	q.Set("username", res.Username)
+	q.Set("real_name", res.RealName)
+	q.Set("role", res.Role)
+	q.Set("department", res.Department)
+	u.RawQuery = q.Encode()
+	c.Redirect(http.StatusFound, u.String())
+}
+
 func (h *Handler) Logout(c *gin.Context) {
 	response.Success(c, nil)
+}
+
+func buildCASCallbackServiceURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	host := c.Request.Host
+	if forwardedHost := c.GetHeader("X-Forwarded-Host"); forwardedHost != "" {
+		host = forwardedHost
+	}
+	u := url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   "/api/v1/auth/cas/callback",
+	}
+	return u.String()
 }
 
 func (h *Handler) GetCurrentUser(c *gin.Context) {
@@ -69,9 +134,9 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"items": users,
-		"total": total,
-		"page": query.Page,
+		"items":     users,
+		"total":     total,
+		"page":      query.Page,
 		"page_size": query.PageSize,
 	})
 }

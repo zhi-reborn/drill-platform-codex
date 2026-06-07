@@ -166,7 +166,7 @@ function viewMonitor(row: DrillInstance) {
 }
 
 function viewScreen(row: DrillInstance) {
-  router.push(`/director/screen/${row.id}`)
+  router.push(`/screen/${row.id}`)
 }
 
 function handleDelete(row: DrillInstance) {
