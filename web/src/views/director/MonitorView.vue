@@ -297,15 +297,13 @@
               <template v-if="!row._isGroup">
                 <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
                 <template v-if="!isParentStep(row)">
-                  <el-popconfirm
-                    v-if="row.status === 'pending' && row.default_assignee_role === 'director'"
-                    title="确认开始此步骤？"
-                    @confirm="handleStartStep(row)"
-                  >
-                    <template #reference>
-                      <el-button type="primary" link size="small">开始</el-button>
-                    </template>
-                  </el-popconfirm>
+                  <el-button
+                    v-if="row.status === 'pending'"
+                    type="primary"
+                    link
+                    size="small"
+                    @click="handleStartStep(row)"
+                  >开始</el-button>
                   <el-button
                     v-if="['pending', 'running'].includes(row.status)"
                     type="success"
@@ -750,6 +748,11 @@ function getStepStatusText(row: any): { text: string; isParent: boolean } {
   const leaves = collectLeafSteps(row)
   const total = leaves.length
   const completed = leaves.filter(c => ['completed', 'skipped', 'timeout', 'issue'].includes(c.status)).length
+  const running = leaves.filter(c => c.status === 'running').length
+  // 有进行中的子任务时，优先展示进度+进行中数量
+  if (running > 0) {
+    return { text: `${completed}/${total} 已完成 · ${running} 进行中`, isParent: true }
+  }
   const label = row._isGroup ? '已完成' : '子任务已完成'
   return { text: `${completed}/${total} ${label}`, isParent: true }
 }
@@ -1170,7 +1173,7 @@ async function handleStartStep(step: StepInstance) {
   try {
     await drillApi.startStep(drillId.value, getStepOperationId(step))
     ElMessage.success('步骤已开始')
-    loadDrillData()
+    await loadDrillData()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }

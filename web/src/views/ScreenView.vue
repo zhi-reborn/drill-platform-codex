@@ -80,7 +80,7 @@
             <span class="kpi-value-sep">:</span>
             <span class="kpi-value-num">{{ elapsedParts.s }}</span>
           </div>
-          <span class="kpi-sub">起 {{ currentDrill.started_at ? formatHM(currentDrill.started_at) : '--:--' }}　预计剩余 2M</span>
+          <span class="kpi-sub">起 {{ currentDrill.started_at ? formatHM(currentDrill.started_at) : '--:--' }}　预计剩余 {{ estimatedRemaining }}</span>
         </div>
 
         <div class="kpi-card">
@@ -358,6 +358,33 @@ const elapsedParts = computed(() => {
   }
 })
 
+// 预计剩余时间（基于运行中/待执行步骤的 timeout 汇总）
+const estimatedRemaining = computed(() => {
+  // 依赖 elapsedSeconds 每秒刷新
+  const _t = elapsedSeconds.value
+  const nowMs = Date.now()
+  const running = leafSteps.value.filter(s => s.status === 'running')
+  const pending = leafSteps.value.filter(s => s.status === 'pending')
+  if (running.length === 0 && pending.length === 0) return '--'
+  let remainSec = 0
+  for (const s of running) {
+    if (s.start_time && s.timeout_minutes) {
+      const elapsed = (nowMs - new Date(s.start_time).getTime()) / 1000
+      remainSec += Math.max(0, s.timeout_minutes * 60 - elapsed)
+    } else {
+      remainSec += (s.timeout_minutes || 30) * 60
+    }
+  }
+  for (const s of pending) {
+    remainSec += (s.timeout_minutes || 30) * 60
+  }
+  if (remainSec <= 0) return '0m'
+  const h = Math.floor(remainSec / 3600)
+  const m = Math.ceil((remainSec % 3600) / 60)
+  if (h > 0) return `${h}h${m > 0 ? m + 'm' : ''}`
+  return `${m}m`
+})
+
 // 状态标签
 const drillStatusLabel = computed(() => {
   const map: Record<string, string> = {
@@ -389,8 +416,11 @@ const stages = computed(() => {
       const leaves = collectLeaves(root.id)
       // 终态判断（completed/skipped/timeout/issue 都视为已结束）
       const isTerminal = (s: StepInstance) => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)
-      // 环节统计：直接子节点（环节级别）
-      const completedPhases = directChildren.filter(c => isTerminal(c)).length
+      // 环节统计：基于每个环节下的叶子步骤完成情况判断
+      const completedPhases = directChildren.filter(c => {
+        const phaseLeaves = collectLeaves(c.id)
+        return phaseLeaves.length > 0 && phaseLeaves.every(l => isTerminal(l))
+      }).length
       const totalPhases = directChildren.length
       // 步骤统计：叶子节点（实际操作步骤）
       const finishedLeaves = leaves.filter(s => isTerminal(s)).length
@@ -513,7 +543,19 @@ const ringSize = computed(() => {
 
 // === 告警 ===
 // 从步骤的"进行中"或异常中推算
+// 格式化秒数为 HH:MM:SS
+function fmtHMS(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
+}
+
 const activeAlerts = computed(() => {
+  // 依赖 elapsedSeconds 使 computed 每秒重算，进度条/耗时实时刷新
+  const _now = elapsedSeconds.value
+  const nowMs = Date.now()
+
   const alerts: Array<{
     title: string
     team: string
@@ -529,17 +571,18 @@ const activeAlerts = computed(() => {
     .filter(s => s.status === 'running')
     .slice(0, 2)
     .forEach(s => {
-      const elapsed = s.start_time
-        ? Math.max(1, Math.round((Date.now() - new Date(s.start_time).getTime()) / 60000))
+      const elapsedSec = s.start_time
+        ? Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
         : 1
-      const limit = s.timeout_minutes || 30
-      const pct = Math.min(99, Math.round((elapsed / limit) * 100))
+      const limitMin = s.timeout_minutes || 30
+      const limitSec = limitMin * 60
+      const pct = Math.min(99, Math.round((elapsedSec / limitSec) * 100))
       alerts.push({
         title: s.executor_team ? `${s.name} - ${s.executor_team}` : s.name,
-        team: s.executor_team || 'S07-演练-验收/执行环节',
+        team: s.executor_team || '运维部',
         progress: pct,
-        limit: `${Math.floor(limit / 60)}h ${limit % 60}m`,
-        elapsed: `${Math.floor(elapsed / 60)}h ${elapsed % 60}m`,
+        limit: fmtHMS(limitSec),
+        elapsed: fmtHMS(elapsedSec),
         statusLabel: pct >= 80 ? '即将超时' : '进行中',
         level: pct >= 80 ? 'danger' : 'warn',
       })
@@ -550,30 +593,37 @@ const activeAlerts = computed(() => {
     .filter(s => s.status === 'issue' || s.status === 'timeout')
     .slice(0, 2)
     .forEach(s => {
+      const elapsedSec = s.start_time
+        ? Math.max(0, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
+        : 0
       alerts.push({
         title: s.name,
         team: s.executor_team || '执行组',
         progress: 0,
-        limit: `${s.timeout_minutes || 30}m`,
-        elapsed: '--',
+        limit: fmtHMS((s.timeout_minutes || 30) * 60),
+        elapsed: elapsedSec > 0 ? fmtHMS(elapsedSec) : '--',
         statusLabel: s.status === 'timeout' ? '已超时' : '异常',
         level: 'danger',
       })
     })
 
   if (alerts.length === 0) {
-    // 占位（保证画面不为空）—— 取前两步 pending 当作预警
-    leafSteps.value.slice(0, 2).forEach((s, i) => {
-      alerts.push({
-        title: s.name,
-        team: s.executor_team || (i % 2 === 0 ? 'S07-演练-验收/执行环节' : 'S08-演练-复盘/执行环节'),
-        progress: 48 - i * 16,
-        limit: i === 0 ? '13:00:00' : '20:00:00',
-        elapsed: '05:12:50',
-        statusLabel: '进行中',
-        level: 'warn',
+    // 无活跃告警时，展示待执行步骤作为预警
+    leafSteps.value
+      .filter(s => s.status === 'pending')
+      .slice(0, 2)
+      .forEach((s, i) => {
+        const limitMin = s.timeout_minutes || 30
+        alerts.push({
+          title: s.name,
+          team: s.executor_team || '运维部',
+          progress: 0,
+          limit: fmtHMS(limitMin * 60),
+          elapsed: '待启动',
+          statusLabel: '待执行',
+          level: 'info',
+        })
       })
-    })
   }
   return alerts.slice(0, 2)
 })
@@ -1488,6 +1538,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .alert-danger .alert-progress-pct { color: $danger; }
   .alert-danger .alert-status-tag { color: $danger; border-color: rgba(255, 77, 106, 0.3); background: rgba(255, 77, 106, 0.08); }
+  .alert-info .alert-status-tag { color: $neon; border-color: rgba(0, 212, 255, 0.3); background: rgba(0, 212, 255, 0.08); }
 }
 
 // ===== Logs =====

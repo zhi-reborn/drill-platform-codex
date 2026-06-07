@@ -285,6 +285,10 @@ func (h *Handler) Delete(c *gin.Context) {
 
 func (h *Handler) StartStep(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
 
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
@@ -311,15 +315,17 @@ func (h *Handler) StartStep(c *gin.Context) {
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
 			"status":     "running",
-			"started_at": &now,
+			"start_time": &now,
 			"remark":     req.Remark,
 		})
+
+	h.drillService.InvalidateStepCache(id)
 
 	response.SuccessWithMessage(c, "步骤已开始", nil)
 }
 
 // UpdateStepInfo 编辑步骤实例的可维护字段
-// 注意:数据库实际列名为 action_params(代替 attributes)/ started_at/ completed_at 等
+// 注意:数据库实际列名为 action_params(代替 attributes)/ start_time/ end_time 等
 func (h *Handler) UpdateStepInfo(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -411,9 +417,9 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 	repository.DB.Model(&entity.StepInstance{}).
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":       "completed",
-			"completed_at": &now,
-			"remark":       req.Remark,
+			"status":   "completed",
+			"end_time": &now,
+			"remark":   req.Remark,
 		})
 
 	// 通知引擎该步骤已完成
@@ -433,6 +439,8 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 			return
 		}
 	}
+
+	h.drillService.InvalidateStepCache(id)
 
 	response.SuccessWithMessage(c, "步骤已完成", nil)
 }
@@ -488,11 +496,12 @@ func (h *Handler) SkipStep(c *gin.Context) {
 	repository.DB.Model(&entity.StepInstance{}).
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":       "skipped",
-			"completed_at": &nowS,
-			"remark":       contentSkip,
+			"status":   "skipped",
+			"end_time": &nowS,
+			"remark":   contentSkip,
 		})
 
+	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "步骤已跳过", nil)
 }
 
@@ -542,11 +551,12 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 	repository.DB.Model(&entity.StepInstance{}).
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":       "completed",
-			"completed_at": &nowFC,
-			"remark":       req.Remark,
+			"status":   "completed",
+			"end_time": &nowFC,
+			"remark":   req.Remark,
 		})
 
+	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "步骤已强制完成", nil)
 }
 
@@ -586,6 +596,7 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		})
 	}
 
+	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "执行人已更新", nil)
 }
 
@@ -654,7 +665,7 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
 			"status":     "running",
-			"started_at": time.Now(),
+			"start_time": time.Now(),
 		})
 
 	nowRT := time.Now()
@@ -667,5 +678,6 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 		CreatedAt:       nowRT,
 	})
 
+	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "任务已重新派发", nil)
 }

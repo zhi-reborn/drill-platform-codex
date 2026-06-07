@@ -237,8 +237,8 @@ const phasePoints = computed(() => {
     const r = outerR.value
     const x = cx.value + r * Math.cos(angle)
     const y = cy.value + r * Math.sin(angle)
-    // 标签偏移
-    const lx = Math.cos(angle) * 80
+    // 标签偏移（左侧系数较小，补偿 translateX(-100%) 造成的额外左偏）
+    const lx = Math.cos(angle) * (Math.cos(angle) > 0 ? 80 : 40)
     const ly = Math.sin(angle) * 22
     items.push({ x, y, lx, ly, angle })
   }
