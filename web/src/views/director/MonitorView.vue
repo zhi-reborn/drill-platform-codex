@@ -206,7 +206,15 @@
       <el-card class="steps-card">
         <template #header>
           <div class="steps-card-header">
-            <span class="card-title">步骤列表</span>
+            <div class="steps-card-title-area">
+              <span class="card-title">步骤列表</span>
+              <div class="depth-legend">
+                <span class="legend-item legend-phase">阶段</span>
+                <span class="legend-item legend-link">环节</span>
+                <span class="legend-item legend-task">任务</span>
+                <span class="legend-item legend-step">步骤</span>
+              </div>
+            </div>
             <div class="steps-card-actions">
               <el-button size="small" @click="expandAllSteps">全部展开</el-button>
               <el-button size="small" @click="collapseAllSteps">全部折叠</el-button>
@@ -219,28 +227,26 @@
           row-key="id"
           :tree-props="{ children: 'children' }"
           :default-expand-all="true"
+          :row-class-name="stepRowClassName"
           style="width: 100%"
           size="small"
         >
-          <el-table-column prop="seq" label="序号" width="55" align="center">
+          <el-table-column prop="name" label="步骤名" min-width="260" show-overflow-tooltip class-name="name-col">
             <template #default="{ row }">
-              {{ isParentStep(row) && !row._isGroup ? '-' : row.seq }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" label="步骤名" min-width="180" show-overflow-tooltip>
-            <template #default="{ row }">
-              <el-tag v-if="row._isGroup" :type="row._groupType === 'phase' ? '' : 'info'" size="small" class="group-tag">
-                {{ row._groupType === 'phase' ? '阶段' : '环节' }}
-              </el-tag>
-              <el-tag v-else-if="isParentStep(row)" type="info" size="small" class="group-tag">
-                {{ getParentStepLabel(row) }}
-              </el-tag>
-              <span :class="{ 'group-name': row._isGroup || isParentStep(row) }">{{ row.name }}</span>
+              <div class="step-name-cell">
+                <el-tag
+                  :type="getDepthTagType(getStepDepth(row))"
+                  size="small"
+                  class="depth-badge"
+                  effect="dark"
+                >{{ getDepthLabel(getStepDepth(row)) }}</el-tag>
+                <span :class="['step-name-text', `name-depth-${getStepDepth(row)}`]">{{ row.name }}</span>
+              </div>
             </template>
           </el-table-column>
           <el-table-column prop="step_type" label="类型" width="70" align="center">
             <template #default="{ row }">
-              <template v-if="row._isGroup">-</template>
+              <template v-if="isParentStep(row)">-</template>
               <template v-else>
                 <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
               </template>
@@ -263,7 +269,7 @@
           </el-table-column>
           <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
             <template #default="{ row }">
-              <template v-if="row._isGroup">-</template>
+              <template v-if="isParentStep(row)">-</template>
               <template v-else>
                 <el-tag :type="row.default_assignee_role === 'director' ? 'warning' : 'primary'" size="small">
                   {{ row.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
@@ -336,7 +342,7 @@
                   </el-popconfirm>
                 </template>
                 <span v-else class="parent-hint">
-                  父任务 · 子任务全部完成后自动完成
+                  子任务全部完成后自动完成
                 </span>
               </template>
             </template>
@@ -754,10 +760,9 @@ function isParentStep(step: any): boolean {
   return steps.value.some(s => s.parent_step_id === step.id)
 }
 
-// 获取父步骤层级标签（阶段/环节/任务）
-function getParentStepLabel(step: any): string {
-  if (step._isGroup) return step._groupType === 'phase' ? '阶段' : '环节'
-  // 计算该步骤在树中的深度（0=根）
+// 计算步骤在树中的深度（0=根/阶段, 1=环节, 2=任务, 3=步骤）
+function getStepDepth(step: any): number {
+  if (step._isGroup) return step._groupType === 'phase' ? 0 : 1
   let depth = 0
   let current = step
   while (current.parent_step_id) {
@@ -766,9 +771,27 @@ function getParentStepLabel(step: any): string {
     if (!parent) break
     current = parent
   }
-  // depth=0→阶段, depth=1→环节, depth=2→任务
-  const labels = ['阶段', '环节', '任务']
-  return labels[Math.min(depth, labels.length - 1)] || '任务'
+  return depth
+}
+
+// 深度→层级标签
+function getDepthLabel(depth: number): string {
+  const labels = ['阶段', '环节', '任务', '步骤']
+  return labels[Math.min(depth, labels.length - 1)] || '步骤'
+}
+
+// 深度→标签颜色类型
+function getDepthTagType(depth: number): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
+  const types: Record<number, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
+    0: 'primary', 1: 'success', 2: 'warning', 3: 'info',
+  }
+  return types[Math.min(depth, 3)] || 'info'
+}
+
+// el-table 行类名：按深度添加样式
+function stepRowClassName({ row }: { row: any }): string {
+  const depth = getStepDepth(row)
+  return `step-depth-${Math.min(depth, 3)}`
 }
 
 const completedSteps = computed(() => {
@@ -1528,6 +1551,34 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: $spacing-base;
+    flex-wrap: wrap;
+
+    .steps-card-title-area {
+      display: flex;
+      align-items: center;
+      gap: $spacing-lg;
+    }
+
+    .depth-legend {
+      display: flex;
+      gap: $spacing-xs;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      color: #fff;
+      font-weight: $font-weight-medium;
+    }
+
+    .legend-phase { background: var(--el-color-primary); }
+    .legend-link { background: var(--el-color-success); }
+    .legend-task { background: var(--el-color-warning); }
+    .legend-step { background: #64748B; }
 
     .steps-card-actions {
       display: flex;
@@ -1535,28 +1586,102 @@ onUnmounted(() => {
     }
   }
 
+  // 深度徽章（步骤名列内）
+  .depth-badge {
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  // 步骤(depth-3)深度徽章：覆盖全局 el-tag--info 样式，使用与图例一致的灰色
+  .depth-badge.el-tag--info.el-tag--dark {
+    background-color: #64748B !important;
+    color: #fff !important;
+  }
+
+  .step-name-text {
+    font-size: 13px;
+  }
+
+  .name-depth-0 {
+    font-weight: $font-weight-bold;
+    color: var(--el-color-primary-dark-2);
+  }
+
+  .name-depth-1 {
+    font-weight: $font-weight-semibold;
+    color: var(--el-color-success-dark-2);
+  }
+
+  .name-depth-2 {
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  .name-depth-3 {
+    font-weight: $font-weight-regular;
+    color: $text-tertiary;
+    font-size: 12px;
+  }
+
+  // 表格行按深度的视觉区分
+  :deep(.el-table) {
+    // 展开箭头样式优化
+    .el-table__expand-icon {
+      font-size: 13px;
+      color: $text-tertiary;
+      transition: color 0.2s, transform 0.2s;
+
+      &:hover {
+        color: var(--el-color-primary);
+      }
+    }
+
+    .el-table__expand-icon--expanded {
+      color: var(--el-color-primary);
+    }
+
+    // 步骤名列布局
+    .name-col .cell {
+      display: flex;
+      align-items: center;
+    }
+
+    .step-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    // 步骤名列左侧色带
+    .step-depth-0 .name-col {
+      border-left: 3px solid var(--el-color-primary);
+    }
+    .step-depth-1 .name-col {
+      border-left: 3px solid var(--el-color-success);
+    }
+    .step-depth-2 .name-col {
+      border-left: 3px solid var(--el-color-warning);
+    }
+    .step-depth-3 .name-col {
+      border-left: 3px solid var(--el-color-info-light-5);
+    }
+
+    // 行背景色按深度微弱区分
+    .step-depth-0 td { background: rgba(24, 144, 255, 0.04); }
+    .step-depth-1 td { background: rgba(82, 196, 26, 0.03); }
+    .step-depth-2 td { background: rgba(250, 173, 20, 0.02); }
+  }
+
   .parent-status-text {
     font-size: 12px;
     color: $text-secondary;
   }
 
-  .group-tag {
-    margin-right: 6px;
-  }
-
-  .group-name {
-    font-weight: $font-weight-semibold;
-    color: $text-primary;
-  }
-
-  .sub-task-content {
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 200px;
-    overflow-y: auto;
-    font-size: $font-size-xs;
-    line-height: 1.6;
-    color: $text-secondary;
+  .parent-hint {
+    font-size: 11px;
+    color: $text-tertiary;
+    font-style: italic;
   }
 
   .logs-card {

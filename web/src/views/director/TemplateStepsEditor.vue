@@ -54,7 +54,7 @@
         </el-tabs>
 
         <div class="panel-header">
-          <h3>步骤树</h3>
+          <h3>模板层次图</h3>
           <el-button type="primary" size="small" @click="openSingleAddDialog" :disabled="!activePhaseName">
             <el-icon>
               <Plus />
@@ -67,50 +67,8 @@
             <draggable v-model="rootStepList" :animation="200" item-key="id" handle=".drag-handle"
               ghost-class="drag-ghost" class="draggable-list" @start="dragging = true" @end="onDragEnd">
               <template #item="{ element: root }">
-                <div class="step-group">
-                  <!-- 根步骤行 -->
-                  <div class="step-row" :class="{ 'step-selected': selectedStep?.id === root.id }"
-                    @click="handleStepSelect(root)">
-                    <span class="drag-handle">⠿</span>
-                    <span class="seq-badge">{{ computeSEQ(root) }}</span>
-                    <button v-if="root.hasChildren" class="expand-btn" @click.stop="toggleCollapse(root.id)">
-                      {{ isCollapsed(root.id) ? '▶' : '▼' }}
-                    </button>
-                    <span v-else class="expand-placeholder"></span>
-                    <span class="step-name">{{ root.name || '-' }}</span>
-                    <el-tag size="small" type="info">{{ getStepTypeLabel(root.step_type) }}</el-tag>
-                    <el-button text type="danger" size="small" @click.stop="removeStepByRow(root)" title="删除">
-                      <el-icon>
-                        <Delete />
-                      </el-icon>
-                    </el-button>
-                  </div>
-                  <!-- 子步骤行 -->
-                  <template v-if="!isCollapsed(root.id)">
-                    <draggable v-model="root.children" :animation="200" item-key="id" handle=".drag-handle"
-                      ghost-class="drag-ghost" :group="{ name: 'children-group', pull: false, put: false }"
-                      class="children-list" @start="dragging = true" @end="onDragEnd">
-                      <template #item="{ element: child }">
-                        <div class="step-row child-row" :class="{ 'step-selected': selectedStep?.id === child.id }"
-                          @click="handleStepSelect(child)">
-                          <span class="drag-handle">⠿</span>
-                          <span class="seq-badge">{{ computeSEQ(child) }}</span>
-                          <button v-if="child.hasChildren" class="expand-btn" @click.stop="toggleCollapse(child.id)">
-                            {{ isCollapsed(child.id) ? '▶' : '▼' }}
-                          </button>
-                          <span v-else class="expand-placeholder"></span>
-                          <span class="step-name">{{ child.name || '-' }}</span>
-                          <el-tag size="small" type="info">{{ getStepTypeLabel(child.step_type) }}</el-tag>
-                          <el-button text type="danger" size="small" @click.stop="removeStepByRow(child)" title="删除">
-                            <el-icon>
-                              <Delete />
-                            </el-icon>
-                          </el-button>
-                        </div>
-                      </template>
-                    </draggable>
-                  </template>
-                </div>
+                <StepTreeNodeItem :node="root" :depth="0" :selected-step="selectedStep" :collapsed-ids="collapsedIds"
+                  @select="handleStepSelect" @toggle-collapse="toggleCollapse" @remove="removeStepByRow" />
               </template>
             </draggable>
           </div>
@@ -366,6 +324,7 @@ import * as XLSX from 'xlsx'
 import { userApi } from '@/api'
 import { templateApi } from '@/api/modules/template'
 import type { StepTemplate, StepType, StepAttributes } from '@/types'
+import StepTreeNodeItem from '@/components/StepTreeNodeItem.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1419,113 +1378,11 @@ onMounted(() => {
 }
 
 .steps-panel .panel-body {
+  --border-color: #{$border-color};
+
   .draggable-list {
     display: flex;
     flex-direction: column;
-  }
-
-  .step-group {
-    margin-bottom: 2px;
-  }
-
-  .step-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: white;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.15s;
-
-    &:hover {
-      background: #ecf5ff;
-      border-color: var(--el-color-primary-light-7);
-    }
-  }
-
-  .child-row {
-    margin-left: 32px;
-    border-left: 3px solid var(--el-color-primary-light-7);
-    background: #f7f8fa;
-    min-height: 36px;
-    line-height: 1;
-
-    .step-name {
-      color: #606266;
-      line-height: 1;
-    }
-
-    &:hover {
-      background: #ecf5ff;
-      border-color: var(--el-color-primary);
-    }
-  }
-
-  .drag-handle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: grab;
-    color: #c0c4cc;
-    font-size: 14px;
-    width: 16px;
-    height: 24px;
-    user-select: none;
-    line-height: 1;
-    flex-shrink: 0;
-
-    &:hover {
-      color: var(--el-color-primary);
-    }
-
-    &:active {
-      cursor: grabbing;
-    }
-  }
-
-  .seq-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--el-color-primary);
-    color: white;
-    font-size: 11px;
-    font-weight: 600;
-    flex-shrink: 0;
-  }
-
-  .expand-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #606266;
-    font-size: 10px;
-    width: 16px;
-    text-align: center;
-    padding: 0;
-    flex-shrink: 0;
-
-    &:hover {
-      color: var(--el-color-primary);
-    }
-  }
-
-  .expand-placeholder {
-    width: 16px;
-    flex-shrink: 0;
-  }
-
-  .step-name {
-    flex: 1;
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .drag-ghost {
@@ -1533,17 +1390,6 @@ onMounted(() => {
     border: 1px dashed var(--el-color-primary);
     border-radius: 4px;
     opacity: 0.6;
-  }
-
-  .children-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 2px;
-    margin-left: 4px;
-    border-left: 2px solid $border-color;
-    padding-left: 8px;
-    padding-top: 2px;
   }
 
   :deep(.el-tag) {
@@ -1573,11 +1419,6 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   min-height: 300px;
-}
-
-.step-selected {
-  color: var(--el-color-primary);
-  font-weight: 600;
 }
 
 .single-step-form {

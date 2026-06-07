@@ -78,6 +78,7 @@ declare module 'vue' {
     RadarChart: typeof import('./../components/charts/RadarChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StepTreeNodeItem: typeof import('./../components/StepTreeNodeItem.vue')['default']
     TimelineChart: typeof import('./../components/charts/TimelineChart.vue')['default']
   }
   export interface ComponentCustomProperties {

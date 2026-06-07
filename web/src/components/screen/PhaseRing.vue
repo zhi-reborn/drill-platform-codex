@@ -1,5 +1,6 @@
 <template>
-  <div class="phase-ring" :style="{ width: size + 'px', height: size + 'px' }">
+  <div class="phase-ring" :style="{ width: containerSize + 'px', height: containerSize + 'px' }">
+    <div class="ring-inner" :style="{ width: size + 'px', height: size + 'px' }">
     <svg :viewBox="`0 0 ${size} ${size}`" :width="size" :height="size" class="ring-svg">
       <defs>
         <linearGradient id="grad-active" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -127,26 +128,9 @@
         />
       </g>
 
-      <!-- 内圈 6 个环节标签（径向） -->
-      <g class="inner-labels">
-        <text
-          v-for="(label, idx) in innerLabels"
-          :key="'il' + idx"
-          :x="innerLabelPoints[idx].x"
-          :y="innerLabelPoints[idx].y"
-          :fill="label.color"
-          :font-size="label.size"
-          :font-weight="label.weight"
-          text-anchor="middle"
-          dominant-baseline="middle"
-          font-family="'Microsoft YaHei', 'PingFang SC', sans-serif"
-        >
-          {{ label.text }}
-        </text>
-      </g>
     </svg>
 
-    <!-- 4 个阶段名称（外侧，HTML 定位） -->
+    <!-- 4 个阶段名称（外侧 4 角，HTML 定位） -->
     <div
       v-for="(p, idx) in phasePoints"
       :key="'lbl' + idx"
@@ -165,9 +149,48 @@
       </div>
     </div>
 
+    <!-- 6 个环节标签（环形外侧，雷达布局） -->
+    <svg :viewBox="`0 0 ${size} ${size}`" :width="size" :height="size" class="ring-svg ring-svg-overlay">
+      <!-- 连接线：从环节标签到环边缘 -->
+      <line
+        v-for="(lp, idx) in ringLabelLines"
+        :key="'rll' + idx"
+        :x1="lp.x1" :y1="lp.y1"
+        :x2="lp.x2" :y2="lp.y2"
+        stroke="rgba(0, 212, 255, 0.25)"
+        stroke-width="1"
+        stroke-dasharray="3 3"
+      />
+      <!-- 连接端点小圆 -->
+      <circle
+        v-for="(lp, idx) in ringLabelLines"
+        :key="'rlc' + idx"
+        :cx="lp.x2" :cy="lp.y2"
+        r="2.5"
+        fill="#00d4ff"
+        opacity="0.5"
+      />
+    </svg>
+    <div
+      v-for="(lp, idx) in ringLabelPositions"
+      :key="'rl' + idx"
+      class="ring-outer-label"
+      :class="[
+        { 'ring-outer-label-active': ringLabels[idx].active },
+        lp.align === 'left' ? 'label-align-left' : lp.align === 'right' ? 'label-align-right' : 'label-align-center',
+      ]"
+      :style="{
+        left: lp.leftPct + '%',
+        top: lp.topPct + '%',
+      }"
+    >
+      <span class="ring-outer-label-dot" />
+      <span class="ring-outer-label-text">{{ ringLabels[idx].text }}</span>
+    </div>
+
     <!-- 中心数字 -->
     <div class="center-content">
-      <div class="center-caption">{{ centerCaption }}</div>
+      <div class="center-caption">演练总进度</div>
       <div class="center-value">
         <span class="num-num">{{ centerNumerator }}</span>
         <span class="num-sep">/</span>
@@ -175,6 +198,7 @@
       </div>
       <div class="center-pct">{{ progress }}<span class="pct-unit">%</span></div>
       <div class="center-hint">{{ centerHint }}</div>
+    </div>
     </div>
   </div>
 </template>
@@ -188,18 +212,18 @@ const props = defineProps<{
   progress: number
   centerNumerator: number
   centerDenominator: number
-  centerCaption: string
   centerHint: string
   size?: number
 }>()
 
 const size = computed(() => props.size ?? 520)
+const PAD = 50 // 外圈标签预留空间
+const containerSize = computed(() => size.value + PAD * 2)
 const cx = computed(() => size.value / 2)
 const cy = computed(() => size.value / 2)
 
 // 半径定义
 const innerR = computed(() => size.value * 0.18)
-const midR = computed(() => size.value * 0.30)   // 内圈标签
 const segR = computed(() => size.value * 0.36)   // 分段环
 const outerR = computed(() => size.value * 0.46) // 刻度
 
@@ -266,38 +290,61 @@ const progressPath = computed(() => {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
 })
 
-// 内圈 6 个标签（径向）
-const INNER_LABELS_DEFAULT = [
-  '演练复盘与行动',
-  '演练启动与人员',
-  '基线指标与备份',
-  '演练启动与人员',
-  '故障定位于影响',
+// 外圈 6 个环节标签（环形外侧，雷达布局）
+const RING_LABELS = [
   '业务验收与告警',
+  '演练复盘与行动',
+  '基线指标与备份',
+  '故障定位与影响',
+  '演练启动与人员',
+  '执行恢复与流量',
 ]
-const innerLabels = computed(() => {
-  // 6 个标签从 6 个不同角度摆放（顶部 12 点起算）
-  return INNER_LABELS_DEFAULT.map((t, i) => {
-    let size = 11
-    let weight = 400
-    let color = 'rgba(110, 141, 181, 0.85)'
-    // 当前阶段高亮（这里简单按数组中含 业务/复盘 的视觉）
-    if (t === '业务验收与告警' || t === '基线指标与备份') {
-      size = 12
-      weight = 600
-      color = '#d6e8ff'
-    }
-    return { text: t, size, weight, color }
+// 6 个标签角度（12 点起，顺时针 60° 间隔）
+const RING_LABEL_ANGLES_DEG = [-90, -30, 30, 90, 150, 210]
+
+const ringLabels = computed(() => {
+  return RING_LABELS.map((text, i) => {
+    // 高亮当前阶段相关标签
+    const active = i === 0 // 默认第一个高亮
+    return { text, active }
   })
 })
 
-const innerLabelPoints = computed(() => {
-  // 6 个标签的角度（12 点起，顺时针 60° 一格）
-  const angles = [-90, -30, 30, 90, 150, 210].map(a => a * Math.PI / 180)
-  return angles.map(a => ({
-    x: cx.value + midR.value * Math.cos(a),
-    y: cy.value + midR.value * Math.sin(a),
-  }))
+// 标签放置半径（比外圈刻度再外一些）
+const labelR = computed(() => outerR.value + 28)
+
+// 标签 HTML 定位（百分比）
+const ringLabelPositions = computed(() => {
+  return RING_LABEL_ANGLES_DEG.map((deg) => {
+    const a = deg * Math.PI / 180
+    const r = labelR.value
+    const px = cx.value + r * Math.cos(a)
+    const py = cy.value + r * Math.sin(a)
+    // 文字对齐：右侧标签左对齐，左侧标签右对齐，顶部/底部居中
+    let align: 'left' | 'right' | 'center' = 'center'
+    if (Math.cos(a) > 0.2) align = 'left'
+    else if (Math.cos(a) < -0.2) align = 'right'
+    return {
+      leftPct: (px / size.value) * 100,
+      topPct: (py / size.value) * 100,
+      align,
+    }
+  })
+})
+
+// 连接线：从标签到环外缘
+const ringLabelLines = computed(() => {
+  return RING_LABEL_ANGLES_DEG.map((deg) => {
+    const a = deg * Math.PI / 180
+    const rLabel = labelR.value - 12 // 标签端（稍内缩）
+    const rRing = outerR.value + 6   // 环端（稍超出刻度）
+    return {
+      x1: cx.value + rLabel * Math.cos(a),
+      y1: cy.value + rLabel * Math.sin(a),
+      x2: cx.value + rRing * Math.cos(a),
+      y2: cy.value + rRing * Math.sin(a),
+    }
+  })
 })
 
 function chineseNum(n: number): string {
@@ -307,9 +354,12 @@ function chineseNum(n: number): string {
 
 <style lang="scss" scoped>
 .phase-ring {
-  position: relative;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+.ring-inner {
+  position: relative;
+  flex-shrink: 0;
 }
 .ring-svg {
   position: absolute; top: 0; left: 0;
@@ -428,6 +478,56 @@ function chineseNum(n: number): string {
   &::before { right: -16px; left: auto; background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), transparent); }
 }
 
+.ring-svg-overlay {
+  z-index: 1;
+  pointer-events: none;
+}
+
+// 外圈环节标签（雷达环形布局）
+.ring-outer-label {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.label-align-center {
+  transform: translate(-50%, -50%);
+}
+.label-align-left {
+  transform: translate(4px, -50%);
+}
+.label-align-right {
+  transform: translate(calc(-100% - 4px), -50%);
+  flex-direction: row-reverse;
+}
+.ring-outer-label-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.5);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+}
+.ring-outer-label-text {
+  font-size: 12px;
+  color: rgba(180, 210, 240, 0.85);
+  letter-spacing: 1.5px;
+  font-weight: 400;
+  text-shadow: 0 0 6px rgba(0, 30, 80, 0.8);
+}
+.ring-outer-label-active .ring-outer-label-dot {
+  background: #00d4ff;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+}
+.ring-outer-label-active .ring-outer-label-text {
+  color: #d6e8ff;
+  font-weight: 600;
+}
+
 // 中心内容
 .center-content {
   position: absolute;
@@ -438,10 +538,24 @@ function chineseNum(n: number): string {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .center-caption {
-  font-size: 13px;
-  color: #c7dcff;
-  letter-spacing: 3px;
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  font-size: 14px;
+  color: #a0c4f0;
+  letter-spacing: 4px;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-weight: 500;
+  text-shadow: 0 0 10px rgba(0, 120, 255, 0.3);
+  position: relative;
+  padding-bottom: 8px;
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.5), transparent);
+  }
 }
 .center-value {
   display: flex; align-items: center; gap: 4px;

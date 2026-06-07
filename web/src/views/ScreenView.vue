@@ -160,7 +160,6 @@
               :progress="progressPercent"
               :center-numerator="currentPhaseProgress.num"
               :center-denominator="currentPhaseProgress.den"
-              :center-caption="currentPhaseName"
               :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
               :size="ringSize"
             />
@@ -1395,6 +1394,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
     radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
   position: relative;
+  overflow: visible;
   &::before, &::after {
     content: '';
     position: absolute; width: 14px; height: 14px;
