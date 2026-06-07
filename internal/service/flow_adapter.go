@@ -229,6 +229,7 @@ func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newS
 		repository.DB.Create(&entity.DrillInstanceLog{
 			DrillInstanceID: drillID,
 			Action:          "complete",
+			OperatorName:    "流程引擎",
 			Content:         "演练已完成",
 		})
 	}
@@ -236,6 +237,7 @@ func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newS
 		repository.DB.Create(&entity.DrillInstanceLog{
 			DrillInstanceID: drillID,
 			Action:          "terminate",
+			OperatorName:    "流程引擎",
 			Content:         "演练已终止",
 		})
 	}
@@ -253,6 +255,7 @@ func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newS
 			DrillName:      drillName,
 			PreviousStatus: string(oldStatus),
 			NewStatus:      string(newStatus),
+			Operator:       "流程引擎",
 		})
 	}
 
@@ -360,10 +363,18 @@ func (a *DrillFlowAdapter) LogAction(stepInstID int64, action string, operatorID
 		}
 	}
 
+	var operatorName string
+	if operatorID > 0 && a.userRepo != nil {
+		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
+			operatorName = u.RealName
+		}
+	}
+
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: drillID,
 		Action:          action,
 		OperatorID:      uint64(operatorID),
+		OperatorName:    operatorName,
 		Content:         content,
 	})
 }
@@ -486,6 +497,7 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusPending),
 			NewStatus:      string(flowengine.StepStatusRunning),
+			Executor:       stepInst.AssigneeNames,
 			StartTime:      &startTimeStr,
 			TimeoutAt:      timeoutAtStr,
 			AssigneeNames:  stepInst.AssigneeNames,
@@ -562,6 +574,13 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 		drillName = drill.Name
 	}
 
+	var operatorName string
+	if a.userRepo != nil {
+		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
+			operatorName = u.RealName
+		}
+	}
+
 	if a.wsManager != nil {
 		startTimeStr := ""
 		if stepInst.StartTime != nil {
@@ -577,6 +596,7 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusCompleted),
+			Executor:       operatorName,
 			StartTime:      &startTimeStr,
 			EndTime:        &endTimeStr,
 			Remark:         remarkStr,
@@ -603,12 +623,6 @@ func (a *DrillFlowAdapter) handleStepComplete(evt flowengine.Event) {
 			logContent = fmt.Sprintf("【%s】%s 已完成", stepInst.Phase, stepInst.Name)
 		} else {
 			logContent = fmt.Sprintf("%s 已完成", stepInst.Name)
-		}
-	}
-	var operatorName string
-	if a.userRepo != nil {
-		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
-			operatorName = u.RealName
 		}
 	}
 	repository.DB.Create(&entity.DrillInstanceLog{
@@ -721,6 +735,7 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		DrillInstanceID: drillID,
 		StepInstanceID:  &parentInst.ID,
 		Action:          "auto_complete",
+		OperatorName:    "流程引擎",
 		Content:         fmt.Sprintf("[%s] 子任务全部完成，父步骤自动完成", parentInst.Name),
 		CreatedAt:       now,
 	})
@@ -739,6 +754,7 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 			StepName:       parentInst.Name,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusCompleted),
+			Executor:       "流程引擎",
 			EndTime:        &endTimeStr,
 		})
 	}
@@ -794,6 +810,7 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 			StepName:       parentInst.Name,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(status),
+			Executor:       "流程引擎",
 			EndTime:        &endTimeStr,
 		})
 	}
@@ -806,6 +823,7 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 		DrillInstanceID: drillID,
 		StepInstanceID:  &parentInst.ID,
 		Action:          "parent_" + string(status),
+		OperatorName:    "流程引擎",
 		Content:         fmt.Sprintf("[%s] 子步骤%s，父步骤同步%s", parentInst.Name, label, label),
 		CreatedAt:       at,
 	})
@@ -837,6 +855,7 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 		DrillInstanceID: drillID,
 		StepInstanceID:  &stepInst.ID,
 		Action:          "timeout",
+		OperatorName:    "流程引擎",
 		Content:         timeoutContent,
 		CreatedAt:       now,
 	})
@@ -861,6 +880,7 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusTimeout),
+			Executor:       stepInst.AssigneeNames,
 			StartTime:      &startTimeStr,
 			EndTime:        &endTimeStr,
 			AssigneeNames:  stepInst.AssigneeNames,
@@ -924,6 +944,13 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 		issueDesc = desc
 	}
 
+	var operatorName string
+	if a.userRepo != nil {
+		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
+			operatorName = u.RealName
+		}
+	}
+
 	ctx := a.GetDrillContext(evt.FlowInstID)
 	drillName := ""
 	if ctx != nil {
@@ -946,6 +973,7 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 			PhaseStepName:  stepInst.PhaseStep,
 			PreviousStatus: string(flowengine.StepStatusRunning),
 			NewStatus:      string(flowengine.StepStatusIssue),
+			Executor:       operatorName,
 			StartTime:      &startTimeStr,
 			EndTime:        &endTimeStr,
 			IssueDesc:      issueDesc,
@@ -980,12 +1008,6 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 
 	drillIDForLog := drillID
 	stepIDForLog := stepInst.ID
-	var operatorName string
-	if a.userRepo != nil {
-		if u, err := a.userRepo.FindByID(uint64(operatorID)); err == nil && u != nil {
-			operatorName = u.RealName
-		}
-	}
 	issueLogContent := issueDesc
 	if issueLogContent == "" {
 		if stepInst.Phase != "" {

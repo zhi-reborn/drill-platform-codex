@@ -380,6 +380,7 @@ func (h *Handler) UpdateStepInfo(c *gin.Context) {
 		response.InternalError(c, "保存失败: "+err.Error())
 		return
 	}
+	h.drillService.InvalidateStepCache(id)
 
 	response.SuccessWithMessage(c, "步骤信息已更新", nil)
 }

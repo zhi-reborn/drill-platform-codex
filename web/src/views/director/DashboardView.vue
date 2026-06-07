@@ -63,7 +63,7 @@
               </div>
               <div class="drill-actions">
                 <el-button type="primary" size="small" @click="viewDrill(drill.id)">
-                  监控
+                  详情
                 </el-button>
                 <el-button type="success" size="small" @click="viewScreen(drill.id)">
                   <el-icon><Monitor /></el-icon>
@@ -222,7 +222,7 @@ async function loadDashboard() {
           allLogs.push({
             type: log.action,
             drill_name: drill.name,
-            operator: log.operator_name || '系统',
+            operator: log.operator_name || '流程引擎',
             created_at: log.created_at,
           })
         })
@@ -241,7 +241,7 @@ async function loadDashboard() {
 }
 
 function viewDrill(drillId: number) {
-  router.push(`/director/screen/${drillId}`)
+  router.push(`/director/monitor/${drillId}`)
 }
 
 function viewScreen(drillId: number) {

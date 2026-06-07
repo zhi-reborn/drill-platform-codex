@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: backend_api/drill_domain
+title: 演练实例生命周期与步骤执行管理
+scope:
+    - internal/api/handler/drill/
+    - internal/service/drill.go
+    - internal/service/drill_prestep.go
+    - internal/repository/drill.go
+    - internal/repository/step.go
+    - internal/domain/entity/instance.go
+    - internal/domain/entity/log.go
+source_files: []
+depends_on: []
+related_to: []

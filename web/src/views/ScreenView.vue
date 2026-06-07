@@ -136,7 +136,7 @@
               <div class="stage-card-bottom">
                 <span class="stage-meta">
                   <span class="meta-key">环节</span>
-                  <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
+                  <span class="meta-val">{{ stage.completedPhases }} / {{ stage.totalPhases }}</span>
                 </span>
                 <span class="stage-meta">
                   <span class="meta-key">步骤</span>
@@ -220,8 +220,6 @@
               <div class="log-thead">
                 <span class="col-time">时间</span>
                 <span class="col-step">节点名称</span>
-                <span class="col-operator">操作人</span>
-                <span class="col-status">状态</span>
                 <span class="col-desc">描述</span>
               </div>
               <div class="log-tbody">
@@ -233,12 +231,6 @@
                 >
                   <span class="col-time">{{ formatTime(log.CreatedAt) }}</span>
                   <span class="col-step" :title="resolveStepName(log)">{{ resolveStepName(log) }}</span>
-                  <span class="col-operator" :title="log.OperatorName || '-'">{{ log.OperatorName || '-' }}</span>
-                  <span class="col-status">
-                    <span class="log-status-tag" :class="'tag-' + logActionClass(log.Action)">
-                      {{ logActionShort(log.Action) }}
-                    </span>
-                  </span>
                   <span class="col-desc">{{ log.Remark || logActionLabel(log.Action) }}</span>
                 </div>
                 <div v-if="recentLogs.length === 0" class="empty-tip">暂无日志</div>
@@ -273,6 +265,7 @@ const viewportWidth = ref(window.innerWidth)
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
 let timeTimer: number | null = null
+let componentDestroyed = false
 
 // 顶部时间
 const systemTime = ref(formatSystemTime(new Date()))
@@ -292,11 +285,64 @@ const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
 
+// === 树形步骤辅助 ===
+// 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
+const childMap = computed(() => {
+  const map = new Map<number, StepInstance[]>()
+  for (const s of drillSteps.value) {
+    const pid = s.parent_step_id
+    if (pid) {
+      const list = map.get(pid) || []
+      list.push(s)
+      map.set(pid, list)
+    }
+  }
+  return map
+})
+
+// 递归收集某步骤子树中的所有叶子节点
+function collectLeaves(stepId: number): StepInstance[] {
+  const children = childMap.value.get(stepId)
+  if (!children || children.length === 0) {
+    // 自身就是叶子
+    const self = drillSteps.value.find(s => s.id === stepId)
+    return self ? [self] : []
+  }
+  const leaves: StepInstance[] = []
+  for (const c of children) {
+    leaves.push(...collectLeaves(c.id))
+  }
+  return leaves
+}
+
+// 叶子步骤：无子节点的步骤（实际执行的操作步骤）
+const leafSteps = computed(() => {
+  const allSteps = drillSteps.value
+  if (allSteps.length === 0) return []
+  const hasChild = new Set<number>()
+  for (const s of allSteps) {
+    if (s.parent_step_id) hasChild.add(s.parent_step_id)
+  }
+  const leaves = allSteps.filter(s => !hasChild.has(s.id))
+  return leaves.length > 0 ? leaves : allSteps
+})
+
+// 根步骤（阶段）
+const rootSteps = computed(() => {
+  const allSteps = drillSteps.value
+  const hasParent = new Set<number>()
+  for (const s of allSteps) {
+    if (s.parent_step_id) hasParent.add(s.id)
+  }
+  // 没有 parent_step_id 的就是根
+  return allSteps.filter(s => !s.parent_step_id).sort((a, b) => a.seq - b.seq)
+})
+
 // === KPI 计算 ===
 const completedCount = computed(() =>
-  drillSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
+  leafSteps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
 )
-const totalCount = computed(() => drillSteps.value.length)
+const totalCount = computed(() => leafSteps.value.length)
 const progressPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)
@@ -331,18 +377,88 @@ const STAGE_NAMES = [
 ]
 
 const stages = computed(() => {
-  const total = drillSteps.value.length
-  if (total === 0) return []
+  const allSteps = drillSteps.value
+  if (allSteps.length === 0) return []
+
+  const roots = rootSteps.value
+  const hasHierarchy = roots.length > 0 && leafSteps.value.length < allSteps.length
+
+  if (hasHierarchy) {
+    // 有层级结构：每个根步骤就是一个阶段
+    return roots.map((root, idx) => {
+      const directChildren = childMap.value.get(root.id) || []
+      const leaves = collectLeaves(root.id)
+      // 环节统计：直接子节点（环节级别）
+      const completedPhases = directChildren.filter(c => c.status === 'completed' || c.status === 'skipped').length
+      const totalPhases = directChildren.length
+      // 步骤统计：叶子节点（实际操作步骤）
+      const completedLeaves = leaves.filter(s => s.status === 'completed' || s.status === 'skipped').length
+      const totalLeaves = leaves.length
+      const running = leaves.some(s => s.status === 'running')
+      const hasIssue = leaves.some(s => s.status === 'issue' || s.status === 'timeout')
+      const allDone = completedLeaves === totalLeaves && totalLeaves > 0
+      // 前面阶段都完成 → 当前阶段为进行中
+      const prevDone = roots.slice(0, idx).every(r => {
+        const rl = collectLeaves(r.id)
+        return rl.length > 0 && rl.every(l => l.status === 'completed' || l.status === 'skipped')
+      })
+      const isActive = !allDone && prevDone
+      const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (isActive ? 'running' : 'pending')))
+      // 时间范围
+      const started = leaves.find(s => s.start_time)?.start_time
+      const ended = [...leaves].reverse().find(s => s.end_time)?.end_time
+      let endStr: string | null = ended ?? null
+      if (!endStr) {
+        const t = leaves[0]?.timeout_minutes
+        if (t) endStr = new Date(Date.now() + t * 60000).toISOString()
+      }
+      const timeRange = `${formatHM(started)} / ${formatHM(endStr)}`
+      // 段落
+      const segCount = 18
+      const segs: string[] = []
+      for (let i = 0; i < segCount; i++) {
+        if (i < completedLeaves) segs.push('done')
+        else if (i === completedLeaves && running) segs.push('active')
+        else if (i < totalLeaves) segs.push('todo')
+        else segs.push('empty')
+      }
+      const team = leaves.find(s => s.executor_team)?.executor_team
+        || leaves.find(s => s.assignee_names)?.assignee_names
+        || '运维部'
+      return {
+        name: root.name || STAGE_NAMES[idx % STAGE_NAMES.length],
+        status,
+        timeRange,
+        completedPhases,
+        totalPhases,
+        completedSteps: completedLeaves,
+        totalSteps: totalLeaves,
+        segments: segs,
+        team,
+      }
+    })
+  }
+
+  // 无层级：均匀分成 4 个阶段
+  const total = allSteps.length
   const stageCount = Math.min(4, total)
   const perStage = Math.ceil(total / stageCount)
+  const prevAllDone = (idx: number) => {
+    for (let i = 0; i < idx; i++) {
+      const s = allSteps.slice(i * perStage, (i + 1) * perStage)
+      if (!s.length) continue
+      if (!s.every(st => st.status === 'completed' || st.status === 'skipped')) return false
+    }
+    return true
+  }
   return Array.from({ length: stageCount }).map((_, idx) => {
-    const slice = drillSteps.value.slice(idx * perStage, (idx + 1) * perStage)
+    const slice = allSteps.slice(idx * perStage, (idx + 1) * perStage)
     const completed = slice.filter(s => s.status === 'completed' || s.status === 'skipped').length
     const running = slice.some(s => s.status === 'running')
     const hasIssue = slice.some(s => s.status === 'issue' || s.status === 'timeout')
     const allDone = completed === slice.length && slice.length > 0
-    const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : 'pending'))
-    // 时间范围
+    const isActive = !allDone && prevAllDone(idx)
+    const status = allDone ? 'done' : (running ? 'running' : (hasIssue ? 'issue' : (isActive ? 'running' : 'pending')))
     const started = slice.find(s => s.start_time)?.start_time
     const ended = slice.find(s => s.end_time)?.end_time
     let endStr: string | null = ended ?? null
@@ -351,7 +467,6 @@ const stages = computed(() => {
       if (t) endStr = new Date(Date.now() + t * 60000).toISOString()
     }
     const timeRange = `${formatHM(started)} / ${formatHM(endStr)}`
-    // 段落（用 18 个小方块表示该阶段的所有步骤）
     const segCount = 18
     const segs: string[] = []
     for (let i = 0; i < segCount; i++) {
@@ -360,7 +475,6 @@ const stages = computed(() => {
       else if (i < slice.length) segs.push('todo')
       else segs.push('empty')
     }
-    // 主团队
     const team = slice.find(s => s.executor_team)?.executor_team
       || slice.find(s => s.assignee_names)?.assignee_names
       || '运维部'
@@ -368,6 +482,8 @@ const stages = computed(() => {
       name: STAGE_NAMES[idx % STAGE_NAMES.length],
       status,
       timeRange,
+      completedPhases: 0,
+      totalPhases: 0,
       completedSteps: completed,
       totalSteps: slice.length,
       segments: segs,
@@ -418,8 +534,8 @@ const activeAlerts = computed(() => {
     level: 'warn' | 'info' | 'danger'
   }> = []
 
-  // 进行中步骤
-  drillSteps.value
+  // 进行中步骤（只看叶子步骤）
+  leafSteps.value
     .filter(s => s.status === 'running')
     .slice(0, 2)
     .forEach(s => {
@@ -439,8 +555,8 @@ const activeAlerts = computed(() => {
       })
     })
 
-  // 异常步骤
-  drillSteps.value
+  // 异常步骤（只看叶子步骤）
+  leafSteps.value
     .filter(s => s.status === 'issue' || s.status === 'timeout')
     .slice(0, 2)
     .forEach(s => {
@@ -457,7 +573,7 @@ const activeAlerts = computed(() => {
 
   if (alerts.length === 0) {
     // 占位（保证画面不为空）—— 取前两步 pending 当作预警
-    drillSteps.value.slice(0, 2).forEach((s, i) => {
+    leafSteps.value.slice(0, 2).forEach((s, i) => {
       alerts.push({
         title: s.name,
         team: s.executor_team || (i % 2 === 0 ? 'S07-演练-验收/执行环节' : 'S08-演练-复盘/执行环节'),
@@ -480,22 +596,13 @@ function logActionClass(action: string): string {
   if (action.includes('force')) return 'force'
   return 'ok'
 }
-function logActionShort(action: string): string {
-  const map: Record<string, string> = {
-    complete: 'ok', step_complete: 'ok',
-    issue: 'ERR', step_issue: 'ERR',
-    timeout: 'ERR', force_complete: 'FC', skip: 'SK', step_skip: 'SK',
-    start: 'RUN', step_start: 'RUN',
-  }
-  return map[action] || 'ok'
-}
 function logActionLabel(action: string): string {
   const map: Record<string, string> = {
-    complete: '步骤完成', step_complete: '步骤完成',
-    issue: '异常上报', step_issue: '异常上报',
-    timeout: '步骤超时', force_complete: '强制完成',
-    skip: '步骤跳过', step_skip: '步骤跳过',
-    start: '步骤启动', step_start: '步骤启动',
+    complete: '完成', step_complete: '完成',
+    issue: '异常', step_issue: '异常',
+    timeout: '超时', force_complete: '强制完成',
+    skip: '跳过', step_skip: '跳过',
+    start: '启动', step_start: '启动',
   }
   return map[action] || action
 }
@@ -553,12 +660,15 @@ async function loadData() {
   }
   try {
     const drill = await drillApi.getDetail(drillId.value)
+    if (componentDestroyed) return
     currentDrill.value = drill
 
     const steps = await drillApi.getSteps(drillId.value)
+    if (componentDestroyed) return
     drillSteps.value = steps.sort((a, b) => a.seq - b.seq)
 
     const logs = await drillApi.getLogs(drillId.value)
+    if (componentDestroyed) return
     recentLogs.value = logs.slice(0, 30)
 
     loading.value = false
@@ -566,6 +676,7 @@ async function loadData() {
     tick()
     connectWebSocket()
   } catch (err: any) {
+    if (componentDestroyed) return
     error.value = err.message || '加载数据失败'
     console.error('Failed to load drill data:', err)
     loading.value = false
@@ -596,12 +707,14 @@ const LOG_EVENTS: Record<string, string> = {
 }
 
 function connectWebSocket() {
+  if (componentDestroyed) return
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const authStore = useAuthStore()
   const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId.value}?token=${authStore.token}`
   ws = new WebSocket(wsUrl)
   ws.onmessage = (event) => {
+    if (componentDestroyed) return
     try {
       const data = JSON.parse(event.data)
       const eventType = data.type || data.event_type
@@ -623,8 +736,12 @@ function connectWebSocket() {
       }
     } catch (e) { /* ignore */ }
   }
-  ws.onerror = () => startFallbackPolling()
+  ws.onerror = () => {
+    if (componentDestroyed) return
+    startFallbackPolling()
+  }
   ws.onclose = () => {
+    if (componentDestroyed) return
     if (currentDrill.value?.status === 'running') startFallbackPolling()
   }
 }
@@ -660,7 +777,7 @@ function applyStepEvent(eventType: string, payload: any) {
     StepInstanceID: stepId,
     Action: logAction,
     OperatorID: 0,
-    OperatorName: payload.executor || '系统',
+    OperatorName: payload.executor || '流程引擎',
     Remark: payload.remark || payload.comment || payload.issue_desc || '',
     CreatedAt: new Date().toISOString(),
   }
@@ -681,7 +798,7 @@ function applyDrillEvent(eventType: string, payload: any) {
     StepInstanceID: 0,
     Action: LOG_EVENTS[eventType] || eventType,
     OperatorID: 0,
-    OperatorName: payload.operator || '系统',
+    OperatorName: payload.operator || '流程引擎',
     Remark: payload.remark || '',
     CreatedAt: new Date().toISOString(),
   }
@@ -712,10 +829,22 @@ function recomputeKpis() {
 }
 
 function startFallbackPolling() {
+  if (componentDestroyed) return
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = window.setInterval(() => {
+    if (componentDestroyed) {
+      stopFallbackPolling()
+      return
+    }
     if (currentDrill.value?.status === 'running') loadData()
   }, 5000)
+}
+
+function stopFallbackPolling() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 }
 
 // 全屏
@@ -728,14 +857,16 @@ function toggleFullscreen() {
 }
 
 onMounted(() => {
+  componentDestroyed = false
   loadData()
   window.addEventListener('resize', handleResize)
   timeTimer = window.setInterval(tick, 1000)
 })
 onBeforeUnmount(() => {
+  componentDestroyed = true
   window.removeEventListener('resize', handleResize)
   if (timeTimer) clearInterval(timeTimer)
-  if (refreshTimer) clearInterval(refreshTimer)
+  stopFallbackPolling()
   if (ws) { ws.close(); ws = null }
 })
 
@@ -1380,14 +1511,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex; flex-direction: column; padding: 0;
 }
 .log-thead {
-  display: grid; grid-template-columns: 72px 1.4fr 80px 64px 1.4fr;
+  display: grid; grid-template-columns: 72px 1.8fr 0.6fr;
   padding: 6px 12px;
   background: rgba(0, 60, 130, 0.42);
   border-bottom: 1px solid $line;
   font-family: $font-display; font-size: 10px;
   color: $neon; letter-spacing: 1.5px;
-  .col-status { text-align: center; }
-  .col-step, .col-operator { text-align: left; padding-left: 6px; }
+  .col-step { text-align: left; padding-left: 6px; }
 }
 .log-tbody {
   flex: 1; overflow-y: auto; padding: 4px 0;
@@ -1396,20 +1526,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
 }
 .log-row {
-  display: grid; grid-template-columns: 72px 1.4fr 80px 64px 1.4fr;
+  display: grid; grid-template-columns: 72px 1.8fr 0.6fr;
   align-items: center;
   padding: 7px 12px;
   border-bottom: 1px solid rgba(111, 151, 220, 0.16);
   font-size: 12px;
   .col-time { font-family: $font-mono; color: $text-dim; font-size: 11px; }
-  .col-status { text-align: center; }
   .col-step {
     color: $text;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    padding-left: 6px;
-  }
-  .col-operator {
-    color: $text-dim;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     padding-left: 6px;
   }
@@ -1422,17 +1546,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &.log-force { .col-desc { color: $neon; } }
   &.log-ok { .col-desc { color: $ok; } }
 }
-.log-status-tag {
-  display: inline-block;
-  font-family: $font-mono; font-size: 10px;
-  padding: 1px 8px; letter-spacing: 1px;
-  border-radius: 1px; min-width: 36px; text-align: center;
-  &.tag-ok { color: $ok; background: rgba(0, 255, 156, 0.1); border: 1px solid rgba(0, 255, 156, 0.3); }
-  &.tag-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); }
-  &.tag-skip { color: #a78bfa; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); }
-  &.tag-force { color: $neon; background: $neon-soft; border: 1px solid $line-strong; }
-}
-
 // ===== Footer =====
 .screen-footer {
   display: flex; justify-content: space-between;
@@ -1669,7 +1782,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
   .log-thead,
   .log-row {
-    grid-template-columns: 62px 52px 1fr;
+    grid-template-columns: 62px 1fr 52px 1fr;
     padding-left: 8px;
     padding-right: 8px;
   }

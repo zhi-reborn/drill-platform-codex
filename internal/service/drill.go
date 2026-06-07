@@ -181,6 +181,10 @@ func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	return steps, nil
 }
 
+func (s *DrillService) InvalidateStepCache(drillID uint64) {
+	InvalidateStepCache(s.redis, drillID)
+}
+
 func (s *DrillService) EnrichStepsWithAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
 	allIDs := make(map[uint64]bool)
 	for i := range steps {
@@ -496,6 +500,7 @@ func (s *DrillService) Pause(id uint64) error {
 			DrillName:      drill.Name,
 			PreviousStatus: prevStatus,
 			NewStatus:      "paused",
+			Operator:       operatorName,
 		}
 		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
 	}
@@ -553,6 +558,7 @@ func (s *DrillService) Resume(id uint64) error {
 			DrillName:      drill.Name,
 			PreviousStatus: prevStatus,
 			NewStatus:      "running",
+			Operator:       operatorName,
 		}
 		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
 	}
@@ -615,6 +621,7 @@ func (s *DrillService) Terminate(id uint64) error {
 			DrillName:      drill.Name,
 			PreviousStatus: prevStatus,
 			NewStatus:      "terminated",
+			Operator:       operatorName,
 		}
 		s.wsManager.SendDrillStatus(uint(drill.ID), payload)
 	}

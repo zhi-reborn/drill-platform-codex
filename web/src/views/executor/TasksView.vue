@@ -399,7 +399,7 @@ async function loadTasks() {
           allLogs.push({
             type: log.action,
             drill_name: drill.name,
-            operator: log.operator_name || '系统',
+            operator: log.operator_name || '流程引擎',
             created_at: log.created_at,
           })
         })

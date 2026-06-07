@@ -1,0 +1,46 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+exported_at: "2026-06-07T11:29:35Z"
+modules:
+    backend_api/auth_domain:
+        dir_name: 认证与用户管理
+        title: 认证与用户管理
+        scope:
+            - internal/api/handler/auth/
+            - internal/service/auth.go
+            - internal/service/ldap.go
+            - internal/service/cas.go
+            - internal/domain/entity/user.go
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_api/drill_domain:
+        dir_name: 演练实例生命周期与步骤执行管理
+        title: 演练实例生命周期与步骤执行管理
+        scope:
+            - internal/api/handler/drill/
+            - internal/service/drill.go
+            - internal/service/drill_prestep.go
+            - internal/repository/drill.go
+            - internal/repository/step.go
+            - internal/domain/entity/instance.go
+            - internal/domain/entity/log.go
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_api/template_domain:
+        dir_name: 演练模板管理
+        title: 演练模板管理
+        scope:
+            - internal/api/handler/template/
+            - internal/service/template.go
+            - internal/repository/template.go
+            - internal/domain/entity/template.go
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

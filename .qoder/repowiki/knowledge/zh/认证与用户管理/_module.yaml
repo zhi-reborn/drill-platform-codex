@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend_api/auth_domain
+title: 认证与用户管理
+scope:
+    - internal/api/handler/auth/
+    - internal/service/auth.go
+    - internal/service/ldap.go
+    - internal/service/cas.go
+    - internal/domain/entity/user.go
+source_files: []
+depends_on: []
+related_to: []

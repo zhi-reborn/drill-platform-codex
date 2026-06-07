@@ -1,6 +1,6 @@
 <template>
   <aside class="app-sidebar" :class="{ 'is-collapsed': collapsed }">
-    <el-menu :default-active="activeMenu" :collapse="collapsed" :collapse-transition="true" router class="sidebar-menu">
+    <el-menu :default-active="activeMenu" :collapse="collapsed" :collapse-transition="true" class="sidebar-menu" @select="handleMenuSelect">
       <template v-for="menu in visibleMenus" :key="menu.path">
         <el-menu-item v-if="!menu.children" :index="menu.path">
           <el-icon><component :is="menu.icon" /></el-icon>
@@ -23,7 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getVisibleMenus } from '@/config/menu'
 import type { Role } from '@/types'
@@ -31,6 +31,7 @@ import type { Role } from '@/types'
 defineProps<{ collapsed: boolean }>()
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 
 const activeMenu = computed(() => {
@@ -45,6 +46,12 @@ const visibleMenus = computed(() => {
   const role = authStore.role
   return getVisibleMenus(role as Role)
 })
+
+function handleMenuSelect(index: string) {
+  if (index !== route.path) {
+    router.push(index)
+  }
+}
 </script>
 
 <style lang="scss" scoped>

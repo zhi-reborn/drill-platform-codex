@@ -39,7 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     const hierarchy: Role[] = ['admin', 'director', 'executor', 'viewer']
     const userIndex = hierarchy.indexOf(user.value.role)
     const requiredIndex = hierarchy.indexOf(requiredRole)
-    return userIndex >= requiredIndex
+    return userIndex <= requiredIndex
   }
 
   function hasPermission(permission: string): boolean {

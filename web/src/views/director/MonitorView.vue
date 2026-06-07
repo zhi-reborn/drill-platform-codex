@@ -833,8 +833,10 @@ function getCountdown(timeoutAt: string): string {
 
 // WebSocket 实时刷新 — 区分事件类型，步骤事件增量更新
 let logDebounceTimer: number | null = null
+let componentDestroyed = false
 
 function connectWebSocket() {
+  if (componentDestroyed) return
   if (ws) ws.close()
   if (!isValidDrill.value) return
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
@@ -843,6 +845,7 @@ function connectWebSocket() {
 
   ws = new WebSocket(wsUrl)
   ws.onmessage = (ev: MessageEvent) => {
+    if (componentDestroyed) return
     try {
       const msg = JSON.parse(ev.data)
       handleWSMessage(msg)
@@ -852,9 +855,11 @@ function connectWebSocket() {
     }
   }
   ws.onerror = () => {
+    if (componentDestroyed) return
     startFallbackPolling()
   }
   ws.onclose = () => {
+    if (componentDestroyed) return
     if (instance.value?.status === 'running') {
       startFallbackPolling()
     }
@@ -931,8 +936,13 @@ async function refreshLogs() {
 }
 
 function startFallbackPolling() {
+  if (componentDestroyed) return
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = window.setInterval(() => {
+    if (componentDestroyed) {
+      stopFallbackPolling()
+      return
+    }
     if (instance.value?.status === 'running') {
       loadDrillData()
     } else {
@@ -949,19 +959,21 @@ function stopFallbackPolling() {
 }
 
 async function loadDrillData() {
+  if (componentDestroyed) return
   if (!isValidDrill.value) {
-    // 静默重定向,避免在用户点击侧边栏导航时弹出"演练 ID 无效"的脏错误
     router.replace('/director/drills')
     return
   }
   try {
     instance.value = await drillApi.getDetail(drillId.value)
+    if (componentDestroyed) return
     if (!instance.value) {
       ElMessage.error('演练不存在')
       router.back()
       return
     }
     let stepsData = await drillApi.getSteps(drillId.value)
+    if (componentDestroyed) return
     // 解析 attributes JSON 字符串为对象
     stepsData = stepsData.map((step: StepInstance) => ({
       ...step,
@@ -970,6 +982,7 @@ async function loadDrillData() {
     steps.value = stepsData
 
     const logsData = await drillApi.getLogs(drillId.value)
+    if (componentDestroyed) return
     logs.value = logsData
 
     // 初始化展开所有 phase 面板
@@ -978,6 +991,7 @@ async function loadDrillData() {
     // 连接 WebSocket，演练运行中自动刷新状态
     connectWebSocket()
   } catch (error: any) {
+    if (componentDestroyed) return
     if (error?.response?.status === 404) {
       ElMessage.error('演练不存在或已删除')
       router.back()
@@ -1148,10 +1162,12 @@ async function saveStepInfo() {
 }
 
 onMounted(() => {
+  componentDestroyed = false
   loadDrillData()
 })
 
 onUnmounted(() => {
+  componentDestroyed = true
   if (ws) {
     ws.close()
     ws = null

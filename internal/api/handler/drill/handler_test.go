@@ -1,14 +1,55 @@
 package drill
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/repository"
+	drillservice "drill-platform/internal/service"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type fakeStepCacheRedis struct {
+	values  map[string]string
+	deleted []string
+}
+
+func newFakeStepCacheRedis() *fakeStepCacheRedis {
+	return &fakeStepCacheRedis{values: map[string]string{}}
+}
+
+func (r *fakeStepCacheRedis) Get(key string) (string, error) {
+	return r.values[key], nil
+}
+
+func (r *fakeStepCacheRedis) Set(key string, value interface{}, _ time.Duration) error {
+	switch v := value.(type) {
+	case []byte:
+		r.values[key] = string(v)
+	case string:
+		r.values[key] = v
+	default:
+		buf, _ := json.Marshal(v)
+		r.values[key] = string(buf)
+	}
+	return nil
+}
+
+func (r *fakeStepCacheRedis) Delete(keys ...string) error {
+	r.deleted = append(r.deleted, keys...)
+	for _, key := range keys {
+		delete(r.values, key)
+	}
+	return nil
+}
 
 func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -26,11 +67,13 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 		`CREATE TABLE drill_instance_step (
 			id INTEGER PRIMARY KEY,
 			drill_instance_id INTEGER NOT NULL,
-			step_template_id INTEGER NOT NULL,
+			template_step_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
 			seq INTEGER NOT NULL,
 			status TEXT NOT NULL,
-			assignee_ids TEXT NOT NULL
+			assignee_ids TEXT NOT NULL,
+			remark TEXT,
+			action_params TEXT
 		)`,
 		`CREATE TABLE drill_template_step (
 			id INTEGER PRIMARY KEY,
@@ -46,6 +89,65 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 		}
 	}
 	return db
+}
+
+func TestUpdateStepInfoInvalidatesStepCache(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	step := map[string]interface{}{
+		"id":                12,
+		"drill_instance_id": 2,
+		"template_step_id":  252,
+		"name":              "操作1",
+		"seq":               1,
+		"status":            "running",
+		"assignee_ids":      "[]",
+		"action_params":     `{"operator":"旧操作人"}`,
+	}
+	if err := db.Table("drill_instance_step").Create(step).Error; err != nil {
+		t.Fatalf("create instance step: %v", err)
+	}
+
+	redis := newFakeStepCacheRedis()
+	drillservice.SetCachedSteps(redis, 2, []entity.StepInstance{{
+		ID:              12,
+		DrillInstanceID: 2,
+		StepTemplateID:  252,
+		Name:            "操作1",
+		Seq:             1,
+		Status:          "running",
+		AssigneeIDs:     "[]",
+		JSONAttributes:  `{"operator":"旧操作人"}`,
+	}})
+
+	svc := drillservice.NewDrillService(
+		repository.NewDrillRepo(),
+		repository.NewTemplateRepo(),
+		repository.NewStepRepo(),
+		repository.NewUserRepo(),
+	)
+	svc.SetRedis(redis)
+	handler := NewHandler(svc, nil)
+
+	router := gin.New()
+	router.PUT("/drills/:id/steps/info", handler.UpdateStepInfo)
+	body := bytes.NewBufferString(`{"step_id":252,"attributes":{"operator":"新操作人"}}`)
+	req := httptest.NewRequest(http.MethodPut, "/drills/2/steps/info", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if _, ok := drillservice.GetCachedSteps(redis, 2); ok {
+		t.Fatalf("expected step cache to be invalidated")
+	}
 }
 
 func TestResolveStepOperationTargetBackfillsMissingTemplateID(t *testing.T) {
@@ -72,7 +174,7 @@ func TestResolveStepOperationTargetBackfillsMissingTemplateID(t *testing.T) {
 	step := map[string]interface{}{
 		"id":                12,
 		"drill_instance_id": 2,
-		"step_template_id":  0,
+		"template_step_id":  0,
 		"name":              stepName,
 		"seq":               4,
 		"status":            "timeout",
@@ -111,7 +213,7 @@ func TestResolveStepOperationTargetKeepsTemplateIDLookup(t *testing.T) {
 	step := map[string]interface{}{
 		"id":                80,
 		"drill_instance_id": 7,
-		"step_template_id":  99,
+		"template_step_id":  99,
 		"name":              "步骤",
 		"seq":               1,
 		"status":            "running",

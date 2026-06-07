@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_api/template_domain
+title: 演练模板管理
+scope:
+    - internal/api/handler/template/
+    - internal/service/template.go
+    - internal/repository/template.go
+    - internal/domain/entity/template.go
+source_files: []
+depends_on: []
+related_to: []
