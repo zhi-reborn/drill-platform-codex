@@ -440,6 +440,14 @@ func (a *DrillFlowAdapter) SetupEventSubscriptions(engine *flowengine.Engine) {
 		}
 	}()
 
+	stepSkipCh := make(chan flowengine.Event, 100)
+	engine.GetEventBus().Subscribe(flowengine.EventStepSkip, stepSkipCh)
+	go func() {
+		for evt := range stepSkipCh {
+			a.handleStepSkip(evt)
+		}
+	}()
+
 	stepForceCompleteCh := make(chan flowengine.Event, 100)
 	engine.GetEventBus().Subscribe(flowengine.EventStepForceComplete, stepForceCompleteCh)
 	go func() {
@@ -787,6 +795,9 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		parentSI.Status = flowengine.StepStatusCompleted
 		parentSI.EndTime = &now
 		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+
+		// CompleteStep 失败时（如流程非 running 状态），仍需递归检查祖父步骤
+		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
 	}
 
 	if a.wsManager != nil {
@@ -890,6 +901,9 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 		if a.engine != nil {
 			_ = a.engine.AdvanceFlow(flowInstID, parentStepDefID)
 		}
+
+		// 递归检查祖父步骤是否也需要自动完成
+		a.propagateStatusToParent(flowInstID, parentStepDefID, status, at)
 	}
 	// 如果还有子步骤未终态，父步骤保持 running 状态，不传播超时/异常
 }
@@ -1109,6 +1123,46 @@ func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {
 	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusIssue, nw)
 }
 
+func (a *DrillFlowAdapter) handleStepSkip(evt flowengine.Event) {
+	drillID := uint64(evt.FlowInstID)
+	stepDefID := evt.StepDefID
+
+	stepInst, err := a.findStepInstance(drillID, stepDefID)
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+
+	if a.wsManager != nil {
+		startTimeStr := ""
+		if stepInst.StartTime != nil {
+			startTimeStr = stepInst.StartTime.Format(time.RFC3339)
+		}
+		endTimeStr := now.Format(time.RFC3339)
+		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+			DrillID:        uint(drillID),
+			StepID:         uint(stepInst.ID),
+			StepName:       stepInst.Name,
+			PhaseName:      stepInst.Phase,
+			PhaseStepName:  stepInst.PhaseStep,
+			PreviousStatus: string(flowengine.StepStatusRunning),
+			NewStatus:      string(flowengine.StepStatusSkipped),
+			Executor:       "指挥员",
+			StartTime:      &startTimeStr,
+			EndTime:        &endTimeStr,
+		})
+		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
+			"status":     string(flowengine.StepStatusSkipped),
+			"start_time": &startTimeStr,
+			"end_time":   &endTimeStr,
+		})
+	}
+
+	// 跳过步骤后检查父步骤是否需要自动完成
+	a.handleSubtaskCompletion(evt.FlowInstID, stepDefID)
+}
+
 func (a *DrillFlowAdapter) handleFlowComplete(evt flowengine.Event) {
 	drillID := uint64(evt.FlowInstID)
 	ctx := a.GetDrillContext(evt.FlowInstID)
@@ -1160,33 +1214,49 @@ func parseAssigneeIDsFromInstance(assigneeIDsJSON string) []int64 {
 }
 
 // computeParallelGroupCondition 为并行步骤计算其所属并行组的 Condition
-// 相邻 root 并行步骤（无子步骤在中间的并行兄弟）自动成组
+// 同一父步骤下相邻的并行步骤自动成组（支持任意层级，不仅限根级）
 func computeParallelGroupCondition(templateSteps []entity.StepTemplate, targetStepID int64) *flowengine.ConditionDef {
-	type rootInfo struct {
+	// 找到目标步骤的父步骤 ID
+	var targetParentID int64 = 0
+	for _, s := range templateSteps {
+		if int64(s.ID) == targetStepID {
+			if s.ParentStepID != nil {
+				targetParentID = int64(*s.ParentStepID)
+			}
+			break
+		}
+	}
+
+	// 收集同一父步骤下的兄弟步骤
+	type siblingInfo struct {
 		id       int64
 		seq      int
 		stepType string
 	}
-	var roots []rootInfo
+	var siblings []siblingInfo
 	for _, s := range templateSteps {
-		if s.ParentStepID == nil || *s.ParentStepID == 0 {
-			roots = append(roots, rootInfo{id: int64(s.ID), seq: s.Seq, stepType: s.StepType})
+		sParentID := int64(0)
+		if s.ParentStepID != nil {
+			sParentID = int64(*s.ParentStepID)
+		}
+		if sParentID == targetParentID {
+			siblings = append(siblings, siblingInfo{id: int64(s.ID), seq: s.Seq, stepType: s.StepType})
 		}
 	}
-	sort.Slice(roots, func(i, j int) bool { return roots[i].seq < roots[j].seq })
+	sort.Slice(siblings, func(i, j int) bool { return siblings[i].seq < siblings[j].seq })
 
-	for i := 0; i < len(roots); i++ {
-		if roots[i].stepType != "parallel" {
+	for i := 0; i < len(siblings); i++ {
+		if siblings[i].stepType != "parallel" {
 			continue
 		}
 		j := i + 1
-		for j < len(roots) && roots[j].stepType == "parallel" {
+		for j < len(siblings) && siblings[j].stepType == "parallel" {
 			j++
 		}
 		if j > i+1 {
 			var groupIDs []int64
 			for k := i; k < j; k++ {
-				groupIDs = append(groupIDs, roots[k].id)
+				groupIDs = append(groupIDs, siblings[k].id)
 			}
 			for _, id := range groupIDs {
 				if id == targetStepID {

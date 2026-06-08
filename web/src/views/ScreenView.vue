@@ -52,7 +52,7 @@
             <span class="status-dot" :class="'dot-' + (currentDrill.status || '')" />
             <span class="kpi-value-text" :class="'txt-' + (currentDrill.status || '')">{{ drillStatusLabel }}</span>
           </div>
-          <span class="kpi-sub">编号: D-{{ String(currentDrill.id).padStart(10, '0') }}</span>
+          <span class="kpi-sub">{{ currentDrill?.name || '未命名演练' }}</span>
         </div>
 
         <div class="kpi-card kpi-progress-card">
@@ -1108,8 +1108,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     grid-column: 1;
     text-align: left;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 18px;
+    margin-top: -2px;
     .drill-title {
       font-family: $font-cn;
       font-size: clamp(24px, 2.35vw, 42px);
@@ -1304,8 +1305,16 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .kpi-sub {
     grid-column: 1 / -1;
     grid-row: 3;
-    font-size: 11px; color: rgba(255, 122, 0, 0.78); margin-top: 2px;
-    font-family: $font-mono; letter-spacing: 1px;
+    font-size: 11px;
+    color: rgba(180, 220, 255, 0.62);
+    margin-top: 0;
+    padding-top: 6px;
+    font-family: $font-mono;
+    letter-spacing: 0.04em;
+    border-top: 1px solid rgba(0, 212, 255, 0.12);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .kpi-node-count {
     margin-left: 10px;
@@ -1588,6 +1597,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &::after { bottom: 18%; }
 }
 
+
 // ===== Right column =====
 .panel-right {
   display: flex; flex-direction: column;
@@ -1826,6 +1836,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .kpi-sub {
       font-size: 7px;
       letter-spacing: 0;
+      color: rgba(180, 220, 255, 0.55);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
