@@ -240,9 +240,7 @@
       </main>
 
       <!-- Footer decorations -->
-      <footer class="screen-footer">
-        <span class="footer-tag">节点 {{ drillId }} · {{ currentDrill.name }}</span>
-      </footer>
+      <footer class="screen-footer" />
     </div>
   </div>
 </template>
@@ -947,7 +945,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &::before {
     content: '';
     position: absolute;
-    inset: 10px 18px 12px;
+    inset: 8px 12px 8px;
     border: 1px solid rgba(134, 181, 255, 0.45);
     box-shadow:
       inset 0 0 42px rgba(38, 118, 255, 0.1),
@@ -1051,8 +1049,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 18px 30px 14px;
-  gap: 16px;
+  padding: 12px 20px 4px;
+  gap: 8px;
 }
 
 // ===== HEADER =====
@@ -1062,7 +1060,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: 16px;
-  height: 58px;
+  height: 46px;
   background:
     linear-gradient(90deg, rgba(37, 130, 255, 0.26), rgba(13, 37, 74, 0.1) 44%, rgba(20, 50, 96, 0.35));
   border: 0;
@@ -1144,10 +1142,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-  height: 102px;
+  gap: 16px;
+  height: 88px;
   flex-shrink: 0;
-  padding: 0 18px;
+  padding: 0;
 }
 .kpi-card {
   position: relative;
@@ -1155,7 +1153,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     linear-gradient(90deg, rgba(14, 50, 112, 0.82), rgba(10, 26, 57, 0.36)),
     linear-gradient(180deg, rgba(53, 138, 255, 0.18), transparent);
   border: 1px solid rgba(105, 165, 255, 0.38);
-  padding: 17px 22px 14px 94px;
+  padding: 12px 22px 10px 80px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto 1fr auto;
@@ -1176,10 +1174,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
   .kpi-orb {
     position: absolute;
-    left: 28px;
-    top: 22px;
-    width: 44px;
-    height: 44px;
+    left: 24px;
+    top: 18px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     background:
       radial-gradient(circle at 36% 34%, #9ffcff 0 14%, #00d4ff 15% 28%, rgba(20, 255, 189, 0.85) 29% 45%, rgba(0, 74, 165, 0.7) 46% 100%);
@@ -1297,11 +1295,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== MAIN GRID =====
 .screen-main {
   display: grid;
-  grid-template-columns: minmax(220px, 22vw) minmax(340px, 1fr) minmax(240px, 24vw);
-  gap: 22px;
+  grid-template-columns: minmax(180px, 18vw) minmax(340px, 1fr) minmax(240px, 24vw);
+  gap: 20px;
   flex: 1;
   min-height: 0;
-  padding: 0 18px;
+  padding: 0;
 }
 
 .panel {
@@ -1315,8 +1313,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-header {
   position: relative;
   display: flex; align-items: center; gap: 8px;
-  height: 38px;
-  padding: 0 14px 0 28px;
+  height: 34px;
+  padding: 0 12px 0 24px;
   background:
     linear-gradient(90deg, rgba(0, 116, 255, 0.62), rgba(8, 29, 67, 0.38) 52%, transparent 100%);
   border-bottom: 0;
@@ -1360,7 +1358,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 14px;
+  padding: 10px 12px;
+  min-height: 0;
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
   &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
@@ -1374,16 +1373,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Left stages =====
 .panel-stages {
   background: transparent;
+  min-height: 0;
+  overflow: hidden;
   .stages-list {
-    display: flex; flex-direction: column; gap: 18px;
+    display: flex; flex-direction: column; gap: 14px;
+    height: 100%;
   }
   .stage-card {
     position: relative;
     background: linear-gradient(90deg, rgba(11, 21, 38, 0.88), rgba(10, 20, 40, 0.42));
     border: 1px solid rgba(70, 96, 130, 0.28);
     border-left: 3px solid rgba(160, 176, 196, 0.48);
-    padding: 12px 14px 13px;
-    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 12px 9px;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 4px;
+    justify-content: center;
     transition: all 0.2s;
 
     &.stage-done { border-left-color: $neon; }
@@ -1421,7 +1425,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-meta-label { font-size: 10px; color: $text-mute; letter-spacing: 1px; }
   }
   .stage-segments {
-    display: flex; gap: 2px; height: 8px;
+    display: flex; gap: 2px; height: 6px;
     .segment { flex: 1; background: rgba(255, 255, 255, 0.05); }
     .segment.seg-done { background: linear-gradient(180deg, $neon, $neon-dim); box-shadow: 0 0 4px rgba(0, 212, 255, 0.4); }
     .segment.seg-active { background: linear-gradient(180deg, #ff9a2f, #ff7a00); box-shadow: 0 0 6px #ff7a00; animation: pulse 1.2s ease-in-out infinite; }
@@ -1471,15 +1475,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Right column =====
 .panel-right {
   display: flex; flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   background: transparent; border: none; padding: 0;
+  min-height: 0;
   .sub-panel {
     position: relative;
     background: transparent; border: 0;
     display: flex; flex-direction: column;
     overflow: hidden;
+    min-height: 0;
   }
-  .sub-warn { flex: 0 0 43%; }
+  .sub-warn { flex: 0 0 auto; }
   .sub-logs { flex: 1; min-height: 0; }
 }
 
@@ -1584,24 +1590,26 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Footer =====
 .screen-footer {
   display: flex; justify-content: space-between;
-  padding: 0 8px;
+  padding: 0;
+  height: 16px;
+  flex-shrink: 0;
   font-family: $font-display; font-size: 10px;
   color: $text-mute; letter-spacing: 2px;
 }
 
 @media (max-width: 1000px) {
   .screen-content {
-    padding: 14px 18px 10px;
-    gap: 10px;
+    padding: 10px 12px 4px;
+    gap: 6px;
   }
 
   .screen-root::before {
-    inset: 8px 12px 10px;
+    inset: 6px 8px 6px;
   }
 
   .screen-header {
-    height: 54px;
-    padding: 0 16px;
+    height: 44px;
+    padding: 0 12px;
 
     .header-title-block {
       gap: 8px;
@@ -1638,13 +1646,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 
   .kpi-row {
-    gap: 8px;
-    height: 86px;
-    padding: 0 6px;
+    gap: 6px;
+    height: 76px;
+    padding: 0;
   }
 
   .kpi-card {
-    padding: 12px 8px 10px 54px;
+    padding: 10px 8px 8px 54px;
     column-gap: 4px;
 
     .kpi-orb {
@@ -1710,9 +1718,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 
   .screen-main {
-    grid-template-columns: 226px minmax(260px, 1fr) 226px;
-    gap: 8px;
-    padding: 0 6px;
+    grid-template-columns: 190px minmax(260px, 1fr) 190px;
+    gap: 10px;
+    padding: 0;
   }
 
   .panel-header {
@@ -1731,16 +1739,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 
   .panel-body {
-    padding: 9px;
+    padding: 8px;
   }
 
   .panel-stages {
     .stages-list {
-      gap: 10px;
+      gap: 8px;
     }
 
     .stage-card {
-      padding: 9px 9px 10px;
+      padding: 6px 8px 7px;
+      flex: 1;
     }
 
     .stage-card-top {
@@ -1833,6 +1842,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .screen-footer {
     font-size: 8px;
     letter-spacing: 1px;
+    padding: 0;
   }
 }
 </style>

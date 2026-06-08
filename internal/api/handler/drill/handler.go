@@ -299,29 +299,57 @@ func (h *Handler) StartStep(c *gin.Context) {
 		return
 	}
 
+	if h.drillService.Engine() == nil {
+		response.InternalError(c, "流程引擎未初始化")
+		return
+	}
+
 	target, err := resolveStepOperationTarget(id, req.StepID)
 	if err != nil {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
 
-	if target.step.Status == "completed" || target.step.Status == "skipped" {
-		response.BadRequest(c, "步骤已是终态,无法开始")
+	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
+	stepDefID := int64(target.stepDefID)
+	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
+		if si, ok := inst.Steps[stepDefID]; ok {
+			si.Status = flowengine.StepStatus(target.step.Status)
+		}
+	}
+
+	err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID)
+	if err == flowengine.ErrInstanceNotFound {
+		if recErr := h.drillService.Recover(id); recErr != nil {
+			response.InternalError(c, "恢复演练状态失败")
+			return
+		}
+		if err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID); err != nil {
+			response.BadRequest(c, stepStartErrorMessage(err))
+			return
+		}
+	} else if err != nil {
+		response.BadRequest(c, stepStartErrorMessage(err))
 		return
 	}
 
-	now := time.Now()
-	repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(map[string]interface{}{
-			"status":     "running",
-			"start_time": &now,
-			"remark":     req.Remark,
-		})
-
 	h.drillService.InvalidateStepCache(id)
-
 	response.SuccessWithMessage(c, "步骤已开始", nil)
+}
+
+func stepStartErrorMessage(err error) string {
+	switch err {
+	case flowengine.ErrPreStepsNotDone:
+		return "前序步骤尚未完成，无法开始"
+	case flowengine.ErrInvalidStatus:
+		return "步骤状态不允许开始"
+	case flowengine.ErrInstanceNotRunning:
+		return "演练未在执行中"
+	case flowengine.ErrStepNotFound:
+		return "步骤不存在于流程引擎"
+	default:
+		return "内部错误"
+	}
 }
 
 // UpdateStepInfo 编辑步骤实例的可维护字段
@@ -407,41 +435,41 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 		return
 	}
 
+	if h.drillService.Engine() == nil {
+		response.InternalError(c, "流程引擎未初始化")
+		return
+	}
+
 	target, err := resolveStepOperationTarget(id, req.StepID)
 	if err != nil {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
 
-	now := time.Now()
-	repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(map[string]interface{}{
-			"status":   "completed",
-			"end_time": &now,
-			"remark":   req.Remark,
-		})
-
-	// 通知引擎该步骤已完成
-	if h.drillService.Engine() != nil {
-		err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
-		if err == flowengine.ErrInstanceNotFound {
-			if recErr := h.drillService.Recover(id); recErr != nil {
-				response.InternalError(c, "恢复演练状态失败")
-				return
-			}
-			if err = h.drillService.Engine().DirectorCompleteStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
-				response.InternalError(c, "内部错误")
-				return
-			}
-		} else if err != nil {
-			response.InternalError(c, "内部错误")
-			return
+	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
+	stepDefID := int64(target.stepDefID)
+	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
+		if si, ok := inst.Steps[stepDefID]; ok {
+			si.Status = flowengine.StepStatus(target.step.Status)
 		}
 	}
 
-	h.drillService.InvalidateStepCache(id)
+	err = h.drillService.Engine().DirectorCompleteStep(int64(id), stepDefID, int64(middleware.GetUserID(c)))
+	if err == flowengine.ErrInstanceNotFound {
+		if recErr := h.drillService.Recover(id); recErr != nil {
+			response.InternalError(c, "恢复演练状态失败")
+			return
+		}
+		if err = h.drillService.Engine().DirectorCompleteStep(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
+			response.InternalError(c, "内部错误")
+			return
+		}
+	} else if err != nil {
+		response.InternalError(c, "内部错误")
+		return
+	}
 
+	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "步骤已完成", nil)
 }
 
@@ -477,14 +505,22 @@ func (h *Handler) SkipStep(c *gin.Context) {
 		return
 	}
 
+	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
+	stepDefID := int64(target.stepDefID)
+	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
+		if si, ok := inst.Steps[stepDefID]; ok {
+			si.Status = flowengine.StepStatus(target.step.Status)
+		}
+	}
+
 	nowS := time.Now()
-	err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
+	err = h.drillService.Engine().DirectorSkipStep(int64(id), stepDefID, int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
 			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
-		if err = h.drillService.Engine().DirectorSkipStep(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
+		if err = h.drillService.Engine().DirectorSkipStep(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
 			response.InternalError(c, "内部错误")
 			return
 		}
@@ -532,14 +568,21 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 		return
 	}
 
-	nowFC := time.Now()
-	err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c)))
+	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
+	stepDefID := int64(target.stepDefID)
+	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
+		if si, ok := inst.Steps[stepDefID]; ok {
+			si.Status = flowengine.StepStatus(target.step.Status)
+		}
+	}
+
+	err = h.drillService.Engine().DirectorForceComplete(int64(id), stepDefID, int64(middleware.GetUserID(c)))
 	if err == flowengine.ErrInstanceNotFound {
 		if recErr := h.drillService.Recover(id); recErr != nil {
 			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
-		if err = h.drillService.Engine().DirectorForceComplete(int64(id), int64(target.stepDefID), int64(middleware.GetUserID(c))); err != nil {
+		if err = h.drillService.Engine().DirectorForceComplete(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
 			response.InternalError(c, "内部错误")
 			return
 		}
@@ -547,14 +590,6 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 		response.InternalError(c, "内部错误")
 		return
 	}
-
-	repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(map[string]interface{}{
-			"status":   "completed",
-			"end_time": &nowFC,
-			"remark":   req.Remark,
-		})
 
 	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "步骤已强制完成", nil)

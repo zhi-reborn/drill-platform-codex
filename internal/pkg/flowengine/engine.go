@@ -230,6 +230,50 @@ func (e *Engine) handleStepCompletion(inst *FlowInst, completedStepDefID int64) 
 	}
 }
 
+// ManualStartStep 手动启动步骤（外部 API 调用入口）
+// 校验前序步骤完成、父步骤已开始、步骤状态为 pending，然后通过 activateStep 激活
+func (e *Engine) ManualStartStep(instanceID int64, stepDefID int64) error {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return ErrInstanceNotFound
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	if inst.Status != FlowStatusRunning {
+		return ErrInstanceNotRunning
+	}
+
+	si, exists := inst.Steps[stepDefID]
+	if !exists {
+		return ErrStepNotFound
+	}
+
+	if si.Status != StepStatusPending {
+		return ErrInvalidStatus
+	}
+
+	if !e.allPredecessorsDone(inst, stepDefID) {
+		return ErrPreStepsNotDone
+	}
+
+	// 校验父步骤已开始（如果有父步骤）
+	if si.ParentStepID != 0 {
+		parentSI, parentExists := inst.Steps[si.ParentStepID]
+		if !parentExists || (parentSI.Status != StepStatusRunning && parentSI.Status != StepStatusCompleted) {
+			return ErrInvalidStatus
+		}
+	}
+
+	e.activateStep(inst, si)
+	e.updateProgress(inst)
+
+	return nil
+}
+
 func (e *Engine) removeFromCurrentSteps(currentIDs []int64, removeID int64) []int64 {
 	result := make([]int64, 0, len(currentIDs))
 	for _, id := range currentIDs {

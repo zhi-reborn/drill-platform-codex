@@ -298,10 +298,11 @@ func (e *Engine) DirectorCompleteStep(instanceID int64, stepDefID int64, operato
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusCompleted)
+		cbs.OnStepCompleted(si.ID, operatorID, "指挥组完成任务")
 		cbs.LogAction(si.ID, "director_complete", operatorID, "指挥组完成任务")
 	}
 
-	e.eventBus.emit(EventStepForceComplete, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
+	e.eventBus.emit(EventStepComplete, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
 		"operator_id": operatorID,
 	})
 

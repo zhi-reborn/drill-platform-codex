@@ -10,14 +10,16 @@ import (
 )
 
 type Client struct {
-	ID       string
-	UserID   uint
-	Conn     *websocket.Conn
-	Send     chan []byte
-	DrillID  uint
-	Type     string
-	Mu       sync.Mutex
-	lastPong time.Time
+	ID        string
+	UserID    uint
+	Conn      *websocket.Conn
+	Send      chan []byte
+	DrillID   uint
+	Type      string
+	Mu        sync.Mutex
+	lastPong  time.Time
+	closeOnce sync.Once
+	closed    bool
 }
 
 func NewClient(id string, userID uint, conn *websocket.Conn, drillID uint, connType string) *Client {
@@ -35,7 +37,7 @@ func NewClient(id string, userID uint, conn *websocket.Conn, drillID uint, connT
 func (c *Client) ReadPump(m *Manager) {
 	defer func() {
 		m.Unregister <- c
-		c.Conn.Close()
+		c.Close()
 	}()
 
 	c.Conn.SetReadLimit(MaxMessageSize)
@@ -104,7 +106,20 @@ func (c *Client) WritePump() {
 	}
 }
 
-func (c *Client) SendJSON(v interface{}) error {
+func (c *Client) SendJSON(v interface{}) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = ErrClientClosed
+		}
+	}()
+
+	c.Mu.Lock()
+	if c.closed {
+		c.Mu.Unlock()
+		return ErrClientClosed
+	}
+	c.Mu.Unlock()
+
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -119,6 +134,10 @@ func (c *Client) SendJSON(v interface{}) error {
 }
 
 func (c *Client) Close() {
-	c.Conn.Close()
-	close(c.Send)
+	c.closeOnce.Do(func() {
+		c.Mu.Lock()
+		c.closed = true
+		c.Mu.Unlock()
+		close(c.Send)
+	})
 }

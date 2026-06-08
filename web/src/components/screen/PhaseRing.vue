@@ -238,7 +238,7 @@ const phasePoints = computed(() => {
     const x = cx.value + r * Math.cos(angle)
     const y = cy.value + r * Math.sin(angle)
     // 标签偏移（左侧系数较小，补偿 translateX(-100%) 造成的额外左偏）
-    const lx = Math.cos(angle) * (Math.cos(angle) > 0 ? 80 : 40)
+    const lx = Math.cos(angle) * (Math.cos(angle) > 0 ? 80 : 70)
     const ly = Math.sin(angle) * 22
     items.push({ x, y, lx, ly, angle })
   }
@@ -469,12 +469,12 @@ function chineseNum(n: number): string {
 }
 .phase-label-2 {
   // 左下
-  .phase-label-tag { margin-left: -18px; transform: translateX(-100%); }
+  .phase-label-tag { margin-left: -4px; transform: translateX(-100%); }
   &::before { right: -16px; left: auto; background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), transparent); }
 }
 .phase-label-3 {
   // 左上
-  .phase-label-tag { margin-left: -18px; transform: translateX(-100%); }
+  .phase-label-tag { margin-left: -4px; transform: translateX(-100%); }
   &::before { right: -16px; left: auto; background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), transparent); }
 }
 
