@@ -209,7 +209,7 @@
                 <div class="alert-head">
                   <span class="alert-arrow">▸</span>
                   <span class="alert-title">{{ alert.title }}</span>
-                  <span class="alert-team">{{ alert.team }}</span>
+                  <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
                 </div>
                 <div class="alert-bar">
                   <div class="alert-bar-fill" :style="{ width: alert.progress + '%' }" />
@@ -219,9 +219,10 @@
                   <span class="alert-meta">限时: {{ alert.limit }}</span>
                   <span class="alert-meta">已耗时: {{ alert.elapsed }}</span>
                 </div>
-                <div class="alert-status">
-                  <span class="alert-progress-pct">{{ alert.progress }}%</span>
-                  <span class="alert-status-tag">{{ alert.statusLabel }}</span>
+                <div class="alert-hierarchy">
+                  <span class="hierarchy-phase">{{ alert.parentPhase }}</span>
+                  <span v-if="alert.directParent !== '--'" class="hierarchy-sep">/</span>
+                  <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
                 </div>
               </div>
               <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃告警</div>
@@ -355,6 +356,33 @@ const rootSteps = computed(() => {
   return allSteps.filter(s => !s.parent_step_id).sort((a, b) => a.seq - b.seq)
 })
 
+// 从叶子步骤向上追溯，找到所属环节（根步骤的直接子节点）
+function findParentPhase(stepId: number): string {
+  const stepMap = new Map<number, StepInstance>()
+  for (const s of drillSteps.value) stepMap.set(s.id, s)
+  const rootIds = new Set(rootSteps.value.map(r => r.id))
+  let cur = stepMap.get(stepId)
+  let last = cur
+  while (cur && !rootIds.has(cur.id)) {
+    last = cur
+    cur = cur.parent_step_id ? stepMap.get(cur.parent_step_id) : undefined
+  }
+  // last 是根的直接子节点（环节），cur 是根节点本身
+  if (last && last.id !== stepId) return last.name
+  // 叶子本身就是根步骤
+  return cur?.name || '--'
+}
+
+// 从叶子步骤向上追溯，找到直接父节点名称（任务）
+function findDirectParent(stepId: number): string {
+  const stepMap = new Map<number, StepInstance>()
+  for (const s of drillSteps.value) stepMap.set(s.id, s)
+  const step = stepMap.get(stepId)
+  if (!step?.parent_step_id) return '--'
+  const parent = stepMap.get(step.parent_step_id)
+  return parent?.name || '--'
+}
+
 // === KPI 计算 ===
 const completedCount = computed(() =>
   leafSteps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
@@ -395,11 +423,11 @@ const estimatedRemaining = computed(() => {
       const elapsed = (nowMs - new Date(s.start_time).getTime()) / 1000
       remainSec += Math.max(0, s.timeout_minutes * 60 - elapsed)
     } else {
-      remainSec += (s.timeout_minutes || 30) * 60
+      remainSec += (s.timeout_minutes || 120) * 60
     }
   }
   for (const s of pending) {
-    remainSec += (s.timeout_minutes || 30) * 60
+    remainSec += (s.timeout_minutes || 120) * 60
   }
   if (remainSec <= 0) return '0m'
   const h = Math.floor(remainSec / 3600)
@@ -426,6 +454,8 @@ const STAGE_NAMES = [
 ]
 
 const stages = computed(() => {
+  // 依赖 elapsedSeconds 每秒刷新，使未结束阶段的截止时间实时跳动
+  const _tick = elapsedSeconds.value
   const allSteps = drillSteps.value
   if (allSteps.length === 0) return []
 
@@ -582,6 +612,8 @@ const activeAlerts = computed(() => {
   const alerts: Array<{
     title: string
     team: string
+    parentPhase: string
+    directParent: string
     progress: number
     limit: string
     elapsed: string
@@ -597,12 +629,14 @@ const activeAlerts = computed(() => {
       const elapsedSec = s.start_time
         ? Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
         : 1
-      const limitMin = s.timeout_minutes || 30
+      const limitMin = s.timeout_minutes || 120
       const limitSec = limitMin * 60
       const pct = Math.min(99, Math.round((elapsedSec / limitSec) * 100))
       alerts.push({
-        title: s.executor_team ? `${s.name} - ${s.executor_team}` : s.name,
+        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
         team: s.executor_team || '运维部',
+        parentPhase: findParentPhase(s.id),
+        directParent: findDirectParent(s.id),
         progress: pct,
         limit: fmtHMS(limitSec),
         elapsed: fmtHMS(elapsedSec),
@@ -620,10 +654,12 @@ const activeAlerts = computed(() => {
         ? Math.max(0, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
         : 0
       alerts.push({
-        title: s.name,
+        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
         team: s.executor_team || '执行组',
+        parentPhase: findParentPhase(s.id),
+        directParent: findDirectParent(s.id),
         progress: 0,
-        limit: fmtHMS((s.timeout_minutes || 30) * 60),
+        limit: fmtHMS((s.timeout_minutes || 120) * 60),
         elapsed: elapsedSec > 0 ? fmtHMS(elapsedSec) : '--',
         statusLabel: s.status === 'timeout' ? '已超时' : '异常',
         level: 'danger',
@@ -636,10 +672,12 @@ const activeAlerts = computed(() => {
       .filter(s => s.status === 'pending')
       .slice(0, 2)
       .forEach((s, i) => {
-        const limitMin = s.timeout_minutes || 30
+        const limitMin = s.timeout_minutes || 120
         alerts.push({
-          title: s.name,
+          title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
           team: s.executor_team || '运维部',
+          parentPhase: findParentPhase(s.id),
+          directParent: findDirectParent(s.id),
           progress: 0,
           limit: fmtHMS(limitMin * 60),
           elapsed: '待启动',
@@ -1636,10 +1674,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       font-size: 13px; color: #ffffff; font-weight: 800;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .alert-team {
-      font-family: $font-mono; font-size: 10px;
-      color: $neon; background: $neon-soft;
-      padding: 1px 5px; letter-spacing: 1px;
+    .alert-status-badge {
+      font-family: $font-mono; font-size: 10px; font-weight: 700;
+      padding: 2px 8px; letter-spacing: 0.5px;
+      border-radius: 2px; white-space: nowrap; flex-shrink: 0;
+      &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.14); border: 1px solid rgba(255, 182, 72, 0.35); }
+      &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.12); border: 1px solid rgba(255, 77, 106, 0.35); }
+      &.badge-info { color: $neon; background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); }
     }
   }
   .alert-bar {
@@ -1655,22 +1696,26 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; justify-content: space-between;
     .alert-meta { font-family: $font-mono; font-size: 10px; color: $text-dim; }
   }
-  .alert-status {
-    display: flex; justify-content: space-between; align-items: center;
+  .alert-hierarchy {
+    display: flex; align-items: center; gap: 0;
     border-top: 1px dashed $line; padding-top: 5px;
-    .alert-progress-pct {
-      font-family: $font-mono; font-size: 14px; color: $warn; font-weight: 700;
-      text-shadow: 0 0 6px rgba(255, 182, 72, 0.3);
+    font-family: $font-mono; font-size: 11px; font-weight: 600;
+    overflow: hidden;
+    .hierarchy-phase {
+      color: rgba(0, 212, 255, 0.72);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 45%;
     }
-    .alert-status-tag {
-      font-size: 10px; padding: 1px 6px; color: $ok;
-      border: 1px solid rgba(0, 255, 156, 0.3); background: rgba(0, 255, 156, 0.08);
-      letter-spacing: 1px;
+    .hierarchy-sep {
+      color: rgba(180, 220, 255, 0.3); margin: 0 4px;
+      font-weight: 400;
+    }
+    .hierarchy-task {
+      color: rgba(180, 220, 255, 0.55);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 45%;
     }
   }
-  .alert-danger .alert-progress-pct { color: $danger; }
-  .alert-danger .alert-status-tag { color: $danger; border-color: rgba(255, 77, 106, 0.3); background: rgba(255, 77, 106, 0.08); }
-  .alert-info .alert-status-tag { color: $neon; border-color: rgba(0, 212, 255, 0.3); background: rgba(0, 212, 255, 0.08); }
 }
 
 // ===== Logs =====
@@ -1965,8 +2010,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         font-size: 10px;
       }
 
-      .alert-team {
+      .alert-status-badge {
         font-size: 8px;
+        padding: 1px 5px;
       }
     }
 

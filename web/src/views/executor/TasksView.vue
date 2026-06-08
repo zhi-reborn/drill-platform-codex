@@ -382,17 +382,38 @@ function canStartTask(task: StepInstance): boolean {
   if (task.status !== 'pending') return false
   if (isParentTask(task)) return false
 
+  // 检查父步骤链是否已激活：所有祖先必须处于 running 状态
+  let currentAncestorId = task.parent_step_id
+  while (currentAncestorId) {
+    const parent = tasks.value.find((t: StepInstance) => t.id === currentAncestorId)
+    if (!parent) break
+    if (parent.status !== 'running') return false
+    currentAncestorId = parent.parent_step_id
+  }
+
   // 检查前序步骤
   const preStepIds = task.pre_step_ids || []
   if (preStepIds.length > 0) {
     const allPreDone = preStepIds.every((preId: number) => {
       const preStep = tasks.value.find((t: StepInstance) => t.id === preId)
-      return preStep && TERMINAL_STATUSES.includes(preStep.status)
+      // 前序步骤未找到，视为未完成
+      if (!preStep) return false
+      return TERMINAL_STATUSES.includes(preStep.status)
     })
     if (!allPreDone) return false
   }
 
-  // 前序步骤已全部完成（或无前序），可以开始（引擎会自动启动父步骤链）
+  // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也不能开始
+  if (preStepIds.length === 0 && task.parent_step_id) {
+    const siblings = tasks.value.filter((t: StepInstance) =>
+      t.parent_step_id === task.parent_step_id && t.id !== task.id
+    )
+    const earlierPendingSibling = siblings.find((t: StepInstance) =>
+      t.seq < task.seq && t.step_type === 'serial' && !TERMINAL_STATUSES.includes(t.status)
+    )
+    if (earlierPendingSibling) return false
+  }
+
   return true
 }
 

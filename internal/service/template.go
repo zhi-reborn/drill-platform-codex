@@ -35,12 +35,16 @@ func (s *TemplateService) Create(req *dto.CreateTemplateRequest, createdBy uint6
 	}
 
 	for _, stepReq := range req.Steps {
+		timeout := stepReq.TimeoutMinutes
+		if timeout <= 0 {
+			timeout = 120
+		}
 		step := entity.StepTemplate{
 			Name:                stepReq.Name,
 			Seq:                 stepReq.Seq,
 			ParentStepID:        stepReq.ParentStepID,
 			StepType:            stepReq.StepType,
-			TimeoutMinutes:      stepReq.TimeoutMinutes,
+			TimeoutMinutes:      timeout,
 			GuideContent:        stepReq.GuideContent,
 			IsBlocking:          stepReq.IsBlocking,
 			DefaultAssigneeRole: stepReq.DefaultAssigneeRole,
@@ -111,19 +115,16 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 
 	newSteps := make([]entity.StepTemplate, 0, len(steps))
 	for _, stepReq := range steps {
-		est := 5
-		if stepReq.EstimatedDurationMinutes != nil && *stepReq.EstimatedDurationMinutes > 0 {
-			est = *stepReq.EstimatedDurationMinutes
-		}
-		if est < 5 {
-			est = 5
+		timeout := stepReq.TimeoutMinutes
+		if timeout <= 0 {
+			timeout = 120
 		}
 		step := entity.StepTemplate{
 			Name:                     stepReq.Name,
 			Seq:                      stepReq.Seq,
 			ParentStepID:             stepReq.ParentStepID,
 			StepType:                 stepReq.StepType,
-			TimeoutMinutes:           est * 2,
+			TimeoutMinutes:           timeout,
 			GuideContent:             stepReq.GuideContent,
 			IsBlocking:               stepReq.IsBlocking,
 			DefaultAssigneeRole:      stepReq.DefaultAssigneeRole,
@@ -153,12 +154,9 @@ func (s *TemplateService) UpdateStep(templateID uint64, stepID uint64, stepReq d
 		return err
 	}
 
-	est := 5
-	if stepReq.EstimatedDurationMinutes != nil && *stepReq.EstimatedDurationMinutes > 0 {
-		est = *stepReq.EstimatedDurationMinutes
-	}
-	if est < 5 {
-		est = 5
+	timeout := stepReq.TimeoutMinutes
+	if timeout <= 0 {
+		timeout = 120
 	}
 	step := entity.StepTemplate{
 		ID:                       stepID,
@@ -166,7 +164,7 @@ func (s *TemplateService) UpdateStep(templateID uint64, stepID uint64, stepReq d
 		Seq:                      stepReq.Seq,
 		ParentStepID:             stepReq.ParentStepID,
 		StepType:                 stepReq.StepType,
-		TimeoutMinutes:           est * 2,
+		TimeoutMinutes:           timeout,
 		GuideContent:             stepReq.GuideContent,
 		IsBlocking:               stepReq.IsBlocking,
 		DefaultAssigneeRole:      stepReq.DefaultAssigneeRole,

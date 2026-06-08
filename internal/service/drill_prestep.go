@@ -73,30 +73,59 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 	var computeLevel func(parentID uint64, inherited []uint64)
 	computeLevel = func(parentID uint64, inherited []uint64) {
 		siblings := childrenOf[parentID]
+
+		// 核心规则：
+		// - parallel 步骤的前序只继承父级传入的前序（inherited），不受同级其他步骤影响
+		// - serial 步骤的前序包含前一个步骤/并行组
+		// - 连续的 parallel 步骤组成并行组，组完成后成为后续 serial 步骤的前序
+		// - 子步骤的 inherited 为空，因为子步骤只需要等父步骤激活即可
+
+		// 第一遍：识别段（连续 parallel 为一段，单个 serial 为一段）
+		type segment struct {
+			startIdx   int
+			endIdx     int // exclusive
+			isParallel bool
+		}
+		var segments []segment
 		for i := 0; i < len(siblings); {
-			id := siblings[i]
-			if all[id].stepType == "parallel" {
+			if all[siblings[i]].stepType == "parallel" {
 				j := i + 1
 				for j < len(siblings) && all[siblings[j]].stepType == "parallel" {
 					j++
 				}
-				groupIDs := make([]uint64, 0, j-i)
-				for _, gid := range siblings[i:j] {
-					computed[gid] = copyIDs(inherited)
-					computeLevel(gid, computed[gid])
+				segments = append(segments, segment{startIdx: i, endIdx: j, isParallel: true})
+				i = j
+			} else {
+				segments = append(segments, segment{startIdx: i, endIdx: i + 1, isParallel: false})
+				i++
+			}
+		}
+
+		// 第二遍：计算前序
+		// parallel 段：所有步骤的 pre = inherited（父级传入的前序）
+		// serial 段：pre = 前一个段完成后的前序
+		currentInherited := copyIDs(inherited)
+		for _, seg := range segments {
+			if seg.isParallel {
+				groupIDs := make([]uint64, 0, seg.endIdx-seg.startIdx)
+				for k := seg.startIdx; k < seg.endIdx; k++ {
+					gid := siblings[k]
+					computed[gid] = copyIDs(inherited) // parallel 步骤始终只继承父级传入的前序
+					// 子步骤的 inherited 为空，子步骤只需等父步骤激活
+					computeLevel(gid, nil)
 					groupIDs = append(groupIDs, gid)
 				}
-				inherited = groupIDs
-				i = j
-				continue
+				currentInherited = groupIDs
+			} else {
+				id := siblings[seg.startIdx]
+				computed[id] = copyIDs(currentInherited)
+				// 子步骤的 inherited 为空，子步骤只需等父步骤激活
+				computeLevel(id, nil)
+				currentInherited = []uint64{id}
 			}
-
-			computed[id] = copyIDs(inherited)
-			computeLevel(id, computed[id])
-			inherited = []uint64{id}
-			i++
 		}
 	}
+
 	computeLevel(rootParentID, nil)
 
 	for id, ids := range computed {

@@ -897,11 +897,7 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 			})
 		}
 
-		// 推进流程
-		if a.engine != nil {
-			_ = a.engine.AdvanceFlow(flowInstID, parentStepDefID)
-		}
-
+		// 超时/异常导致的父步骤自动完成，不自动推进后续步骤
 		// 递归检查祖父步骤是否也需要自动完成
 		a.propagateStatusToParent(flowInstID, parentStepDefID, status, at)
 	}
@@ -1006,10 +1002,7 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 
 	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusTimeout, now)
 
-	// 超时步骤也需要推进流程（激活后续步骤）
-	if a.engine != nil {
-		_ = a.engine.AdvanceFlow(evt.FlowInstID, stepDefID)
-	}
+	// 超时步骤不自动推进后续步骤，需要用户手动操作
 }
 
 func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {

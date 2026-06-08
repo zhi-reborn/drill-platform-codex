@@ -97,11 +97,12 @@ export interface StepLog {
 }
 
 export interface StepInstanceLog {
-  ID: number
-  StepInstanceID: number
-  Action: string
-  OperatorID: number
-  OperatorName: string
-  Remark: string
-  CreatedAt: string
+  id: number
+  drill_instance_id?: number
+  step_instance_id?: number | null
+  action: string
+  operator_id?: number
+  operator_name?: string
+  content?: string
+  created_at: string
 }

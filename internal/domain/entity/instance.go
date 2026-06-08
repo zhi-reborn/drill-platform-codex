@@ -46,7 +46,7 @@ type StepInstance struct {
 	Remark                   string     `gorm:"type:text;column:remark" json:"remark"`
 	IssueDesc                string     `gorm:"type:text;column:issue_desc" json:"issue_desc"`
 	StepType                 string     `gorm:"type:varchar(32);column:step_type" json:"step_type"`
-	TimeoutMinutes           int        `gorm:"type:int;default:5;column:timeout_minutes" json:"timeout_minutes"`
+	TimeoutMinutes           int        `gorm:"type:int;default:120;column:timeout_minutes" json:"timeout_minutes"`
 	DefaultAssigneeRole      string     `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
 	ExecutorTeam             string     `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
 	Phase                    string     `gorm:"type:varchar(64);column:phase" json:"phase"`

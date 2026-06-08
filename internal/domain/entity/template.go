@@ -46,7 +46,7 @@ type StepTemplate struct {
 	Name               string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
 	Seq                int       `gorm:"type:int;not null;column:seq" json:"seq"`
 	StepType           string    `gorm:"type:varchar(32);not null;column:step_type" json:"step_type"`
-	TimeoutMinutes     int       `gorm:"type:int;not null;default:5;column:timeout_minutes" json:"timeout_minutes"`
+	TimeoutMinutes     int       `gorm:"type:int;not null;default:120;column:timeout_minutes" json:"timeout_minutes"`
 	PreStepIDs         string    `gorm:"type:json;column:pre_step_ids" json:"pre_step_ids"`
 	GuideContent       string    `gorm:"type:text;column:guide_content" json:"guide_content"`
 	IsBlocking         int8      `gorm:"type:tinyint;not null;default:1;column:is_blocking" json:"is_blocking"`

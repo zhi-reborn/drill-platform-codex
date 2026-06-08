@@ -243,7 +243,7 @@
           </el-form-item>
           <el-form-item label="超时时间" class="inline-form-item">
             <el-input-number v-model="singleStepForm.timeout_minutes" :min="1" :max="1440" controls-position="right"
-              placeholder="5" />
+              placeholder="120" />
             <span class="unit-label">分钟</span>
           </el-form-item>
         </div>
@@ -639,7 +639,7 @@ const singleStepForm = reactive({
   name: '',
   description: '',
   step_type: 'serial' as StepType,
-  timeout_minutes: 5,
+  timeout_minutes: 120,
   default_assignee_role: 'executor',
   executor_team: '',
   parent_step_id: undefined as number | undefined,
@@ -764,7 +764,7 @@ function resetSingleStepForm() {
   singleStepForm.name = ''
   singleStepForm.description = ''
   singleStepForm.step_type = 'serial'
-  singleStepForm.timeout_minutes = 5
+  singleStepForm.timeout_minutes = 120
   singleStepForm.default_assignee_role = 'executor'
   singleStepForm.executor_team = ''
   singleStepForm.parent_step_id = undefined
@@ -791,7 +791,7 @@ function openStepEditDialog(index: number) {
   singleStepForm.name = step.name
   singleStepForm.description = step.description || step.guide_content || ''
   singleStepForm.step_type = step.step_type as StepType
-  singleStepForm.timeout_minutes = step.timeout_minutes || 5
+  singleStepForm.timeout_minutes = step.timeout_minutes || 120
   singleStepForm.default_assignee_role = step.default_assignee_role || ''
   singleStepForm.executor_team = step.executor_team || ''
   singleStepForm.parent_step_id = step.parent_step_id
@@ -851,6 +851,8 @@ async function handleEditStep() {
         executor_team: singleStepForm.executor_team,
         phase: step.phase || activePhaseName.value,
         phase_step: singleStepForm.phase_step || '',
+        parent_step_id: singleStepForm.parent_step_id || null,
+        is_blocking: singleStepForm.is_blocking ?? 1,
         estimated_duration_minutes: singleStepForm.estimated_duration_minutes,
         estimated_start_offset: singleStepForm.estimated_start_offset,
         attributes: JSON.stringify(singleStepForm.attributes),
@@ -950,7 +952,7 @@ async function handleSaveSteps() {
         name: s.name,
         seq: s.order_index || (idx + 1),
         step_type: s.step_type || 'serial',
-        timeout_minutes: s.timeout_minutes || 5,
+        timeout_minutes: s.timeout_minutes || 120,
         guide_content: s.description || s.guide_content || '',
         default_assignee_role: s.default_assignee_role || '',
         executor_team: s.executor_team || '',
@@ -1088,7 +1090,7 @@ function exportSteps() {
         step.description || step.guide_content || '',
         stepTypeLabels[step.step_type] || step.step_type || '串行',
         step.estimated_duration_minutes ?? '',
-        step.timeout_minutes ?? 5,
+        step.timeout_minutes ?? 120,
         assigneeRoleLabels[step.default_assignee_role || ''] || step.default_assignee_role || '执行组',
         step.executor_team || '',
         attrs.responsible_department || '',
@@ -1153,7 +1155,7 @@ function handleExcelUpload(file: File) {
           const description = String(row[4] || '').trim()
           const stepTypeRaw = String(row[5] || '').trim()
           const estimatedDuration = parseInt(String(row[6] || '')) || undefined
-          const timeoutMinutes = parseInt(String(row[7] || '')) || 5
+          const timeoutMinutes = parseInt(String(row[7] || '')) || 120
           const assigneeRoleRaw = String(row[8] || '').trim()
           const executorTeam = String(row[9] || '').trim()
           const responsibleDepartment = String(row[10] || '').trim()

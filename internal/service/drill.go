@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -83,6 +84,9 @@ func (s *DrillService) Recover(id uint64) error {
 	// 同步内存中步骤实例的 ID 到数据库 ID
 	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
 
+	// 重新计算前序步骤 ID（确保使用最新算法）
+	s.computeInstancePreStepIDsTx(steps, template.Steps, repository.DB)
+
 	// 同步前序步骤 ID（将实例 ID 转换为模板步骤 ID）
 	s.syncPreStepIDsToEngine(int64(drill.ID))
 
@@ -106,7 +110,130 @@ func (s *DrillService) Recover(id uint64) error {
 		}
 	}
 
+	// 协调状态：自动完成所有子步骤已终态但自身未终态的父步骤
+	s.reconcileParentSteps(int64(drill.ID), steps)
+
 	return nil
+}
+
+// reconcileParentSteps 检查并自动完成所有子步骤已终态但自身未终态的父步骤
+// 从最深层开始向上逐层处理，确保多层嵌套时祖先节点也能正确完成
+func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.StepInstance) {
+	inst, ok := s.engine.GetInstanceForMutate(flowInstID)
+	if !ok {
+		return
+	}
+
+	terminalStatuses := map[string]bool{
+		string(flowengine.StepStatusCompleted): true,
+		string(flowengine.StepStatusSkipped):   true,
+		string(flowengine.StepStatusTimeout):   true,
+		string(flowengine.StepStatusIssue):     true,
+	}
+
+	// 计算每个步骤的深度（从根到叶）
+	stepMap := make(map[int64]*flowengine.StepInst)
+	for id, si := range inst.Steps {
+		stepMap[id] = si
+	}
+
+	depth := make(map[int64]int)
+	var calcDepth func(int64) int
+	calcDepth = func(stepDefID int64) int {
+		if d, ok := depth[stepDefID]; ok {
+			return d
+		}
+		si, exists := stepMap[stepDefID]
+		if !exists || si.ParentStepID == 0 {
+			depth[stepDefID] = 0
+			return 0
+		}
+		d := calcDepth(si.ParentStepID) + 1
+		depth[stepDefID] = d
+		return d
+	}
+	maxDepth := 0
+	for id := range stepMap {
+		d := calcDepth(id)
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+
+	// 从最深层开始，逐层向上处理
+	for d := maxDepth; d >= 0; d-- {
+		for stepDefID, si := range stepMap {
+			if depth[stepDefID] != d {
+				continue
+			}
+			// 跳过已终态的步骤
+			if si.Status == flowengine.StepStatusCompleted ||
+				si.Status == flowengine.StepStatusSkipped ||
+				si.Status == flowengine.StepStatusTimeout ||
+				si.Status == flowengine.StepStatusIssue {
+				continue
+			}
+
+			// 检查是否有子步骤
+			var childIDs []int64
+			for cid, csi := range stepMap {
+				if csi.ParentStepID == stepDefID {
+					childIDs = append(childIDs, cid)
+				}
+			}
+			if len(childIDs) == 0 {
+				continue // 叶子步骤，跳过
+			}
+
+			// 检查所有子步骤是否已终态
+			allChildrenTerminal := true
+			for _, cid := range childIDs {
+				csi, exists := stepMap[cid]
+				if !exists || !terminalStatuses[string(csi.Status)] {
+					allChildrenTerminal = false
+					break
+				}
+			}
+
+			if !allChildrenTerminal {
+				continue
+			}
+
+			// 所有子步骤已终态，自动完成该父步骤
+			now := time.Now()
+			si.Status = flowengine.StepStatusCompleted
+			si.EndTime = &now
+
+			// 更新数据库
+			for _, step := range steps {
+				if step.StepTemplateID == uint64(stepDefID) {
+					repository.DB.Model(&entity.StepInstance{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
+						"status":   string(flowengine.StepStatusCompleted),
+						"end_time": &now,
+					})
+					break
+				}
+			}
+
+			// 写日志
+			var stepName string
+			for _, step := range steps {
+				if step.StepTemplateID == uint64(stepDefID) {
+					stepName = step.Name
+					break
+				}
+			}
+			repository.DB.Create(&entity.DrillInstanceLog{
+				DrillInstanceID: uint64(flowInstID),
+				Action:          "auto_complete",
+				OperatorName:    "流程引擎",
+				Content:         fmt.Sprintf("[%s] 所有子步骤已终态，自动完成（恢复协调）", stepName),
+				CreatedAt:       now,
+			})
+
+			// 恢复协调不自动推进流程，只修正状态
+		}
+	}
 }
 
 func (s *DrillService) backfillMissingStepTemplateIDs(drillID uint64, templateSteps []entity.StepTemplate, steps []entity.StepInstance) error {
@@ -180,8 +307,171 @@ func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// 协调父步骤状态：如果所有子步骤已终态但父步骤未终态，自动完成父步骤
+	s.reconcileParentStepsFromDB(id, steps)
+
+	// 协调 pre_step_ids：如果 parallel 步骤的 pre_step_ids 包含同级步骤，重新计算
+	s.reconcilePreStepIDs(id, steps)
+
 	SetCachedSteps(s.redis, id, steps)
 	return steps, nil
+}
+
+// reconcileParentStepsFromDB 基于 DB 数据协调父步骤状态，不依赖引擎内存
+// 从最深层开始向上逐层处理，确保多层嵌套时祖先节点也能正确完成
+func (s *DrillService) reconcileParentStepsFromDB(drillID uint64, steps []entity.StepInstance) {
+	terminalStatuses := map[string]bool{
+		"completed": true,
+		"skipped":   true,
+		"timeout":   true,
+		"issue":     true,
+	}
+
+	// 构建步骤映射和父子关系
+	stepMap := make(map[uint64]*entity.StepInstance, len(steps))
+	childrenMap := make(map[uint64][]uint64) // parentID -> childIDs
+	for i := range steps {
+		stepMap[steps[i].ID] = &steps[i]
+		if steps[i].ParentStepID != nil && *steps[i].ParentStepID > 0 {
+			childrenMap[*steps[i].ParentStepID] = append(childrenMap[*steps[i].ParentStepID], steps[i].ID)
+		}
+	}
+
+	// 计算每个步骤的深度
+	depth := make(map[uint64]int)
+	var calcDepth func(uint64) int
+	calcDepth = func(stepID uint64) int {
+		if d, ok := depth[stepID]; ok {
+			return d
+		}
+		step := stepMap[stepID]
+		if step == nil || step.ParentStepID == nil || *step.ParentStepID == 0 {
+			depth[stepID] = 0
+			return 0
+		}
+		d := calcDepth(*step.ParentStepID) + 1
+		depth[stepID] = d
+		return d
+	}
+	maxDepth := 0
+	for _, step := range steps {
+		d := calcDepth(step.ID)
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+
+	// 从最深层开始，逐层向上处理
+	changed := false
+	for d := maxDepth; d >= 0; d-- {
+		for i := range steps {
+			if depth[steps[i].ID] != d {
+				continue
+			}
+			if terminalStatuses[steps[i].Status] {
+				continue
+			}
+			childIDs := childrenMap[steps[i].ID]
+			if len(childIDs) == 0 {
+				continue // 叶子步骤
+			}
+
+			allChildrenTerminal := true
+			for _, cid := range childIDs {
+				child := stepMap[cid]
+				if child == nil || !terminalStatuses[child.Status] {
+					allChildrenTerminal = false
+					break
+				}
+			}
+			if !allChildrenTerminal {
+				continue
+			}
+
+			// 自动完成父步骤
+			now := time.Now()
+			steps[i].Status = "completed"
+			steps[i].EndTime = &now
+			changed = true
+
+			repository.DB.Model(&entity.StepInstance{}).Where("id = ?", steps[i].ID).Updates(map[string]interface{}{
+				"status":   "completed",
+				"end_time": &now,
+			})
+
+			repository.DB.Create(&entity.DrillInstanceLog{
+				DrillInstanceID: drillID,
+				StepInstanceID:  &steps[i].ID,
+				Action:          "auto_complete",
+				OperatorName:    "流程引擎",
+				Content:         fmt.Sprintf("[%s] 所有子步骤已终态，自动完成", steps[i].Name),
+				CreatedAt:       now,
+			})
+		}
+	}
+
+	if changed {
+		InvalidateStepCache(s.redis, drillID)
+	}
+}
+
+// reconcilePreStepIDs 检测子步骤的 pre_step_ids 是否包含非同级步骤
+// 子步骤只需要等父步骤激活即可，pre_step_ids 不应包含父步骤范围外的步骤
+// 如果发现异常，重新计算所有 pre_step_ids
+func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepInstance) {
+	// 构建兄弟关系：parentID -> set of childIDs
+	siblingsOf := make(map[uint64]map[uint64]bool)
+	for _, step := range steps {
+		var parentID uint64
+		if step.ParentStepID != nil && *step.ParentStepID > 0 {
+			parentID = *step.ParentStepID
+		}
+		if siblingsOf[parentID] == nil {
+			siblingsOf[parentID] = make(map[uint64]bool)
+		}
+		siblingsOf[parentID][step.ID] = true
+	}
+
+	// 检查子步骤的 pre_step_ids 是否包含非同级步骤
+	needsRecompute := false
+	for _, step := range steps {
+		var parentID uint64
+		if step.ParentStepID != nil && *step.ParentStepID > 0 {
+			parentID = *step.ParentStepID
+		}
+		siblings := siblingsOf[parentID]
+		var preIDs []uint64
+		if json.Unmarshal([]byte(step.PreStepIDs), &preIDs) == nil {
+			for _, preID := range preIDs {
+				// pre_step_ids 中的步骤应该是同级步骤
+				if !siblings[preID] {
+					needsRecompute = true
+					break
+				}
+			}
+		}
+		if needsRecompute {
+			break
+		}
+	}
+
+	if !needsRecompute {
+		return
+	}
+
+	// 重新计算 pre_step_ids
+	s.computeInstancePreStepIDsTx(steps, nil, repository.DB)
+
+	// 重新读取更新后的数据
+	updatedSteps, err := s.stepRepo.FindStepsByDrillID(drillID)
+	if err == nil && len(updatedSteps) == len(steps) {
+		for i := range steps {
+			steps[i] = updatedSteps[i]
+		}
+	}
+
+	InvalidateStepCache(s.redis, drillID)
 }
 
 func (s *DrillService) InvalidateStepCache(drillID uint64) {

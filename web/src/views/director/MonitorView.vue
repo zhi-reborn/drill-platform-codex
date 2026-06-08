@@ -233,22 +233,21 @@
           <el-table-column prop="name" label="步骤名" min-width="260" show-overflow-tooltip class-name="name-col">
             <template #default="{ row }">
               <div class="step-name-cell">
-                <el-tag
-                  :type="getDepthTagType(getStepDepth(row))"
-                  size="small"
+                <span
                   class="depth-badge"
-                  effect="dark"
-                >{{ getDepthLabel(getStepDepth(row)) }}</el-tag>
+                  :class="`depth-badge-${getStepDepth(row)}`"
+                >
+                  <span class="depth-label">{{ getDepthLabel(getStepDepth(row)) }}</span>
+                  <span class="depth-num">{{ getSiblingIndex(row) }}</span>
+                </span>
                 <span :class="['step-name-text', `name-depth-${getStepDepth(row)}`]">{{ row.name }}</span>
               </div>
             </template>
           </el-table-column>
           <el-table-column prop="step_type" label="类型" width="70" align="center">
             <template #default="{ row }">
-              <template v-if="isParentStep(row)">-</template>
-              <template v-else>
-                <el-tag :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
-              </template>
+              <el-tag v-if="row.step_type" :type="getStepTypeTag(row.step_type)" size="small">{{ getStepTypeLabel(row.step_type) }}</el-tag>
+              <template v-else>-</template>
             </template>
           </el-table-column>
           <el-table-column prop="status" label="状态" width="140" align="center">
@@ -794,12 +793,27 @@ function getStartDisabledReason(step: any): string {
   if (step.status !== 'pending') return '步骤不在待执行状态'
   if (isParentStep(step)) return '父步骤不可手动开始'
 
+  // 检查父步骤链是否已激活：从当前步骤向上遍历，所有祖先必须处于 running 状态
+  let ancestor = step
+  while (ancestor.parent_step_id) {
+    const parent = steps.value.find(s => s.id === ancestor.parent_step_id)
+    if (!parent) break
+    if (parent.status !== 'running') {
+      return `父步骤未启动：${parent.name}`
+    }
+    ancestor = parent
+  }
+
+  // 检查 pre_step_ids 中的前序步骤是否全部完成
   const preStepIds = step.pre_step_ids || []
   if (preStepIds.length > 0) {
     const pendingPreSteps: string[] = []
     preStepIds.forEach((preId: number) => {
       const preStep = steps.value.find(s => s.id === preId)
-      if (preStep && !TERMINAL_STATUSES.includes(preStep.status)) {
+      if (!preStep) {
+        // 前序步骤未找到，视为未完成
+        pendingPreSteps.push(`步骤#${preId}`)
+      } else if (!TERMINAL_STATUSES.includes(preStep.status)) {
         pendingPreSteps.push(preStep.name)
       }
     })
@@ -808,8 +822,18 @@ function getStartDisabledReason(step: any): string {
     }
   }
 
-  // 没有前序步骤的叶子节点，只要演练在运行中就可以开始（引擎会自动启动父步骤链）
-  // 有前序步骤的，前序已全部完成也可以开始（父步骤链同样由引擎自动处理）
+  // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也应禁用
+  if (preStepIds.length === 0 && step.parent_step_id) {
+    const siblings = steps.value.filter(s =>
+      s.parent_step_id === step.parent_step_id && s.id !== step.id
+    )
+    const earlierPendingSibling = siblings.find(s =>
+      s.seq < step.seq && s.step_type === 'serial' && !TERMINAL_STATUSES.includes(s.status)
+    )
+    if (earlierPendingSibling) {
+      return `前序步骤未完成：${earlierPendingSibling.name}`
+    }
+  }
 
   return ''
 }
@@ -826,6 +850,24 @@ function getStepDepth(step: any): number {
     current = parent
   }
   return depth
+}
+
+// 同级节点编号映射：step.id → 在同父节点下的序号（1-based）
+const siblingIndexMap = computed(() => {
+  const map = new Map<number, number>()
+  function assignSiblings(nodes: any[]) {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]
+      map.set(node.id, i + 1)
+      if (node.children?.length) assignSiblings(node.children)
+    }
+  }
+  assignSiblings(drillStepTree.value)
+  return map
+})
+
+function getSiblingIndex(step: any): number {
+  return siblingIndexMap.value.get(step.id) || 0
 }
 
 // 深度→层级标签
@@ -1662,15 +1704,31 @@ onUnmounted(() => {
 
   // 深度徽章（步骤名列内）
   .depth-badge {
-    margin-right: 8px;
-    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 0;
+    margin-right: 8px; flex-shrink: 0;
+    height: 20px; border-radius: 3px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.5px; white-space: nowrap;
+    overflow: hidden;
+    line-height: 1;
+
+    .depth-label {
+      padding: 0 5px;
+    }
+    .depth-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 16px; height: 20px;
+      padding: 0 3px;
+      font-size: 10px; font-weight: 800;
+      font-family: $font-family-mono;
+    }
   }
 
-  // 步骤(depth-3)深度徽章：覆盖全局 el-tag--info 样式，使用与图例一致的灰色
-  .depth-badge.el-tag--info.el-tag--dark {
-    background-color: #64748B !important;
-    color: #fff !important;
-  }
+  // 各层级配色
+  .depth-badge-0 { background: rgba(24, 144, 255, 0.1); color: #1890ff; .depth-num { background: #1890ff; color: #fff; } }
+  .depth-badge-1 { background: rgba(82, 196, 26, 0.1); color: #52c41a; .depth-num { background: #52c41a; color: #fff; } }
+  .depth-badge-2 { background: rgba(250, 173, 20, 0.1); color: #faad14; .depth-num { background: #faad14; color: #fff; } }
+  .depth-badge-3 { background: rgba(100, 116, 139, 0.12); color: #64748b; .depth-num { background: #64748b; color: #fff; } }
 
   .step-name-text {
     font-size: 13px;
