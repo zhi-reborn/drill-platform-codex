@@ -646,9 +646,24 @@ function chineseNum(n: number): string {
   .pct-unit { font-size: 34px; opacity: 0.95; margin-left: 2px; }
 }
 .center-hint {
-  font-size: 11px;
-  color: #6e8db5;
-  letter-spacing: 1px;
-  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255, 180, 74, 0.85);
+  letter-spacing: 2px;
+  margin-top: 6px;
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(255, 122, 0, 0.35);
+  position: relative;
+  padding: 3px 14px;
+  background: rgba(255, 122, 0, 0.08);
+  border: 1px solid rgba(255, 122, 0, 0.25);
+  white-space: nowrap;
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    width: 4px; height: 4px;
+    border: 1px solid rgba(255, 180, 74, 0.5);
+  }
+  &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 }
 </style>

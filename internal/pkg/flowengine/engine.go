@@ -210,7 +210,9 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 
 	inst.CurrentStepIDs = append(inst.CurrentStepIDs, si.StepDefID)
 
-	e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, timeoutAt)
+	if !timeoutAt.IsZero() {
+		e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, timeoutAt)
+	}
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, si.Status)
@@ -316,6 +318,29 @@ func (e *Engine) activateChildSteps(inst *FlowInst, parentStepDefID int64) {
 			e.activateStep(inst, childSI)
 		}
 	}
+}
+
+// EnsureChildrenActivated 确保运行中/已完成的父步骤的 pending 子步骤被激活
+// 用于 Recover 场景：状态从数据库同步后，running 步骤的子步骤可能未被激活
+func (e *Engine) EnsureChildrenActivated(instanceID int64, parentStepDefID int64) {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	parentSI, ok := inst.Steps[parentStepDefID]
+	if !ok {
+		return
+	}
+	if parentSI.Status != StepStatusRunning && parentSI.Status != StepStatusCompleted {
+		return
+	}
+	e.activateChildSteps(inst, parentStepDefID)
 }
 
 // AdvanceFlow 在步骤达到终态（超时/异常等）后推进流程

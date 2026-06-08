@@ -179,11 +179,11 @@
                 </el-button>
                 <el-button
                   v-else-if="task.status === 'pending' && canStartTask(task)"
-                  type="info"
+                  type="primary"
                   class="action-btn"
-                  disabled
+                  @click="goToTaskDetail(task.id)"
                 >
-                  等待开始
+                  待执行
                 </el-button>
                 <el-button
                   v-else-if="task.status === 'running' && !isParentTask(task)"
@@ -191,7 +191,7 @@
                   class="action-btn"
                   @click="goToTaskDetail(task.id)"
                 >
-                  开始执行
+                  执行中
                 </el-button>
                 <el-button
                   v-else-if="task.status === 'running'"
@@ -221,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
@@ -231,6 +231,7 @@ import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
 import { taskApi } from '@/api/modules/task'
 import { drillApi } from '@/api/modules/drill'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 
@@ -387,7 +388,7 @@ function canStartTask(task: StepInstance): boolean {
   while (currentAncestorId) {
     const parent = tasks.value.find((t: StepInstance) => t.id === currentAncestorId)
     if (!parent) break
-    if (parent.status !== 'running') return false
+    if (parent.status !== 'running' && parent.status !== 'completed') return false
     currentAncestorId = parent.parent_step_id
   }
 
@@ -446,7 +447,7 @@ function viewScreen(drillId: number) {
 }
 
 // 加载数据
-async function loadTasks() {
+async function loadTasks(): Promise<void> {
   loading.value = true
   try {
     // 加载我的任务
@@ -489,8 +490,82 @@ async function loadTasks() {
   }
 }
 
+// WebSocket 实时同步
+let wsConnections: WebSocket[] = []
+let componentDestroyed = false
+
+function connectDrillWS(drillId: number) {
+  const authStore = useAuthStore()
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsUrl = `${wsProtocol}://${window.location.host}/ws/control/${drillId}?token=${authStore.token}`
+  const ws = new WebSocket(wsUrl)
+  ws.onmessage = (event) => {
+    if (componentDestroyed) return
+    try {
+      const data = JSON.parse(event.data)
+      const eventType = data.type || data.event_type
+      if (!eventType) return
+      const payload = data.payload || data.data || data
+      // 增量更新步骤状态
+      if (eventType.startsWith('step_') && payload) {
+        const stepId = Number(payload.step_id ?? payload.id)
+        if (stepId) {
+          const idx = tasks.value.findIndex((t: StepInstance) => t.id === stepId)
+          if (idx !== -1) {
+            const newStatus = payload.new_status || mapEventToStatus(eventType)
+            if (newStatus) tasks.value[idx].status = newStatus as any
+            if (payload.remark) tasks.value[idx].remark = payload.remark
+            if (payload.issue_desc) tasks.value[idx].issue_desc = payload.issue_desc
+          }
+        }
+      }
+      // 演练状态变化时全量刷新
+      if (eventType.startsWith('drill_')) {
+        loadTasks()
+      }
+    } catch { /* ignore */ }
+  }
+  ws.onerror = () => { /* ignore */ }
+  wsConnections.push(ws)
+}
+
+function mapEventToStatus(eventType: string): string {
+  const map: Record<string, string> = {
+    step_started: 'running',
+    step_complete: 'completed',
+    step_issue: 'issue',
+    step_skipped: 'skipped',
+    step_timeout: 'timeout',
+  }
+  return map[eventType] || ''
+}
+
+function connectAllDrills() {
+  // 为每个活跃演练建立 WebSocket 连接
+  const activeDrills = instances.value.filter(i => i.status === 'running' || i.status === 'paused')
+  for (const drill of activeDrills) {
+    if (!wsConnections.some(ws => ws.url.includes(`/ws/control/${drill.id}`))) {
+      connectDrillWS(drill.id)
+    }
+  }
+}
+
+function disconnectAllWS() {
+  wsConnections.forEach(ws => {
+    try { ws.close() } catch { /* ignore */ }
+  })
+  wsConnections = []
+}
+
 onMounted(() => {
-  loadTasks()
+  loadTasks().then(() => {
+    connectAllDrills()
+  })
+})
+
+onBeforeUnmount(() => {
+  componentDestroyed = true
+  disconnectAllWS()
 })
 </script>
 

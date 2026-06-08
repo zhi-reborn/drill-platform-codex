@@ -187,7 +187,7 @@
               :progress="progressPercent"
               :center-numerator="completedCount"
               :center-denominator="totalCount"
-              :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
+              :center-hint="`${currentPhaseName} · 阶段${currentPhaseIndex + 1}`"
               :size="ringSize"
             />
           </div>
@@ -254,13 +254,13 @@
               <div class="log-tbody">
                 <div
                   v-for="(log, idx) in recentLogs"
-                  :key="(log.ID ?? idx)"
+                  :key="(log.id ?? idx)"
                   class="log-row"
-                  :class="'log-' + logActionClass(log.Action)"
+                  :class="'log-' + logActionClass(log.action)"
                 >
-                  <span class="col-time">{{ formatTime(log.CreatedAt) }}</span>
+                  <span class="col-time">{{ formatTime(log.created_at) }}</span>
                   <span class="col-step" :title="resolveStepName(log)">{{ resolveStepName(log) }}</span>
-                  <span class="col-desc">{{ log.Remark || logActionLabel(log.Action) }}</span>
+                  <span class="col-desc">{{ log.content || logActionLabel(log.action) }}</span>
                 </div>
                 <div v-if="recentLogs.length === 0" class="empty-tip">暂无日志</div>
               </div>
@@ -704,23 +704,31 @@ function logActionClass(action: string): string {
   if (action.includes('issue') || action.includes('timeout')) return 'danger'
   if (action.includes('skip')) return 'skip'
   if (action.includes('force')) return 'force'
-  return 'ok'
+  if (action.includes('start') || action.includes('resume')) return 'ok'
+  if (action.includes('complete') || action.includes('terminate')) return 'step'
+  return 'step'
 }
 function logActionLabel(action: string): string {
   const map: Record<string, string> = {
     complete: '完成', step_complete: '完成',
     issue: '异常', step_issue: '异常',
-    timeout: '超时', force_complete: '强制完成',
+    timeout: '超时', step_timeout: '超时',
+    force_complete: '强制完成',
     skip: '跳过', step_skip: '跳过',
     start: '启动', step_start: '启动',
+    pause: '暂停', drill_paused: '暂停',
+    resume: '恢复', drill_resumed: '恢复',
+    drill_started: '演练启动',
+    drill_completed: '演练完成',
+    drill_terminated: '演练终止',
   }
   return map[action] || action
 }
 
-// 根据 log 中的 StepInstanceID 在 drillSteps 中查节点名称
+// 根据 log 中的 step_instance_id 在 drillSteps 中查节点名称
 function resolveStepName(log: StepInstanceLog): string {
-  const id = log?.StepInstanceID
-  if (!id) return '-'
+  const id = log?.step_instance_id
+  if (!id) return currentDrill.value?.name || '演练'
   const step = drillSteps.value.find(s => s.id === id)
   if (step?.name) return step.name
   return `步骤 #${id}`
@@ -835,7 +843,16 @@ function connectWebSocket() {
       const eventType = data.type || data.event_type
       if (!eventType) return
 
-      // 步骤/演练状态变化：全量刷新，确保级联状态（父步骤、阶段）正确更新
+      const payload = data.payload || data.data || data
+
+      // 步骤事件：增量更新 + 推入本地日志
+      if (eventType.startsWith('step_')) {
+        applyStepEvent(eventType, payload)
+      } else if (eventType.startsWith('drill_')) {
+        applyDrillEvent(eventType, payload)
+      }
+
+      // 全量刷新确保级联状态正确（延迟执行，让增量先生效）
       if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
         loadData()
       }
@@ -878,13 +895,13 @@ function applyStepEvent(eventType: string, payload: any) {
   // 推入一条本地日志
   const logAction = LOG_EVENTS[eventType] || eventType
   const newLog: StepInstanceLog = {
-    ID: Date.now(),
-    StepInstanceID: stepId,
-    Action: logAction,
-    OperatorID: 0,
-    OperatorName: payload.executor || '流程引擎',
-    Remark: payload.remark || payload.comment || payload.issue_desc || '',
-    CreatedAt: new Date().toISOString(),
+    id: Date.now(),
+    step_instance_id: stepId,
+    action: logAction,
+    operator_id: 0,
+    operator_name: payload.executor || '流程引擎',
+    content: payload.remark || payload.comment || payload.issue_desc || '',
+    created_at: new Date().toISOString(),
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
 
@@ -899,13 +916,13 @@ function applyDrillEvent(eventType: string, payload: any) {
     if (newStatus) currentDrill.value.status = newStatus as DrillStatus
   }
   const newLog: StepInstanceLog = {
-    ID: Date.now(),
-    StepInstanceID: 0,
-    Action: LOG_EVENTS[eventType] || eventType,
-    OperatorID: 0,
-    OperatorName: payload.operator || '流程引擎',
-    Remark: payload.remark || '',
-    CreatedAt: new Date().toISOString(),
+    id: Date.now(),
+    step_instance_id: null,
+    action: LOG_EVENTS[eventType] || eventType,
+    operator_id: 0,
+    operator_name: payload.operator || '流程引擎',
+    content: payload.remark || '',
+    created_at: new Date().toISOString(),
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
   recomputeKpis()
@@ -1803,7 +1820,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex; flex-direction: column; padding: 0;
 }
 .log-thead {
-  display: grid; grid-template-columns: 72px 1.8fr 0.6fr;
+  display: grid; grid-template-columns: 68px 1.2fr 2fr;
   padding: 6px 12px;
   background: rgba(0, 60, 130, 0.42);
   border-bottom: 1px solid $line;
@@ -1818,7 +1835,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
 }
 .log-row {
-  display: grid; grid-template-columns: 72px 1.8fr 0.6fr;
+  display: grid; grid-template-columns: 68px 1.2fr 2fr;
   align-items: center;
   padding: 7px 12px;
   border-bottom: 1px solid rgba(111, 151, 220, 0.16);
@@ -1831,7 +1848,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .col-desc {
     color: $text;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
   }
   &.log-danger { .col-desc { color: $danger; } }
   &.log-skip { .col-desc { color: #a78bfa; } }
@@ -2109,7 +2130,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
   .log-thead,
   .log-row {
-    grid-template-columns: 62px 1fr 52px 1fr;
+    grid-template-columns: 56px 1fr 1.5fr;
     padding-left: 8px;
     padding-right: 8px;
   }

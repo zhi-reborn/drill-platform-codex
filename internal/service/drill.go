@@ -104,7 +104,7 @@ func (s *DrillService) Recover(id uint64) error {
 				si.ActualOperator = &op
 			}
 
-			if step.Status == "running" && step.TimeoutAt != nil {
+			if step.Status == "running" && step.TimeoutAt != nil && step.TimeoutAt.After(time.Now()) {
 				s.engine.TimeoutScheduler().Register(int64(drill.ID), int64(step.StepTemplateID), int64(step.ID), *step.TimeoutAt)
 			}
 		}
@@ -112,6 +112,26 @@ func (s *DrillService) Recover(id uint64) error {
 
 	// 协调状态：自动完成所有子步骤已终态但自身未终态的父步骤
 	s.reconcileParentSteps(int64(drill.ID), steps)
+
+	// 协调状态：激活所有前序步骤已完成但自身仍为 pending 的步骤
+	// 对每个已终态的步骤调用 AdvanceFlow，触发 handleStepCompletion 推进流程
+	if drill.Status == "running" {
+		for _, step := range steps {
+			if step.Status == "completed" || step.Status == "skipped" ||
+				step.Status == "timeout" || step.Status == "issue" {
+				s.engine.AdvanceFlow(int64(drill.ID), int64(step.StepTemplateID))
+			}
+		}
+
+		// 确保运行中/已完成的父步骤的 pending 子步骤被激活
+		// AdvanceFlow 只激活 pending 的下一步骤，但 running 步骤（从数据库同步的状态）
+		// 不会触发 activateChildSteps，导致其子步骤仍为 pending
+		for _, step := range steps {
+			if step.Status == "running" || step.Status == "completed" {
+				s.engine.EnsureChildrenActivated(int64(drill.ID), int64(step.StepTemplateID))
+			}
+		}
+	}
 
 	return nil
 }
@@ -300,6 +320,18 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 }
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
+	// 如果演练运行中但引擎中没有对应实例，先触发 Recover 重建引擎状态
+	// 这会通过 AdvanceFlow+EnsureChildrenActivated 激活应当运行但 DB 仍为 pending 的步骤
+	if s.engine != nil {
+		if _, ok := s.engine.GetInstance(int64(id)); !ok {
+			drill, err := s.drillRepo.FindByID(id)
+			if err == nil && drill.Status == "running" {
+				s.Recover(id)
+				InvalidateStepCache(s.redis, id)
+			}
+		}
+	}
+
 	if steps, ok := GetCachedSteps(s.redis, id); ok {
 		return steps, nil
 	}

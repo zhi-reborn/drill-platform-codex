@@ -796,7 +796,11 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		parentSI.EndTime = &now
 		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
 
-		// CompleteStep 失败时（如流程非 running 状态），仍需递归检查祖父步骤
+		// CompleteStep 失败时（如父步骤在引擎中非 running 状态），手动推进流程
+		// 否则后续步骤（如环节3）不会被自动激活
+		a.engine.AdvanceFlow(flowInstID, parentStepDefID)
+
+		// 仍需递归检查祖父步骤
 		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
 	}
 

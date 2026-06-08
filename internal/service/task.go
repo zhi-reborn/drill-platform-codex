@@ -11,12 +11,12 @@ import (
 )
 
 type TaskService struct {
-	stepRepo              *repository.StepRepo
-	drillService          *DrillService
-	wsManager             *websocket.Manager
-	notificationService   *NotificationService
-	userRepo              *repository.UserRepo
-	redis                 RedisClient
+	stepRepo            *repository.StepRepo
+	drillService        *DrillService
+	wsManager           *websocket.Manager
+	notificationService *NotificationService
+	userRepo            *repository.UserRepo
+	redis               RedisClient
 }
 
 func NewTaskService(stepRepo *repository.StepRepo) *TaskService {
@@ -71,11 +71,86 @@ func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*en
 
 func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
+
+	// 1. 按 assignee_ids 精确匹配
 	err := repository.DB.
-		Where("JSON_CONTAINS(assignee_ids, CAST(? AS JSON)) AND status = ?",
-			userID, "running").
+		Where("JSON_CONTAINS(assignee_ids, CAST(? AS JSON)) AND status IN ?",
+			userID, []string{"pending", "running", "issue"}).
 		Find(&steps).Error
-	return steps, err
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 按用户角色和部门补充匹配（覆盖 assignee_ids 不包含该用户但角色/部门匹配的情况）
+	if s.userRepo != nil {
+		user, uErr := s.userRepo.FindByID(userID)
+		if uErr == nil && user.ID > 0 {
+			var extraSteps []entity.StepInstance
+			conditions := []string{}
+			args := []interface{}{}
+
+			// 按部门匹配 executor_team
+			if user.Department != "" {
+				conditions = append(conditions, "executor_team = ?")
+				args = append(args, user.Department)
+			}
+
+			// 按角色匹配 default_assignee_role
+			if user.Role != "" {
+				conditions = append(conditions, "default_assignee_role = ?")
+				args = append(args, user.Role)
+			}
+
+			if len(conditions) > 0 {
+				condStr := conditions[0]
+				for i := 1; i < len(conditions); i++ {
+					condStr += " OR " + conditions[i]
+				}
+				err := repository.DB.
+					Where("status IN ?", []string{"pending", "running", "issue"}).
+					Where(condStr, args...).
+					Find(&extraSteps).Error
+				if err == nil {
+					existingIDs := make(map[uint64]bool)
+					for _, s := range steps {
+						existingIDs[s.ID] = true
+					}
+					for _, es := range extraSteps {
+						if !existingIDs[es.ID] {
+							steps = append(steps, es)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. 过滤：只返回属于活跃演练的步骤
+	if len(steps) > 0 {
+		drillIDs := make(map[uint64]bool)
+		for _, s := range steps {
+			drillIDs[s.DrillInstanceID] = true
+		}
+		var activeDrills []entity.DrillInstance
+		drillIDList := make([]uint64, 0, len(drillIDs))
+		for id := range drillIDs {
+			drillIDList = append(drillIDList, id)
+		}
+		repository.DB.Where("id IN ? AND status IN ?", drillIDList, []string{"running", "paused"}).Find(&activeDrills)
+		activeDrillMap := make(map[uint64]bool)
+		for _, d := range activeDrills {
+			activeDrillMap[d.ID] = true
+		}
+		filtered := steps[:0]
+		for _, s := range steps {
+			if activeDrillMap[s.DrillInstanceID] {
+				filtered = append(filtered, s)
+			}
+		}
+		steps = filtered
+	}
+
+	return steps, nil
 }
 
 func (s *TaskService) EnrichStepsWithAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
@@ -109,10 +184,10 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 
 	now := time.Now()
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepID).Updates(map[string]interface{}{
-		"status":         "completed",
+		"status":          "completed",
 		"actual_operator": operatorID,
-		"end_time":       &now,
-		"remark":         remark,
+		"end_time":        &now,
+		"remark":          remark,
 	})
 
 	var user entity.User
@@ -160,13 +235,13 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   operatorID,
-			Type:     entity.NotificationTypeStepComplete,
-			Title:    "步骤已完成",
-			Content:  step.Name + " 已完成",
-			DrillID:  &step.DrillInstanceID,
-			StepID:   &stepID,
-			IsRead:   false,
+			UserID:  operatorID,
+			Type:    entity.NotificationTypeStepComplete,
+			Title:   "步骤已完成",
+			Content: step.Name + " 已完成",
+			DrillID: &step.DrillInstanceID,
+			StepID:  &stepID,
+			IsRead:  false,
 		}, operatorID)
 	}
 
@@ -238,13 +313,13 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 
 	if s.notificationService != nil {
 		s.notificationService.CreateNotification(&entity.Notification{
-			UserID:   step.DrillInstance.CreatedBy,
-			Type:     entity.NotificationTypeStepTimeout,
-			Title:    "步骤异常上报",
-			Content:  step.Name + " 上报异常：" + issueDesc,
-			DrillID:  &step.DrillInstanceID,
-			StepID:   &stepID,
-			IsRead:   false,
+			UserID:  step.DrillInstance.CreatedBy,
+			Type:    entity.NotificationTypeStepTimeout,
+			Title:   "步骤异常上报",
+			Content: step.Name + " 上报异常：" + issueDesc,
+			DrillID: &step.DrillInstanceID,
+			StepID:  &stepID,
+			IsRead:  false,
 		})
 	}
 

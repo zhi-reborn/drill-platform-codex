@@ -798,7 +798,7 @@ function getStartDisabledReason(step: any): string {
   while (ancestor.parent_step_id) {
     const parent = steps.value.find(s => s.id === ancestor.parent_step_id)
     if (!parent) break
-    if (parent.status !== 'running') {
+    if (parent.status !== 'running' && parent.status !== 'completed') {
       return `父步骤未启动：${parent.name}`
     }
     ancestor = parent
