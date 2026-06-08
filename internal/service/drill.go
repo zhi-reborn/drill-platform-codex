@@ -83,6 +83,9 @@ func (s *DrillService) Recover(id uint64) error {
 	// 同步内存中步骤实例的 ID 到数据库 ID
 	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
 
+	// 同步前序步骤 ID（将实例 ID 转换为模板步骤 ID）
+	s.syncPreStepIDsToEngine(int64(drill.ID))
+
 	for _, step := range steps {
 		si, exists := inst.Steps[int64(step.StepTemplateID)]
 		if exists {

@@ -55,17 +55,37 @@
           <span class="kpi-sub">编号: D-{{ String(currentDrill.id).padStart(10, '0') }}</span>
         </div>
 
-        <div class="kpi-card">
+        <div class="kpi-card kpi-progress-card">
           <span class="kpi-orb" />
           <div class="kpi-copy">
             <span class="kpi-label-zh">整体进度</span>
           </div>
           <div class="kpi-value-row kpi-progress-row">
-            <span class="kpi-value-num">{{ progressPercent }}</span>
-            <span class="kpi-value-unit">%</span>
-            <span class="kpi-node-count">{{ completedCount }} / {{ totalCount }}</span>
+            <div class="progress-ring-wrap">
+              <svg class="progress-ring-svg" viewBox="0 0 100 100">
+                <defs>
+                  <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#fff" stop-opacity="0.95" />
+                    <stop offset="60%" stop-color="#2cf8d8" stop-opacity="1" />
+                    <stop offset="100%" stop-color="#00d4aa" stop-opacity="1" />
+                  </linearGradient>
+                </defs>
+                <circle class="progress-ring-bg" cx="50" cy="50" r="46" />
+                <circle class="progress-ring-fill"
+                  cx="50" cy="50" r="46"
+                  :style="{ strokeDashoffset: 289.03 * (1 - progressPercent / 100) }" />
+              </svg>
+              <span class="progress-ring-text">{{ progressPercent }}<small>%</small></span>
+            </div>
+            <div class="progress-node-block">
+              <div class="node-count-row">
+                <span class="kpi-value-num">{{ completedCount }}</span>
+                <span class="node-separator">/</span>
+                <span class="node-total">{{ totalCount }}</span>
+              </div>
+              <span class="progress-sub-label">完成节点</span>
+            </div>
           </div>
-          <span class="kpi-sub">完成节点</span>
         </div>
 
         <div class="kpi-card">
@@ -80,7 +100,7 @@
             <span class="kpi-value-sep">:</span>
             <span class="kpi-value-num">{{ elapsedParts.s }}</span>
           </div>
-          <span class="kpi-sub">起 {{ currentDrill.started_at ? formatHM(currentDrill.started_at) : '--:--' }}　预计剩余 {{ estimatedRemaining }}</span>
+          <span class="kpi-sub">开始 {{ drillStartTime ? formatHM(drillStartTime) : '--:--' }} 预计剩余 {{ estimatedRemaining }}</span>
         </div>
 
         <div class="kpi-card">
@@ -158,8 +178,8 @@
               :phases="ringPhases"
               :current-index="currentPhaseIndex"
               :progress="progressPercent"
-              :center-numerator="currentPhaseProgress.num"
-              :center-denominator="currentPhaseProgress.den"
+              :center-numerator="completedCount"
+              :center-denominator="totalCount"
               :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
               :size="ringSize"
             />
@@ -344,6 +364,11 @@ const progressPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)
 })
+
+// 演练开始时间（兼容 start_time / started_at 两种字段名）
+const drillStartTime = computed(() =>
+  (currentDrill.value as any)?.start_time || (currentDrill.value as any)?.started_at || null
+)
 
 // 总耗时（演练开始至今 / 已完成时刻起算）
 const elapsedSeconds = ref(0)
@@ -678,11 +703,13 @@ function formatSystemTime(d: Date): string {
 function tick() {
   const now = new Date()
   systemTime.value = formatSystemTime(now)
-  if (currentDrill.value?.started_at) {
-    const start = new Date(currentDrill.value.started_at).getTime()
+  const started = drillStartTime.value
+  if (started) {
+    const start = new Date(started).getTime()
     if (!isNaN(start)) {
-      const end = currentDrill.value.completed_at
-        ? new Date(currentDrill.value.completed_at).getTime()
+      const ended = (currentDrill.value as any)?.end_time || (currentDrill.value as any)?.completed_at
+      const end = ended
+        ? new Date(ended).getTime()
         : now.getTime()
       elapsedSeconds.value = Math.max(0, Math.round((end - start) / 1000))
     }
@@ -1209,13 +1236,27 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .kpi-copy {
     grid-column: 1;
     grid-row: 1 / 3;
+    display: flex;
+    align-items: center;
   }
   .kpi-label-zh {
     display: block;
+    position: relative;
     font-size: clamp(13px, 1vw, 18px);
     font-weight: 800;
     color: #f0f7ff;
     letter-spacing: 1px;
+    padding-bottom: 6px;
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 24px;
+      height: 2px;
+      border-radius: 1px;
+      background: linear-gradient(90deg, #2cf8d8, transparent);
+    }
   }
   .kpi-label-en {
     font-family: $font-display;
@@ -1271,6 +1312,81 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     color: #dff6ff;
     font-family: $font-mono;
     font-size: 14px;
+  }
+
+  // === Progress card specific: ring + node count layout ===
+  &.kpi-progress-card {
+    .kpi-value-row.kpi-progress-row {
+      align-items: center;
+      gap: 12px;
+    }
+  }
+  .progress-ring-wrap {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .progress-ring-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+  .progress-ring-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 6;
+  }
+  .progress-ring-fill {
+    fill: none;
+    stroke: url(#ring-grad);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 289.03;
+    transition: stroke-dashoffset 0.8s ease;
+  }
+  .progress-ring-text {
+    position: absolute;
+    font-family: $font-mono;
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+    small {
+      font-size: 10px;
+      font-weight: 600;
+      opacity: 0.75;
+    }
+  }
+  .progress-node-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .node-count-row {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    .node-separator {
+      font-family: $font-mono;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.45);
+    }
+    .node-total {
+      font-family: $font-mono;
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.55);
+      font-weight: 600;
+    }
+  }
+  .progress-sub-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: $font-mono;
+    letter-spacing: 1px;
   }
   .status-dot {
     width: 10px; height: 10px; border-radius: 50%;
@@ -1677,6 +1793,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       font-size: 11px;
       letter-spacing: 0;
       line-height: 1.2;
+      padding-bottom: 4px;
+      &::after {
+        width: 16px;
+        height: 1.5px;
+      }
     }
 
     .kpi-label-en {
@@ -1714,6 +1835,31 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       margin-left: 4px;
       font-size: 8px;
       white-space: nowrap;
+    }
+
+    .progress-ring-wrap {
+      width: 40px;
+      height: 40px;
+    }
+    .progress-ring-text {
+      font-size: 11px;
+      small {
+        font-size: 8px;
+      }
+    }
+    .progress-sub-label {
+      font-size: 8px;
+    }
+    .node-count-row {
+      .kpi-value-num {
+        font-size: 16px;
+      }
+      .node-total {
+        font-size: 12px;
+      }
+      .node-separator {
+        font-size: 11px;
+      }
     }
   }
 

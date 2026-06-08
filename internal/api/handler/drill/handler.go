@@ -316,6 +316,19 @@ func (h *Handler) StartStep(c *gin.Context) {
 		if si, ok := inst.Steps[stepDefID]; ok {
 			si.Status = flowengine.StepStatus(target.step.Status)
 		}
+		// 同步父步骤状态（子步骤启动前需要父步骤处于 running/completed）
+		if target.step.ParentStepID != nil && *target.step.ParentStepID > 0 {
+			parentDefID := int64(*target.step.ParentStepID)
+			if parentSI, ok := inst.Steps[parentDefID]; ok {
+				var parentStep entity.StepInstance
+				if err := repository.DB.Where("drill_instance_id = ? AND template_step_id = ?", id, *target.step.ParentStepID).First(&parentStep).Error; err == nil {
+					parentSI.Status = flowengine.StepStatus(parentStep.Status)
+					if parentStep.StartTime != nil {
+						parentSI.StartTime = parentStep.StartTime
+					}
+				}
+			}
+		}
 	}
 
 	err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID)

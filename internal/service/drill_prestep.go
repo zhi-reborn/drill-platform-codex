@@ -126,6 +126,8 @@ func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {
 		instIDToDefID[step.ID] = defID
 
 		if step.PreStepIDs == "" || step.PreStepIDs == "[]" || step.PreStepIDs == "null" {
+			// 数据库中 pre_step_ids 为空，也需要同步到引擎（覆盖模板中错误的 seq 值）
+			instIDToPres[defID] = nil
 			continue
 		}
 		var ids []uint64

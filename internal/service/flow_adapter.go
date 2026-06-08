@@ -284,6 +284,49 @@ func (a *DrillFlowAdapter) OnFlowStatusChanged(flowInstID int64, oldStatus, newS
 }
 
 func (a *DrillFlowAdapter) OnStepStatusChanged(stepInstID int64, oldStatus, newStatus flowengine.StepStatus) {
+	// 查找步骤所属的演练
+	var stepInst entity.StepInstance
+	if err := repository.DB.Where("id = ?", stepInstID).First(&stepInst).Error; err != nil {
+		return
+	}
+	drillID := stepInst.DrillInstanceID
+
+	// 更新步骤状态到数据库
+	updates := map[string]interface{}{"status": string(newStatus)}
+	if newStatus == flowengine.StepStatusRunning {
+		if a.engine != nil {
+			if inst, ok := a.engine.GetInstance(int64(drillID)); ok {
+				if si, ok := inst.Steps[int64(stepInst.StepTemplateID)]; ok {
+					if si.StartTime != nil {
+						updates["start_time"] = si.StartTime
+					}
+				}
+			}
+		}
+	} else if newStatus == flowengine.StepStatusCompleted || newStatus == flowengine.StepStatusSkipped || newStatus == flowengine.StepStatusTimeout {
+		if a.engine != nil {
+			if inst, ok := a.engine.GetInstance(int64(drillID)); ok {
+				if si, ok := inst.Steps[int64(stepInst.StepTemplateID)]; ok {
+					if si.EndTime != nil {
+						updates["end_time"] = si.EndTime
+					}
+				}
+			}
+		}
+	}
+	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInstID).Updates(updates)
+
+	// 清除 Redis 缓存，确保前端获取最新数据
+	InvalidateStepCache(a.redis, drillID)
+
+	// 从引擎获取最新进度
+	if a.engine != nil {
+		inst, ok := a.engine.GetInstance(int64(drillID))
+		if ok {
+			progress := inst.ProgressPct
+			repository.DB.Model(&entity.DrillInstance{}).Where("id = ?", drillID).Update("progress_pct", progress)
+		}
+	}
 }
 
 func (a *DrillFlowAdapter) SyncStepInstanceIDs(flowInstID int64) {
@@ -762,6 +805,11 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 	// handleSubtaskCompletion 会由 CompleteStep 发出的 EventStepComplete 自动触发
 }
 
+func isStepTerminalStatus(status flowengine.StepStatus) bool {
+	return status == flowengine.StepStatusCompleted || status == flowengine.StepStatusSkipped ||
+		status == flowengine.StepStatusTimeout || status == flowengine.StepStatusIssue
+}
+
 func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID int64, status flowengine.StepStatus, at time.Time) {
 	stepDef, err := a.GetStepDef(flowInstID, stepDefID)
 	if err != nil || stepDef.ParentStepID == 0 {
@@ -781,11 +829,10 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 		return
 	}
 
+	// 父步骤已处于终态，不处理
 	switch parentSI.Status {
 	case flowengine.StepStatusCompleted:
 	case flowengine.StepStatusSkipped:
-	case flowengine.StepStatusTimeout:
-	case flowengine.StepStatusIssue:
 		return
 	}
 
@@ -794,39 +841,57 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 		return
 	}
 
-	parentSI.Status = status
-	parentSI.EndTime = &at
+	// 检查是否所有子步骤都已终态
+	allChildrenTerminal := true
+	for _, si := range inst.Steps {
+		if si.ParentStepID == parentStepDefID && !isStepTerminalStatus(si.Status) {
+			allChildrenTerminal = false
+			break
+		}
+	}
 
-	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
-		"status":   string(status),
-		"end_time": &at,
-	})
+	if allChildrenTerminal {
+		// 所有子步骤都终态，父步骤自动完成
+		parentSI.Status = flowengine.StepStatusCompleted
+		parentSI.EndTime = &at
 
-	if a.wsManager != nil {
-		endTimeStr := at.Format(time.RFC3339)
-		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:        uint(drillID),
-			StepID:         uint(parentInst.ID),
-			StepName:       parentInst.Name,
-			PreviousStatus: string(flowengine.StepStatusRunning),
-			NewStatus:      string(status),
-			Executor:       "流程引擎",
-			EndTime:        &endTimeStr,
+		repository.DB.Model(&entity.StepInstance{}).Where("id = ?", parentInst.ID).Updates(map[string]interface{}{
+			"status":   string(flowengine.StepStatusCompleted),
+			"end_time": &at,
 		})
-	}
 
-	label := "超时"
-	if status == flowengine.StepStatusIssue {
-		label = "异常"
+		label := "超时"
+		if status == flowengine.StepStatusIssue {
+			label = "异常"
+		}
+		repository.DB.Create(&entity.DrillInstanceLog{
+			DrillInstanceID: drillID,
+			StepInstanceID:  &parentInst.ID,
+			Action:          "auto_complete",
+			OperatorName:    "流程引擎",
+			Content:         fmt.Sprintf("[%s] 子步骤%s，所有子步骤已终态，父步骤自动完成", parentInst.Name, label),
+			CreatedAt:       at,
+		})
+
+		if a.wsManager != nil {
+			endTimeStr := at.Format(time.RFC3339)
+			a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
+				DrillID:        uint(drillID),
+				StepID:         uint(parentInst.ID),
+				StepName:       parentInst.Name,
+				PreviousStatus: string(flowengine.StepStatusRunning),
+				NewStatus:      string(flowengine.StepStatusCompleted),
+				Executor:       "流程引擎",
+				EndTime:        &endTimeStr,
+			})
+		}
+
+		// 推进流程
+		if a.engine != nil {
+			_ = a.engine.AdvanceFlow(flowInstID, parentStepDefID)
+		}
 	}
-	repository.DB.Create(&entity.DrillInstanceLog{
-		DrillInstanceID: drillID,
-		StepInstanceID:  &parentInst.ID,
-		Action:          "parent_" + string(status),
-		OperatorName:    "流程引擎",
-		Content:         fmt.Sprintf("[%s] 子步骤%s，父步骤同步%s", parentInst.Name, label, label),
-		CreatedAt:       at,
-	})
+	// 如果还有子步骤未终态，父步骤保持 running 状态，不传播超时/异常
 }
 
 func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
@@ -926,6 +991,11 @@ func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
 	}
 
 	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusTimeout, now)
+
+	// 超时步骤也需要推进流程（激活后续步骤）
+	if a.engine != nil {
+		_ = a.engine.AdvanceFlow(evt.FlowInstID, stepDefID)
+	}
 }
 
 func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {

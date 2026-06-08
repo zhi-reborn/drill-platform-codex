@@ -31,13 +31,13 @@
           <el-descriptions-item label="演练模板">{{ instance.template_name }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ instance.created_by_name }}</el-descriptions-item>
           <el-descriptions-item label="开始时间">
-            {{ instance.started_at ? formatTime(instance.started_at) : '-' }}
+            {{ (instance as any)?.start_time || instance.started_at ? formatTime((instance as any)?.start_time || instance.started_at) : '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
             {{ formatTime(instance.created_at) }}
           </el-descriptions-item>
-          <el-descriptions-item v-if="instance.completed_at" label="完成时间" :span="2">
-            {{ formatTime(instance.completed_at) }}
+          <el-descriptions-item v-if="(instance as any)?.end_time || instance.completed_at" label="完成时间" :span="2">
+            {{ formatTime((instance as any)?.end_time || instance.completed_at) }}
           </el-descriptions-item>
         </el-descriptions>
       </el-card>

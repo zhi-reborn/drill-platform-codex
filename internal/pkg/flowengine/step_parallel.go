@@ -8,6 +8,12 @@ func (e *Engine) advanceParallelSteps(inst *FlowInst, completedStepDefID int64) 
 
 	siblingStepDefIDs := e.getParallelSiblings(inst, completedStepDefID)
 
+	// 非根级并行步骤（无并行组信息），回退到串行推进逻辑
+	if siblingStepDefIDs == nil {
+		e.advanceSerialSteps(inst, completedStepDefID)
+		return
+	}
+
 	allDone := true
 	for _, siblingID := range siblingStepDefIDs {
 		sib, exists := inst.Steps[siblingID]
@@ -15,7 +21,7 @@ func (e *Engine) advanceParallelSteps(inst *FlowInst, completedStepDefID int64) 
 			allDone = false
 			continue
 		}
-		if sib.Status == StepStatusPending || sib.Status == StepStatusRunning {
+		if !isTerminalStatus(sib.Status) {
 			allDone = false
 		}
 	}

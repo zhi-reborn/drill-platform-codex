@@ -170,12 +170,20 @@
 
               <div class="task-card-footer">
                 <el-button
-                  v-if="task.status === 'pending'"
+                  v-if="task.status === 'pending' && !canStartTask(task)"
                   type="info"
                   class="action-btn"
                   disabled
                 >
-                  等待中
+                  等待前序完成
+                </el-button>
+                <el-button
+                  v-else-if="task.status === 'pending' && canStartTask(task)"
+                  type="info"
+                  class="action-btn"
+                  disabled
+                >
+                  等待开始
                 </el-button>
                 <el-button
                   v-else-if="task.status === 'running' && !isParentTask(task)"
@@ -351,6 +359,43 @@ function isParentTask(task: StepInstance): boolean {
   return tasks.value.some((t: StepInstance) => t.parent_step_id === task.id)
 }
 
+// 终态集合
+const TERMINAL_STATUSES = ['completed', 'skipped', 'timeout', 'issue']
+
+// 解析 pre_step_ids（API 返回的是 JSON 字符串）
+function parsePreStepIds(preStepIds: number[] | string | null | undefined): number[] {
+  if (!preStepIds) return []
+  if (Array.isArray(preStepIds)) return preStepIds
+  if (typeof preStepIds === 'string') {
+    try {
+      const parsed = JSON.parse(preStepIds)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+// 判断任务是否满足开始条件（前序步骤全部完成，父步骤已开始）
+function canStartTask(task: StepInstance): boolean {
+  if (task.status !== 'pending') return false
+  if (isParentTask(task)) return false
+
+  // 检查前序步骤
+  const preStepIds = task.pre_step_ids || []
+  if (preStepIds.length > 0) {
+    const allPreDone = preStepIds.every((preId: number) => {
+      const preStep = tasks.value.find((t: StepInstance) => t.id === preId)
+      return preStep && TERMINAL_STATUSES.includes(preStep.status)
+    })
+    if (!allPreDone) return false
+  }
+
+  // 前序步骤已全部完成（或无前序），可以开始（引擎会自动启动父步骤链）
+  return true
+}
+
 // 选择演练
 function selectDrill(drillId: number) {
   selectedDrillId.value = drillId
@@ -384,7 +429,12 @@ async function loadTasks() {
   loading.value = true
   try {
     // 加载我的任务
-    tasks.value = await taskApi.getMyTasks()
+    const rawTasks = await taskApi.getMyTasks()
+    // 解析 pre_step_ids 字符串为数组
+    tasks.value = rawTasks.map((t: StepInstance) => ({
+      ...t,
+      pre_step_ids: parsePreStepIds(t.pre_step_ids),
+    }))
     
     // 加载演练列表
     const drillResult = await drillApi.getList({ page: 1, page_size: 50 })

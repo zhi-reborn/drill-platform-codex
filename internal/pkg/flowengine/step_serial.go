@@ -60,10 +60,15 @@ func (e *Engine) allPredecessorsDone(inst *FlowInst, stepDefID int64) bool {
 		if !ok {
 			return false
 		}
-		if preSI.Status != StepStatusCompleted && preSI.Status != StepStatusSkipped {
+		if !isTerminalStatus(preSI.Status) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isTerminalStatus 判断步骤是否处于终态（已完成/已跳过/已超时/异常）
+func isTerminalStatus(status StepStatus) bool {
+	return status == StepStatusCompleted || status == StepStatusSkipped || status == StepStatusTimeout || status == StepStatusIssue
 }

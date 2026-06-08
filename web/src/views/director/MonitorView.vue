@@ -162,17 +162,16 @@
               </el-descriptions>
             </div>
             <div class="step-actions">
-              <ActionConfirm
+              <el-button
                 v-if="step.default_assignee_role === 'director' && !isParentStep(step)"
-                :title="`完成任务：${step.name}`"
-                message="确认已完成此步骤？"
                 type="success"
-                @confirm="handleDirectorComplete(step)"
+                size="small"
                 :disabled="instance?.status === 'paused'"
+                @click="handleDirectorComplete(step)"
               >
                 <el-icon><CircleCheckFilled /></el-icon>
                 完成任务
-              </ActionConfirm>
+              </el-button>
               <ActionConfirm
                 v-if="!isParentStep(step)"
                 :title="`跳过步骤：${step.name}`"
@@ -297,20 +296,38 @@
               <template v-if="!row._isGroup">
                 <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
                 <template v-if="!isParentStep(row)">
-                  <el-button
+                  <el-tooltip
                     v-if="row.status === 'pending'"
-                    type="primary"
-                    link
-                    size="small"
-                    @click="handleStartStep(row)"
-                  >开始</el-button>
+                    :content="getStartDisabledReason(row)"
+                    :disabled="canStartStep(row)"
+                    placement="top"
+                  >
+                    <span>
+                      <el-button
+                        type="primary"
+                        link
+                        size="small"
+                        :disabled="!canStartStep(row)"
+                        @click="handleStartStep(row)"
+                      >开始</el-button>
+                    </span>
+                  </el-tooltip>
                   <el-button
-                    v-if="['pending', 'running'].includes(row.status)"
+                    v-if="row.status === 'running'"
                     type="success"
                     link
                     size="small"
                     @click="handleDirectorComplete(row)"
                   >完成</el-button>
+                  <el-popconfirm
+                    v-if="['timeout', 'issue'].includes(row.status)"
+                    title="步骤异常/超时，确认强制完成？"
+                    @confirm="handleForceComplete(row)"
+                  >
+                    <template #reference>
+                      <el-button type="success" link size="small">完成</el-button>
+                    </template>
+                  </el-popconfirm>
                   <el-popconfirm
                     v-if="['pending', 'running', 'timeout'].includes(row.status)"
                     title="确认跳过此步骤？"
@@ -513,12 +530,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
-import type { DrillInstance, StepInstance } from '@/types'
+import type { DrillInstance, StepInstance, StepStatus } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
@@ -763,6 +780,40 @@ function isParentStep(step: any): boolean {
   return steps.value.some(s => s.parent_step_id === step.id)
 }
 
+// 终态集合：已完成/已跳过/已超时/异常
+const TERMINAL_STATUSES: StepStatus[] = ['completed', 'skipped', 'timeout', 'issue']
+
+// 判断步骤是否可以手动开始
+function canStartStep(step: any): boolean {
+  return !getStartDisabledReason(step)
+}
+
+// 获取步骤不能开始的原因，返回空字符串表示可以开始
+function getStartDisabledReason(step: any): string {
+  if (instance.value?.status !== 'running') return '演练未处于执行中状态'
+  if (step.status !== 'pending') return '步骤不在待执行状态'
+  if (isParentStep(step)) return '父步骤不可手动开始'
+
+  const preStepIds = step.pre_step_ids || []
+  if (preStepIds.length > 0) {
+    const pendingPreSteps: string[] = []
+    preStepIds.forEach((preId: number) => {
+      const preStep = steps.value.find(s => s.id === preId)
+      if (preStep && !TERMINAL_STATUSES.includes(preStep.status)) {
+        pendingPreSteps.push(preStep.name)
+      }
+    })
+    if (pendingPreSteps.length > 0) {
+      return `前序步骤未完成：${pendingPreSteps.join('、')}`
+    }
+  }
+
+  // 没有前序步骤的叶子节点，只要演练在运行中就可以开始（引擎会自动启动父步骤链）
+  // 有前序步骤的，前序已全部完成也可以开始（父步骤链同样由引擎自动处理）
+
+  return ''
+}
+
 // 计算步骤在树中的深度（0=根/阶段, 1=环节, 2=任务, 3=步骤）
 function getStepDepth(step: any): number {
   if (step._isGroup) return step._groupType === 'phase' ? 0 : 1
@@ -850,6 +901,20 @@ function parseStepAttributes(attributes: StepInstance['attributes'] | string | n
   } catch {
     return {}
   }
+}
+
+function parsePreStepIds(preStepIds: number[] | string | null | undefined): number[] {
+  if (!preStepIds) return []
+  if (Array.isArray(preStepIds)) return preStepIds
+  if (typeof preStepIds === 'string') {
+    try {
+      const parsed = JSON.parse(preStepIds)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 function getStepOperationId(step: StepInstance): number {
@@ -1101,12 +1166,18 @@ async function loadDrillData() {
     }
     let stepsData = await drillApi.getSteps(drillId.value)
     if (componentDestroyed) return
-    // 解析 attributes JSON 字符串为对象
+    // 解析 attributes JSON 字符串为对象，解析 pre_step_ids 为数组
     stepsData = stepsData.map((step: StepInstance) => ({
       ...step,
       attributes: parseStepAttributes(step.attributes),
+      pre_step_ids: parsePreStepIds(step.pre_step_ids),
     }))
     steps.value = stepsData
+
+    // 数据加载后自动展开所有树形节点
+    nextTick(() => {
+      expandAllSteps()
+    })
 
     const logsData = await drillApi.getLogs(drillId.value)
     if (componentDestroyed) return

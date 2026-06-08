@@ -127,7 +127,7 @@ func (e *Engine) countLeafProgress(inst *FlowInst) (total, completed int) {
 	for _, si := range inst.Steps {
 		if !parentIDs[si.StepDefID] {
 			total++
-			if si.Status == StepStatusCompleted || si.Status == StepStatusSkipped {
+			if isTerminalStatus(si.Status) {
 				completed++
 			}
 		}
@@ -144,7 +144,7 @@ func (e *Engine) checkFlowCompletion(inst *FlowInst) {
 	}
 
 	for _, si := range inst.Steps {
-		if !parentIDs[si.StepDefID] && si.Status != StepStatusCompleted && si.Status != StepStatusSkipped {
+		if !parentIDs[si.StepDefID] && !isTerminalStatus(si.Status) {
 			return
 		}
 	}

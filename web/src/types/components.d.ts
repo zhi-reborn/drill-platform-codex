@@ -65,6 +65,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTimeline: typeof import('element-plus/es')['ElTimeline']
     ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     EmptyBox: typeof import('./../components/common/EmptyBox.vue')['default']
     GaugeChart: typeof import('./../components/charts/GaugeChart.vue')['default']

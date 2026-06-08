@@ -34,8 +34,10 @@ export interface DrillInstance {
   created_by_name?: string
   current_step_id?: number
   progress_pct: number
+  start_time?: string
+  end_time?: string
+  planned_start?: string
   started_at?: string
-  paused_at?: string
   completed_at?: string
   created_at: string
   updated_at?: string
@@ -74,6 +76,7 @@ export interface StepInstance {
   executor_team: string
   phase?: string
   phase_step?: string
+  pre_step_ids?: number[]
   estimated_duration_minutes?: number
   estimated_start_offset?: number
   attributes?: StepAttributes

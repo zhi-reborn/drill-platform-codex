@@ -158,9 +158,10 @@ func (e *Engine) GetInstanceForMutate(instanceID int64) (*FlowInst, bool) {
 }
 
 func (e *Engine) activateInitialSteps(inst *FlowInst) {
+	// 只激活根级步骤（无父步骤）且无前序依赖的步骤
 	var firstSteps []*StepInst
 	for _, si := range inst.Steps {
-		if len(si.PreStepIDs) == 0 {
+		if len(si.PreStepIDs) == 0 && si.ParentStepID == 0 {
 			firstSteps = append(firstSteps, si)
 		}
 	}
@@ -171,6 +172,24 @@ func (e *Engine) activateInitialSteps(inst *FlowInst) {
 }
 
 func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
+	// 已激活的步骤不重复激活
+	if si.Status != StepStatusPending {
+		return
+	}
+
+	// 自动启动 pending 状态的父步骤
+	if si.ParentStepID != 0 {
+		parentSI, parentExists := inst.Steps[si.ParentStepID]
+		if parentExists && parentSI.Status == StepStatusPending {
+			e.activateStep(inst, parentSI)
+		}
+	}
+
+	// 父步骤的 activateChildSteps 可能已经激活了本步骤，再次检查
+	if si.Status != StepStatusPending {
+		return
+	}
+
 	now := time.Now()
 	oldStatus := si.Status
 	si.Status = StepStatusRunning
@@ -204,6 +223,9 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 		"step_name":  si.Name,
 		"timeout_at": timeoutAt,
 	})
+
+	// 激活子步骤：父步骤开始后，自动激活其首批子步骤（无前序依赖的子步骤）
+	e.activateChildSteps(inst, si.StepDefID)
 }
 
 func (e *Engine) handleStepCompletion(inst *FlowInst, completedStepDefID int64) {
@@ -244,6 +266,7 @@ func (e *Engine) ManualStartStep(instanceID int64, stepDefID int64) error {
 	defer inst.mu.Unlock()
 
 	if inst.Status != FlowStatusRunning {
+		log.Printf("[FLOW] ManualStartStep rejected: instance=%d flowStatus=%s", instanceID, inst.Status)
 		return ErrInstanceNotRunning
 	}
 
@@ -253,6 +276,8 @@ func (e *Engine) ManualStartStep(instanceID int64, stepDefID int64) error {
 	}
 
 	if si.Status != StepStatusPending {
+		log.Printf("[FLOW] ManualStartStep rejected: step=%d name=%s status=%s expected=pending instID=%d",
+			stepDefID, si.Name, si.Status, instanceID)
 		return ErrInvalidStatus
 	}
 
@@ -260,11 +285,11 @@ func (e *Engine) ManualStartStep(instanceID int64, stepDefID int64) error {
 		return ErrPreStepsNotDone
 	}
 
-	// 校验父步骤已开始（如果有父步骤）
+	// 父步骤如果还是 pending，activateStep 会自动启动它
 	if si.ParentStepID != 0 {
-		parentSI, parentExists := inst.Steps[si.ParentStepID]
-		if !parentExists || (parentSI.Status != StepStatusRunning && parentSI.Status != StepStatusCompleted) {
-			return ErrInvalidStatus
+		_, parentExists := inst.Steps[si.ParentStepID]
+		if !parentExists {
+			return ErrStepNotFound
 		}
 	}
 
@@ -282,4 +307,34 @@ func (e *Engine) removeFromCurrentSteps(currentIDs []int64, removeID int64) []in
 		}
 	}
 	return result
+}
+
+// activateChildSteps 激活父步骤下的首批子步骤（无前序依赖的子步骤）
+func (e *Engine) activateChildSteps(inst *FlowInst, parentStepDefID int64) {
+	for _, childSI := range inst.Steps {
+		if childSI.ParentStepID == parentStepDefID && len(childSI.PreStepIDs) == 0 && childSI.Status == StepStatusPending {
+			e.activateStep(inst, childSI)
+		}
+	}
+}
+
+// AdvanceFlow 在步骤达到终态（超时/异常等）后推进流程
+func (e *Engine) AdvanceFlow(instanceID int64, stepDefID int64) error {
+	e.mu.RLock()
+	inst, ok := e.instances[instanceID]
+	e.mu.RUnlock()
+	if !ok {
+		return ErrInstanceNotFound
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	inst.CurrentStepIDs = e.removeFromCurrentSteps(inst.CurrentStepIDs, stepDefID)
+	e.timeoutScheduler.Unregister(inst.ID, stepDefID)
+
+	e.handleStepCompletion(inst, stepDefID)
+	e.updateProgress(inst)
+
+	return nil
 }
