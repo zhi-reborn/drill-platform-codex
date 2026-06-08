@@ -89,6 +89,31 @@
         />
       </g>
 
+      <!-- 活跃段流光动画层 -->
+      <g v-if="activeSegmentPath" class="flow-light-group">
+        <path
+          :d="activeSegmentPath"
+          stroke="#ffb44a"
+          stroke-width="14"
+          fill="none"
+          stroke-linecap="butt"
+          class="flow-light-streak"
+        />
+      </g>
+
+      <!-- 活跃段粒子（沿弧线运动） -->
+      <g v-if="activeSegmentPath" class="flow-particles">
+        <circle r="3.5" fill="#fff4cf" opacity="0.9" class="flow-particle flow-particle-1">
+          <animateMotion :dur="activeSegDur" repeatCount="indefinite" :path="activeSegmentPath" />
+        </circle>
+        <circle r="2.5" fill="#ff9a2f" opacity="0.7" class="flow-particle flow-particle-2">
+          <animateMotion :dur="activeSegDur" begin="0.4s" repeatCount="indefinite" :path="activeSegmentPath" />
+        </circle>
+        <circle r="2" fill="#ffe0a0" opacity="0.6" class="flow-particle flow-particle-3">
+          <animateMotion :dur="activeSegDur" begin="0.8s" repeatCount="indefinite" :path="activeSegmentPath" />
+        </circle>
+      </g>
+
       <!-- 雷达扫描光束 -->
       <g class="radar-sweep">
         <path
@@ -245,6 +270,15 @@ const phasePoints = computed(() => {
   return items
 })
 
+// 活跃段的弧线路径（用于流光 + 粒子动画）
+const activeSegmentPath = computed(() => {
+  if (props.currentIndex < 0 || props.currentIndex >= 4) return ''
+  return segmentPaths.value[props.currentIndex]?.d || ''
+})
+
+// 活跃段粒子运动周期
+const activeSegDur = computed(() => '2.4s')
+
 // 4 段弧路径
 const segmentPaths = computed(() => {
   const r = segR.value
@@ -375,6 +409,36 @@ function chineseNum(n: number): string {
   50% { opacity: 0.55; filter: drop-shadow(0 0 8px #ff7a00); }
 }
 
+// 活跃段流光动画
+.flow-light-streak {
+  stroke-dasharray: 30 200;
+  stroke-dashoffset: 0;
+  animation: flow-streak 2.4s linear infinite;
+  will-change: stroke-dashoffset;
+}
+@keyframes flow-streak {
+  from { stroke-dashoffset: 230; }
+  to { stroke-dashoffset: 0; }
+}
+
+// 活跃段粒子光晕
+.flow-particle {
+  filter: drop-shadow(0 0 4px rgba(255, 180, 74, 0.8));
+}
+.flow-particle-1 {
+  animation: particle-glow 1.2s ease-in-out infinite;
+}
+.flow-particle-2 {
+  animation: particle-glow 1.2s ease-in-out infinite 0.3s;
+}
+.flow-particle-3 {
+  animation: particle-glow 1.2s ease-in-out infinite 0.6s;
+}
+@keyframes particle-glow {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.4; }
+}
+
 // 雷达扫描旋转（由浏览器合成器线程处理，无需 GPU 硬件）
 .radar-sweep {
   transform-origin: center;
@@ -400,6 +464,9 @@ function chineseNum(n: number): string {
 @media (prefers-reduced-motion: reduce) {
   .radar-sweep { animation: none; opacity: 0.3; }
   .concentric-rings { animation: none; }
+  .flow-light-streak { animation: none; stroke-dasharray: none; }
+  .flow-particle { display: none; }
+  .pulse-node { animation: none; }
 }
 
 .phase-label {

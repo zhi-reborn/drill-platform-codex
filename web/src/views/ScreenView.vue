@@ -5,6 +5,11 @@
     <div class="bg-scan" />
     <div class="bg-vignette" />
 
+    <!-- 漂浮微光粒子 -->
+    <div class="bg-particles">
+      <div v-for="i in 8" :key="'bp' + i" class="bg-particle" :class="'bp-' + i" />
+    </div>
+
     <!-- Loading state -->
     <div v-if="loading" class="overlay-state">
       <div class="loader">
@@ -39,6 +44,7 @@
           <FullScreen :size="16" />
         </button>
         <div class="header-deco header-deco-right" />
+        <div class="header-pulse-line" />
       </header>
 
       <!-- ========== TOP KPI ROW ========== -->
@@ -124,6 +130,7 @@
             <span class="panel-deco-corner tr" />
             <span class="panel-title-zh">演练阶段总览</span>
             <span class="panel-badge">{{ stages.length }}</span>
+            <div class="panel-scan-line" />
           </div>
           <div class="panel-body stages-list">
             <div
@@ -198,6 +205,7 @@
                 <span class="rt-dot" />
                 实时
               </span>
+              <div class="panel-scan-line" />
             </div>
             <div class="panel-body warn-list">
               <div
@@ -235,6 +243,7 @@
               <span class="panel-deco-corner tl" />
               <span class="panel-deco-corner tr" />
               <span class="panel-title-zh">实时操作日志</span>
+              <div class="panel-scan-line" />
             </div>
             <div class="panel-body logs-wrap">
               <div class="log-thead">
@@ -1080,6 +1089,38 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   z-index: 0;
 }
 
+// ===== 漂浮微光粒子 =====
+.bg-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.bg-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.6);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+  will-change: transform, opacity;
+}
+.bp-1 { left: 8%; top: 15%; animation: float-particle 12s ease-in-out infinite; }
+.bp-2 { left: 22%; top: 70%; animation: float-particle 15s ease-in-out infinite 2s; width: 3px; height: 3px; }
+.bp-3 { left: 45%; top: 25%; animation: float-particle 18s ease-in-out infinite 4s; background: rgba(255, 180, 74, 0.5); box-shadow: 0 0 8px rgba(255, 180, 74, 0.3); }
+.bp-4 { left: 65%; top: 80%; animation: float-particle 14s ease-in-out infinite 1s; width: 3px; height: 3px; }
+.bp-5 { left: 80%; top: 35%; animation: float-particle 16s ease-in-out infinite 3s; }
+.bp-6 { left: 35%; top: 55%; animation: float-particle 20s ease-in-out infinite 5s; width: 2px; height: 2px; background: rgba(0, 255, 156, 0.4); box-shadow: 0 0 6px rgba(0, 255, 156, 0.3); }
+.bp-7 { left: 90%; top: 60%; animation: float-particle 13s ease-in-out infinite 6s; width: 3px; height: 3px; }
+.bp-8 { left: 55%; top: 10%; animation: float-particle 17s ease-in-out infinite 7s; background: rgba(255, 180, 74, 0.4); box-shadow: 0 0 6px rgba(255, 180, 74, 0.2); width: 2px; height: 2px; }
+@keyframes float-particle {
+  0%, 100% { transform: translate(0, 0); opacity: 0.6; }
+  25% { transform: translate(15px, -20px); opacity: 1; }
+  50% { transform: translate(-10px, -35px); opacity: 0.4; }
+  75% { transform: translate(20px, -15px); opacity: 0.8; }
+}
+
 // ===== Overlay =====
 .overlay-state {
   position: fixed; inset: 0;
@@ -1199,9 +1240,27 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .header-deco {
     position: absolute; top: 0; width: 8px; height: 100%;
-    &-left { left: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; }
-    &-right { right: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; }
+    &-left { left: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite; }
+    &-right { right: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite 1.5s; }
   }
+  .header-pulse-line {
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, $neon, transparent);
+    transform: scaleX(0);
+    animation: header-pulse 3s ease-in-out infinite;
+    will-change: transform;
+  }
+}
+@keyframes deco-flicker {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.35; }
+}
+@keyframes header-pulse {
+  0% { transform: scaleX(0); opacity: 0; }
+  50% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0); opacity: 0; }
 }
 
 // ===== KPI Row =====
@@ -1234,9 +1293,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     content: '';
     position: absolute; width: 10px; height: 10px;
     border: 1px solid $neon;
+    animation: corner-flicker 4s ease-in-out infinite;
   }
   &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; animation-delay: 2s; }
 
   .kpi-orb {
     position: absolute;
@@ -1454,6 +1514,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }
 }
+@keyframes corner-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 
 // ===== MAIN GRID =====
 .screen-main {
@@ -1482,6 +1546,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     linear-gradient(90deg, rgba(0, 116, 255, 0.62), rgba(8, 29, 67, 0.38) 52%, transparent 100%);
   border-bottom: 0;
   flex-shrink: 0;
+  overflow: hidden;
   .panel-deco-corner {
     position: absolute; width: 8px; height: 8px; border-color: $neon; border-style: solid; border-width: 0;
     &.tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
@@ -1517,6 +1582,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       animation: pulse 1.4s ease-in-out infinite;
     }
   }
+  // 面板流光扫描线
+  .panel-scan-line {
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
+    animation: panel-scan 4s ease-in-out infinite;
+    will-change: transform;
+    pointer-events: none;
+  }
+}
+@keyframes panel-scan {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(350%); }
 }
 .panel-body {
   flex: 1;
@@ -2047,5 +2127,18 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     letter-spacing: 1px;
     padding: 0;
   }
+}
+
+// ===== 无障碍：减少动画 =====
+@media (prefers-reduced-motion: reduce) {
+  .bg-particle { animation: none !important; opacity: 0.3; }
+  .panel-scan-line { animation: none !important; display: none; }
+  .header-pulse-line { animation: none !important; display: none; }
+  .header-deco-left, .header-deco-right { animation: none !important; }
+  .kpi-card::before, .kpi-card::after { animation: none !important; }
+  .status-dot { animation: none !important; }
+  .rt-dot { animation: none !important; }
+  .bg-scan { animation: none !important; }
+  .segment.seg-active { animation: none !important; }
 }
 </style>
