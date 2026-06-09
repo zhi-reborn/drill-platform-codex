@@ -169,10 +169,6 @@
                   <span class="meta-key">步骤</span>
                   <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
                 </span>
-                <span class="stage-meta">
-                  <span class="meta-key">团队</span>
-                  <span class="meta-val">{{ stage.team || '运维部' }}</span>
-                </span>
               </div>
             </div>
           </div>

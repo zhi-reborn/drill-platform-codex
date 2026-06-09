@@ -76,8 +76,9 @@
                 size="large"
                 :prefix-icon="Lock"
                 show-password
-                autocomplete="current-password"
+                autocomplete="off"
                 @keyup.enter="handleLocalLogin"
+                @input="(val: string) => { form.password = val }"
               />
             </el-form-item>
             <el-form-item>
@@ -229,7 +230,9 @@ async function handleDevLogin() {
 }
 
 async function handleLocalLogin() {
-  if (!form.value.username.trim() || !form.value.password.trim()) {
+  // 展开为普通对象，避免 Vue Proxy 在某些浏览器下序列化异常
+  const credentials = { username: form.value.username, password: form.value.password }
+  if (!credentials.username.trim() || !credentials.password.trim()) {
     error.value = '请输入用户名和密码'
     return
   }
@@ -239,7 +242,7 @@ async function handleLocalLogin() {
   loading.value = true
   error.value = ''
   try {
-    await authStore.loginWithCredentials(form.value)
+    await authStore.loginWithCredentials(credentials)
     ElMessage.success('登录成功')
     const user = authStore.user
     router.push(user ? roleDashboards[user.role] : '/viewer')
