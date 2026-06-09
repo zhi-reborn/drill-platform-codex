@@ -142,17 +142,19 @@ func createTemplate(token string) (int, error) {
 func updateSteps(token string, templateID int, steps []stepTemplateReq) error {
 	body, _ := json.Marshal(map[string]interface{}{"steps": steps})
 	url := fmt.Sprintf("/templates/%d/steps", templateID)
+	fmt.Printf("请求体大小: %d bytes, 步骤数: %d\n", len(body), len(steps))
 	resp, err := apiPut(token, url, body)
 	if err != nil {
-		return err
+		return fmt.Errorf("HTTP 请求失败: %w", err)
 	}
+	fmt.Printf("API 响应: %s\n", string(resp))
 	var result struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	}
 	json.Unmarshal(resp, &result)
 	if result.Code != 0 {
-		return fmt.Errorf("API 错误: %s", result.Message)
+		return fmt.Errorf("API 错误(code=%d): %s", result.Code, result.Message)
 	}
 	return nil
 }
@@ -275,7 +277,11 @@ func apiPut(token, path string, body []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return respBody, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return respBody, nil
 }
 
 func apiDelete(token, path string) ([]byte, error) {

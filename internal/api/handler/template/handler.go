@@ -201,8 +201,8 @@ type UpdateStepsRequest struct {
 		IsBlocking               int8    `json:"is_blocking"`
 		DefaultAssigneeRole      string  `json:"default_assignee_role"`
 		ExecutorTeam             string  `json:"executor_team"`
-	Phase                    string `json:"phase"`
-		PhaseStep                string `json:"phase_step"`
+		Phase                    string  `json:"phase"`
+		PhaseStep                string  `json:"phase_step"`
 		EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
 		EstimatedStartOffset     *int    `json:"estimated_start_offset"`
 		JSONAttributes           string  `json:"attributes"`
