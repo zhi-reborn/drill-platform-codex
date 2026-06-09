@@ -33,9 +33,9 @@
           <el-icon>
             <Upload />
           </el-icon>
-          导出步骤
+          导出节点
         </el-button>
-        <el-button type="primary" @click="handleSaveSteps">
+        <el-button type="primary" @click="handleSaveSteps()">
           <el-icon>
             <Check />
           </el-icon>
@@ -59,7 +59,7 @@
             <el-icon>
               <Plus />
             </el-icon>
-            添加步骤
+            添加流程节点
           </el-button>
         </div>
         <div class="panel-body">
@@ -94,8 +94,8 @@
       <!-- 右侧：步骤详情 -->
       <div class="detail-panel">
         <div class="panel-header">
-          <h3 v-if="selectedStep">步骤详情 - {{ selectedStep.name }}</h3>
-          <h3 v-else>请选择一个步骤</h3>
+          <h3 v-if="selectedStep">节点详情 - {{ selectedStep.name }}</h3>
+          <h3 v-else>请选择一个节点</h3>
           <div v-if="selectedStep" class="panel-actions">
             <el-button text type="primary" size="small" @click="openStepEditDialogForSelected">
               <el-icon>
@@ -108,10 +108,10 @@
         <div class="panel-body">
           <div v-if="selectedStep" class="step-detail">
             <el-descriptions :column="2" border size="default">
-              <el-descriptions-item label="步骤名称" :span="2">{{ selectedStep.name }}</el-descriptions-item>
-              <el-descriptions-item label="描述" :span="2">{{ selectedStep.description || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="父步骤序号">{{ selectedStep.parent_seq_display || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="步骤类型">{{ getStepTypeLabel(selectedStep.step_type) }}</el-descriptions-item>
+              <el-descriptions-item label="节点名称" :span="2">{{ selectedStep.name }}</el-descriptions-item>
+              <el-descriptions-item label="节点描述" :span="2">{{ selectedStep.description || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="父节点序号">{{ selectedStep.parent_seq_display || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="节点类型">{{ getStepTypeLabel(selectedStep.step_type) }}</el-descriptions-item>
               <el-descriptions-item label="环节">{{ selectedStep.phase_step || '-' }}</el-descriptions-item>
               <el-descriptions-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ?
                 selectedStep.estimated_duration_minutes + ' 分钟' : '-' }}</el-descriptions-item>
@@ -119,18 +119,9 @@
                 selectedStep.estimated_start_offset
                 + ' 分钟' : '-' }}</el-descriptions-item>
             </el-descriptions>
-            <el-divider>责任与扩展</el-divider>
+            <el-divider>执行配置</el-divider>
             <el-descriptions :column="2" border size="default">
-              <el-descriptions-item label="执行角色">{{ selectedStep.default_assignee_role ?
-                (selectedStep.default_assignee_role
-                  === 'director' ? '指挥组' : '执行组') : '-' }}</el-descriptions-item>
               <el-descriptions-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-'
-                }}</el-descriptions-item>
-              <el-descriptions-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-'
-                }}</el-descriptions-item>
-              <el-descriptions-item label="责任团队">{{ selectedStep.attributes?.responsible_team || '-'
-                }}</el-descriptions-item>
               <el-descriptions-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-descriptions-item>
               <el-descriptions-item label="复核人">{{ selectedStep.attributes?.reviewer || '-' }}</el-descriptions-item>
             </el-descriptions>
@@ -148,7 +139,7 @@
             </el-descriptions>
           </div>
           <div v-else class="empty-detail">
-            <el-empty description="请在左侧选择要查看的步骤" :image-size="80" />
+            <el-empty description="请在左侧选择要查看的节点" :image-size="80" />
           </div>
         </div>
       </div>
@@ -203,36 +194,26 @@
     </el-dialog>
 
     <!-- 单个添加/编辑抽屉 -->
-    <el-drawer v-model="singleAddVisible" :title="singleStepEditIndex !== null ? '编辑步骤' : '添加步骤'" size="720px">
+    <el-drawer v-model="singleAddVisible" :title="singleStepEditIndex !== null ? '编辑步骤' : '添加流程节点'" size="720px">
       <el-form :model="singleStepForm" label-width="90px" class="single-step-form">
-        <el-form-item label="步骤名称" required>
-          <el-input v-model="singleStepForm.name" placeholder="请输入步骤名称" maxlength="100" show-word-limit />
+        <el-form-item label="节点名称" required>
+          <el-input v-model="singleStepForm.name" placeholder="请输入流程节点名称，如果为根节点请与阶段名称相同" maxlength="100" show-word-limit />
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="singleStepForm.description" type="textarea" placeholder="步骤描述" :rows="2" maxlength="500"
+        <el-form-item label="节点描述">
+          <el-input v-model="singleStepForm.description" type="textarea" placeholder="比如阶段描述、步骤描述" :rows="2" maxlength="500"
             show-word-limit />
         </el-form-item>
         <div class="form-row">
-          <el-form-item label="父步骤" class="inline-form-item">
+          <el-form-item label="父节点" class="inline-form-item">
             <el-select v-model="singleStepForm.parent_step_id" clearable placeholder="可选" filterable>
               <el-option v-for="opt in formParentStepOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="步骤类型" class="inline-form-item">
+          <el-form-item label="节点类型" class="inline-form-item">
             <el-select v-model="singleStepForm.step_type">
               <el-option label="串行" value="serial" />
               <el-option label="并行" value="parallel" />
             </el-select>
-          </el-form-item>
-        </div>
-        <div class="form-row">
-          <el-form-item label="环节" class="inline-form-item">
-            <el-input v-model="singleStepForm.phase_step" placeholder="如：初始化、主流程" clearable />
-          </el-form-item>
-          <el-form-item label="开始偏移" class="inline-form-item">
-            <el-input-number v-model="singleStepForm.estimated_start_offset" :min="0" controls-position="right"
-              placeholder="相对启动偏移" />
-            <span class="unit-label">分钟</span>
           </el-form-item>
         </div>
         <div class="form-row">
@@ -248,41 +229,26 @@
           </el-form-item>
         </div>
 
-        <el-divider>执行权限</el-divider>
+        <el-divider>执行配置</el-divider>
         <div class="form-row">
-          <el-form-item label="执行角色" class="inline-form-item">
-            <el-select v-model="singleStepForm.default_assignee_role" clearable placeholder="可留空">
-              <el-option label="指挥组" value="director" />
-              <el-option label="执行组" value="executor" />
-            </el-select>
-          </el-form-item>
           <el-form-item label="执行团队" class="inline-form-item">
             <el-select v-model="singleStepForm.executor_team" clearable placeholder="选择团队" filterable allow-create>
               <el-option v-for="dept in departmentOptions" :key="dept" :label="dept" :value="dept" />
             </el-select>
           </el-form-item>
-        </div>
-
-        <el-divider>责任信息</el-divider>
-        <div class="form-row">
-          <el-form-item label="责任部门" class="inline-form-item">
-            <el-input v-model="singleStepForm.attributes.responsible_department" placeholder="责任部门" clearable />
-          </el-form-item>
-          <el-form-item label="配合部门" class="inline-form-item">
-            <el-input v-model="singleStepForm.attributes.cooperating_department" placeholder="配合部门" clearable />
-          </el-form-item>
-        </div>
-        <div class="form-row">
-          <el-form-item label="责任团队" class="inline-form-item">
-            <el-input v-model="singleStepForm.attributes.responsible_team" placeholder="责任团队" clearable />
-          </el-form-item>
           <el-form-item label="操作人" class="inline-form-item">
-            <el-input v-model="singleStepForm.attributes.operator" placeholder="操作人姓名" clearable />
+            <el-select v-model="singleStepForm.attributes.operator" clearable filterable remote :remote-method="searchUsers" :loading="userSearchLoading" placeholder="搜索并选择操作人" allow-create>
+              <el-option v-for="u in userOptions" :key="u" :label="u" :value="u" />
+            </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="复核人">
-          <el-input v-model="singleStepForm.attributes.reviewer" placeholder="复核人姓名" clearable />
-        </el-form-item>
+        <div class="form-row">
+          <el-form-item label="复核人" class="inline-form-item">
+            <el-select v-model="singleStepForm.attributes.reviewer" clearable filterable remote :remote-method="searchUsers" :loading="userSearchLoading" placeholder="搜索并选择复核人" allow-create>
+              <el-option v-for="u in userOptions" :key="u" :label="u" :value="u" />
+            </el-select>
+          </el-form-item>
+        </div>
 
         <el-divider>说明与预案</el-divider>
         <el-form-item label="操作说明">
@@ -307,7 +273,7 @@
       </el-form>
       <template #footer>
         <el-button @click="singleAddVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleAddSingleStep">{{ singleStepEditIndex !== null ? '保存修改' : '添加步骤'
+        <el-button type="primary" @click="handleAddSingleStep">{{ singleStepEditIndex !== null ? '保存修改' : '添加流程节点'
           }}</el-button>
       </template>
     </el-drawer>
@@ -516,10 +482,11 @@ function handleStepSelect(step: StepTemplate) {
   }
 }
 
-function onDragEnd() {
+async function onDragEnd() {
   recomputeSEQ(rootStepList.value)
   syncTreeToFlatList(rootStepList.value)
   dragging.value = false
+  await handleSaveSteps(true)
 }
 
 // 获取所有步骤（扁平化，用于保存）
@@ -586,7 +553,7 @@ function removePhase(index: number) {
   editablePhases.value.splice(index, 1)
 }
 
-function handleSavePhases() {
+async function handleSavePhases() {
   // 验证名称
   if (editablePhases.value.some(p => !p.name.trim())) {
     ElMessage.warning('阶段名称不能为空')
@@ -622,6 +589,7 @@ function handleSavePhases() {
     activePhaseName.value = newPhases[0].name
   }
   phaseManageVisible.value = false
+  await handleSaveSteps(true)
   ElMessage.success('阶段已保存')
 }
 
@@ -633,6 +601,28 @@ const importVisible = ref(false)
 const singleAddVisible = ref(false)
 const singleStepEditIndex = ref<number | null>(null)
 const departmentOptions = ref<string[]>([])
+const userOptions = ref<string[]>([])
+const userSearchLoading = ref(false)
+
+async function searchUsers(query: string) {
+  if (!query) {
+    userOptions.value = []
+    return
+  }
+  userSearchLoading.value = true
+  try {
+    const result = await userApi.getList({ page: 1, page_size: 20 })
+    const users = result.items || []
+    const q = query.toLowerCase()
+    userOptions.value = users
+      .filter(u => u.real_name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q))
+      .map(u => u.real_name || u.username)
+  } catch {
+    userOptions.value = []
+  } finally {
+    userSearchLoading.value = false
+  }
+}
 
 // 表单
 const singleStepForm = reactive({
@@ -657,6 +647,16 @@ const formParentStepOptions = computed(() => {
       value: s.id as number,
       label: `#${s.order_index || ''} ${s.name}`,
     }))
+})
+
+// 当前阶段下已有的环节名称（去重）
+const phaseStepOptions = computed(() => {
+  const steps = activeSteps.value
+  const seen = new Set<string>()
+  for (const s of steps) {
+    if (s.phase_step) seen.add(s.phase_step)
+  }
+  return Array.from(seen)
 })
 
 // 加载部门
@@ -690,6 +690,16 @@ async function loadTemplateSteps() {
       }
     })
 
+    // 解析 phase_order
+    let savedPhaseOrder: string[] = []
+    if (template.phase_order) {
+      try {
+        savedPhaseOrder = typeof template.phase_order === 'string'
+          ? JSON.parse(template.phase_order)
+          : template.phase_order
+      } catch { savedPhaseOrder = [] }
+    }
+
     // 按阶段分组
     const phaseMap = new Map<string, StepTemplate[]>()
     const noPhaseSteps: StepTemplate[] = []
@@ -705,8 +715,22 @@ async function loadTemplateSteps() {
     }
 
     const newPhases: PhaseGroup[] = []
-    for (const [name, stepsList] of phaseMap) {
-      newPhases.push({ name, steps: stepsList })
+    if (savedPhaseOrder.length > 0) {
+      // 按 phase_order 重建阶段（包括空阶段）
+      for (const name of savedPhaseOrder) {
+        newPhases.push({ name, steps: phaseMap.get(name) || [] })
+      }
+      // 如果 savedPhaseOrder 中没包含某些阶段（兼容旧数据），补充到末尾
+      for (const [name, stepsList] of phaseMap) {
+        if (!savedPhaseOrder.includes(name)) {
+          newPhases.push({ name, steps: stepsList })
+        }
+      }
+    } else {
+      // 无 phase_order 时回退旧逻辑
+      for (const [name, stepsList] of phaseMap) {
+        newPhases.push({ name, steps: stepsList })
+      }
     }
     // 如果没有阶段信息，创建默认阶段
     if (newPhases.length === 0 && noPhaseSteps.length > 0) {
@@ -730,7 +754,7 @@ async function loadTemplateSteps() {
 function handleRowSelect(_row: StepTemplate | undefined) { }
 
 // 删除步骤
-function removeStepByRow(row: StepTreeNode) {
+async function removeStepByRow(row: StepTreeNode) {
   const steps = getPhaseSteps(activePhaseName.value)
   if (!steps) return
   const index = steps.findIndex(s => s.id === row.id)
@@ -748,6 +772,9 @@ function removeStepByRow(row: StepTreeNode) {
     }
     // 同步更新树形结构
     buildAndSyncTree()
+    // 自动保存到后端
+    await handleSaveSteps(true)
+    ElMessage.success('步骤已删除并保存')
   }
 }
 
@@ -864,8 +891,9 @@ async function handleEditStep() {
       return
     }
   } else {
-    const isNew = singleStepEditIndex.value === steps.length - 1 || !step.order_index
-    ElMessage.success(isNew ? '步骤已添加' : '步骤已更新')
+    // 新步骤（临时 ID），通过批量保存接口持久化
+    await handleSaveSteps(true)
+    ElMessage.success('步骤已更新并保存')
   }
 
   // 强制刷新右侧详情面板（直接赋新值确保视图更新）
@@ -894,8 +922,8 @@ async function handleEditStep() {
   buildAndSyncTree()
 }
 
-// 添加步骤
-function handleAddSingleStep() {
+// 添加流程节点
+async function handleAddSingleStep() {
   if (!singleStepForm.name.trim()) {
     ElMessage.warning('请输入步骤名称')
     return
@@ -925,17 +953,20 @@ function handleAddSingleStep() {
     phase_step: singleStepForm.phase_step || '',
     attributes: { ...singleStepForm.attributes },
   })
-  ElMessage.success('步骤已添加')
 
   resetSingleStepForm()
   singleAddVisible.value = false
   buildAndSyncTree()
+  await handleSaveSteps(true)
+  ElMessage.success('步骤已添加并保存')
 }
 
 // ============ 保存 ============
 
-async function handleSaveSteps() {
+async function handleSaveSteps(silent = false) {
   const allSteps = getAllSteps()
+  // 收集所有阶段名称顺序（包括空阶段）
+  const phaseOrder = phases.value.map(p => p.name)
   // Build position map for parent step remapping (1-based index)
   const idToPos = new Map<number, number>()
   allSteps.forEach((s, idx) => { if (s.id) idToPos.set(s.id, idx + 1) })
@@ -962,17 +993,18 @@ async function handleSaveSteps() {
         estimated_start_offset: s.estimated_start_offset,
         attributes: typeof s.attributes === 'string' ? s.attributes : JSON.stringify(s.attributes || {}),
       }
-      if (s.id && Number.isInteger(s.id)) {
-        payload.id = s.id
-      }
       if (s.parent_step_id && s.parent_step_id > 0) {
         const parentPos = idToPos.get(s.parent_step_id)
         if (parentPos) payload.parent_step_id = parentPos
       }
       return payload
-    }))
-    ElMessage.success('步骤已保存')
-    goBack()
+    }), phaseOrder)
+    if (silent) {
+      await loadTemplateSteps()
+    } else {
+      ElMessage.success('步骤已保存')
+      goBack()
+    }
   } catch (error) {
     ElMessage.error('保存步骤失败')
     console.error('Save steps error:', error)
@@ -1119,7 +1151,7 @@ function exportSteps() {
 
 function handleExcelUpload(file: File) {
   const reader = new FileReader()
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array', cellDates: true })
@@ -1279,6 +1311,7 @@ function handleExcelUpload(file: File) {
         if (firstPhase) activePhaseName.value = firstPhase
       }
       buildAndSyncTree()
+      await handleSaveSteps(true)
       ElMessage.success(`成功导入 ${totalImported} 个步骤到 ${phaseStepsMap.size} 个阶段`)
       importVisible.value = false
     } catch {

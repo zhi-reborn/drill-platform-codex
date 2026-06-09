@@ -33,7 +33,7 @@
       <header class="screen-header">
         <div class="header-deco header-deco-left" />
         <div class="header-title-block">
-          <h1 class="drill-title">容灾演练指挥中心</h1>
+          <h1 class="drill-title">应急处置指挥中心</h1>
         </div>
         <div class="header-meta">
           <span class="meta-label">系统时间</span>
@@ -169,6 +169,10 @@
                   <span class="meta-key">步骤</span>
                   <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
                 </span>
+                <span class="stage-meta">
+                  <span class="meta-key">团队</span>
+                  <span class="meta-val">{{ stage.team || '运维部' }}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -179,11 +183,12 @@
           <div class="center-stage">
             <PhaseRing
               :phases="ringPhases"
+              :phase-names="ringPhaseNames"
               :current-index="currentPhaseIndex"
               :progress="progressPercent"
               :center-numerator="completedCount"
               :center-denominator="totalCount"
-              :center-hint="`${currentPhaseName} · 阶段${currentPhaseIndex + 1}`"
+              :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
               :size="ringSize"
             />
           </div>
@@ -520,6 +525,7 @@ const stages = computed(() => {
         totalSteps: totalLeaves,
         segments: segs,
         team,
+        phaseNames: directChildren.map(c => c.name),
       }
     })
   }
@@ -566,6 +572,7 @@ const stages = computed(() => {
       totalSteps: slice.length,
       segments: segs,
       team,
+      phaseNames: [] as string[],
     }
   })
 })
@@ -588,9 +595,14 @@ const currentPhaseProgress = computed(() => {
   return { num: s.completedSteps, den: s.totalSteps }
 })
 
-// 阶段环需要的 4 个相位（主名 + 内圈 6 个标签）
+// 阶段环需要的相位名称 + 各阶段环节名称
 const ringPhases = computed(() => {
   return stages.value.map(s => s.name)
+})
+
+// 每个阶段的环节名称列表
+const ringPhaseNames = computed(() => {
+  return stages.value.map(s => s.phaseNames || [])
 })
 
 const ringSize = computed(() => {

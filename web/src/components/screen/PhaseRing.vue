@@ -174,7 +174,7 @@
       </div>
     </div>
 
-    <!-- 6 个环节标签（环形外侧，雷达布局） -->
+    <!-- 环节标签（环形外侧，围绕各阶段弧段分布） -->
     <svg :viewBox="`0 0 ${size} ${size}`" :width="size" :height="size" class="ring-svg ring-svg-overlay">
       <!-- 连接线：从环节标签到环边缘 -->
       <line
@@ -202,6 +202,7 @@
       class="ring-outer-label"
       :class="[
         { 'ring-outer-label-active': ringLabels[idx].active },
+        'ring-outer-label-phase-' + ringLabels[idx].phaseIdx,
         lp.align === 'left' ? 'label-align-left' : lp.align === 'right' ? 'label-align-right' : 'label-align-center',
       ]"
       :style="{
@@ -233,6 +234,7 @@ import { computed } from 'vue'
 
 const props = defineProps<{
   phases: string[]
+  phaseNames: string[][]
   currentIndex: number
   progress: number
   centerNumerator: number
@@ -254,7 +256,6 @@ const outerR = computed(() => size.value * 0.46) // 刻度
 
 // 4 个相位点的位置（外侧 4 个角）
 const phasePoints = computed(() => {
-  const list = props.phases.length || 4
   const items = []
   for (let i = 0; i < 4; i++) {
     // 4 个相位 = 90° 间隔，从右上 - 右下 - 左下 - 左上
@@ -324,24 +325,34 @@ const progressPath = computed(() => {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
 })
 
-// 外圈 6 个环节标签（环形外侧，雷达布局）
-const RING_LABELS = [
-  '业务验收与告警',
-  '演练复盘与行动',
-  '基线指标与备份',
-  '故障定位与影响',
-  '演练启动与人员',
-  '执行恢复与流量',
-]
-// 6 个标签角度（12 点起，顺时针 60° 间隔）
-const RING_LABEL_ANGLES_DEG = [-90, -30, 30, 90, 150, 210]
-
+// 外圈环节标签：从各阶段的 phaseNames 实时获取，均匀围绕对应阶段的弧段
 const ringLabels = computed(() => {
-  return RING_LABELS.map((text, i) => {
-    // 高亮当前阶段相关标签
-    const active = i === 0 // 默认第一个高亮
-    return { text, active }
-  })
+  const labels: { text: string; active: boolean; phaseIdx: number; angleDeg: number }[] = []
+  const segCount = props.phases.length || 4
+  const segSpan = 360 / segCount
+  const startOffsetDeg = -90 + 90 / segCount - segSpan / 2 // 与 segmentPaths 的 startOffset 对应
+
+  for (let pi = 0; pi < segCount; pi++) {
+    const names = props.phaseNames?.[pi] || []
+    if (names.length === 0) continue
+    // 每个阶段的弧段角度范围
+    const segStartDeg = startOffsetDeg + pi * segSpan
+    const segEndDeg = segStartDeg + segSpan
+    // 在弧段内均匀分布标签
+    const step = names.length > 1 ? (segEndDeg - segStartDeg) / (names.length + 1) : 0
+    for (let ni = 0; ni < names.length; ni++) {
+      const angleDeg = names.length === 1
+        ? (segStartDeg + segEndDeg) / 2
+        : segStartDeg + step * (ni + 1)
+      labels.push({
+        text: names[ni],
+        active: pi === props.currentIndex,
+        phaseIdx: pi,
+        angleDeg,
+      })
+    }
+  }
+  return labels
 })
 
 // 标签放置半径（比外圈刻度再外一些）
@@ -349,8 +360,8 @@ const labelR = computed(() => outerR.value + 28)
 
 // 标签 HTML 定位（百分比）
 const ringLabelPositions = computed(() => {
-  return RING_LABEL_ANGLES_DEG.map((deg) => {
-    const a = deg * Math.PI / 180
+  return ringLabels.value.map((lbl) => {
+    const a = lbl.angleDeg * Math.PI / 180
     const r = labelR.value
     const px = cx.value + r * Math.cos(a)
     const py = cy.value + r * Math.sin(a)
@@ -368,8 +379,8 @@ const ringLabelPositions = computed(() => {
 
 // 连接线：从标签到环外缘
 const ringLabelLines = computed(() => {
-  return RING_LABEL_ANGLES_DEG.map((deg) => {
-    const a = deg * Math.PI / 180
+  return ringLabels.value.map((lbl) => {
+    const a = lbl.angleDeg * Math.PI / 180
     const rLabel = labelR.value - 12 // 标签端（稍内缩）
     const rRing = outerR.value + 6   // 环端（稍超出刻度）
     return {
@@ -595,6 +606,17 @@ function chineseNum(n: number): string {
   font-weight: 600;
 }
 
+// 已完成阶段的标签（phaseIdx < currentIndex）
+.ring-outer-label[class*="ring-outer-label-phase-"]:not(.ring-outer-label-active) {
+  .ring-outer-label-dot {
+    background: rgba(0, 160, 200, 0.4);
+    box-shadow: 0 0 4px rgba(0, 160, 200, 0.2);
+  }
+  .ring-outer-label-text {
+    color: rgba(140, 180, 220, 0.6);
+  }
+}
+
 // 中心内容
 .center-content {
   position: absolute;
@@ -646,24 +668,9 @@ function chineseNum(n: number): string {
   .pct-unit { font-size: 34px; opacity: 0.95; margin-left: 2px; }
 }
 .center-hint {
-  font-size: 12px;
-  color: rgba(255, 180, 74, 0.85);
-  letter-spacing: 2px;
-  margin-top: 6px;
-  font-weight: 600;
-  text-shadow: 0 0 8px rgba(255, 122, 0, 0.35);
-  position: relative;
-  padding: 3px 14px;
-  background: rgba(255, 122, 0, 0.08);
-  border: 1px solid rgba(255, 122, 0, 0.25);
-  white-space: nowrap;
-  &::before, &::after {
-    content: '';
-    position: absolute;
-    width: 4px; height: 4px;
-    border: 1px solid rgba(255, 180, 74, 0.5);
-  }
-  &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+  font-size: 11px;
+  color: #6e8db5;
+  letter-spacing: 1px;
+  margin-top: 2px;
 }
 </style>

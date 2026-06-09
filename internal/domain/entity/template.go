@@ -19,19 +19,20 @@ func (TemplateCategory) TableName() string {
 
 // DrillTemplate 演练模板
 type DrillTemplate struct {
-	ID          uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	Name        string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
-	Category    string    `gorm:"type:varchar(64);not null;column:category;index:idx_category" json:"category"`
-	Description string    `gorm:"type:text;column:description" json:"description"`
-	Status      int8      `gorm:"type:tinyint;not null;default:1;column:status;index:idx_status" json:"status"`
-	StatusLabel string    `gorm:"-" json:"status_label"`
-	CreatedBy      uint64    `gorm:"type:bigint unsigned;not null;column:created_by;index:idx_created_by" json:"created_by"`
-	CreatedByName  string    `gorm:"-" json:"created_by_name"`
-	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
-	DeletedAt   *time.Time `gorm:"index;column:deleted_at" json:"deleted_at,omitempty"`
+	ID            uint64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Name          string     `gorm:"type:varchar(128);not null;column:name" json:"name"`
+	Category      string     `gorm:"type:varchar(64);not null;column:category;index:idx_category" json:"category"`
+	Description   string     `gorm:"type:text;column:description" json:"description"`
+	Status        int8       `gorm:"type:tinyint;not null;default:1;column:status;index:idx_status" json:"status"`
+	StatusLabel   string     `gorm:"-" json:"status_label"`
+	CreatedBy     uint64     `gorm:"type:bigint unsigned;not null;column:created_by;index:idx_created_by" json:"created_by"`
+	CreatedByName string     `gorm:"-" json:"created_by_name"`
+	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	DeletedAt     *time.Time `gorm:"index;column:deleted_at" json:"deleted_at,omitempty"`
 
-	Steps []StepTemplate `gorm:"foreignKey:DrillTemplateID;constraint:OnDelete:CASCADE" json:"steps,omitempty"`
+	PhaseOrder string         `gorm:"type:json;column:phase_order" json:"phase_order"`
+	Steps      []StepTemplate `gorm:"foreignKey:DrillTemplateID;constraint:OnDelete:CASCADE" json:"steps,omitempty"`
 }
 
 func (DrillTemplate) TableName() string {
@@ -40,24 +41,24 @@ func (DrillTemplate) TableName() string {
 
 // StepTemplate 步骤模板
 type StepTemplate struct {
-	ID                 uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	DrillTemplateID    uint64    `gorm:"type:bigint unsigned;not null;column:drill_template_id;index:idx_drill_template_id" json:"drill_template_id"`
-	ParentStepID       *uint64   `gorm:"type:bigint unsigned;column:parent_step_id" json:"parent_step_id"`
-	Name               string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
-	Seq                int       `gorm:"type:int;not null;column:seq" json:"seq"`
-	StepType           string    `gorm:"type:varchar(32);not null;column:step_type" json:"step_type"`
-	TimeoutMinutes     int       `gorm:"type:int;not null;default:120;column:timeout_minutes" json:"timeout_minutes"`
-	PreStepIDs         string    `gorm:"type:json;column:pre_step_ids" json:"pre_step_ids"`
-	GuideContent       string    `gorm:"type:text;column:guide_content" json:"guide_content"`
-	IsBlocking         int8      `gorm:"type:tinyint;not null;default:1;column:is_blocking" json:"is_blocking"`
-	DefaultAssigneeRole string   `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
-	ExecutorTeam       string   `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
-	Phase              string    `gorm:"type:varchar(64);column:phase" json:"phase"`
-	PhaseStep          string    `gorm:"type:varchar(64);column:phase_step" json:"phase_step"`
-	EstimatedDurationMinutes *int `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
-	EstimatedStartOffset     *int `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
-	JSONAttributes       string    `gorm:"type:json;column:attributes" json:"attributes"`
-	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	ID                       uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	DrillTemplateID          uint64    `gorm:"type:bigint unsigned;not null;column:drill_template_id;index:idx_drill_template_id" json:"drill_template_id"`
+	ParentStepID             *uint64   `gorm:"type:bigint unsigned;column:parent_step_id" json:"parent_step_id"`
+	Name                     string    `gorm:"type:varchar(128);not null;column:name" json:"name"`
+	Seq                      int       `gorm:"type:int;not null;column:seq" json:"seq"`
+	StepType                 string    `gorm:"type:varchar(32);not null;column:step_type" json:"step_type"`
+	TimeoutMinutes           int       `gorm:"type:int;not null;default:120;column:timeout_minutes" json:"timeout_minutes"`
+	PreStepIDs               string    `gorm:"type:json;column:pre_step_ids" json:"pre_step_ids"`
+	GuideContent             string    `gorm:"type:text;column:guide_content" json:"guide_content"`
+	IsBlocking               int8      `gorm:"type:tinyint;not null;default:1;column:is_blocking" json:"is_blocking"`
+	DefaultAssigneeRole      string    `gorm:"type:varchar(64);column:default_assignee_role" json:"default_assignee_role"`
+	ExecutorTeam             string    `gorm:"type:varchar(64);column:executor_team" json:"executor_team"`
+	Phase                    string    `gorm:"type:varchar(64);column:phase" json:"phase"`
+	PhaseStep                string    `gorm:"type:varchar(64);column:phase_step" json:"phase_step"`
+	EstimatedDurationMinutes *int      `gorm:"column:estimated_duration_minutes" json:"estimated_duration_minutes"`
+	EstimatedStartOffset     *int      `gorm:"column:estimated_start_offset" json:"estimated_start_offset"`
+	JSONAttributes           string    `gorm:"type:json;column:attributes" json:"attributes"`
+	CreatedAt                time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 
 	DrillTemplate DrillTemplate `gorm:"foreignKey:DrillTemplateID;references:ID" json:"drill_template,omitempty"`
 }

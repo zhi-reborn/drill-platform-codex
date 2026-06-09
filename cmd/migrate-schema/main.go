@@ -77,6 +77,12 @@ func main() {
 	}
 
 	migrations := []migration{
+		// 0. drill_template: 添加 phase_order 列
+		{
+			name: "drill_template: 添加 phase_order 列",
+			sql:  "ALTER TABLE `drill_template` ADD COLUMN `phase_order` JSON DEFAULT NULL COMMENT '阶段顺序列表'",
+		},
+
 		// 1. drill_template_step: 添加缺失列（兼容旧表结构）
 		{
 			name: "drill_template_step: 添加 phase 列",

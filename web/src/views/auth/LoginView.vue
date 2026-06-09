@@ -4,7 +4,7 @@
     <div class="login-brand">
       <div class="brand-content">
         <el-icon :size="64" color="#55C3D3"><Monitor /></el-icon>
-        <h1>演练流程管理系统</h1>
+        <h1>应急处置流程管理系统</h1>
         <p class="brand-desc">指挥中心大屏 · 流程引擎驱动 · 实时通信同步</p>
       </div>
       <div class="brand-bg-pattern"></div>

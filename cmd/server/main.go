@@ -77,6 +77,7 @@ func loadConfig(path string) (*Config, error) {
 func main() {
 	configPaths := []string{
 		"configs/config.yaml",
+		"/app/configs/config.yaml",
 		"../../configs/config.yaml",
 		"/data/opencode/drill-platform/configs/config.yaml",
 	}

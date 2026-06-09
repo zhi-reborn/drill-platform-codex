@@ -6,7 +6,7 @@
       </el-button>
       <div class="logo">
         <el-icon :size="24" color="#22C55E"><Monitor /></el-icon>
-        <span class="logo-text">演练流程管理系统</span>
+        <span class="logo-text">应急处置流程管理系统</span>
       </div>
     </div>
 

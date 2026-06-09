@@ -32,6 +32,7 @@ func (s *TemplateService) Create(req *dto.CreateTemplateRequest, createdBy uint6
 		Description: req.Description,
 		CreatedBy:   createdBy,
 		Status:      1,
+		PhaseOrder:  "[]",
 	}
 
 	for _, stepReq := range req.Steps {
@@ -103,7 +104,7 @@ func (s *TemplateService) ToggleStatus(id uint64) error {
 	return s.templateRepo.Update(template)
 }
 
-func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest) error {
+func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest, phaseOrder []string) error {
 	template, err := s.templateRepo.FindByID(id)
 	if err != nil {
 		return err
@@ -135,6 +136,9 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 			EstimatedStartOffset:     stepReq.EstimatedStartOffset,
 			JSONAttributes:           stepReq.JSONAttributes,
 		}
+		if step.JSONAttributes == "" {
+			step.JSONAttributes = "{}"
+		}
 		if stepReq.ID != nil {
 			step.ID = *stepReq.ID
 		}
@@ -143,6 +147,15 @@ func (s *TemplateService) UpdateSteps(id uint64, steps []dto.StepTemplateRequest
 			step.PreStepIDs = string(b)
 		}
 		newSteps = append(newSteps, step)
+	}
+
+	// Save phase_order to template
+	if phaseOrder != nil {
+		b, _ := json.Marshal(phaseOrder)
+		template.PhaseOrder = string(b)
+		if err := s.templateRepo.Update(template); err != nil {
+			return err
+		}
 	}
 
 	return s.templateRepo.UpdateSteps(template.ID, newSteps)

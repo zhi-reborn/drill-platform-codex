@@ -190,7 +190,8 @@ func (h *Handler) ToggleStatus(c *gin.Context) {
 }
 
 type UpdateStepsRequest struct {
-	Steps []struct {
+	PhaseOrder []string `json:"phase_order"`
+	Steps      []struct {
 		ID                       *uint64 `json:"id"`
 		Name                     string  `json:"name" binding:"required,max=200"`
 		Seq                      int     `json:"seq" binding:"required"`
@@ -243,7 +244,7 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 		})
 	}
 
-	if err := h.templateService.UpdateSteps(id, steps); err != nil {
+	if err := h.templateService.UpdateSteps(id, steps, req.PhaseOrder); err != nil {
 		log.Printf("[UpdateSteps] 模板ID=%d 更新步骤失败: %v", id, err)
 		response.InternalError(c, "更新步骤失败: "+err.Error())
 		return

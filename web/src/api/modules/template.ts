@@ -112,11 +112,11 @@ export const templateApi = {
     estimated_duration_minutes?: number
     estimated_start_offset?: number
     attributes?: string
-  }>) => {
+  }>, phaseOrder?: string[]) => {
     return apiRequest<void>({
       url: `/v1/templates/${id}/steps`,
       method: 'PUT',
-      data: { steps },
+      data: { steps, phase_order: phaseOrder || [] },
     })
   },
 
