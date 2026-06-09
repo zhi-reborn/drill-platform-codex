@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -22,65 +22,69 @@ const scssAliasImporter = {
   },
 }
 
-export default defineConfig({
-  plugins: [
-    vue(),
-    AutoImport({
-      imports: ['vue', 'pinia', 'vue-router'],
-      resolvers: [
-        ElementPlusResolver(),
-        (name) => {
-          if (name === 'ElMessage') return { name: 'ElMessage', from: 'element-plus' }
-          if (name === 'ElMessageBox') return { name: 'ElMessageBox', from: 'element-plus' }
-          if (name === 'ElNotification') return { name: 'ElNotification', from: 'element-plus' }
-          return undefined
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [
+      vue(),
+      AutoImport({
+        imports: ['vue', 'pinia', 'vue-router'],
+        resolvers: [
+          ElementPlusResolver(),
+          (name) => {
+            if (name === 'ElMessage') return { name: 'ElMessage', from: 'element-plus' }
+            if (name === 'ElMessageBox') return { name: 'ElMessageBox', from: 'element-plus' }
+            if (name === 'ElNotification') return { name: 'ElNotification', from: 'element-plus' }
+            return undefined
+          },
+        ],
+        dts: 'src/types/auto-imports.d.ts',
+      }),
+      Components({
+        resolvers: [
+          ElementPlusResolver(),
+        ],
+        dirs: ['src/components'],
+        dts: 'src/types/components.d.ts',
+      }),
+    ],
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src'),
+      },
+    },
+    server: {
+      host: '0.0.0.0',
+      proxy: {
+        '/api': {
+          target: env.VITE_BACKEND_URL || 'http://localhost:8080',
+          changeOrigin: true,
         },
-      ],
-      dts: 'src/types/auto-imports.d.ts',
-    }),
-    Components({
-      resolvers: [
-        ElementPlusResolver(),
-      ],
-      dirs: ['src/components'],
-      dts: 'src/types/components.d.ts',
-    }),
-  ],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
-  },
-  server: {
-    host: '0.0.0.0',
-    proxy: {
-      '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://backend:8080',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: process.env.VITE_WS_URL || 'ws://backend:8080',
-        ws: true,
-        changeOrigin: true,
-      },
-    },
-  },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        // 使用自定义 importer 解析@别名
-        importer: scssAliasImporter,
-      },
-    },
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['vue', 'vue-router', 'pinia', 'echarts'],
-          'element-plus': ['element-plus'],
+        '/ws': {
+          target: env.VITE_WS_URL || 'ws://localhost:5173/ws',
+          ws: true,
+          changeOrigin: true,
         },
       },
     },
-  },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          // 使用自定义 importer 解析@别名
+          importer: scssAliasImporter,
+        },
+      },
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['vue', 'vue-router', 'pinia', 'echarts'],
+            'element-plus': ['element-plus'],
+          },
+        },
+      },
+    },
+  }
 })

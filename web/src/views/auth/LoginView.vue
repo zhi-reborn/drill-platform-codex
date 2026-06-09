@@ -106,9 +106,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Lock, Connection, CircleCheck, Monitor } from '@element-plus/icons-vue'
+import { User, Lock, Connection, Monitor } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import axios from 'axios'
@@ -158,12 +158,12 @@ async function fetchDevUsers() {
 }
 
 // Local mode
-const form = reactive({ username: '', password: '' })
+const form = ref({ username: '', password: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, max: 50, message: '3-50 个字符', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少 6 个字符', trigger: 'blur' }],
 }
-const canSubmit = computed(() => form.username.length >= 3 && form.password.length >= 6)
+const canSubmit = computed(() => form.value.username.length >= 3 && form.value.password.length >= 6)
 
 function roleLabel(role: string): string {
   const map: Record<string, string> = { admin: '管理员', director: '指挥员', executor: '执行者', viewer: '观察者' }
@@ -229,13 +229,17 @@ async function handleDevLogin() {
 }
 
 async function handleLocalLogin() {
+  if (!form.value.username.trim() || !form.value.password.trim()) {
+    error.value = '请输入用户名和密码'
+    return
+  }
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   loading.value = true
   error.value = ''
   try {
-    await authStore.loginWithCredentials(form)
+    await authStore.loginWithCredentials(form.value)
     ElMessage.success('登录成功')
     const user = authStore.user
     router.push(user ? roleDashboards[user.role] : '/viewer')
@@ -248,7 +252,7 @@ async function handleLocalLogin() {
       error.value = '登录失败'
     }
   } finally {
-    form.password = ''
+    form.value.password = ''
     loading.value = false
   }
 }
