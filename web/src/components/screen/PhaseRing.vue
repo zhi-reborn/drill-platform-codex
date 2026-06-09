@@ -1,7 +1,7 @@
 <template>
-  <div class="phase-ring" :style="{ width: containerSize + 'px', height: containerSize + 'px' }">
-    <div class="ring-inner" :style="{ width: size + 'px', height: size + 'px' }">
-    <svg :viewBox="`0 0 ${size} ${size}`" :width="size" :height="size" class="ring-svg">
+  <div class="phase-ring" :style="{ width: containerSize.width + 'px', height: containerSize.height + 'px' }">
+    <div class="ring-inner" :style="{ width: (size + PAD_X * 2) + 'px', height: (size + PAD_Y_TOP + PAD_Y_BOTTOM) + 'px' }">
+    <svg :viewBox="`0 0 ${size + PAD_X * 2} ${size + PAD_Y_TOP + PAD_Y_BOTTOM}`" :width="size + PAD_X * 2" :height="size + PAD_Y_TOP + PAD_Y_BOTTOM" class="ring-svg">
       <defs>
         <linearGradient id="grad-active" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#fff4cf" />
@@ -89,6 +89,21 @@
         />
       </g>
 
+      <!-- 环节节点进度弧（外圈小弧形，长度反映进度） -->
+      <g class="node-progress-arcs">
+        <path
+          v-for="(arc, idx) in nodeProgressArcs"
+          :key="'npa' + idx"
+          :d="arc.d"
+          :stroke="arc.color"
+          :stroke-width="5"
+          fill="none"
+          stroke-linecap="butt"
+          :opacity="arc.opacity"
+          :class="{ 'arc-running': arc.isRunning }"
+        />
+      </g>
+
       <!-- 活跃段流光动画层 -->
       <g v-if="activeSegmentPath" class="flow-light-group">
         <path
@@ -138,44 +153,24 @@
         />
       </g>
 
-      <!-- 4 个阶段的连接点（圆点） -->
-      <g class="phase-nodes">
-        <circle
-          v-for="(p, idx) in phasePoints"
-          :key="'p' + idx"
-          :cx="p.x"
-          :cy="p.y"
-          :r="idx === currentIndex ? 8 : 5"
-          :fill="idx === currentIndex ? '#ff7a00' : idx < currentIndex ? '#00d4ff' : '#1a3a6a'"
-          :stroke="idx === currentIndex ? '#fff4cf' : 'rgba(0, 212, 255, 0.4)'"
-          stroke-width="2"
-          :class="idx === currentIndex ? 'pulse-node' : ''"
-        />
-      </g>
-
     </svg>
 
-    <!-- 4 个阶段名称（外侧 4 角，HTML 定位） -->
+    <!-- 4 个阶段节点（外侧 4 角，圆形，HTML 定位） -->
     <div
       v-for="(p, idx) in phasePoints"
       :key="'lbl' + idx"
-      class="phase-label"
-      :class="['phase-label-' + idx, idx === currentIndex ? 'phase-label-active' : '', idx < currentIndex ? 'phase-label-done' : '']"
+      class="phase-node-label"
+      :class="['phase-node-' + idx, idx === currentIndex ? 'phase-node-active' : '', idx < currentIndex ? 'phase-node-done' : '']"
       :style="{
-        left: (p.x / size * 100) + '%',
-        top: (p.y / size * 100) + '%',
-        '--lx': (p.lx) + 'px',
-        '--ly': (p.ly) + 'px',
+        left: (p.x / (size + PAD_X * 2) * 100) + '%',
+        top: (p.y / (size + PAD_Y_TOP + PAD_Y_BOTTOM) * 100) + '%',
       }"
     >
-      <div class="phase-label-tag">
-        <span class="phase-label-num">阶段{{ chineseNum(idx + 1) }}</span>
-        <span class="phase-label-name">{{ phases[idx] || '--' }}</span>
-      </div>
+      <span class="phase-node-text">阶段{{ chineseNum(idx + 1) }}</span>
     </div>
 
     <!-- 环节标签（环形外侧，围绕各阶段弧段分布） -->
-    <svg :viewBox="`0 0 ${size} ${size}`" :width="size" :height="size" class="ring-svg ring-svg-overlay">
+    <svg :viewBox="`0 0 ${size + PAD_X * 2} ${size + PAD_Y_TOP + PAD_Y_BOTTOM}`" :width="size + PAD_X * 2" :height="size + PAD_Y_TOP + PAD_Y_BOTTOM" class="ring-svg ring-svg-overlay">
       <!-- 连接线：从环节标签到环边缘 -->
       <line
         v-for="(lp, idx) in ringLabelLines"
@@ -202,6 +197,7 @@
       class="ring-outer-label"
       :class="[
         { 'ring-outer-label-active': ringLabels[idx].active },
+        { 'ring-outer-label-running': ringLabels[idx].isRunning },
         'ring-outer-label-phase-' + ringLabels[idx].phaseIdx,
         lp.align === 'left' ? 'label-align-left' : lp.align === 'right' ? 'label-align-right' : 'label-align-center',
       ]"
@@ -235,6 +231,7 @@ import { computed } from 'vue'
 const props = defineProps<{
   phases: string[]
   phaseNames: string[][]
+  phaseNodeStatuses: { status: string; progress: number }[][]
   currentIndex: number
   progress: number
   centerNumerator: number
@@ -244,29 +241,31 @@ const props = defineProps<{
 }>()
 
 const size = computed(() => props.size ?? 520)
-const PAD = 50 // 外圈标签预留空间
-const containerSize = computed(() => size.value + PAD * 2)
-const cx = computed(() => size.value / 2)
-const cy = computed(() => size.value / 2)
+const PAD_X = 70  // 左右预留空间
+const PAD_Y_TOP = 60  // 顶部预留（阶段节点在上方时较小）
+const PAD_Y_BOTTOM = 90  // 底部预留（标签文字需要更多空间）
+const containerSize = computed(() => ({
+  width: size.value + PAD_X * 2,
+  height: size.value + PAD_Y_TOP + PAD_Y_BOTTOM,
+}))
+const cx = computed(() => size.value / 2 + PAD_X)
+const cy = computed(() => size.value / 2 + PAD_Y_TOP)
 
 // 半径定义
 const innerR = computed(() => size.value * 0.18)
 const segR = computed(() => size.value * 0.36)   // 分段环
 const outerR = computed(() => size.value * 0.46) // 刻度
 
-// 4 个相位点的位置（外侧 4 个角）
+// 4 个相位点的位置（弧段端点，与环上的节点圆点重合）
 const phasePoints = computed(() => {
   const items = []
+  const r = outerR.value
   for (let i = 0; i < 4; i++) {
-    // 4 个相位 = 90° 间隔，从右上 - 右下 - 左下 - 左上
-    const angle = -Math.PI / 2 + (Math.PI / 2) * i + Math.PI / 4 // 起始 45°
-    const r = outerR.value
+    // 与 segmentPaths 的角度一致：4 个节点在 45°, 135°, 225°, 315°
+    const angle = -Math.PI / 2 + (Math.PI / 2) * i + Math.PI / 4
     const x = cx.value + r * Math.cos(angle)
     const y = cy.value + r * Math.sin(angle)
-    // 标签偏移（左侧系数较小，补偿 translateX(-100%) 造成的额外左偏）
-    const lx = Math.cos(angle) * (Math.cos(angle) > 0 ? 80 : 70)
-    const ly = Math.sin(angle) * 22
-    items.push({ x, y, lx, ly, angle })
+    items.push({ x, y, angle })
   }
   return items
 })
@@ -325,15 +324,109 @@ const progressPath = computed(() => {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
 })
 
+// 环节节点进度弧：每个环节节点在环外侧有独立的小弧形，长度反映进度
+const nodeProgressArcs = computed(() => {
+  const r = outerR.value + 18 // 在刻度环外侧
+  const segCount = props.phases.length || 4
+  const segSpan = (Math.PI * 2) / segCount
+  const startOffset = -Math.PI / 2 + Math.PI / 4 - segSpan / 2
+  const gap = 0.06 // 与 segmentPaths 一致的段间隙
+
+  const arcs: {
+    d: string
+    color: string
+    opacity: number
+    status: string
+    isRunning: boolean
+  }[] = []
+
+  for (let pi = 0; pi < segCount; pi++) {
+    const nodeStatuses = props.phaseNodeStatuses?.[pi] || []
+    const names = props.phaseNames?.[pi] || []
+    if (names.length === 0) continue
+
+    // 该阶段弧段的角度范围
+    const segStart = startOffset + pi * segSpan + gap / 2
+    const segEnd = startOffset + (pi + 1) * segSpan - gap / 2
+    const segAngle = segEnd - segStart
+
+    // 每个环节节点在弧段内均分空间
+    const nodeAngle = segAngle / names.length
+    const nodeGap = 0.03 // 环节节点间的小间隙
+
+    for (let ni = 0; ni < names.length; ni++) {
+      const nodeStart = segStart + ni * nodeAngle + nodeGap / 2
+      const nodeEnd = segStart + (ni + 1) * nodeAngle - nodeGap / 2
+      const nodeSpan = nodeEnd - nodeStart
+
+      const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
+      const progress = ns.progress / 100
+      const isRunning = ns.status === 'running'
+      const isDone = ns.status === 'completed'
+      const isIssue = ns.status === 'issue' || ns.status === 'timeout'
+
+      // 背景弧（完整弧段，暗色）
+      const bx1 = cx.value + r * Math.cos(nodeStart)
+      const by1 = cy.value + r * Math.sin(nodeStart)
+      const bx2 = cx.value + r * Math.cos(nodeEnd)
+      const by2 = cy.value + r * Math.sin(nodeEnd)
+      const bLarge = nodeSpan > Math.PI ? 1 : 0
+      const bgPath = `M ${bx1} ${by1} A ${r} ${r} 0 ${bLarge} 1 ${bx2} ${by2}`
+
+      // 进度弧（按进度比例截取）
+      const progressEnd = nodeStart + nodeSpan * progress
+      let fgPath = ''
+      if (progress > 0) {
+        const fx1 = bx1
+        const fy1 = by1
+        const fx2 = cx.value + r * Math.cos(progressEnd)
+        const fy2 = cy.value + r * Math.sin(progressEnd)
+        const fSpan = progressEnd - nodeStart
+        const fLarge = fSpan > Math.PI ? 1 : 0
+        fgPath = `M ${fx1} ${fy1} A ${r} ${r} 0 ${fLarge} 1 ${fx2} ${fy2}`
+      }
+
+      // 颜色
+      let fgColor = '#1a3a6a'
+      let fgOpacity = 0.3
+      if (isDone) { fgColor = '#00a0c8'; fgOpacity = 0.85 }
+      else if (isRunning) { fgColor = '#ff9a2f'; fgOpacity = 1 }
+      else if (isIssue) { fgColor = '#ff4444'; fgOpacity = 0.9 }
+      else if (progress > 0) { fgColor = '#0088bb'; fgOpacity = 0.6 }
+
+      arcs.push({
+        d: bgPath,
+        color: 'rgba(26, 58, 106, 0.25)',
+        opacity: 1,
+        status: ns.status,
+        isRunning: false,
+      })
+
+      if (fgPath) {
+        arcs.push({
+          d: fgPath,
+          color: fgColor,
+          opacity: fgOpacity,
+          status: ns.status,
+          isRunning,
+        })
+      }
+    }
+  }
+
+  return arcs
+})
+
 // 外圈环节标签：从各阶段的 phaseNames 实时获取，均匀围绕对应阶段的弧段
 const ringLabels = computed(() => {
-  const labels: { text: string; active: boolean; phaseIdx: number; angleDeg: number }[] = []
+  const labels: { text: string; active: boolean; phaseIdx: number; angleDeg: number; isRunning: boolean }[] = []
   const segCount = props.phases.length || 4
   const segSpan = 360 / segCount
   const startOffsetDeg = -90 + 90 / segCount - segSpan / 2 // 与 segmentPaths 的 startOffset 对应
 
   for (let pi = 0; pi < segCount; pi++) {
     const names = props.phaseNames?.[pi] || []
+    const nodeStatuses = props.phaseNodeStatuses?.[pi] || []
     if (names.length === 0) continue
     // 每个阶段的弧段角度范围
     const segStartDeg = startOffsetDeg + pi * segSpan
@@ -344,34 +437,37 @@ const ringLabels = computed(() => {
       const angleDeg = names.length === 1
         ? (segStartDeg + segEndDeg) / 2
         : segStartDeg + step * (ni + 1)
+      const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
       labels.push({
         text: names[ni],
         active: pi === props.currentIndex,
         phaseIdx: pi,
         angleDeg,
+        isRunning: ns.status === 'running',
       })
     }
   }
   return labels
 })
 
-// 标签放置半径（比外圈刻度再外一些）
-const labelR = computed(() => outerR.value + 28)
+// 标签放置半径（比阶段圆形节点再外一些，避免重叠）
+const labelR = computed(() => outerR.value + 52)
 
 // 标签 HTML 定位（百分比）
 const ringLabelPositions = computed(() => {
+  const totalW = size.value + PAD_X * 2
+  const totalH = size.value + PAD_Y_TOP + PAD_Y_BOTTOM
   return ringLabels.value.map((lbl) => {
     const a = lbl.angleDeg * Math.PI / 180
     const r = labelR.value
     const px = cx.value + r * Math.cos(a)
     const py = cy.value + r * Math.sin(a)
-    // 文字对齐：右侧标签左对齐，左侧标签右对齐，顶部/底部居中
     let align: 'left' | 'right' | 'center' = 'center'
     if (Math.cos(a) > 0.2) align = 'left'
     else if (Math.cos(a) < -0.2) align = 'right'
     return {
-      leftPct: (px / size.value) * 100,
-      topPct: (py / size.value) * 100,
+      leftPct: (px / totalW) * 100,
+      topPct: (py / totalH) * 100,
       align,
     }
   })
@@ -381,8 +477,8 @@ const ringLabelPositions = computed(() => {
 const ringLabelLines = computed(() => {
   return ringLabels.value.map((lbl) => {
     const a = lbl.angleDeg * Math.PI / 180
-    const rLabel = labelR.value - 12 // 标签端（稍内缩）
-    const rRing = outerR.value + 6   // 环端（稍超出刻度）
+    const rLabel = labelR.value - 16 // 标签端（稍内缩）
+    const rRing = outerR.value + 8   // 环端（稍超出刻度）
     return {
       x1: cx.value + rLabel * Math.cos(a),
       y1: cy.value + rLabel * Math.sin(a),
@@ -432,6 +528,16 @@ function chineseNum(n: number): string {
   to { stroke-dashoffset: 0; }
 }
 
+// 环节节点进度弧 - 运行中动画
+.arc-running {
+  animation: arc-pulse 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px rgba(255, 154, 47, 0.6));
+}
+@keyframes arc-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(255, 154, 47, 0.6)); }
+  50% { opacity: 0.7; filter: drop-shadow(0 0 8px rgba(255, 154, 47, 0.9)); }
+}
+
 // 活跃段粒子光晕
 .flow-particle {
   filter: drop-shadow(0 0 4px rgba(255, 180, 74, 0.8));
@@ -478,82 +584,50 @@ function chineseNum(n: number): string {
   .flow-light-streak { animation: none; stroke-dasharray: none; }
   .flow-particle { display: none; }
   .pulse-node { animation: none; }
+  .arc-running { animation: none; }
+  .ring-outer-label-running .ring-outer-label-dot { animation: none; }
 }
 
-.phase-label {
+// 阶段圆形节点
+.phase-node-label {
   position: absolute;
-  transform: translate(calc(-50% + var(--lx)), calc(-50% + var(--ly)));
+  transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 2;
-  &::before {
-    content: '';
-    position: absolute;
-    left: -16px; top: 50%;
-    width: 14px; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.4));
-  }
+  z-index: 5;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 18, 48, 0.85);
+  border: 2px solid rgba(0, 212, 255, 0.45);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+  transition: all 0.3s ease;
 }
-.phase-label-tag {
-  display: flex; flex-direction: column;
-  background: rgba(0, 30, 80, 0.55);
-  border: 1px solid rgba(0, 212, 255, 0.3);
-  padding: 4px 10px;
+.phase-node-text {
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8cb8e0;
+  letter-spacing: 1px;
   white-space: nowrap;
-  position: relative;
-  &::before, &::after {
-    content: '';
-    position: absolute; width: 6px; height: 6px;
-    border: 1px solid #00d4ff;
-  }
-  &::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-  &::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
-  .phase-label-num {
-    font-family: 'Share Tech Mono', 'Consolas', monospace;
-    font-size: 11px;
-    color: #00d4ff;
-    letter-spacing: 1px;
-  }
-  .phase-label-name {
-    font-size: 13px;
-    color: #d6e8ff;
-    font-weight: 600;
-    letter-spacing: 1px;
-  }
 }
-.phase-label-done .phase-label-tag {
-  border-color: rgba(0, 212, 255, 0.55);
-  .phase-label-name { color: #b8d8ff; }
+.phase-node-done {
+  border-color: rgba(0, 160, 200, 0.6);
+  background: rgba(0, 40, 70, 0.75);
+  .phase-node-text { color: #5aafcc; }
 }
-.phase-label-active .phase-label-tag {
+.phase-node-active {
   border-color: #ff9a2f;
-  background: rgba(93, 48, 10, 0.72);
-  box-shadow: 0 0 18px rgba(255, 122, 0, 0.38);
-  &::before, &::after { border-color: #ff9a2f; }
-  .phase-label-num { color: #ffb44a; }
-  .phase-label-name { color: #ffffff; }
+  background: rgba(80, 38, 8, 0.88);
+  box-shadow: 0 0 22px rgba(255, 122, 0, 0.45), inset 0 0 10px rgba(255, 122, 0, 0.12);
+  animation: phase-node-pulse 2s ease-in-out infinite;
+  .phase-node-text { color: #ffd699; }
 }
-
-// 4 个角的标签方向修正
-.phase-label-0 {
-  // 右上
-  transform: translate(0, calc(-50% + var(--ly)));
-  .phase-label-tag { margin-left: 18px; }
-  &::before { left: -18px; }
-}
-.phase-label-1 {
-  // 右下
-  .phase-label-tag { margin-left: 18px; }
-  &::before { left: -18px; }
-}
-.phase-label-2 {
-  // 左下
-  .phase-label-tag { margin-left: -4px; transform: translateX(-100%); }
-  &::before { right: -16px; left: auto; background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), transparent); }
-}
-.phase-label-3 {
-  // 左上
-  .phase-label-tag { margin-left: -4px; transform: translateX(-100%); }
-  &::before { right: -16px; left: auto; background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), transparent); }
+@keyframes phase-node-pulse {
+  0%, 100% { box-shadow: 0 0 22px rgba(255, 122, 0, 0.45), inset 0 0 10px rgba(255, 122, 0, 0.12); }
+  50% { box-shadow: 0 0 30px rgba(255, 122, 0, 0.65), inset 0 0 14px rgba(255, 122, 0, 0.18); }
 }
 
 .ring-svg-overlay {
@@ -604,6 +678,24 @@ function chineseNum(n: number): string {
 .ring-outer-label-active .ring-outer-label-text {
   color: #d6e8ff;
   font-weight: 600;
+}
+
+// 运行中的环节节点 - 突出高亮
+.ring-outer-label-running {
+  .ring-outer-label-dot {
+    background: #ff9a2f !important;
+    box-shadow: 0 0 12px rgba(255, 154, 47, 0.8) !important;
+    animation: label-dot-pulse 1.2s ease-in-out infinite;
+  }
+  .ring-outer-label-text {
+    color: #ffe0a0 !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 8px rgba(255, 154, 47, 0.5), 0 0 16px rgba(255, 100, 0, 0.3) !important;
+  }
+}
+@keyframes label-dot-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 154, 47, 0.8); transform: scale(1); }
+  50% { box-shadow: 0 0 18px rgba(255, 154, 47, 1); transform: scale(1.4); }
 }
 
 // 已完成阶段的标签（phaseIdx < currentIndex）

@@ -184,6 +184,7 @@
             <PhaseRing
               :phases="ringPhases"
               :phase-names="ringPhaseNames"
+              :phase-node-statuses="ringPhaseNodeStatuses"
               :current-index="currentPhaseIndex"
               :progress="progressPercent"
               :center-numerator="completedCount"
@@ -194,23 +195,23 @@
           </div>
         </section>
 
-        <!-- RIGHT: Alerts + logs -->
+        <!-- RIGHT: Active steps -->
         <section class="panel panel-right">
-          <!-- Active warnings -->
           <div class="sub-panel sub-warn">
             <div class="panel-header">
               <span class="panel-deco-corner tl" />
               <span class="panel-deco-corner tr" />
               <span class="panel-title-zh">执行中步骤</span>
+              <span class="panel-badge">{{ activeAlerts.length }}</span>
               <span class="panel-realtime">
                 <span class="rt-dot" />
                 实时
               </span>
               <div class="panel-scan-line" />
             </div>
-            <div class="panel-body warn-list">
+            <div class="panel-body warn-list" ref="warnListRef">
               <div
-                v-for="(alert, ai) in activeAlerts"
+                v-for="(alert, ai) in visibleAlerts"
                 :key="ai"
                 class="alert-card"
                 :class="'alert-' + alert.level"
@@ -234,36 +235,9 @@
                   <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
                 </div>
               </div>
-              <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃告警</div>
-            </div>
-          </div>
-
-          <!-- Real-time logs -->
-          <div class="sub-panel sub-logs">
-            <div class="panel-header">
-              <span class="panel-deco-corner tl" />
-              <span class="panel-deco-corner tr" />
-              <span class="panel-title-zh">实时操作日志</span>
-              <div class="panel-scan-line" />
-            </div>
-            <div class="panel-body logs-wrap">
-              <div class="log-thead">
-                <span class="col-time">时间</span>
-                <span class="col-step">节点名称</span>
-                <span class="col-desc">描述</span>
-              </div>
-              <div class="log-tbody">
-                <div
-                  v-for="(log, idx) in recentLogs"
-                  :key="(log.id ?? idx)"
-                  class="log-row"
-                  :class="'log-' + logActionClass(log.action)"
-                >
-                  <span class="col-time">{{ formatTime(log.created_at) }}</span>
-                  <span class="col-step" :title="resolveStepName(log)">{{ resolveStepName(log) }}</span>
-                  <span class="col-desc">{{ log.content || logActionLabel(log.action) }}</span>
-                </div>
-                <div v-if="recentLogs.length === 0" class="empty-tip">暂无日志</div>
+              <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
+              <div v-else-if="visibleAlerts.length < activeAlerts.length" class="more-tip">
+                还有 {{ activeAlerts.length - visibleAlerts.length }} 个步骤...
               </div>
             </div>
           </div>
@@ -312,6 +286,7 @@ const drillId = computed(() => {
 const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
+const warnListRef = ref<HTMLElement | null>(null)
 
 // === 树形步骤辅助 ===
 // 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
@@ -605,6 +580,47 @@ const ringPhaseNames = computed(() => {
   return stages.value.map(s => s.phaseNames || [])
 })
 
+// 每个阶段中每个环节节点的状态信息
+const ringPhaseNodeStatuses = computed(() => {
+  const _tick = elapsedSeconds.value
+  const nowMs = Date.now()
+  const isTerminal = (s: StepInstance) => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)
+
+  return rootSteps.value.map(root => {
+    const directChildren = childMap.value.get(root.id) || []
+    return directChildren.map(child => {
+      const leaves = collectLeaves(child.id)
+      if (leaves.length === 0) return { status: child.status, progress: 0 }
+
+      const totalLeaves = leaves.length
+      const finishedLeaves = leaves.filter(s => isTerminal(s)).length
+      const isRunning = leaves.some(s => s.status === 'running')
+      const isDone = leaves.every(s => isTerminal(s)) && totalLeaves > 0
+      const hasIssue = leaves.some(s => s.status === 'issue' || s.status === 'timeout')
+
+      let progress = 0
+      if (isDone) {
+        progress = 100
+      } else if (isRunning) {
+        // 计算运行中步骤的进度
+        const runningLeaves = leaves.filter(s => s.status === 'running')
+        const avgProgress = runningLeaves.reduce((sum, s) => {
+          if (!s.start_time) return sum + 0
+          const elapsedSec = Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
+          const limitSec = (s.timeout_minutes || 120) * 60
+          return sum + Math.min(99, Math.round((elapsedSec / limitSec) * 100))
+        }, 0) / Math.max(1, runningLeaves.length)
+        progress = Math.round((finishedLeaves / totalLeaves) * 100 + (avgProgress / totalLeaves))
+      } else if (finishedLeaves > 0) {
+        progress = Math.round((finishedLeaves / totalLeaves) * 100)
+      }
+
+      const status = isDone ? 'completed' : hasIssue ? 'issue' : isRunning ? 'running' : 'pending'
+      return { status, progress: Math.min(progress, 100) }
+    })
+  })
+})
+
 const ringSize = computed(() => {
   if (viewportWidth.value < 900) return 330
   if (viewportWidth.value < 1200) return 420
@@ -626,7 +642,7 @@ const activeAlerts = computed(() => {
   const _now = elapsedSeconds.value
   const nowMs = Date.now()
 
-  const alerts: Array<{
+  const running: Array<{
     title: string
     team: string
     parentPhase: string
@@ -636,12 +652,14 @@ const activeAlerts = computed(() => {
     elapsed: string
     statusLabel: string
     level: 'warn' | 'info' | 'danger'
+    seq: number
   }> = []
+
+  const pending: typeof running = []
 
   // 进行中步骤（只看叶子步骤）
   leafSteps.value
     .filter(s => s.status === 'running')
-    .slice(0, 2)
     .forEach(s => {
       const elapsedSec = s.start_time
         ? Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
@@ -649,7 +667,7 @@ const activeAlerts = computed(() => {
       const limitMin = s.timeout_minutes || 120
       const limitSec = limitMin * 60
       const pct = Math.min(99, Math.round((elapsedSec / limitSec) * 100))
-      alerts.push({
+      running.push({
         title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
@@ -659,18 +677,18 @@ const activeAlerts = computed(() => {
         elapsed: fmtHMS(elapsedSec),
         statusLabel: pct >= 80 ? '即将超时' : '进行中',
         level: pct >= 80 ? 'danger' : 'warn',
+        seq: s.seq,
       })
     })
 
   // 异常步骤（只看叶子步骤）
   leafSteps.value
     .filter(s => s.status === 'issue' || s.status === 'timeout')
-    .slice(0, 2)
     .forEach(s => {
       const elapsedSec = s.start_time
         ? Math.max(0, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
         : 0
-      alerts.push({
+      running.push({
         title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
         team: s.executor_team || '执行组',
         parentPhase: findParentPhase(s.id),
@@ -680,31 +698,47 @@ const activeAlerts = computed(() => {
         elapsed: elapsedSec > 0 ? fmtHMS(elapsedSec) : '--',
         statusLabel: s.status === 'timeout' ? '已超时' : '异常',
         level: 'danger',
+        seq: s.seq,
       })
     })
 
-  if (alerts.length === 0) {
-    // 无活跃告警时，展示待执行步骤作为预警
-    leafSteps.value
-      .filter(s => s.status === 'pending')
-      .slice(0, 2)
-      .forEach((s, i) => {
-        const limitMin = s.timeout_minutes || 120
-        alerts.push({
-          title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
-          team: s.executor_team || '运维部',
-          parentPhase: findParentPhase(s.id),
-          directParent: findDirectParent(s.id),
-          progress: 0,
-          limit: fmtHMS(limitMin * 60),
-          elapsed: '待启动',
-          statusLabel: '待执行',
-          level: 'info',
-        })
+  // 待执行步骤（始终展示，排在运行中之后）
+  leafSteps.value
+    .filter(s => s.status === 'pending')
+    .forEach((s) => {
+      const limitMin = s.timeout_minutes || 120
+      pending.push({
+        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
+        team: s.executor_team || '运维部',
+        parentPhase: findParentPhase(s.id),
+        directParent: findDirectParent(s.id),
+        progress: 0,
+        limit: fmtHMS(limitMin * 60),
+        elapsed: '待启动',
+        statusLabel: '待执行',
+        level: 'info',
+        seq: s.seq,
       })
-  }
-  return alerts.slice(0, 2)
+    })
+
+  // 先按类型分组排序（running/issue/timeout 在前，pending 在后），再按 seq 排序
+  const sortedRunning = running.sort((a, b) => a.seq - b.seq)
+  const sortedPending = pending.sort((a, b) => a.seq - b.seq)
+  return [...sortedRunning, ...sortedPending]
 })
+
+// 可见步骤数量：只显示能完整放入容器的卡片，避免底部截断
+const ALERT_CARD_HEIGHT = 92 // 卡片高度（含 gap）
+const containerHeight = ref(0)
+const visibleAlertCount = computed(() => {
+  // 依赖 elapsedSeconds 使其每秒重算
+  const _t = elapsedSeconds.value
+  const available = containerHeight.value
+  if (!available) return activeAlerts.value.length
+  const count = Math.floor(available / ALERT_CARD_HEIGHT)
+  return Math.min(count, activeAlerts.value.length)
+})
+const visibleAlerts = computed(() => activeAlerts.value.slice(0, visibleAlertCount.value))
 
 // === 日志（已有数据） ===
 function logActionClass(action: string): string {
@@ -776,6 +810,10 @@ function tick() {
         : now.getTime()
       elapsedSeconds.value = Math.max(0, Math.round((end - start) / 1000))
     }
+  }
+  // 更新容器高度（用于截断计算）
+  if (warnListRef.value) {
+    containerHeight.value = warnListRef.value.clientHeight
   }
 }
 
@@ -1637,6 +1675,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   font-size: 12px; padding: 30px 0;
   font-family: $font-mono;
 }
+.more-tip {
+  text-align: center; color: $text-dim;
+  font-size: 11px; padding: 8px 0 4px;
+  font-family: $font-mono;
+  letter-spacing: 1px;
+  border-top: 1px dashed $line;
+}
 
 // ===== Left stages =====
 .panel-stages {
@@ -1744,7 +1789,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Right column =====
 .panel-right {
   display: flex; flex-direction: column;
-  gap: 8px;
   background: transparent; border: none; padding: 0;
   min-height: 0;
   .sub-panel {
@@ -1753,9 +1797,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    flex: 1;
   }
-  .sub-warn { flex: 0 0 auto; }
-  .sub-logs { flex: 1; min-height: 0; }
 }
 
 // ===== Alerts =====
@@ -1823,50 +1866,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 }
 
-// ===== Logs =====
-.logs-wrap {
-  display: flex; flex-direction: column; padding: 0;
-}
-.log-thead {
-  display: grid; grid-template-columns: 68px 1.2fr 2fr;
-  padding: 6px 12px;
-  background: rgba(0, 60, 130, 0.42);
-  border-bottom: 1px solid $line;
-  font-family: $font-display; font-size: 10px;
-  color: $neon; letter-spacing: 1.5px;
-  .col-step { text-align: left; padding-left: 6px; }
-}
-.log-tbody {
-  flex: 1; overflow-y: auto; padding: 4px 0;
-  &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: $line-strong; border-radius: 2px; }
-}
-.log-row {
-  display: grid; grid-template-columns: 68px 1.2fr 2fr;
-  align-items: center;
-  padding: 7px 12px;
-  border-bottom: 1px solid rgba(111, 151, 220, 0.16);
-  font-size: 12px;
-  .col-time { font-family: $font-mono; color: $text-dim; font-size: 11px; }
-  .col-step {
-    color: $text;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    padding-left: 6px;
-  }
-  .col-desc {
-    color: $text;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.4;
-  }
-  &.log-danger { .col-desc { color: $danger; } }
-  &.log-skip { .col-desc { color: #a78bfa; } }
-  &.log-force { .col-desc { color: $neon; } }
-  &.log-ok { .col-desc { color: $ok; } }
-}
 // ===== Footer =====
 .screen-footer {
   display: flex; justify-content: space-between;
@@ -2133,21 +2132,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       .alert-meta {
         font-size: 8px;
       }
-    }
-  }
-
-  .log-thead,
-  .log-row {
-    grid-template-columns: 56px 1fr 1.5fr;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  .log-row {
-    font-size: 10px;
-
-    .col-time {
-      font-size: 9px;
     }
   }
 
