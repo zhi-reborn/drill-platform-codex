@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	baseURL      = "http://localhost:8080/api/v1"
-	username     = "admin"
-	password     = "admin123"
-	defaultTime  = 120
+	baseURL     = "http://localhost:8080/api/v1"
+	username    = "admin"
+	password    = "admin123"
+	defaultTime = 120
 )
 
 type loginReq struct {
