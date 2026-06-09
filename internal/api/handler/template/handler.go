@@ -6,6 +6,7 @@ import (
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/pkg/response"
 	"drill-platform/internal/service"
+	"log"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -243,7 +244,8 @@ func (h *Handler) UpdateSteps(c *gin.Context) {
 	}
 
 	if err := h.templateService.UpdateSteps(id, steps); err != nil {
-		response.InternalError(c, "更新步骤失败")
+		log.Printf("[UpdateSteps] 模板ID=%d 更新步骤失败: %v", id, err)
+		response.InternalError(c, "更新步骤失败: "+err.Error())
 		return
 	}
 

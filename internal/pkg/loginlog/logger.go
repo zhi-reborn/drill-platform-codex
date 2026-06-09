@@ -1,5 +1,4 @@
 package loginlog
-package loginlog
 
 import (
 	"fmt"
