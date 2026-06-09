@@ -69,10 +69,14 @@ func main() {
 	}
 	fmt.Println("数据库连接成功")
 
-	migrations := []struct {
-		name string
-		sql  string
-	}{
+	// renameMigration: 先尝试 CHANGE COLUMN 重命名，旧列不存在时改为 ADD COLUMN
+	type migration struct {
+		name     string
+		sql      string
+		fallback string // 重命名失败时的备选 SQL
+	}
+
+	migrations := []migration{
 		// 1. drill_template_step: 添加缺失列（兼容旧表结构）
 		{
 			name: "drill_template_step: 添加 phase 列",
@@ -109,14 +113,16 @@ func main() {
 			sql:  "ALTER TABLE `drill_template_step` ALTER COLUMN `timeout_minutes` SET DEFAULT 120",
 		},
 
-		// 3. drill_instance_step: 列重命名
+		// 3. drill_instance_step: 列重命名（旧列不存在则直接添加新列）
 		{
-			name: "drill_instance_step: step_template_id → template_step_id",
-			sql:  "ALTER TABLE `drill_instance_step` CHANGE COLUMN `step_template_id` `template_step_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID'",
+			name:     "drill_instance_step: step_template_id → template_step_id",
+			sql:      "ALTER TABLE `drill_instance_step` CHANGE COLUMN `step_template_id` `template_step_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID'",
+			fallback: "ALTER TABLE `drill_instance_step` ADD COLUMN `template_step_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '来源步骤模板 ID'",
 		},
 		{
-			name: "drill_instance_step: attributes → action_params",
-			sql:  "ALTER TABLE `drill_instance_step` CHANGE COLUMN `attributes` `action_params` JSON DEFAULT NULL COMMENT '动态扩展属性'",
+			name:     "drill_instance_step: attributes → action_params",
+			sql:      "ALTER TABLE `drill_instance_step` CHANGE COLUMN `attributes` `action_params` JSON DEFAULT NULL COMMENT '动态扩展属性'",
+			fallback: "ALTER TABLE `drill_instance_step` ADD COLUMN `action_params` JSON DEFAULT NULL COMMENT '动态扩展属性'",
 		},
 
 		// 4. drill_instance_step: timeout_minutes 默认值 5 → 120
@@ -127,14 +133,16 @@ func main() {
 
 		// 5. drill_instance: 列重命名
 		{
-			name: "drill_instance: current_step_id → current_task_id",
-			sql:  "ALTER TABLE `drill_instance` CHANGE COLUMN `current_step_id` `current_task_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前激活步骤 ID'",
+			name:     "drill_instance: current_step_id → current_task_id",
+			sql:      "ALTER TABLE `drill_instance` CHANGE COLUMN `current_step_id` `current_task_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前激活步骤 ID'",
+			fallback: "ALTER TABLE `drill_instance` ADD COLUMN `current_task_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前激活步骤 ID'",
 		},
 
 		// 6. drill_instance_step_log: 列重命名
 		{
-			name: "drill_instance_step_log: step_instance_id → task_instance_id",
-			sql:  "ALTER TABLE `drill_instance_step_log` CHANGE COLUMN `step_instance_id` `task_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '步骤实例 ID'",
+			name:     "drill_instance_step_log: step_instance_id → task_instance_id",
+			sql:      "ALTER TABLE `drill_instance_step_log` CHANGE COLUMN `step_instance_id` `task_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '步骤实例 ID'",
+			fallback: "ALTER TABLE `drill_instance_step_log` ADD COLUMN `task_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '步骤实例 ID'",
 		},
 	}
 
@@ -148,19 +156,34 @@ func main() {
 		if err != nil {
 			errMsg := err.Error()
 			// MySQL Error 1060 = Duplicate column name (列已存在)
-			// MySQL Error 1054 = Unknown column (CHANGE 时旧列不存在，说明已迁移)
-			// MySQL Error 1091 = Can't DROP (列不存在)
 			if strings.Contains(errMsg, "Error 1060") ||
 				strings.Contains(errMsg, "Duplicate column name") {
 				fmt.Printf("  ✓ 跳过 (列已存在)\n")
 				skipCount++
-			} else if strings.Contains(errMsg, "Error 1054") && strings.Contains(m.sql, "CHANGE COLUMN") {
-				fmt.Printf("  ✓ 跳过 (旧列不存在，可能已迁移)\n")
-				skipCount++
-			} else {
-				fmt.Printf("  ✗ 失败: %v\n", err)
-				failCount++
+				continue
 			}
+			// CHANGE COLUMN 旧列不存在 → 执行 fallback ADD COLUMN
+			if strings.Contains(errMsg, "Error 1054") && m.fallback != "" {
+				fmt.Printf("  → 旧列不存在，改用 ADD COLUMN...\n")
+				_, err2 := dbConn.Exec(m.fallback)
+				if err2 != nil {
+					errMsg2 := err2.Error()
+					if strings.Contains(errMsg2, "Error 1060") ||
+						strings.Contains(errMsg2, "Duplicate column name") {
+						fmt.Printf("  ✓ 跳过 (新列已存在)\n")
+						skipCount++
+					} else {
+						fmt.Printf("  ✗ fallback 失败: %v\n", err2)
+						failCount++
+					}
+				} else {
+					fmt.Printf("  ✓ 成功 (ADD COLUMN)\n")
+					successCount++
+				}
+				continue
+			}
+			fmt.Printf("  ✗ 失败: %v\n", err)
+			failCount++
 		} else {
 			fmt.Printf("  ✓ 成功\n")
 			successCount++
