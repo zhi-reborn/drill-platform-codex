@@ -3,6 +3,7 @@ package auth
 import (
 	"drill-platform/internal/api/middleware"
 	"drill-platform/internal/domain/dto"
+	"drill-platform/internal/pkg/loginlog"
 	"drill-platform/internal/pkg/response"
 	"drill-platform/internal/service"
 	"net/http"
@@ -15,10 +16,11 @@ import (
 
 type Handler struct {
 	authService *service.AuthService
+	loginLogger *loginlog.Logger
 }
 
-func NewHandler(authService *service.AuthService) *Handler {
-	return &Handler{authService: authService}
+func NewHandler(authService *service.AuthService, loginLogger *loginlog.Logger) *Handler {
+	return &Handler{authService: authService, loginLogger: loginLogger}
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -28,9 +30,16 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
 	res, err := h.authService.Login(&req)
 	if err != nil {
-		switch err.Error() {
+		reason := err.Error()
+		if h.loginLogger != nil {
+			h.loginLogger.LogFailure(clientIP, req.Username, "local", reason, userAgent)
+		}
+		switch reason {
 		case "用户名不存在":
 			response.Unauthorized(c, "用户名不存在")
 		case "密码错误":
@@ -43,6 +52,9 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	if h.loginLogger != nil {
+		h.loginLogger.LogSuccess(clientIP, req.Username, "local", userAgent)
+	}
 	response.Success(c, res)
 }
 
@@ -65,11 +77,23 @@ func (h *Handler) CASCallback(c *gin.Context) {
 	}
 	redirect := c.Query("redirect")
 	serviceURL := h.authService.CASServiceURL(buildCASCallbackServiceURL(c), redirect)
+
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
 	res, err := h.authService.LoginWithCASTicket(ticket, serviceURL)
 	if err != nil {
+		if h.loginLogger != nil {
+			h.loginLogger.LogFailure(clientIP, "", "cas", err.Error(), userAgent)
+		}
 		response.Unauthorized(c, err.Error())
 		return
 	}
+
+	if h.loginLogger != nil {
+		h.loginLogger.LogSuccess(clientIP, res.Username, "cas", userAgent)
+	}
+
 	if redirect == "" {
 		response.Success(c, res)
 		return

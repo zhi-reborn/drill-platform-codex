@@ -8,6 +8,7 @@ import (
 	"drill-platform/internal/api/router"
 	"drill-platform/internal/infrastructure/redis"
 	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/loginlog"
 	"drill-platform/internal/repository"
 	"drill-platform/internal/service"
 
@@ -22,6 +23,7 @@ type Config struct {
 	Auth     AuthConfig         `yaml:"auth"`
 	CAS      service.CASConfig  `yaml:"cas"`
 	LDAP     service.LDAPConfig `yaml:"ldap"`
+	Log      LogConfig          `yaml:"log"`
 }
 
 type AuthConfig struct {
@@ -57,6 +59,10 @@ type RedisConfig struct {
 type JWTConfig struct {
 	Secret string `yaml:"secret"`
 	Expire int    `yaml:"expire"`
+}
+
+type LogConfig struct {
+	LoginLogFile string `yaml:"loginLogFile"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -131,7 +137,15 @@ func main() {
 	services.AuthService.SetCASConfig(cfg.CAS)
 	services.AuthService.SetLDAPConfig(cfg.LDAP)
 
-	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret)
+	loginLogger, err := loginlog.New(cfg.Log.LoginLogFile)
+	if err != nil {
+		log.Printf("登录日志初始化失败（将仅输出到标准输出）: %v", err)
+	} else {
+		defer loginLogger.Close()
+		log.Printf("登录日志文件：%s", cfg.Log.LoginLogFile)
+	}
+
+	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret, loginLogger)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("服务启动在 %s (mode=%s)", addr, cfg.Server.Mode)

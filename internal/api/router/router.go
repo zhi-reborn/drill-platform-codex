@@ -10,18 +10,19 @@ import (
 	"drill-platform/internal/api/handler/template"
 	"drill-platform/internal/api/middleware"
 	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/loginlog"
 	"drill-platform/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSecret string) *gin.Engine {
+func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSecret string, loginLogger *loginlog.Logger) *gin.Engine {
 	r := gin.Default()
 
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
 
-	authHandler := auth.NewHandler(services.AuthService)
+	authHandler := auth.NewHandler(services.AuthService, loginLogger)
 	templateHandler := template.NewHandler(services.TemplateService, services.AuthService)
 	drillHandler := drill.NewHandler(services.DrillService, services.AuthService)
 	taskHandler := task.NewHandler(services.TaskService)

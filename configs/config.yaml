@@ -77,3 +77,6 @@ cors:
   allowHeaders:
     - "Content-Type"
     - "Authorization"
+
+log:
+  loginLogFile: "logs/login.log"  # 登录日志文件路径
