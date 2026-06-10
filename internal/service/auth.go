@@ -185,7 +185,10 @@ func (s *AuthService) LoginWithExternalIdentity(ext ExternalUser) (*dto.LoginRes
 		user.Email = ext.Email
 		user.Phone = ext.Phone
 		user.Department = ext.Department
-		user.Role = role
+		// LDAP 匹配到明确角色映射才覆盖，否则保留管理员手动分配的角色
+		if ldapRole := s.resolveExternalRole(ext.Groups); ldapRole != s.externalAuth.DefaultRole {
+			user.Role = ldapRole
+		}
 		if err := s.userRepo.Update(user); err != nil {
 			return nil, err
 		}
