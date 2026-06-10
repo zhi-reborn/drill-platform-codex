@@ -31,6 +31,9 @@
             使用企业统一认证账号登录
           </el-button>
           <p class="hint">登录后将自动跳转至企业身份提供商进行认证</p>
+          <div class="link-btn" @click="authMode = 'local'">
+            使用账号密码登录
+          </div>
         </div>
 
         <!-- DEV 模式 -->
@@ -90,8 +93,8 @@
               </el-button>
             </el-form-item>
           </el-form>
-          <div class="link-btn" @click="authMode = 'dev'; selectedUser = null">
-            切换快捷登录
+          <div v-if="initialAuthMode === 'cas'" class="link-btn" @click="authMode = 'cas'">
+            使用企业统一认证登录
           </div>
         </div>
 
@@ -118,7 +121,8 @@ import type { Role } from '@/types'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const authMode = ref<'cas' | 'dev' | 'local'>((import.meta.env.VITE_AUTH_MODE as 'cas' | 'dev' | 'local') || 'dev')
+const initialAuthMode = (import.meta.env.VITE_AUTH_MODE as 'cas' | 'dev' | 'local') || 'dev'
+const authMode = ref<'cas' | 'dev' | 'local'>(initialAuthMode)
 const loading = ref(false)
 const error = ref('')
 const remember = ref(false)

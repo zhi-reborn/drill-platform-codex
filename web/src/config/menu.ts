@@ -17,6 +17,7 @@ export const menuConfig: MenuItem[] = [
     roles: ['admin', 'director', 'executor', 'viewer'],
     children: [
       { path: '/admin', title: '系统概览', icon: 'DataAnalysis', roles: ['admin'] },
+      { path: '/admin/users', title: '用户管理', icon: 'User', roles: ['admin'] },
       { path: '/director', title: '指挥概览', icon: 'DataAnalysis', roles: ['admin', 'director'] },
       { path: '/executor', title: '任务中心', icon: 'Tickets', roles: ['executor'] },
       { path: '/viewer', title: '演练总览', icon: 'View', roles: ['viewer'] },
