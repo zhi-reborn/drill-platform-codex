@@ -213,12 +213,12 @@
     <!-- 中心数字 -->
     <div class="center-content">
       <div class="center-caption">演练总进度</div>
+      <div class="center-pct">{{ progress }}<span class="pct-unit">%</span></div>
       <div class="center-value">
         <span class="num-num">{{ centerNumerator }}</span>
         <span class="num-sep">/</span>
         <span class="num-den">{{ centerDenominator }}</span>
       </div>
-      <div class="center-pct">{{ progress }}<span class="pct-unit">%</span></div>
       <div class="center-hint">{{ centerHint }}</div>
     </div>
     </div>

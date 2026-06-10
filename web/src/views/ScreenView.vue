@@ -232,7 +232,7 @@
               </div>
               <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
               <div v-else-if="visibleAlerts.length < activeAlerts.length" class="more-tip">
-                还有 {{ activeAlerts.length - visibleAlerts.length }} 个步骤...
+                还有 {{ totalCount - completedCount }} 个步骤待执行...
               </div>
             </div>
           </div>
@@ -679,27 +679,6 @@ const activeAlerts = computed(() => {
         elapsed: fmtHMS(elapsedSec),
         statusLabel: pct >= 80 ? '即将超时' : '进行中',
         level: pct >= 80 ? 'danger' : 'warn',
-        seq: s.seq,
-      })
-    })
-
-  // 异常步骤（只看叶子步骤）
-  leafSteps.value
-    .filter(s => s.status === 'issue' || s.status === 'timeout')
-    .forEach(s => {
-      const elapsedSec = s.start_time
-        ? Math.max(0, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
-        : 0
-      running.push({
-        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
-        team: s.executor_team || '执行组',
-        parentPhase: findParentPhase(s.id),
-        directParent: findDirectParent(s.id),
-        progress: 0,
-        limit: fmtHMS((s.timeout_minutes || 120) * 60),
-        elapsed: elapsedSec > 0 ? fmtHMS(elapsedSec) : '--',
-        statusLabel: s.status === 'timeout' ? '已超时' : '异常',
-        level: 'danger',
         seq: s.seq,
       })
     })
