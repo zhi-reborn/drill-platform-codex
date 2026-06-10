@@ -185,7 +185,7 @@
               :progress="progressPercent"
               :center-numerator="completedCount"
               :center-denominator="totalCount"
-              :center-hint="`注入应用实例 · 阶段${currentPhaseIndex + 1}`"
+              :center-hint="`阶段${currentPhaseIndex + 1} · ${currentPhaseName}`"
               :size="ringSize"
             />
           </div>
@@ -198,7 +198,6 @@
               <span class="panel-deco-corner tl" />
               <span class="panel-deco-corner tr" />
               <span class="panel-title-zh">执行中步骤</span>
-              <span class="panel-badge">{{ activeAlerts.length }}</span>
               <span class="panel-realtime">
                 <span class="rt-dot" />
                 实时
@@ -732,7 +731,7 @@ const activeAlerts = computed(() => {
 
 // 可见步骤数量：只显示能完整放入容器的卡片，避免底部截断
 const ALERT_CARD_HEIGHT = 110 // 卡片高度（含 gap）
-const MORE_TIP_HEIGHT = 28    // 底部"还有N个步骤"提示的高度
+const MORE_TIP_HEIGHT = 36    // 底部"还有N个步骤"提示的高度
 const containerHeight = ref(0)
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
@@ -1685,7 +1684,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 .more-tip {
   text-align: center; color: $text-dim;
-  font-size: 11px; padding: 8px 0 4px;
+  font-size: 11px; padding: 6px 0 16px;
   font-family: $font-mono;
   letter-spacing: 1px;
   border-top: 1px dashed $line;
@@ -1804,7 +1803,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     position: relative;
     background: transparent; border: 0;
     display: flex; flex-direction: column;
-    overflow: hidden;
     min-height: 0;
     flex: 1;
   }
@@ -1813,7 +1811,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Alerts =====
 .warn-list {
   display: flex; flex-direction: column; gap: 8px;
-  overflow: hidden;
+  overflow-y: auto;
   flex: 1;
   min-height: 0;
   .alert-card {
