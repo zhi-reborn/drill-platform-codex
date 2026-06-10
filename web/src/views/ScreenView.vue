@@ -169,10 +169,6 @@
                   <span class="meta-key">步骤</span>
                   <span class="meta-val">{{ stage.completedSteps }} / {{ stage.totalSteps }}</span>
                 </span>
-                <span class="stage-meta">
-                  <span class="meta-key">团队</span>
-                  <span class="meta-val">{{ stage.team || '运维部' }}</span>
-                </span>
               </div>
             </div>
           </div>
@@ -263,6 +259,7 @@ const route = useRoute()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
+const viewportHeight = ref(window.innerHeight)
 
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
@@ -622,9 +619,15 @@ const ringPhaseNodeStatuses = computed(() => {
 })
 
 const ringSize = computed(() => {
-  if (viewportWidth.value < 900) return 330
-  if (viewportWidth.value < 1200) return 420
-  return 560
+  // 基于视口高度动态计算，确保不溢出
+  // 可用高度 ≈ 100vh - header(46) - kpi(88) - gaps(8*3) - padding(16)
+  const availableH = viewportHeight.value - 46 - 88 - 24 - 16
+  // PhaseRing 实际高度 = ringSize + PAD_Y_TOP + PAD_Y_BOTTOM
+  // PAD_Y_TOP=60, PAD_Y_BOTTOM=90 → 总 padding=150
+  const maxRingFromH = availableH - 150
+  // 基于宽度限制
+  const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 420 : 560
+  return Math.min(maxRingFromW, Math.max(280, maxRingFromH))
 })
 
 // === 告警 ===
@@ -728,15 +731,19 @@ const activeAlerts = computed(() => {
 })
 
 // 可见步骤数量：只显示能完整放入容器的卡片，避免底部截断
-const ALERT_CARD_HEIGHT = 92 // 卡片高度（含 gap）
+const ALERT_CARD_HEIGHT = 110 // 卡片高度（含 gap）
+const MORE_TIP_HEIGHT = 28    // 底部"还有N个步骤"提示的高度
 const containerHeight = ref(0)
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
   const _t = elapsedSeconds.value
   const available = containerHeight.value
-  if (!available) return activeAlerts.value.length
-  const count = Math.floor(available / ALERT_CARD_HEIGHT)
-  return Math.min(count, activeAlerts.value.length)
+  if (!available) return 5 // 容器高度未就绪时默认显示 5 个
+  // 如果有更多步骤，需要为 more-tip 预留空间
+  const hasMore = activeAlerts.value.length > Math.floor(available / ALERT_CARD_HEIGHT)
+  const reserved = hasMore ? MORE_TIP_HEIGHT : 0
+  const count = Math.floor((available - reserved) / ALERT_CARD_HEIGHT)
+  return Math.min(Math.max(count, 1), activeAlerts.value.length)
 })
 const visibleAlerts = computed(() => activeAlerts.value.slice(0, visibleAlertCount.value))
 
@@ -1040,6 +1047,7 @@ onBeforeUnmount(() => {
 
 function handleResize() {
   viewportWidth.value = window.innerWidth
+  viewportHeight.value = window.innerHeight
 }
 </script>
 
@@ -1687,10 +1695,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-stages {
   background: transparent;
   min-height: 0;
-  overflow: hidden;
   .stages-list {
     display: flex; flex-direction: column; gap: 14px;
-    height: 100%;
+    min-height: 0;
+    flex: 1;
   }
   .stage-card {
     position: relative;
@@ -1699,6 +1707,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     border-left: 3px solid rgba(160, 176, 196, 0.48);
     padding: 8px 12px 9px;
     flex: 1;
+    min-height: 0;
     display: flex; flex-direction: column; gap: 4px;
     justify-content: center;
     transition: all 0.2s;
@@ -1761,7 +1770,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
     radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   &::before, &::after {
     content: '';
     position: absolute; width: 14px; height: 14px;
@@ -1804,6 +1813,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Alerts =====
 .warn-list {
   display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
   .alert-card {
     position: relative;
     background: linear-gradient(180deg, rgba(20, 22, 35, 0.86), rgba(16, 26, 47, 0.72));
@@ -2060,6 +2072,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-card {
       padding: 6px 8px 7px;
       flex: 1;
+      min-height: 0;
     }
 
     .stage-card-top {
