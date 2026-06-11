@@ -793,17 +793,29 @@ function getStartDisabledReason(step: any): string {
   if (step.status !== 'pending') return '步骤不在待执行状态'
   if (isParentStep(step)) return '父步骤不可手动开始'
 
-  // 检查父步骤链是否已激活：从当前步骤向上遍历，所有祖先必须处于 running 状态
+  const ownDependencyReason = getStepDependencyDisabledReason(step)
+  if (ownDependencyReason) return ownDependencyReason
+
+  // 检查父步骤链是否可被激活：pending 祖先允许由后端自动启动，但祖先自身的依赖必须已满足
   let ancestor = step
   while (ancestor.parent_step_id) {
     const parent = steps.value.find(s => s.id === ancestor.parent_step_id)
     if (!parent) break
-    if (parent.status !== 'running' && parent.status !== 'completed') {
+    if (parent.status === 'pending') {
+      const parentDependencyReason = getStepDependencyDisabledReason(parent)
+      if (parentDependencyReason) {
+        return `父步骤未满足开始条件：${parent.name}（${parentDependencyReason}）`
+      }
+    } else if (parent.status !== 'running' && parent.status !== 'completed') {
       return `父步骤未启动：${parent.name}`
     }
     ancestor = parent
   }
 
+  return ''
+}
+
+function getStepDependencyDisabledReason(step: any): string {
   // 检查 pre_step_ids 中的前序步骤是否全部完成
   const preStepIds = step.pre_step_ids || []
   if (preStepIds.length > 0) {
