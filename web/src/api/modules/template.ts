@@ -131,6 +131,7 @@ export const templateApi = {
     executor_team?: string
     phase?: string
     phase_step?: string
+    parent_step_id?: number | null
     estimated_duration_minutes?: number
     estimated_start_offset?: number
     attributes?: string

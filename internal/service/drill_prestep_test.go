@@ -22,7 +22,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			id integer PRIMARY KEY,
 			drill_instance_id integer NOT NULL,
 			parent_step_id integer NULL,
-			step_template_id integer NOT NULL,
+			template_step_id integer NOT NULL,
 			name text NOT NULL,
 			seq integer NOT NULL,
 			status text NOT NULL,
@@ -42,7 +42,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			pre_step_ids text,
 			estimated_duration_minutes integer NULL,
 			estimated_start_offset integer NULL,
-			attributes text,
+			action_params text,
 			created_at datetime
 		)
 	`).Error
@@ -289,6 +289,28 @@ func TestComputeInstancePreStepIDs_EdgeCases(t *testing.T) {
 				30: {}, 32: {},
 				40: {}, 41: {40}, 42: {40}, 31: {30},
 				11: {10},
+			},
+		},
+		{
+			name: "阶段环节任务子任务四级录入结构",
+			setup: func() []entity.StepInstance {
+				return []entity.StepInstance{
+					{ID: 100, DrillInstanceID: 6, StepTemplateID: 100, Name: "演练准备阶段", Seq: 1, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 110, DrillInstanceID: 6, ParentStepID: ptrUint64(100), StepTemplateID: 110, Name: "信息同步", Seq: 2, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 120, DrillInstanceID: 6, ParentStepID: ptrUint64(110), StepTemplateID: 120, Name: "报备机房断网演练计划", Seq: 3, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 121, DrillInstanceID: 6, ParentStepID: ptrUint64(120), StepTemplateID: 121, Name: "操作1", Seq: 4, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 122, DrillInstanceID: 6, ParentStepID: ptrUint64(120), StepTemplateID: 122, Name: "操作2", Seq: 5, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 123, DrillInstanceID: 6, ParentStepID: ptrUint64(120), StepTemplateID: 123, Name: "操作3", Seq: 6, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 130, DrillInstanceID: 6, ParentStepID: ptrUint64(110), StepTemplateID: 130, Name: "生产环境检查", Seq: 7, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 131, DrillInstanceID: 6, ParentStepID: ptrUint64(110), StepTemplateID: 131, Name: "安全设备检查", Seq: 8, StepType: "parallel", AssigneeIDs: "[]"},
+				}
+			},
+			expected: map[uint64][]uint64{
+				100: {},
+				110: {},
+				120: {},
+				121: {}, 122: {121}, 123: {121},
+				130: {120}, 131: {130},
 			},
 		},
 	}

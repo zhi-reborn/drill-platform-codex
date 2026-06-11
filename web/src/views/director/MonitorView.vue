@@ -461,7 +461,7 @@
             <el-form-item label="操作人">
               <el-autocomplete
                 :model-value="editForm.attributes.operator"
-                @update:model-value="(v: string) => (editForm.attributes.operator = v ?? '')"
+                @update:model-value="(v: string | number) => (editForm.attributes.operator = String(v ?? ''))"
                 :fetch-suggestions="userQuerySearch"
                 placeholder="输入或选择操作人"
                 clearable
@@ -472,7 +472,7 @@
             <el-form-item label="复核人">
               <el-autocomplete
                 :model-value="editForm.attributes.reviewer"
-                @update:model-value="(v: string) => (editForm.attributes.reviewer = v ?? '')"
+                @update:model-value="(v: string | number) => (editForm.attributes.reviewer = String(v ?? ''))"
                 :fetch-suggestions="userQuerySearch"
                 placeholder="输入或选择复核人"
                 clearable

@@ -75,10 +75,10 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 		siblings := childrenOf[parentID]
 
 		// 核心规则：
-		// - parallel 步骤的前序只继承父级传入的前序（inherited），不受同级其他步骤影响
+		// - parallel 步骤的前序继承当前同级段的前序，同一段内可同时开始
 		// - serial 步骤的前序包含前一个步骤/并行组
 		// - 连续的 parallel 步骤组成并行组，组完成后成为后续 serial 步骤的前序
-		// - 子步骤的 inherited 为空，因为子步骤只需要等父步骤激活即可
+		// - 子步骤继承父节点自身的前序，避免绕过父节点启动条件
 
 		// 第一遍：识别段（连续 parallel 为一段，单个 serial 为一段）
 		type segment struct {
@@ -102,7 +102,7 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 		}
 
 		// 第二遍：计算前序
-		// parallel 段：所有步骤的 pre = inherited（父级传入的前序）
+		// parallel 段：所有步骤的 pre = currentInherited
 		// serial 段：pre = 前一个段完成后的前序
 		currentInherited := copyIDs(inherited)
 		for _, seg := range segments {
@@ -110,17 +110,15 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 				groupIDs := make([]uint64, 0, seg.endIdx-seg.startIdx)
 				for k := seg.startIdx; k < seg.endIdx; k++ {
 					gid := siblings[k]
-					computed[gid] = copyIDs(inherited) // parallel 步骤始终只继承父级传入的前序
-					// 子步骤的 inherited 为空，子步骤只需等父步骤激活
-					computeLevel(gid, nil)
+					computed[gid] = copyIDs(currentInherited)
+					computeLevel(gid, computed[gid])
 					groupIDs = append(groupIDs, gid)
 				}
 				currentInherited = groupIDs
 			} else {
 				id := siblings[seg.startIdx]
 				computed[id] = copyIDs(currentInherited)
-				// 子步骤的 inherited 为空，子步骤只需等父步骤激活
-				computeLevel(id, nil)
+				computeLevel(id, computed[id])
 				currentInherited = []uint64{id}
 			}
 		}

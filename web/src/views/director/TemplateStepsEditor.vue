@@ -630,6 +630,7 @@ const singleStepForm = reactive({
   description: '',
   step_type: 'serial' as StepType,
   timeout_minutes: 120,
+  is_blocking: 1,
   default_assignee_role: 'executor',
   executor_team: '',
   parent_step_id: undefined as number | undefined,
@@ -1031,31 +1032,32 @@ function openBatchImportDialog() {
   importVisible.value = true
 }
 
-function downloadTemplate() {
-  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
-  const colWidths = [
-    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
-  ]
+const taskImportHeader = ['阶段', '环节', '任务', '子任务', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
+const taskImportColWidths = [
+  { wch: 14 }, { wch: 14 }, { wch: 26 }, { wch: 22 }, { wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+  { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+  { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
+]
 
+function downloadTemplate() {
   // 按阶段分组示例数据，每个阶段对应一个 sheet
   const phasesData: Record<string, any[][]> = {
-    '准备阶段': [
-      header,
-      ['准备阶段', '初始化', '', '检查数据库状态', '检查主库是否正常运行', '串行', '10', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '王五', '连接主库检查状态，确认连接池正常', '执行 SHOW SLAVE STATUS 确认从库状态', '主库不可用导致业务中断', '切换从库为主库', ''],
-      ['准备阶段', '初始化', '检查数据库状态', '检查主库连接', '检查主库连接池状态', '串行', '5', '5', '执行组', '技术部', '技术部', '', 'DBA组', '李四', '', '连接主库确认连接池正常', '', '', '', ''],
+    '演练准备阶段': [
+      taskImportHeader,
+      ['演练准备阶段', '信息同步', '报备机房断网演练计划', '操作1', '同步演练计划', '串行', '10', '120', '执行组', '技术部', '技术部', '', '网络组', '李四', '王五', '提交报备材料并确认回执', '确认报备已完成', '', '', ''],
+      ['演练准备阶段', '信息同步', '报备机房断网演练计划', '操作2', '同步演练计划', '串行', '10', '120', '执行组', '技术部', '技术部', '', '网络组', '李四', '王五', '通知相关参与人', '确认参与人已收到通知', '', '', ''],
+      ['演练准备阶段', '生产环境检查', '检查网络设备、服务器设备备品备件情况，输出检查结果', '', '检查生产环境', '串行', '15', '120', '执行组', '技术部', '技术部', '', '运维组', '钱七', '孙八', '检查网络设备、服务器备品备件情况', '输出检查结果', '备品备件不足', '补充备品备件', ''],
     ],
-    '执行阶段': [
-      header,
-      ['执行阶段', '主流程', '', '切换从库', '将从库提升为主库', '并行', '15', '5', '指挥组', '运维部', '运维部', '', '运维组', '钱七', '孙八', '停止主库写入，提升从库，更新应用配置', '应用连接新主库验证读写正常', '数据不一致或丢失', '回退到原主库', '注意备份数据'],
+    '演练实施阶段': [
+      taskImportHeader,
+      ['演练实施阶段', '断网执行', '执行机房断网', '', '按计划执行断网', '并行', '20', '120', '执行组', '运维部', '运维部', '', '网络组', '赵六', '', '执行断网操作并记录时间', '确认链路状态符合预期', '业务流量异常', '恢复链路', ''],
     ],
   }
 
   const wb = XLSX.utils.book_new()
   for (const [phaseName, rows] of Object.entries(phasesData)) {
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = colWidths
+    ws['!cols'] = taskImportColWidths
     // sheet 名最长 31 字符
     const sheetName = phaseName.length > 31 ? phaseName.slice(0, 31) : phaseName
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
@@ -1089,36 +1091,37 @@ function exportSteps() {
     return
   }
 
-  // 构建 ID → 步骤名称映射表（用于父步骤名称查表）
-  const idToName = new Map<number, string>()
-  for (const [, steps] of phaseStepsMap) {
-    for (const step of steps) {
-      if (step.id) idToName.set(step.id, step.name)
-    }
-  }
-
-  const header = ['阶段', '环节', '父步骤名称', '步骤名称', '描述', '步骤类型', '预计耗时 (分)', '超时时间 (分)', '执行角色', '执行团队', '责任部门', '配合部门', '责任团队', '操作人', '复核人', '操作说明', '验证方式', '最坏影响分析', '兜底措施', '备注']
-  const colWidths = [
-    { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 40 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
-  ]
-
   const wb = XLSX.utils.book_new()
   let totalSteps = 0
 
   for (const [phaseName, steps] of phaseStepsMap) {
-    const data: any[][] = [header]
+    const data: any[][] = [taskImportHeader]
+    const stepMap = new Map<number, StepTemplate>()
+    const childrenOf = new Map<number, StepTemplate[]>()
     for (const step of steps) {
+      if (step.id) stepMap.set(step.id, step)
+      if (step.parent_step_id) {
+        const children = childrenOf.get(step.parent_step_id) || []
+        children.push(step)
+        childrenOf.set(step.parent_step_id, children)
+      }
+    }
+
+    for (const step of steps) {
+      if (childrenOf.has(step.id)) continue
       const attrs = step.attributes || {}
-      const parentName = step.parent_step_id && step.parent_step_id > 0
-        ? (idToName.get(step.parent_step_id) || '')
-        : ''
+      const parent = step.parent_step_id ? stepMap.get(step.parent_step_id) : undefined
+      const grandParent = parent?.parent_step_id ? stepMap.get(parent.parent_step_id) : undefined
+      const greatGrandParent = grandParent?.parent_step_id ? stepMap.get(grandParent.parent_step_id) : undefined
+      const isSubtask = Boolean(parent && grandParent && greatGrandParent)
+      const task = isSubtask ? parent : step
+      const ring = isSubtask ? grandParent : parent
+      const stage = isSubtask ? greatGrandParent : grandParent
       data.push([
-        phaseName,
-        step.phase_step || '',
-        parentName,
-        step.name || '',
+        stage?.name || step.phase || phaseName,
+        ring?.name || step.phase_step || '',
+        task?.name || step.name || '',
+        isSubtask ? step.name || '' : '',
         step.description || step.guide_content || '',
         stepTypeLabels[step.step_type] || step.step_type || '串行',
         step.estimated_duration_minutes ?? '',
@@ -1138,7 +1141,7 @@ function exportSteps() {
       ])
     }
     const ws = XLSX.utils.aoa_to_sheet(data)
-    ws['!cols'] = colWidths
+    ws['!cols'] = taskImportColWidths
     // sheet 名最长 31 字符
     const sheetName = phaseName.length > 31 ? phaseName.slice(0, 31) : phaseName
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
@@ -1157,17 +1160,89 @@ function handleExcelUpload(file: File) {
       const workbook = XLSX.read(data, { type: 'array', cellDates: true })
       const errors: string[] = []
 
-      // 构建全局名称 → ID 映射表（所有已存在的阶段 + 步骤）
-      const nameToIdMap = new Map<string, number>()
-      for (const phase of phases.value) {
-        for (const s of phase.steps) {
-          if (s.id && s.name) nameToIdMap.set(s.name, s.id)
-        }
-      }
-
       // 阶段 → 步骤列表
       const phaseStepsMap = new Map<string, StepTemplate[]>()
       let globalOrder = 1
+      const pathToIdMap = new Map<string, number>()
+      const existingLeafPaths = new Set<string>()
+      const containerPaths = new Set<string>()
+      for (const phase of phases.value) {
+        const stepMap = new Map<number, StepTemplate>()
+        const childrenOf = new Map<number, StepTemplate[]>()
+        for (const step of phase.steps) {
+          if (step.id) stepMap.set(step.id, step)
+          if (step.parent_step_id) {
+            const children = childrenOf.get(step.parent_step_id) || []
+            children.push(step)
+            childrenOf.set(step.parent_step_id, children)
+          }
+        }
+        for (const step of phase.steps) {
+          const chain: StepTemplate[] = []
+          let current: StepTemplate | undefined = step
+          while (current) {
+            chain.unshift(current)
+            current = current.parent_step_id ? stepMap.get(current.parent_step_id) : undefined
+          }
+          const paths = chain.map((_, idx) => `${phase.name}|${chain.slice(0, idx + 1).map(n => n.name).join('|')}`)
+          paths.forEach((path, idx) => pathToIdMap.set(path, chain[idx].id))
+          const fullPath = paths[paths.length - 1]
+          if (childrenOf.has(step.id)) {
+            containerPaths.add(fullPath)
+          } else {
+            existingLeafPaths.add(fullPath)
+          }
+        }
+      }
+
+      const createImportedStep = (
+        phase: string,
+        name: string,
+        parentStepId: number | undefined,
+        stepType: string,
+        values?: {
+          description?: string
+          estimatedDuration?: number
+          timeoutMinutes?: number
+          assigneeRole?: string
+          executorTeam?: string
+          phaseStepName?: string
+          attributes?: StepAttributes
+        }
+      ): StepTemplate => ({
+        id: Date.now() + Math.random(),
+        template_id: templateId.value,
+        parent_step_id: parentStepId,
+        name,
+        description: values?.description || '',
+        step_type: stepType as StepType,
+        timeout_minutes: values?.timeoutMinutes || 120,
+        default_assignee_role: values?.assigneeRole || '',
+        executor_team: values?.executorTeam || '',
+        order_index: globalOrder++,
+        created_at: new Date().toISOString(),
+        phase,
+        phase_step: values?.phaseStepName || '',
+        estimated_duration_minutes: values?.estimatedDuration,
+        attributes: values?.attributes || {},
+      })
+
+      const ensureImportedNode = (
+        phase: string,
+        key: string,
+        name: string,
+        parentStepId: number | undefined,
+        phaseStepName: string,
+        stepType = 'serial'
+      ): number => {
+        const existingId = pathToIdMap.get(key)
+        if (existingId) return existingId
+        const node = createImportedStep(phase, name, parentStepId, stepType, { phaseStepName })
+        if (!phaseStepsMap.has(phase)) phaseStepsMap.set(phase, [])
+        phaseStepsMap.get(phase)!.push(node)
+        pathToIdMap.set(key, node.id)
+        return node.id
+      }
 
       // 遍历所有 Sheet，每个 Sheet 对应一个阶段
       for (const sheetName of workbook.SheetNames) {
@@ -1180,10 +1255,10 @@ function handleExcelUpload(file: File) {
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i]
           const rowNum = i + 1
-          const phase = String(row[0] || '').trim()
+          const phase = String(row[0] || sheetName).trim()
           const phaseStepName = String(row[1] || '').trim()
-          const parentStepName = String(row[2] || '').trim()
-          const name = String(row[3] || '').trim()
+          const taskName = String(row[2] || '').trim()
+          const subtaskName = String(row[3] || '').trim()
           const description = String(row[4] || '').trim()
           const stepTypeRaw = String(row[5] || '').trim()
           const estimatedDuration = parseInt(String(row[6] || '')) || undefined
@@ -1201,31 +1276,17 @@ function handleExcelUpload(file: File) {
           const fallbackMeasures = String(row[18] || '').trim()
           const remark = String(row[19] || '').trim()
 
-          if (!name) {
-            errors.push(`「${sheetName}」第${rowNum}行：步骤名称不能为空`)
-            continue
-          }
           if (!phase) {
             errors.push(`「${sheetName}」第${rowNum}行：阶段不能为空`)
             continue
           }
-
-          // 检查步骤名称是否重复
-          if (nameToIdMap.has(name)) {
-            errors.push(`「${sheetName}」第${rowNum}行：步骤名称「${name}」与已有步骤重复`)
+          if (!phaseStepName) {
+            errors.push(`「${sheetName}」第${rowNum}行：环节不能为空`)
             continue
           }
-
-          // 解析父子关系
-          let parentStepId: number | undefined
-          if (parentStepName) {
-            const parentId = nameToIdMap.get(parentStepName)
-            if (parentId) {
-              parentStepId = parentId
-            } else {
-              errors.push(`「${sheetName}」第${rowNum}行：父步骤「${parentStepName}」不存在，请确保父步骤在该步骤之前出现`)
-              continue
-            }
+          if (!taskName) {
+            errors.push(`「${sheetName}」第${rowNum}行：任务不能为空`)
+            continue
           }
 
           const stepTypeMap: Record<string, string> = {
@@ -1240,43 +1301,72 @@ function handleExcelUpload(file: File) {
           }
           const assigneeRole = assigneeRoleMap[assigneeRoleRaw.toLowerCase()] || 'executor'
 
-          const newId = Date.now() + Math.random()
-          const newStep: StepTemplate = {
-            id: newId,
-            template_id: templateId.value,
-            parent_step_id: parentStepId,
-            name,
+          const attributes: StepAttributes = {
+            responsible_department: responsibleDepartment || undefined,
+            cooperating_department: cooperatingDepartment || undefined,
+            responsible_team: responsibleTeam || undefined,
+            operator: operator || undefined,
+            reviewer: reviewer || undefined,
+            operation_guide: operationGuide || undefined,
+            verification_method: verificationMethod || undefined,
+            worst_case_analysis: worstCaseAnalysis || undefined,
+            fallback_measures: fallbackMeasures || undefined,
+            remark: remark || undefined,
+          }
+
+          const stageKey = `${phase}|${phase}`
+          const stageId = ensureImportedNode(phase, stageKey, phase, undefined, phaseStepName)
+          const phaseStepKey = `${phase}|${phase}|${phaseStepName}`
+          const phaseStepId = ensureImportedNode(phase, phaseStepKey, phaseStepName, stageId, phaseStepName)
+          const taskKey = `${phase}|${phase}|${phaseStepName}|${taskName}`
+          const taskId = ensureImportedNode(phase, taskKey, taskName, phaseStepId, phaseStepName, stepType)
+          const leafKey = subtaskName ? `${taskKey}|${subtaskName}` : taskKey
+          if (subtaskName && existingLeafPaths.has(taskKey)) {
+            errors.push(`「${sheetName}」第${rowNum}行：任务「${taskName}」已经作为独立任务存在，不能再添加子任务`)
+            continue
+          }
+          if (existingLeafPaths.has(leafKey) || (subtaskName && pathToIdMap.has(leafKey))) {
+            errors.push(`「${sheetName}」第${rowNum}行：任务路径重复「${[phase, phaseStepName, taskName, subtaskName].filter(Boolean).join(' / ')}」`)
+            continue
+          }
+          if (!subtaskName && containerPaths.has(taskKey)) {
+            errors.push(`「${sheetName}」第${rowNum}行：任务「${taskName}」已经作为父任务存在，请填写子任务`)
+            continue
+          }
+          if (!subtaskName && existingLeafPaths.has(taskKey)) {
+            errors.push(`「${sheetName}」第${rowNum}行：任务路径重复「${[phase, phaseStepName, taskName].join(' / ')}」`)
+            continue
+          }
+
+          const leafValues = {
             description,
-            step_type: stepType as any,
-            timeout_minutes: timeoutMinutes,
-            default_assignee_role: assigneeRole,
-            executor_team: executorTeam || '',
-            order_index: globalOrder++,
-            created_at: new Date().toISOString(),
-            phase,
-            phase_step: phaseStepName || '',
-            estimated_duration_minutes: estimatedDuration,
-            attributes: {
-              responsible_department: responsibleDepartment || undefined,
-              cooperating_department: cooperatingDepartment || undefined,
-              responsible_team: responsibleTeam || undefined,
-              operator: operator || undefined,
-              reviewer: reviewer || undefined,
-              operation_guide: operationGuide || undefined,
-              verification_method: verificationMethod || undefined,
-              worst_case_analysis: worstCaseAnalysis || undefined,
-              fallback_measures: fallbackMeasures || undefined,
-              remark: remark || undefined,
-            },
+            estimatedDuration,
+            timeoutMinutes,
+            assigneeRole,
+            executorTeam: executorTeam || '',
+            phaseStepName,
+            attributes,
           }
 
-          if (!phaseStepsMap.has(phase)) {
-            phaseStepsMap.set(phase, [])
+          if (subtaskName) {
+            const subtask = createImportedStep(phase, subtaskName, taskId, stepType, leafValues)
+            if (!phaseStepsMap.has(phase)) phaseStepsMap.set(phase, [])
+            phaseStepsMap.get(phase)!.push(subtask)
+            pathToIdMap.set(leafKey, subtask.id)
+            existingLeafPaths.add(leafKey)
+            containerPaths.add(taskKey)
+          } else {
+            const task = phaseStepsMap.get(phase)?.find(s => s.id === taskId)
+            if (task) {
+              task.description = description
+              task.timeout_minutes = timeoutMinutes
+              task.default_assignee_role = assigneeRole
+              task.executor_team = executorTeam || ''
+              task.estimated_duration_minutes = estimatedDuration
+              task.attributes = attributes
+              existingLeafPaths.add(leafKey)
+            }
           }
-          phaseStepsMap.get(phase)!.push(newStep)
-
-          // 将新步骤加入映射表，后续行可以引用它作为父步骤
-          nameToIdMap.set(name, newId)
         }
       } // end sheet loop
 
