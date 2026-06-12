@@ -350,6 +350,9 @@ func (a *DrillFlowAdapter) SyncStepInstanceIDs(flowInstID int64) {
 }
 
 func (a *DrillFlowAdapter) OnStepStarted(stepInstID int64, timeoutAt time.Time) {
+	var stepInst entity.StepInstance
+	err := repository.DB.Where("id = ?", stepInstID).First(&stepInst).Error
+
 	updates := map[string]interface{}{
 		"status":     string(flowengine.StepStatusRunning),
 		"start_time": time.Now(),
@@ -358,6 +361,9 @@ func (a *DrillFlowAdapter) OnStepStarted(stepInstID int64, timeoutAt time.Time) 
 		updates["timeout_at"] = &timeoutAt
 	}
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInstID).Updates(updates)
+	if err == nil {
+		InvalidateStepCache(a.redis, stepInst.DrillInstanceID)
+	}
 }
 
 func (a *DrillFlowAdapter) OnStepCompleted(stepInstID int64, operatorID int64, remark string) {

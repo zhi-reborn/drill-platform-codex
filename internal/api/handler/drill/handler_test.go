@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 	drillservice "drill-platform/internal/service"
 
@@ -67,12 +68,19 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 		`CREATE TABLE drill_instance_step (
 			id INTEGER PRIMARY KEY,
 			drill_instance_id INTEGER NOT NULL,
+			parent_step_id INTEGER NULL,
 			template_step_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
 			seq INTEGER NOT NULL,
 			status TEXT NOT NULL,
 			assignee_ids TEXT NOT NULL,
+			actual_operator INTEGER NULL,
+			start_time DATETIME NULL,
+			end_time DATETIME NULL,
+			timeout_at DATETIME NULL,
 			remark TEXT,
+			issue_desc TEXT,
+			pre_step_ids TEXT,
 			action_params TEXT
 		)`,
 		`CREATE TABLE drill_template_step (
@@ -89,6 +97,65 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 		}
 	}
 	return db
+}
+
+func TestSyncEngineStepsFromDBAllowsStartAfterDBPredecessorCompleted(t *testing.T) {
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	steps := []map[string]interface{}{
+		{
+			"id":                1,
+			"drill_instance_id": 2,
+			"template_step_id":  10,
+			"name":              "前序任务",
+			"seq":               1,
+			"status":            "completed",
+			"assignee_ids":      "[]",
+			"pre_step_ids":      "[]",
+		},
+		{
+			"id":                2,
+			"drill_instance_id": 2,
+			"template_step_id":  20,
+			"name":              "目标任务",
+			"seq":               2,
+			"status":            "pending",
+			"assignee_ids":      "[]",
+			"pre_step_ids":      "[1]",
+		},
+	}
+	for _, step := range steps {
+		if err := db.Table("drill_instance_step").Create(step).Error; err != nil {
+			t.Fatalf("create step: %v", err)
+		}
+	}
+
+	engine := flowengine.NewEngine()
+	inst, err := engine.CreateInstance(&flowengine.FlowDef{
+		ID:   2,
+		Name: "演练",
+		Steps: []*flowengine.StepDef{
+			{ID: 10, Name: "前序任务", Seq: 1, StepType: flowengine.StepTypeSerial},
+			{ID: 20, Name: "目标任务", Seq: 2, StepType: flowengine.StepTypeSerial, PreStepIDs: []int64{10}},
+		},
+	}, nil, 1)
+	if err != nil {
+		t.Fatalf("create flow instance: %v", err)
+	}
+	inst.Status = flowengine.FlowStatusRunning
+
+	if err := engine.ManualStartStep(2, 20); err != flowengine.ErrPreStepsNotDone {
+		t.Fatalf("expected stale engine state to block start, got %v", err)
+	}
+
+	syncEngineStepsFromDB(engine, 2)
+
+	if err := engine.ManualStartStep(2, 20); err != nil {
+		t.Fatalf("expected synced engine state to allow start, got %v", err)
+	}
 }
 
 func TestUpdateStepInfoInvalidatesStepCache(t *testing.T) {

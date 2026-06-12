@@ -310,27 +310,8 @@ func (h *Handler) StartStep(c *gin.Context) {
 		return
 	}
 
-	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
 	stepDefID := int64(target.stepDefID)
-	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
-		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(target.step.Status)
-		}
-		// 同步父步骤状态（子步骤启动前需要父步骤处于 running/completed）
-		if target.step.ParentStepID != nil && *target.step.ParentStepID > 0 {
-			// target.step.ParentStepID 是步骤实例ID，需要查找对应的模板步骤ID
-			var parentStep entity.StepInstance
-			if err := repository.DB.Where("drill_instance_id = ? AND id = ?", id, *target.step.ParentStepID).First(&parentStep).Error; err == nil {
-				parentDefID := int64(parentStep.StepTemplateID)
-				if parentSI, ok := inst.Steps[parentDefID]; ok {
-					parentSI.Status = flowengine.StepStatus(parentStep.Status)
-					if parentStep.StartTime != nil {
-						parentSI.StartTime = parentStep.StartTime
-					}
-				}
-			}
-		}
-	}
+	syncEngineStepsFromDB(h.drillService.Engine(), id)
 
 	err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID)
 	if err == flowengine.ErrInstanceNotFound {
@@ -338,6 +319,7 @@ func (h *Handler) StartStep(c *gin.Context) {
 			response.InternalError(c, "恢复演练状态失败")
 			return
 		}
+		syncEngineStepsFromDB(h.drillService.Engine(), id)
 		if err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID); err != nil {
 			response.BadRequest(c, stepStartErrorMessage(err))
 			return
@@ -349,6 +331,61 @@ func (h *Handler) StartStep(c *gin.Context) {
 
 	h.drillService.InvalidateStepCache(id)
 	response.SuccessWithMessage(c, "步骤已开始", nil)
+}
+
+func syncEngineStepsFromDB(engine *flowengine.Engine, drillID uint64) {
+	if engine == nil {
+		return
+	}
+	inst, ok := engine.GetInstanceForMutate(int64(drillID))
+	if !ok || inst == nil {
+		return
+	}
+
+	var steps []entity.StepInstance
+	if err := repository.DB.Where("drill_instance_id = ?", drillID).Find(&steps).Error; err != nil {
+		return
+	}
+
+	instIDToDefID := make(map[uint64]int64, len(steps))
+	for _, step := range steps {
+		if step.StepTemplateID > 0 {
+			instIDToDefID[step.ID] = int64(step.StepTemplateID)
+		}
+	}
+
+	for _, step := range steps {
+		si, exists := inst.Steps[int64(step.StepTemplateID)]
+		if !exists {
+			continue
+		}
+		si.ID = int64(step.ID)
+		si.Status = flowengine.StepStatus(step.Status)
+		si.StartTime = step.StartTime
+		si.EndTime = step.EndTime
+		si.TimeoutAt = step.TimeoutAt
+		si.Remark = step.Remark
+		si.IssueDesc = step.IssueDesc
+		if step.ActualOperator != nil {
+			op := int64(*step.ActualOperator)
+			si.ActualOperator = &op
+		} else {
+			si.ActualOperator = nil
+		}
+
+		preDefIDs := make([]int64, 0)
+		if step.PreStepIDs != "" && step.PreStepIDs != "[]" && step.PreStepIDs != "null" {
+			var preInstIDs []uint64
+			if err := json.Unmarshal([]byte(step.PreStepIDs), &preInstIDs); err == nil {
+				for _, preInstID := range preInstIDs {
+					if preDefID, ok := instIDToDefID[preInstID]; ok {
+						preDefIDs = append(preDefIDs, preDefID)
+					}
+				}
+			}
+		}
+		si.PreStepIDs = preDefIDs
+	}
 }
 
 func stepStartErrorMessage(err error) string {
