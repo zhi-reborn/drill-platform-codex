@@ -48,7 +48,7 @@
               :sm="12"
               :lg="8"
             >
-              <el-card class="drill-card" @click="selectDrill(drill.id)">
+              <el-card class="drill-card" @click="goToDrillTasks(drill.id)">
                 <div class="drill-header">
                   <span class="drill-name">{{ drill.name }}</span>
                   <DrillStatusBadge :status="drill.drillStatus" type="drill" />
@@ -74,7 +74,7 @@
                     <el-icon><Monitor /></el-icon>
                     大屏
                   </el-button>
-                  <el-button type="primary" size="small">
+                  <el-button type="primary" size="small" @click.stop.prevent="goToDrillTasks(drill.id)">
                     <el-icon><ArrowRight /></el-icon>
                     查看任务
                   </el-button>
@@ -130,10 +130,9 @@
           <el-radio-group v-model="filterStatus" size="default" @change="handleFilterChange">
             <el-radio-button value="">全部</el-radio-button>
             <el-radio-button value="pending">待执行</el-radio-button>
-            <el-radio-button value="assigned">已分配</el-radio-button>
-            <el-radio-button value="in_progress">执行中</el-radio-button>
+            <el-radio-button value="running">执行中</el-radio-button>
             <el-radio-button value="completed">已完成</el-radio-button>
-            <el-radio-button value="issued">异常</el-radio-button>
+            <el-radio-button value="issue">异常</el-radio-button>
           </el-radio-group>
         </div>
       </div>
@@ -141,80 +140,146 @@
       <div v-loading="loading" class="tasks-container">
         <EmptyBox v-if="!loading && filteredTasks.length === 0" title="暂无任务" description="当前没有分配给您的任务" />
 
-        <el-row v-else :gutter="20" class="tasks-grid">
-          <el-col v-for="task in filteredTasks" :key="task.id" :xs="24" :sm="12" :lg="8" :xl="6">
-            <div class="task-card" :class="getStatusClass(task.status)">
-              <div class="task-card-header">
-                <div class="task-step-name">{{ task.name }}</div>
-                <DrillStatusBadge :status="task.status" type="step" />
+        <div v-else class="flow-list">
+          <template v-for="(group, gIdx) in groupedTasks" :key="group.phase">
+            <!-- 阶段分隔标题 -->
+            <div class="phase-header" :class="{ 'is-first': gIdx === 0 }">
+              <div class="phase-icon">
+                <svg v-if="group.activeCount > 0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="16" height="16"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zM288 512a38.4 38.4 0 0 0 0 76.8h376.32l-100.352 107.52a38.4 38.4 0 0 0 55.04 53.76l168.96-180.48a38.4 38.4 0 0 0 0-53.76l-168.96-180.48a38.4 38.4 0 0 0-55.04 53.76L664.32 512H288z"/></svg>
+                <svg v-else-if="group.doneCount === group.totalCount" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="16" height="16"><path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768m0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896"/><path fill="currentColor" d="M745.344 361.344a32 32 0 0 1 45.312 45.312l-288 288a32 32 0 0 1-45.312 0l-160-160a32 32 0 1 1 45.312-45.312L480 626.752z"/></svg>
+                <span v-else class="phase-dot"></span>
               </div>
-
-              <div class="task-card-body">
-                <div class="task-meta-row">
-                  <el-tag v-if="task.default_assignee_role === 'director'" size="small" type="warning">指挥组</el-tag>
-                  <el-tag v-else-if="task.default_assignee_role" size="small" type="primary">{{ task.default_assignee_role }}</el-tag>
-                  <el-tag v-if="task.executor_team" size="small" type="info">{{ task.executor_team }}</el-tag>
-                  <span v-if="task.phase_step" class="task-phase">{{ task.phase_step }}</span>
+              <span class="phase-name">{{ group.phase }}</span>
+              <span class="phase-stats">{{ group.doneCount }}/{{ group.totalCount }}</span>
+            </div>
+            <!-- 阶段内的任务列表 -->
+            <template
+              v-for="(task, tIdx) in group.tasks"
+              :key="task.id"
+            >
+              <!-- 容器步骤：渲染为分节标题（depth-0 阶段容器由 phase-header 展示，跳过） -->
+              <div
+                v-if="(task as any)._isContainer && getStepDepth(task) > 0"
+                class="section-header"
+                :class="[`depth-${getStepDepth(task)}`]"
+                :style="{ marginLeft: getFlowIndent(task) }"
+              >
+                <div class="section-badge">
+                  <span class="section-badge-label">{{ getStepDepthLabel(task) }}</span>
                 </div>
-
-                <div class="task-meta">
-                  <div v-if="task.estimated_duration_minutes" class="task-duration">
-                    预计耗时：{{ task.estimated_duration_minutes }} 分钟
-                  </div>
-                  <div v-if="task.timeout_at" class="task-deadline">
-                    <el-icon><Clock /></el-icon>
-                    <span>截止：{{ formatDeadline(task.timeout_at) }}</span>
-                  </div>
-                </div>
+                <span class="section-name">{{ task.name }}</span>
+                <span class="section-child-count">{{ getSectionChildCount(task) }}</span>
+                <DrillStatusBadge v-if="task.status !== 'pending'" :status="task.status" type="step" />
               </div>
-
-              <div class="task-card-footer">
-                <el-button
-                  v-if="task.status === 'pending' && !canStartTask(task)"
-                  type="info"
-                  class="action-btn"
-                  disabled
-                >
-                  等待前序完成
-                </el-button>
-                <el-button
-                  v-else-if="task.status === 'pending' && canStartTask(task)"
-                  type="primary"
-                  class="action-btn"
-                  @click="goToTaskDetail(task.id)"
-                >
-                  待执行
-                </el-button>
-                <el-button
-                  v-else-if="task.status === 'running' && !isParentTask(task)"
-                  type="primary"
-                  class="action-btn"
-                  @click="goToTaskDetail(task.id)"
-                >
-                  执行中
-                </el-button>
-                <el-button
-                  v-else-if="task.status === 'running'"
-                  class="action-btn"
-                  disabled
-                >
-                  子任务执行中
-                </el-button>
-                <el-button
-                  v-else-if="task.status === 'issue'"
-                  type="warning"
-                  class="action-btn"
-                  @click="goToTaskDetail(task.id)"
-                >
-                  查看异常
-                </el-button>
-                <el-button v-else disabled class="action-btn">
-                  已完成
-                </el-button>
+              <!-- 叶子步骤：渲染为 flow card -->
+              <div
+                v-else
+                class="flow-item"
+                :class="[getStatusClass(task.status), { 'is-last': tIdx === group.tasks.length - 1 && gIdx === groupedTasks.length - 1 }]"
+                :style="{ marginLeft: getFlowIndent(task) }"
+              >
+              <div class="flow-rail">
+                <div class="flow-dot" :class="task.status">
+                  <svg v-if="task.status === 'completed'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="12" height="12"><path fill="currentColor" d="M745.344 361.344a32 32 0 0 1 45.312 45.312l-288 288a32 32 0 0 1-45.312 0l-160-160a32 32 0 1 1 45.312-45.312L480 626.752z"/></svg>
+                  <svg v-else-if="task.status === 'running'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="12" height="12"><path fill="currentColor" d="M288 512a38.4 38.4 0 0 0 0 76.8h448a38.4 38.4 0 0 0 0-76.8H288z"/></svg>
+                  <svg v-else-if="task.status === 'timeout'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="12" height="12"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m0 393.664L407.936 353.6a38.4 38.4 0 1 0-54.336 54.336L457.664 512 353.6 616.064a38.4 38.4 0 1 0 54.336 54.336L512 566.336 616.064 670.4a38.4 38.4 0 1 0 54.336-54.336L566.336 512 670.4 407.936a38.4 38.4 0 1 0-54.336-54.336z"/></svg>
+                  <svg v-else-if="task.status === 'issue'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="12" height="12"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm-32 232v288a32 32 0 0 0 64 0V296a32 32 0 0 0-64 0zm0 416a32 32 0 1 0 64 0 32 32 0 0 0-64 0z"/></svg>
+                  <span v-else class="dot-inner"></span>
+                </div>
+                <div class="flow-line"></div>
+              </div>
+              <div class="flow-content">
+                <div class="flow-card" :class="[getStatusClass(task.status)]" @click="goToTaskDetail(task.id)">
+                  <div class="flow-card-header">
+                    <div class="flow-step-name">{{ task.name }}</div>
+                    <DrillStatusBadge :status="task.status" type="step" />
+                  </div>
+                  <div class="flow-card-body">
+                    <div class="flow-meta-row">
+                      <el-tag v-if="task.default_assignee_role === 'director'" size="small" type="warning">指挥组</el-tag>
+                      <el-tag v-else-if="task.default_assignee_role" size="small" type="primary">{{ task.default_assignee_role }}</el-tag>
+                      <el-tag v-if="task.executor_team" size="small" type="info">{{ task.executor_team }}</el-tag>
+                      <el-tag v-if="getTaskOperator(task)" size="small" type="success">
+                        操作人：{{ getTaskOperator(task) }}
+                      </el-tag>
+                    </div>
+                    <div class="flow-meta">
+                      <div v-if="task.estimated_duration_minutes" class="flow-duration">
+                        预计耗时：{{ task.estimated_duration_minutes }} 分钟
+                      </div>
+                      <div v-if="task.timeout_at" class="flow-deadline">
+                        <el-icon><Clock /></el-icon>
+                        <span>截止：{{ formatDeadline(task.timeout_at) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flow-card-footer" @click.stop>
+                    <el-button
+                      v-if="task.status === 'pending' && !canStartTask(task)"
+                      type="info"
+                      size="small"
+                      disabled
+                    >
+                      等待前序完成
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'pending' && canStartTask(task)"
+                      type="primary"
+                      size="small"
+                      @click="goToTaskDetail(task.id)"
+                    >
+                      开始执行
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'running' && !isParentTask(task)"
+                      type="success"
+                      size="small"
+                      @click="goToTaskDetail(task.id)"
+                    >
+                      <el-icon><CircleCheck /></el-icon>
+                      完成
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'running'"
+                      size="small"
+                      disabled
+                    >
+                      子任务执行中
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'issue'"
+                      type="warning"
+                      size="small"
+                      @click="goToTaskDetail(task.id)"
+                    >
+                      查看异常
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'timeout'"
+                      type="danger"
+                      size="small"
+                      @click="goToTaskDetail(task.id)"
+                    >
+                      已超时
+                    </el-button>
+                    <el-button
+                      v-else-if="task.status === 'skipped'"
+                      type="info"
+                      size="small"
+                      disabled
+                    >
+                      已跳过
+                    </el-button>
+                    <el-button v-else size="small" disabled>
+                      已完成
+                    </el-button>
+                  </div>
+                </div>
               </div>
             </div>
-          </el-col>
-        </el-row>
+          </template>
+          </template>
+        </div>
       </div>
     </div>
   </div>
@@ -222,9 +287,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Clock, User, Monitor, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck } from '@element-plus/icons-vue'
 import type { StepInstance } from '@/types/instance'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
@@ -234,9 +299,11 @@ import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(false)
 const tasks = ref<StepInstance[]>([])
+const drillFlowSteps = ref<StepInstance[]>([])
 const instances = ref<DrillInstance[]>([])
 const filterStatus = ref<string>('')
 
@@ -276,8 +343,107 @@ const filteredTasks = computed(() => {
   if (filterStatus.value) {
     result = result.filter((t: StepInstance) => t.status === filterStatus.value)
   }
-  return result
+  return sortTasksByFlowOrder(result, drillFlowSteps.value)
 })
+
+const groupedTasks = computed(() => {
+  const sorted = filteredTasks.value
+  const idSet = new Set<number>()
+  for (const t of sorted) idSet.add(t.id)
+  const parentSet = new Set<number>()
+  for (const t of sorted) {
+    if (t.parent_step_id && idSet.has(t.parent_step_id)) {
+      parentSet.add(t.parent_step_id)
+    }
+  }
+
+  const groups: { phase: string; tasks: (StepInstance & { _isContainer?: boolean })[]; doneCount: number; activeCount: number; totalCount: number }[] = []
+  let currentGroup: typeof groups[0] | null = null
+
+  for (const task of sorted) {
+    const phase = task.phase || task.phase_step || '未分类'
+    if (!currentGroup || currentGroup.phase !== phase) {
+      currentGroup = { phase, tasks: [], doneCount: 0, activeCount: 0, totalCount: 0 }
+      groups.push(currentGroup)
+    }
+    const isContainer = parentSet.has(task.id)
+    currentGroup.tasks.push({ ...task, _isContainer: isContainer })
+    if (!isContainer) {
+      currentGroup.totalCount++
+      if (['completed', 'skipped'].includes(task.status)) currentGroup.doneCount++
+      if (task.status === 'running') currentGroup.activeCount++
+    }
+  }
+  return groups
+})
+
+function flattenTreeOrder(taskList: StepInstance[]): StepInstance[] {
+  if (taskList.length === 0) return []
+
+  const idMap = new Map<number, StepInstance>()
+  for (const t of taskList) {
+    idMap.set(t.id, t)
+  }
+
+  // 构建子节点映射
+  const childrenMap = new Map<number, StepInstance[]>()
+  const roots: StepInstance[] = []
+
+  for (const t of taskList) {
+    if (t.parent_step_id && idMap.has(t.parent_step_id)) {
+      if (!childrenMap.has(t.parent_step_id)) childrenMap.set(t.parent_step_id, [])
+      childrenMap.get(t.parent_step_id)!.push(t)
+    } else {
+      roots.push(t)
+    }
+  }
+
+  // 子节点按 seq 排序
+  for (const children of childrenMap.values()) {
+    children.sort((a, b) => (a.seq || 0) - (b.seq || 0))
+  }
+  roots.sort((a, b) => (a.seq || 0) - (b.seq || 0))
+
+  // 前序遍历
+  const result: StepInstance[] = []
+  function traverse(node: StepInstance) {
+    result.push(node)
+    const children = childrenMap.get(node.id)
+    if (children) {
+      for (const child of children) {
+        traverse(child)
+      }
+    }
+  }
+
+  for (const root of roots) {
+    traverse(root)
+  }
+  return result
+}
+
+function sortTasksByFlowOrder(visibleTasks: StepInstance[], flowSteps: StepInstance[]): StepInstance[] {
+  if (visibleTasks.length === 0) return []
+  if (flowSteps.length === 0) return flattenTreeOrder(visibleTasks)
+
+  const visibleMap = new Map<number, StepInstance>()
+  for (const task of visibleTasks) visibleMap.set(task.id, task)
+
+  const ordered: StepInstance[] = []
+  for (const step of flattenTreeOrder(flowSteps)) {
+    const visibleTask = visibleMap.get(step.id)
+    if (visibleTask) {
+      ordered.push(visibleTask)
+    }
+  }
+
+  for (const task of flattenTreeOrder(visibleTasks)) {
+    if (!ordered.some(orderedTask => orderedTask.id === task.id)) {
+      ordered.push(task)
+    }
+  }
+  return ordered
+}
 
 const recentActivity = ref<any[]>([])
 
@@ -287,8 +453,53 @@ const getStatusClass = (status: string) => {
     issue: 'status-issued',
     completed: 'status-completed',
     timeout: 'status-issued',
+    skipped: 'status-completed',
   }
   return classMap[status] || ''
+}
+
+function getStepDepth(task: StepInstance): number {
+  let depth = 0
+  let pid = task.parent_step_id
+  const visited = new Set<number>()
+  while (pid && !visited.has(pid)) {
+    visited.add(pid)
+    depth++
+    const parent = getWorkflowSteps().find(t => t.id === pid)
+    pid = parent?.parent_step_id ?? undefined
+  }
+  return depth
+}
+
+function getFlowIndent(task: StepInstance): string {
+  return `${Math.max(getStepDepth(task) - 1, 0) * 20}px`
+}
+
+function getStepDepthLabel(task: StepInstance): string {
+  const depth = getStepDepth(task)
+  const labels: Record<number, string> = { 0: '阶段', 1: '环节', 2: '任务' }
+  return labels[depth] ?? '分组'
+}
+
+function getSectionChildCount(task: StepInstance): string {
+  const workflowSteps = getWorkflowSteps()
+  const children = workflowSteps.filter(t => t.parent_step_id === task.id)
+  const leafCount = children.filter(c => !workflowSteps.some(x => x.parent_step_id === c.id)).length
+  return leafCount > 0 ? `${leafCount} 项` : ''
+}
+
+function getWorkflowSteps(): StepInstance[] {
+  return drillFlowSteps.value.length > 0 ? drillFlowSteps.value : tasks.value
+}
+
+function getTaskOperator(task: StepInstance): string {
+  if (!task.attributes || typeof task.attributes !== 'string') return ''
+  try {
+    const attributes = JSON.parse(task.attributes)
+    return attributes.operator || ''
+  } catch {
+    return ''
+  }
 }
 
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
@@ -357,7 +568,7 @@ function formatDeadline(d: string): string {
 
 // 检查是否为父任务（有其他任务的 parent_step_id 指向它）
 function isParentTask(task: StepInstance): boolean {
-  return tasks.value.some((t: StepInstance) => t.parent_step_id === task.id)
+  return getWorkflowSteps().some((t: StepInstance) => t.parent_step_id === task.id)
 }
 
 // 终态集合
@@ -396,7 +607,7 @@ function canStartTask(task: StepInstance): boolean {
   const preStepIds = task.pre_step_ids || []
   if (preStepIds.length > 0) {
     const allPreDone = preStepIds.every((preId: number) => {
-      const preStep = tasks.value.find((t: StepInstance) => t.id === preId)
+      const preStep = getWorkflowSteps().find((t: StepInstance) => t.id === preId)
       // 前序步骤未找到，视为未完成
       if (!preStep) return false
       return TERMINAL_STATUSES.includes(preStep.status)
@@ -406,7 +617,7 @@ function canStartTask(task: StepInstance): boolean {
 
   // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也不能开始
   if (preStepIds.length === 0 && task.parent_step_id) {
-    const siblings = tasks.value.filter((t: StepInstance) =>
+    const siblings = getWorkflowSteps().filter((t: StepInstance) =>
       t.parent_step_id === task.parent_step_id && t.id !== task.id
     )
     const earlierPendingSibling = siblings.find((t: StepInstance) =>
@@ -422,13 +633,21 @@ function canStartTask(task: StepInstance): boolean {
 function selectDrill(drillId: number) {
   selectedDrillId.value = drillId
   currentDrill.value = instances.value.find(i => i.id === drillId) || null
+  loadDrillFlowSteps(drillId)
+}
+
+function goToDrillTasks(drillId: number) {
+  selectDrill(drillId)
+  router.replace({ path: '/executor', query: { drill_id: String(drillId) } })
 }
 
 // 返回演练列表
 function backToDrillList() {
   selectedDrillId.value = null
   currentDrill.value = null
+  drillFlowSteps.value = []
   filterStatus.value = ''
+  router.replace({ path: '/executor' })
 }
 
 // 处理筛选变化
@@ -447,8 +666,8 @@ function viewScreen(drillId: number) {
 }
 
 // 加载数据
-async function loadTasks(): Promise<void> {
-  loading.value = true
+async function loadTasks(options: { silent?: boolean } = {}): Promise<void> {
+  if (!options.silent) loading.value = true
   try {
     // 加载我的任务
     const rawTasks = await taskApi.getMyTasks()
@@ -461,6 +680,9 @@ async function loadTasks(): Promise<void> {
     // 加载演练列表
     const drillResult = await drillApi.getList({ page: 1, page_size: 50 })
     instances.value = drillResult.list
+    if (selectedDrillId.value) {
+      await loadDrillFlowSteps(selectedDrillId.value)
+    }
     
     // 加载最近活动（从演练日志）
     const allLogs: any[] = []
@@ -486,13 +708,38 @@ async function loadTasks(): Promise<void> {
     ElMessage.error('加载任务失败')
     console.error('Failed to load tasks:', error)
   } finally {
-    loading.value = false
+    if (!options.silent) loading.value = false
+  }
+}
+
+async function loadDrillFlowSteps(drillId: number): Promise<void> {
+  try {
+    const rawSteps = await drillApi.getSteps(drillId)
+    drillFlowSteps.value = rawSteps.map((t: StepInstance) => ({
+      ...t,
+      pre_step_ids: parsePreStepIds(t.pre_step_ids),
+    }))
+  } catch (error) {
+    console.error('Failed to load drill flow steps:', error)
   }
 }
 
 // WebSocket 实时同步
 let wsConnections: WebSocket[] = []
 let componentDestroyed = false
+let refreshTimer: number | null = null
+
+function scheduleTaskRefresh() {
+  if (refreshTimer !== null) {
+    window.clearTimeout(refreshTimer)
+  }
+  refreshTimer = window.setTimeout(() => {
+    refreshTimer = null
+    loadTasks({ silent: true }).then(() => {
+      connectAllDrills()
+    })
+  }, 300)
+}
 
 function connectDrillWS(drillId: number) {
   const authStore = useAuthStore()
@@ -518,10 +765,11 @@ function connectDrillWS(drillId: number) {
             if (payload.issue_desc) tasks.value[idx].issue_desc = payload.issue_desc
           }
         }
+        scheduleTaskRefresh()
       }
       // 演练状态变化时全量刷新
       if (eventType.startsWith('drill_')) {
-        loadTasks()
+        scheduleTaskRefresh()
       }
     } catch { /* ignore */ }
   }
@@ -559,12 +807,19 @@ function disconnectAllWS() {
 
 onMounted(() => {
   loadTasks().then(() => {
+    const queryDrillId = Number(route.query.drill_id)
+    if (queryDrillId) {
+      selectDrill(queryDrillId)
+    }
     connectAllDrills()
   })
 })
 
 onBeforeUnmount(() => {
   componentDestroyed = true
+  if (refreshTimer !== null) {
+    window.clearTimeout(refreshTimer)
+  }
   disconnectAllWS()
 })
 </script>
@@ -782,116 +1037,297 @@ onBeforeUnmount(() => {
   min-height: 400px;
 }
 
-.tasks-grid {
-  .task-card {
-    @include card-compact;
+.flow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.phase-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md 0 $spacing-sm;
+  border-bottom: 1px solid $border-color-light;
+  margin-bottom: $spacing-sm;
+
+  &.is-first {
+    padding-top: 0;
+  }
+
+  .phase-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+    color: $text-tertiary;
+
+    svg {
+      filter: none;
+    }
+
+    .phase-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: $border-color;
+    }
+  }
+
+  .phase-name {
+    font-size: $font-size-md;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    flex: 1;
+  }
+
+  .phase-stats {
+    font-size: $font-size-xs;
+    color: $text-tertiary;
+    background: $bg-tertiary;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 10px 0 4px 0;
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.01) 70%, transparent 100%);
+  border-left: 3px solid $color-accent;
+  border-radius: 0 $radius-base $radius-base 0;
+
+  &.depth-1 {
+    margin-left: 0;
+  }
+
+  &.depth-2 {
+    margin-left: 20px;
+    border-left-color: $color-success;
+    background: linear-gradient(90deg, rgba(82, 196, 26, 0.07) 0%, rgba(82, 196, 26, 0.01) 70%, transparent 100%);
+  }
+
+  .section-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: $font-size-xs;
+    font-weight: 500;
+    background: rgba(24, 144, 255, 0.12);
+    color: $color-accent;
+    letter-spacing: 0.04em;
+
+    .depth-2 & {
+      background: rgba(82, 196, 26, 0.12);
+      color: $color-success;
+    }
+  }
+
+  .section-name {
+    flex: 1;
+    font-size: $font-size-base;
+    font-weight: 600;
+    color: $text-primary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .section-child-count {
+    font-size: $font-size-xs;
+    color: $text-tertiary;
+    background: $bg-tertiary;
+    padding: 1px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+}
+
+.flow-item {
+  display: flex;
+  gap: $spacing-base;
+  min-height: 0;
+
+  .flow-rail {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 180px;
-    border-left-width: 4px;
-    transition: transform 0.2s, box-shadow 0.2s;
+    align-items: center;
+    width: 32px;
+    flex-shrink: 0;
 
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: $shadow-md;
-    }
+    .flow-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 1;
+      background: $bg-tertiary;
+      border: 2px solid $border-color;
+      color: $text-tertiary;
+      transition: all 0.3s;
 
-    &.status-in-progress {
-      border-left-color: #55c3d3;
-    }
+      .dot-inner {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: $text-tertiary;
+      }
 
-    &.status-issued {
-      border-left-color: #da3633;
-    }
+      &.completed {
+        background: $color-success-bg;
+        border-color: $color-success;
+        color: $color-success;
+      }
 
-    &.status-completed {
-      border-left-color: #2ea043;
-    }
+      &.running {
+        background: $color-accent-bg;
+        border-color: $color-accent;
+        color: $color-accent;
+        animation: dot-pulse 2s ease-in-out infinite;
+      }
 
-    .task-card-header {
-      @include flex-between;
-      margin-bottom: $spacing-sm;
-      gap: $spacing-xs;
+      &.timeout {
+        background: $color-error-bg;
+        border-color: $color-error;
+        color: $color-error;
+      }
 
-      .task-step-name {
-        font-size: $font-size-base;
-        font-weight: $font-weight-semibold;
-        color: $text-primary;
-        @include ellipsis(1);
-        flex: 1;
+      &.issue {
+        background: $color-warning-bg;
+        border-color: $color-warning;
+        color: $color-warning;
+      }
+
+      &.pending {
+        background: $bg-tertiary;
+        border-color: $border-color;
+        color: $text-tertiary;
       }
     }
 
-    .task-card-body {
+    .flow-line {
+      width: 2px;
       flex: 1;
+      min-height: 8px;
+      background: $border-color-light;
+    }
+  }
+
+  &.is-last .flow-rail .flow-line {
+    display: none;
+  }
+
+  .flow-content {
+    flex: 1;
+    padding-bottom: $spacing-base;
+  }
+
+  .flow-card {
+    background: $bg-secondary;
+    border: 1px solid $border-color-light;
+    border-radius: $radius-md;
+    padding: $spacing-md $spacing-base;
+    transition: all 0.2s;
+    border-left: 3px solid $border-color;
+    cursor: pointer;
+
+    &:hover {
+      box-shadow: $shadow-md;
+      border-color: $color-accent-border;
+    }
+
+    &.status-in-progress {
+      border-left-color: $color-accent;
+    }
+
+    &.status-issued {
+      border-left-color: $color-error;
+    }
+
+    &.status-completed {
+      border-left-color: $color-success;
+      opacity: 0.75;
+    }
+
+    .flow-card-header {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
       margin-bottom: $spacing-sm;
 
-      .task-meta-row {
+      .flow-step-name {
+        font-size: $font-size-base;
+        font-weight: $font-weight-semibold;
+        color: $text-primary;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .flow-card-body {
+      margin-bottom: $spacing-sm;
+
+      .flow-meta-row {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
         margin-bottom: $spacing-xs;
         align-items: center;
 
-        .task-phase {
+        .flow-phase {
           font-size: $font-size-xs;
           color: $text-tertiary;
           margin-left: 4px;
         }
       }
 
-      .task-step-name {
-        font-size: $font-size-base;
-        font-weight: $font-weight-medium;
-        color: $text-primary;
-        margin-bottom: $spacing-xs;
-      }
-
-      .task-description {
-        font-size: $font-size-sm;
-        color: $text-secondary;
-        margin-bottom: $spacing-sm;
-        @include ellipsis(2);
-        line-height: 1.6;
-      }
-
-      .task-meta {
+      .flow-meta {
         display: flex;
-        flex-direction: column;
-        gap: $spacing-xs;
+        flex-wrap: wrap;
+        gap: $spacing-md;
         font-size: $font-size-xs;
         color: $text-tertiary;
 
-        .task-duration {
+        .flow-duration {
           color: $text-secondary;
         }
 
-        .task-deadline,
-        .task-assignee {
+        .flow-deadline {
           display: flex;
           align-items: center;
           gap: 4px;
+          color: $color-warning;
 
           .el-icon {
             font-size: 14px;
           }
         }
-
-        .task-deadline {
-          color: $color-warning;
-        }
       }
     }
 
-    .task-card-footer {
-      border-top: 1px solid $border-color-light;
+    .flow-card-footer {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
       padding-top: $spacing-sm;
-
-      .action-btn {
-        width: 100%;
-      }
+      border-top: 1px solid $border-color-light;
     }
   }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba($color-accent, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba($color-accent, 0); }
 }
 </style>

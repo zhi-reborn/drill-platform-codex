@@ -52,6 +52,21 @@ func (h *Handler) GetDetail(c *gin.Context) {
 	response.Success(c, task)
 }
 
+func (h *Handler) StartStep(c *gin.Context) {
+	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的步骤ID")
+		return
+	}
+
+	if err := h.taskService.StartStep(stepID, middleware.GetUserID(c)); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "任务已开始", nil)
+}
+
 func (h *Handler) CompleteStep(c *gin.Context) {
 	stepID, err := strconv.ParseUint(c.Param("stepId"), 10, 64)
 	if err != nil {
@@ -67,7 +82,7 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 	}
 
 	if err := h.taskService.CompleteStep(stepID, middleware.GetUserID(c), req.Remark); err != nil {
-		response.InternalError(c, "内部错误")
+		response.BadRequest(c, err.Error())
 		return
 	}
 

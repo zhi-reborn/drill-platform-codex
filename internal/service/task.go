@@ -1,12 +1,14 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/infrastructure/websocket"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 )
 
@@ -43,6 +45,76 @@ func (s *TaskService) SetRedis(redis RedisClient) {
 	s.redis = redis
 }
 
+func assigneeIDsContain(assigneeIDs string, userID uint64) bool {
+	ids, ok := parseAssigneeIDs(assigneeIDs)
+	if !ok {
+		return false
+	}
+	for _, id := range ids {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func parseAssigneeIDs(assigneeIDs string) ([]uint64, bool) {
+	if assigneeIDs == "" || assigneeIDs == "[]" || assigneeIDs == "null" {
+		return nil, false
+	}
+	var ids []uint64
+	if err := json.Unmarshal([]byte(assigneeIDs), &ids); err != nil {
+		return nil, false
+	}
+	return ids, len(ids) > 0
+}
+
+func implicitAssigneeMatches(step *entity.StepInstance, user *entity.User) bool {
+	if step.ExecutorTeam != "" {
+		return user.Department == step.ExecutorTeam
+	}
+	return step.DefaultAssigneeRole != "" && step.DefaultAssigneeRole == user.Role
+}
+
+func parseStepAttributes(attributes string) map[string]string {
+	if attributes == "" || attributes == "{}" || attributes == "null" {
+		return nil
+	}
+	values := map[string]string{}
+	if err := json.Unmarshal([]byte(attributes), &values); err != nil {
+		return nil
+	}
+	return values
+}
+
+func operatorAttributeMatches(step *entity.StepInstance, user *entity.User) (bool, bool) {
+	attributes := parseStepAttributes(step.JSONAttributes)
+	operator := attributes["operator"]
+	if operator == "" {
+		return false, false
+	}
+	return operator == user.RealName || operator == user.Username, true
+}
+
+func canExecutorOperateStep(step *entity.StepInstance, user *entity.User) bool {
+	if step.ActualOperator != nil && *step.ActualOperator == user.ID {
+		return true
+	}
+	if matched, hasOperator := operatorAttributeMatches(step, user); hasOperator {
+		return matched
+	}
+	ids, hasExplicitAssignees := parseAssigneeIDs(step.AssigneeIDs)
+	if hasExplicitAssignees {
+		for _, id := range ids {
+			if id == user.ID {
+				return true
+			}
+		}
+		return false
+	}
+	return implicitAssigneeMatches(step, user)
+}
+
 func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*entity.StepInstance, error) {
 	step, err := s.stepRepo.FindByID(stepID)
 	if err != nil {
@@ -62,8 +134,8 @@ func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*en
 		return step, nil
 	}
 
-	if step.ExecutorTeam != "" && user.Department != step.ExecutorTeam {
-		return nil, fmt.Errorf("您所在部门 [%s] 不在该任务的执行组 [%s] 内，无法操作", user.Department, step.ExecutorTeam)
+	if !canExecutorOperateStep(step, user) {
+		return nil, fmt.Errorf("该任务未分配给您或您所在部门，无法操作")
 	}
 
 	return step, nil
@@ -71,86 +143,38 @@ func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*en
 
 func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
+	var user *entity.User
 
-	// 1. 按 assignee_ids 精确匹配
+	if s.userRepo != nil {
+		u, err := s.userRepo.FindByID(userID)
+		if err != nil {
+			return nil, errors.New("用户不存在")
+		}
+		user = u
+	}
+
+	statuses := []string{"pending", "running", "issue", "completed", "skipped", "timeout"}
 	err := repository.DB.
-		Where("JSON_CONTAINS(assignee_ids, CAST(? AS JSON)) AND status IN ?",
-			userID, []string{"pending", "running", "issue"}).
+		Table("drill_instance_step").
+		Select("drill_instance_step.*").
+		Joins("JOIN drill_instance ON drill_instance.id = drill_instance_step.drill_instance_id").
+		Where("drill_instance.status IN ?", []string{"running", "paused"}).
+		Where("drill_instance_step.status IN ?", statuses).
+		Order("drill_instance_step.drill_instance_id DESC, drill_instance_step.seq ASC").
 		Find(&steps).Error
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. 按用户角色和部门补充匹配（覆盖 assignee_ids 不包含该用户但角色/部门匹配的情况）
-	if s.userRepo != nil {
-		user, uErr := s.userRepo.FindByID(userID)
-		if uErr == nil && user.ID > 0 {
-			var extraSteps []entity.StepInstance
-			conditions := []string{}
-			args := []interface{}{}
-
-			// 按部门匹配 executor_team
-			if user.Department != "" {
-				conditions = append(conditions, "executor_team = ?")
-				args = append(args, user.Department)
-			}
-
-			// 按角色匹配 default_assignee_role
-			if user.Role != "" {
-				conditions = append(conditions, "default_assignee_role = ?")
-				args = append(args, user.Role)
-			}
-
-			if len(conditions) > 0 {
-				condStr := conditions[0]
-				for i := 1; i < len(conditions); i++ {
-					condStr += " OR " + conditions[i]
-				}
-				err := repository.DB.
-					Where("status IN ?", []string{"pending", "running", "issue"}).
-					Where(condStr, args...).
-					Find(&extraSteps).Error
-				if err == nil {
-					existingIDs := make(map[uint64]bool)
-					for _, s := range steps {
-						existingIDs[s.ID] = true
-					}
-					for _, es := range extraSteps {
-						if !existingIDs[es.ID] {
-							steps = append(steps, es)
-						}
-					}
-				}
-			}
+	// 只返回当前用户可操作的任务；流程排序由前端使用全量步骤骨架完成。
+	filtered := steps[:0]
+	for _, step := range steps {
+		if assigneeIDsContain(step.AssigneeIDs, userID) || (user != nil && canExecutorOperateStep(&step, user)) {
+			filtered = append(filtered, step)
 		}
 	}
 
-	// 3. 过滤：只返回属于活跃演练的步骤
-	if len(steps) > 0 {
-		drillIDs := make(map[uint64]bool)
-		for _, s := range steps {
-			drillIDs[s.DrillInstanceID] = true
-		}
-		var activeDrills []entity.DrillInstance
-		drillIDList := make([]uint64, 0, len(drillIDs))
-		for id := range drillIDs {
-			drillIDList = append(drillIDList, id)
-		}
-		repository.DB.Where("id IN ? AND status IN ?", drillIDList, []string{"running", "paused"}).Find(&activeDrills)
-		activeDrillMap := make(map[uint64]bool)
-		for _, d := range activeDrills {
-			activeDrillMap[d.ID] = true
-		}
-		filtered := steps[:0]
-		for _, s := range steps {
-			if activeDrillMap[s.DrillInstanceID] {
-				filtered = append(filtered, s)
-			}
-		}
-		steps = filtered
-	}
-
-	return steps, nil
+	return filtered, nil
 }
 
 func (s *TaskService) EnrichStepsWithAssigneeNames(steps []entity.StepInstance) []entity.StepInstance {
@@ -164,22 +188,77 @@ func (s *TaskService) GetTaskDetail(stepID uint64) (*entity.StepInstance, error)
 	return s.stepRepo.FindByID(stepID)
 }
 
+func (s *TaskService) StartStep(stepID uint64, operatorID uint64) error {
+	step, err := s.checkExecutorPermission(stepID, operatorID)
+	if err != nil {
+		return err
+	}
+	if step.Status != "pending" {
+		return fmt.Errorf("只有待执行任务可以开始")
+	}
+
+	var childCount int64
+	if err := repository.DB.Model(&entity.StepInstance{}).
+		Where("drill_instance_id = ? AND parent_step_id = ?", step.DrillInstanceID, step.ID).
+		Count(&childCount).Error; err != nil {
+		return err
+	}
+	if childCount > 0 {
+		return fmt.Errorf("父任务由子任务推进，不能直接开始")
+	}
+
+	if s.drillService != nil && s.drillService.engine != nil {
+		err := s.drillService.engine.ManualStartStep(
+			int64(step.DrillInstanceID),
+			int64(step.StepTemplateID),
+		)
+		if errors.Is(err, flowengine.ErrInstanceNotFound) {
+			if recErr := s.drillService.Recover(step.DrillInstanceID); recErr != nil {
+				return fmt.Errorf("恢复演练状态失败")
+			}
+			return s.drillService.engine.ManualStartStep(
+				int64(step.DrillInstanceID),
+				int64(step.StepTemplateID),
+			)
+		}
+		return err
+	}
+
+	now := time.Now()
+	return repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepID).Updates(map[string]interface{}{
+		"status":     "running",
+		"start_time": &now,
+	}).Error
+}
+
 func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark string) error {
 	step, err := s.checkExecutorPermission(stepID, operatorID)
 	if err != nil {
 		return err
 	}
 	if step.Status != "running" {
-		return nil
+		return fmt.Errorf("只有执行中的任务可以完成")
 	}
 
 	if s.drillService != nil && s.drillService.engine != nil {
-		return s.drillService.engine.CompleteStep(
+		err := s.drillService.engine.CompleteStep(
 			int64(step.DrillInstanceID),
 			int64(step.StepTemplateID),
 			int64(operatorID),
 			remark,
 		)
+		if errors.Is(err, flowengine.ErrInstanceNotFound) {
+			if recErr := s.drillService.Recover(step.DrillInstanceID); recErr != nil {
+				return fmt.Errorf("恢复演练状态失败")
+			}
+			return s.drillService.engine.CompleteStep(
+				int64(step.DrillInstanceID),
+				int64(step.StepTemplateID),
+				int64(operatorID),
+				remark,
+			)
+		}
+		return err
 	}
 
 	now := time.Now()
@@ -255,12 +334,24 @@ func (s *TaskService) ReportIssue(stepID uint64, operatorID uint64, issueDesc st
 	}
 
 	if s.drillService != nil && s.drillService.engine != nil {
-		return s.drillService.engine.ReportIssue(
+		err := s.drillService.engine.ReportIssue(
 			int64(step.DrillInstanceID),
 			int64(step.StepTemplateID),
 			int64(operatorID),
 			issueDesc,
 		)
+		if errors.Is(err, flowengine.ErrInstanceNotFound) {
+			if recErr := s.drillService.Recover(step.DrillInstanceID); recErr != nil {
+				return fmt.Errorf("恢复演练状态失败")
+			}
+			return s.drillService.engine.ReportIssue(
+				int64(step.DrillInstanceID),
+				int64(step.StepTemplateID),
+				int64(operatorID),
+				issueDesc,
+			)
+		}
+		return err
 	}
 
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepID).Updates(map[string]interface{}{

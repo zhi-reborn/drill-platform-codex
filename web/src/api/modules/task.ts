@@ -16,6 +16,13 @@ export const taskApi = {
     })
   },
 
+  start: (id: number) => {
+    return apiRequest({
+      url: `/v1/tasks/${id}/start`,
+      method: 'POST',
+    })
+  },
+
   complete: (id: number, remark: string) => {
     return apiRequest({
       url: `/v1/tasks/${id}/complete`,

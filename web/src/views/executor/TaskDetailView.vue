@@ -107,6 +107,13 @@
         </el-form>
         <div class="action-buttons">
           <el-button
+            v-if="task.status === 'pending' && !isParentTask"
+            type="primary"
+            @click="handleStart"
+          >
+            开始执行
+          </el-button>
+          <el-button
             v-if="task.status === 'running' && !isParentTask"
             type="success"
             @click="handleComplete"
@@ -125,7 +132,7 @@
           <span v-if="task.status === 'running' && isParentTask" class="parent-task-hint">
             父任务 · 子任务全部完成后自动完成
           </span>
-          <el-tag v-if="task.status !== 'running'" type="info">
+          <el-tag v-if="task.status !== 'running' && task.status !== 'pending'" type="info">
             {{ task.status === 'completed' ? '已完成' : task.status }}
           </el-tag>
         </div>
@@ -216,6 +223,17 @@ async function loadTask() {
     console.error('Failed to load task:', error)
   } finally {
     loading.value = false
+  }
+}
+
+async function handleStart() {
+  if (!task.value) return
+  try {
+    await taskApi.start(stepId.value)
+    ElMessage.success('任务已开始')
+    await loadTask()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 

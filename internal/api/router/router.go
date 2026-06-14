@@ -82,6 +82,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 			v1.GET("/tasks/my", taskHandler.GetMyTasks)
 			v1.GET("/tasks/:stepId", taskHandler.GetDetail)
+			v1.POST("/tasks/:stepId/start", taskHandler.StartStep)
 			v1.POST("/tasks/:stepId/complete", taskHandler.CompleteStep)
 			v1.POST("/tasks/:stepId/issue", taskHandler.ReportIssue)
 
