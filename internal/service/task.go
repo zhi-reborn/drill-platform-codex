@@ -73,7 +73,7 @@ func implicitAssigneeMatches(step *entity.StepInstance, user *entity.User) bool 
 	if step.ExecutorTeam != "" {
 		return user.Department == step.ExecutorTeam
 	}
-	return step.DefaultAssigneeRole != "" && step.DefaultAssigneeRole == user.Role
+	return false
 }
 
 func parseStepAttributes(attributes string) map[string]string {

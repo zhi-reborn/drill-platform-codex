@@ -145,23 +145,23 @@ func TestGetMyTasksReturnsExplicitTeamOrRoleAssignedTasks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetMyTasks: %v", err)
 		}
-		if len(tasks) != 5 {
-			t.Fatalf("expected 5 assigned tasks, got %d: %#v", len(tasks), tasks)
+		if len(tasks) != 4 {
+			t.Fatalf("expected 4 assigned tasks, got %d: %#v", len(tasks), tasks)
 		}
 		got := map[uint64]bool{}
 		for _, task := range tasks {
 			got[task.ID] = true
 		}
-		if !got[1] || !got[2] || !got[3] || !got[7] || !got[9] {
-			t.Fatalf("expected exact, team, and role-assigned tasks, got %#v", got)
+		if !got[1] || !got[2] || !got[7] || !got[9] {
+			t.Fatalf("expected exact, team, operator, and actual-operator assigned tasks, got %#v", got)
 		}
-		if got[4] || got[5] || got[6] || got[8] {
+		if got[3] || got[4] || got[5] || got[6] || got[8] {
 			t.Fatalf("tasks assigned to another team or another user must not be returned: %#v", got)
 		}
 	})
 }
 
-func TestCompleteStepAllowsRoleAssignedTask(t *testing.T) {
+func TestCompleteStepRejectsRoleOnlyTask(t *testing.T) {
 	withTaskTestDB(t, func(db *gorm.DB) {
 		insertTaskTestUser(t, db, entity.User{ID: 7, Username: "executor", RealName: "执行员", Role: "executor", Department: "研发部"})
 		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
@@ -170,8 +170,8 @@ func TestCompleteStepAllowsRoleAssignedTask(t *testing.T) {
 		svc := NewTaskService(repository.NewStepRepo())
 		svc.SetUserRepo(repository.NewUserRepo())
 
-		if err := svc.CompleteStep(3, 7, "done"); err != nil {
-			t.Fatalf("expected role-assigned task to complete: %v", err)
+		if err := svc.CompleteStep(3, 7, "done"); err == nil {
+			t.Fatalf("expected role-only task to be rejected")
 		}
 	})
 }
