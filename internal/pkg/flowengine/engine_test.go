@@ -421,6 +421,47 @@ func TestManualStartStepRejectsSkippedPredecessor(t *testing.T) {
 	}
 }
 
+func TestActivateParentStartsChildrenWhosePredecessorsAreDone(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "parallel-child-flow",
+		Steps: []*StepDef{
+			{ID: 101, Name: "pre", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5},
+			{ID: 102, Name: "parent", Seq: 2, StepType: StepTypeParallel, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+			{ID: 103, Name: "child serial", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 102, PreStepIDs: []int64{101}},
+			{ID: 104, Name: "child parallel", Seq: 4, StepType: StepTypeParallel, TimeoutMinutes: 5, ParentStepID: 102, PreStepIDs: []int64{101}},
+			{ID: 105, Name: "child blocked", Seq: 5, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 102, PreStepIDs: []int64{103}},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	inst.Status = FlowStatusRunning
+	inst.Steps[101].Status = StepStatusCompleted
+
+	if err := e.ManualStartStep(inst.ID, 103); err != nil {
+		t.Fatalf("ManualStartStep child error: %v", err)
+	}
+
+	if inst.Steps[102].Status != StepStatusRunning {
+		t.Fatalf("expected parent running, got %s", inst.Steps[102].Status)
+	}
+	if inst.Steps[103].Status != StepStatusRunning {
+		t.Errorf("expected serial child with satisfied inherited predecessor running, got %s", inst.Steps[103].Status)
+	}
+	if inst.Steps[104].Status != StepStatusRunning {
+		t.Errorf("expected parallel child with satisfied inherited predecessor running, got %s", inst.Steps[104].Status)
+	}
+	if inst.Steps[105].Status != StepStatusPending {
+		t.Errorf("expected blocked child pending, got %s", inst.Steps[105].Status)
+	}
+}
+
 func TestIntervene_ForceComplete(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()

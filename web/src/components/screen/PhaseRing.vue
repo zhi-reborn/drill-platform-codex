@@ -206,8 +206,23 @@
         top: lp.topPct + '%',
       }"
     >
-      <span class="ring-outer-label-dot" />
-      <span class="ring-outer-label-text">{{ ringLabels[idx].text }}</span>
+      <span class="ring-outer-label-dot">
+        <!-- 运行中: 双层波纹 + 旋转扫描 -->
+        <template v-if="ringLabels[idx].isRunning">
+          <span class="dot-ripple dot-ripple-1"></span>
+          <span class="dot-ripple dot-ripple-2"></span>
+          <span class="dot-ripple dot-ripple-3"></span>
+          <span class="dot-core"></span>
+          <span class="dot-orbit"></span>
+        </template>
+      </span>
+      <span class="ring-outer-label-text">
+        {{ ringLabels[idx].text }}
+        <span v-if="ringLabels[idx].isRunning" class="running-tag">
+          <span class="running-tag-dot"></span>
+          <span class="running-tag-text">RUNNING</span>
+        </span>
+      </span>
     </div>
 
     <!-- 中心数字 -->
@@ -586,6 +601,12 @@ function chineseNum(n: number): string {
   .pulse-node { animation: none; }
   .arc-running { animation: none; }
   .ring-outer-label-running .ring-outer-label-dot { animation: none; }
+  .ring-outer-label-running .dot-core,
+  .ring-outer-label-running .dot-orbit,
+  .ring-outer-label-running .ring-outer-label-text::after,
+  .ring-outer-label-running .running-tag,
+  .ring-outer-label-running .running-tag-dot { animation: none !important; }
+  .ring-outer-label-running .dot-ripple { display: none !important; }
 }
 
 // 阶段圆形节点
@@ -680,22 +701,171 @@ function chineseNum(n: number): string {
   font-weight: 600;
 }
 
-// 运行中的环节节点 - 突出高亮
+// 运行中的环节节点 - 醒目动态高亮（雷达波纹 + 旋转扫描点 + 流光下划线 + RUNNING 徽章）
 .ring-outer-label-running {
+  z-index: 6;
+
   .ring-outer-label-dot {
-    background: #ff9a2f !important;
-    box-shadow: 0 0 12px rgba(255, 154, 47, 0.8) !important;
-    animation: label-dot-pulse 1.2s ease-in-out infinite;
+    position: relative;
+    width: 14px;
+    height: 14px;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible;
+    flex-shrink: 0;
   }
+
+  // 中心实心点（始终可见，做呼吸缩放）
+  .dot-core {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 8px; height: 8px;
+    margin: -4px 0 0 -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffe5b8, #ff9a2f 60%, #ff5800);
+    box-shadow:
+      0 0 8px rgba(255, 154, 47, 0.95),
+      0 0 16px rgba(255, 100, 0, 0.55);
+    animation: dot-core-breath 1.4s ease-in-out infinite;
+    z-index: 3;
+  }
+
+  // 三层向外扩散的波纹环（依次延迟）
+  .dot-ripple {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 14px; height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid rgba(255, 154, 47, 0.85);
+    border-radius: 50%;
+    opacity: 0;
+    animation: dot-ripple-out 2.1s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    pointer-events: none;
+  }
+  .dot-ripple-1 { animation-delay: 0s; }
+  .dot-ripple-2 { animation-delay: 0.7s; }
+  .dot-ripple-3 { animation-delay: 1.4s; }
+
+  // 围绕节点旋转的小光点（轨道扫描）
+  .dot-orbit {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 24px; height: 24px;
+    margin: -12px 0 0 -12px;
+    border-radius: 50%;
+    animation: dot-orbit-rotate 2.4s linear infinite;
+    pointer-events: none;
+    z-index: 2;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: 50%;
+      width: 4px; height: 4px;
+      margin-left: -2px;
+      border-radius: 50%;
+      background: #ffd699;
+      box-shadow: 0 0 6px #ff9a2f, 0 0 12px rgba(255, 154, 47, 0.7);
+    }
+  }
+
   .ring-outer-label-text {
-    color: #ffe0a0 !important;
+    position: relative;
+    color: #fff3da !important;
     font-weight: 700 !important;
-    text-shadow: 0 0 8px rgba(255, 154, 47, 0.5), 0 0 16px rgba(255, 100, 0, 0.3) !important;
+    letter-spacing: 1.5px;
+    text-shadow:
+      0 0 6px rgba(255, 154, 47, 0.9),
+      0 0 14px rgba(255, 100, 0, 0.6),
+      0 0 24px rgba(255, 60, 0, 0.35) !important;
+
+    // 文字底部流光横线
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; bottom: -3px;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 154, 47, 0.9),
+        rgba(255, 220, 150, 1),
+        rgba(255, 154, 47, 0.9),
+        transparent
+      );
+      background-size: 200% 100%;
+      animation: text-underline-flow 2s linear infinite;
+    }
+  }
+
+  // RUNNING 徽章
+  .running-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    padding: 1px 6px 1px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #ff9a2f;
+    background: rgba(255, 100, 0, 0.12);
+    border: 1px solid rgba(255, 154, 47, 0.55);
+    border-radius: 2px;
+    vertical-align: middle;
+    text-shadow: none;
+    animation: running-tag-pulse 1.6s ease-in-out infinite;
+
+    .running-tag-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #ff9a2f;
+      box-shadow: 0 0 4px #ff9a2f;
+      animation: running-tag-blink 0.9s ease-in-out infinite;
+    }
+
+    .running-tag-text {
+      font-family: 'Share Tech Mono', monospace;
+    }
   }
 }
-@keyframes label-dot-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(255, 154, 47, 0.8); transform: scale(1); }
-  50% { box-shadow: 0 0 18px rgba(255, 154, 47, 1); transform: scale(1.4); }
+
+@keyframes dot-core-breath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+@keyframes dot-ripple-out {
+  0% { transform: scale(0.6); opacity: 0.9; border-width: 2px; }
+  70% { opacity: 0.25; border-width: 1px; }
+  100% { transform: scale(3.4); opacity: 0; border-width: 1px; }
+}
+
+@keyframes dot-orbit-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes text-underline-flow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes running-tag-pulse {
+  0%, 100% {
+    border-color: rgba(255, 154, 47, 0.55);
+    box-shadow: 0 0 0 rgba(255, 154, 47, 0);
+  }
+  50% {
+    border-color: rgba(255, 200, 100, 0.95);
+    box-shadow: 0 0 8px rgba(255, 154, 47, 0.5);
+  }
+}
+
+@keyframes running-tag-blink {
+  0%, 60%, 100% { opacity: 1; }
+  30% { opacity: 0.25; }
 }
 
 // 已完成阶段的标签（phaseIdx < currentIndex）

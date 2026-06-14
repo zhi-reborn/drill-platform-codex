@@ -214,6 +214,15 @@
                 <div class="alert-head">
                   <span class="alert-arrow">▸</span>
                   <span class="alert-title">{{ alert.title }}</span>
+                  <span
+                    v-if="alert.operator"
+                    class="alert-operator"
+                    :class="{ 'is-live': alert.operatorLive }"
+                  >
+                    <span class="op-led" :class="{ 'op-led-live': alert.operatorLive }"></span>
+                    <span class="op-label">{{ alert.operatorLive ? 'LIVE' : 'ASSIGN' }}</span>
+                    <span class="op-name">{{ alert.operator }}</span>
+                  </span>
                   <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
                 </div>
                 <div class="alert-bar">
@@ -282,6 +291,8 @@ const drillId = computed(() => {
 const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
+// 步骤 → 实时操作人映射（来自 logs / WebSocket 事件，反映"谁正在操作"而非分配人）
+const stepLiveOperators = ref<Record<number, string>>({})
 const warnListRef = ref<HTMLElement | null>(null)
 
 // === 树形步骤辅助 ===
@@ -655,6 +666,8 @@ const activeAlerts = computed(() => {
     statusLabel: string
     level: 'warn' | 'info' | 'danger'
     seq: number
+    operator: string       // 实时操作人（来自 logs / WS 事件）
+    operatorLive: boolean  // 是否为实时获取的操作人（true=真实操作中，false=回退到分配人）
   }> = []
 
   const pending: typeof running = []
@@ -669,8 +682,9 @@ const activeAlerts = computed(() => {
       const limitMin = s.timeout_minutes || 120
       const limitSec = limitMin * 60
       const pct = Math.min(99, Math.round((elapsedSec / limitSec) * 100))
+      const liveOp = stepLiveOperators.value[s.id]
       running.push({
-        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
+        title: s.name,
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
@@ -680,6 +694,8 @@ const activeAlerts = computed(() => {
         statusLabel: pct >= 80 ? '即将超时' : '进行中',
         level: pct >= 80 ? 'danger' : 'warn',
         seq: s.seq,
+        operator: liveOp || s.assignee_names || '',
+        operatorLive: !!liveOp,
       })
     })
 
@@ -689,7 +705,7 @@ const activeAlerts = computed(() => {
     .forEach((s) => {
       const limitMin = s.timeout_minutes || 120
       pending.push({
-        title: s.assignee_names ? `${s.name} · ${s.assignee_names}` : s.name,
+        title: s.name,
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
@@ -699,6 +715,8 @@ const activeAlerts = computed(() => {
         statusLabel: '待执行',
         level: 'info',
         seq: s.seq,
+        operator: s.assignee_names || '',
+        operatorLive: false,
       })
     })
 
@@ -822,6 +840,22 @@ async function loadData() {
     if (componentDestroyed) return
     recentLogs.value = logs.slice(0, 30)
 
+    // 从全部日志构建"步骤实时操作人"映射：取每个步骤最新一条带 operator_name 的日志
+    const liveOps: Record<number, string> = {}
+    // 后端返回 logs 可能按时间倒序，先按 created_at 升序遍历，让后写覆盖先写，最终保留最新
+    const logsAsc = [...logs].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    for (const log of logsAsc) {
+      const sid = log.step_instance_id
+      if (!sid) continue
+      const name = log.operator_name
+      if (name && name !== '流程引擎' && name !== 'System') {
+        liveOps[sid] = name
+      }
+    }
+    stepLiveOperators.value = liveOps
+
     loading.value = false
     error.value = null
     tick()
@@ -925,16 +959,22 @@ function applyStepEvent(eventType: string, payload: any) {
 
   // 推入一条本地日志
   const logAction = LOG_EVENTS[eventType] || eventType
+  const operatorName = payload.executor || payload.operator_name || payload.operator || '流程引擎'
   const newLog: StepInstanceLog = {
     id: Date.now(),
     step_instance_id: stepId,
     action: logAction,
     operator_id: 0,
-    operator_name: payload.executor || '流程引擎',
+    operator_name: operatorName,
     content: payload.remark || payload.comment || payload.issue_desc || '',
     created_at: new Date().toISOString(),
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
+
+  // 实时更新"操作人"映射（仅写入真实人员名，不覆盖为系统）
+  if (operatorName && operatorName !== '流程引擎' && operatorName !== 'System') {
+    stepLiveOperators.value = { ...stepLiveOperators.value, [stepId]: operatorName }
+  }
 
   // 重新计算 KPI
   recomputeKpis()
@@ -1811,6 +1851,61 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       font-size: 13px; color: #ffffff; font-weight: 800;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    // 实时操作人芯片：LIVE（绿色脉动）/ ASSIGN（灰色静态）
+    .alert-operator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 7px 1px 5px;
+      font-family: $font-mono;
+      font-size: 10px;
+      letter-spacing: 0.6px;
+      border-radius: 2px;
+      background: rgba(120, 140, 170, 0.12);
+      border: 1px solid rgba(120, 140, 170, 0.35);
+      color: rgba(180, 200, 230, 0.85);
+      white-space: nowrap;
+      flex-shrink: 0;
+      max-width: 38%;
+
+      .op-led {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: rgba(180, 200, 230, 0.6);
+        flex-shrink: 0;
+      }
+      .op-label {
+        font-weight: 700;
+        opacity: 0.7;
+      }
+      .op-name {
+        font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+        font-weight: 700;
+        font-size: 11px;
+        color: #c8d8ee;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      // LIVE 状态：绿色脉动 + 描边发光
+      &.is-live {
+        background: rgba(46, 204, 113, 0.12);
+        border-color: rgba(46, 204, 113, 0.55);
+        color: #b8f0cf;
+        box-shadow: 0 0 8px rgba(46, 204, 113, 0.18);
+        animation: alert-op-glow 2s ease-in-out infinite;
+
+        .op-led-live {
+          background: #2ecc71;
+          box-shadow:
+            0 0 4px #2ecc71,
+            0 0 10px rgba(46, 204, 113, 0.7);
+          animation: alert-op-led 1s ease-in-out infinite;
+        }
+        .op-label { color: #6fdd99; opacity: 1; }
+        .op-name { color: #e8ffe8; text-shadow: 0 0 6px rgba(46, 204, 113, 0.4); }
+      }
+    }
     .alert-status-badge {
       font-family: $font-mono; font-size: 10px; font-weight: 700;
       padding: 2px 8px; letter-spacing: 0.5px;
@@ -2143,5 +2238,29 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
+  .alert-operator.is-live,
+  .alert-operator .op-led-live { animation: none !important; }
+}
+
+// 操作人芯片动效（LIVE 状态）
+@keyframes alert-op-led {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 4px #2ecc71, 0 0 10px rgba(46, 204, 113, 0.7);
+  }
+  50% {
+    transform: scale(1.35);
+    box-shadow: 0 0 8px #2ecc71, 0 0 18px rgba(46, 204, 113, 0.95);
+  }
+}
+@keyframes alert-op-glow {
+  0%, 100% {
+    border-color: rgba(46, 204, 113, 0.55);
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.18);
+  }
+  50% {
+    border-color: rgba(46, 204, 113, 0.85);
+    box-shadow: 0 0 14px rgba(46, 204, 113, 0.4);
+  }
 }
 </style>

@@ -226,7 +226,7 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 		"timeout_at": timeoutAt,
 	})
 
-	// 激活子步骤：父步骤开始后，自动激活其首批子步骤（无前序依赖的子步骤）
+	// 激活子步骤：父步骤开始后，自动激活其首批前序已满足的子步骤
 	e.activateChildSteps(inst, si.StepDefID)
 }
 
@@ -311,10 +311,10 @@ func (e *Engine) removeFromCurrentSteps(currentIDs []int64, removeID int64) []in
 	return result
 }
 
-// activateChildSteps 激活父步骤下的首批子步骤（无前序依赖的子步骤）
+// activateChildSteps 激活父步骤下的首批子步骤（前序依赖已满足的子步骤）
 func (e *Engine) activateChildSteps(inst *FlowInst, parentStepDefID int64) {
 	for _, childSI := range inst.Steps {
-		if childSI.ParentStepID == parentStepDefID && len(childSI.PreStepIDs) == 0 && childSI.Status == StepStatusPending {
+		if childSI.ParentStepID == parentStepDefID && childSI.Status == StepStatusPending && e.allPredecessorsDone(inst, childSI.StepDefID) {
 			e.activateStep(inst, childSI)
 		}
 	}
