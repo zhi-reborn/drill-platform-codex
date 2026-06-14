@@ -211,31 +211,39 @@
                 class="alert-card"
                 :class="'alert-' + alert.level"
               >
+                <!-- 顶部：状态指示条 + 标题行 -->
                 <div class="alert-head">
-                  <span class="alert-arrow">▸</span>
+                  <span class="alert-indicator" />
                   <span class="alert-title">{{ alert.title }}</span>
-                  <span
-                    v-if="alert.operator"
-                    class="alert-operator"
-                    :class="{ 'is-live': alert.operatorLive }"
-                  >
-                    <span class="op-led" :class="{ 'op-led-live': alert.operatorLive }"></span>
-                    <span class="op-label">{{ alert.operatorLive ? 'LIVE' : 'ASSIGN' }}</span>
-                    <span class="op-name">{{ alert.operator }}</span>
-                  </span>
                   <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
                 </div>
-                <div class="alert-bar">
+                <!-- 剩余时间进度条 -->
+                <div class="alert-bar" :class="'bar-urgency-' + alert.level">
                   <div class="alert-bar-fill" :style="{ width: alert.progress + '%' }" />
+                  <span class="alert-bar-remaining">{{ alert.remainingPct }}%</span>
                 </div>
+                <!-- 元数据行 -->
                 <div class="alert-foot">
-                  <span class="alert-meta">团队: {{ alert.team }}</span>
-                  <span class="alert-meta">限时: {{ alert.limit }}</span>
-                  <span class="alert-meta">已耗时: {{ alert.elapsed }}</span>
+                  <span v-if="alert.operator" class="alert-meta">
+                    <span class="meta-icon">◈</span>
+                    <span class="meta-label">操作人</span>
+                    <span class="meta-val operator-val">{{ alert.operator }}</span>
+                  </span>
+                  <span class="alert-meta">
+                    <span class="meta-icon">◷</span>
+                    <span class="meta-label">限时</span>
+                    <span class="meta-val">{{ alert.limit }}</span>
+                  </span>
+                  <span v-if="alert.elapsed !== '待启动'" class="alert-meta">
+                    <span class="meta-icon">▶</span>
+                    <span class="meta-label">已耗时</span>
+                    <span class="meta-val">{{ alert.elapsed }}</span>
+                  </span>
                 </div>
+                <!-- 层级路径：环节名 - 任务名 -->
                 <div class="alert-hierarchy">
                   <span class="hierarchy-phase">{{ alert.parentPhase }}</span>
-                  <span v-if="alert.directParent !== '--'" class="hierarchy-sep">/</span>
+                  <span v-if="alert.directParent !== '--'" class="hierarchy-dash">—</span>
                   <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
                 </div>
               </div>
@@ -291,8 +299,6 @@ const drillId = computed(() => {
 const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
-// 步骤 → 实时操作人映射（来自 logs / WebSocket 事件，反映"谁正在操作"而非分配人）
-const stepLiveOperators = ref<Record<number, string>>({})
 const warnListRef = ref<HTMLElement | null>(null)
 
 // === 树形步骤辅助 ===
@@ -650,6 +656,10 @@ function fmtHMS(totalSec: number): string {
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
 }
 
+function safeParseJSON(str: string): Record<string, any> | null {
+  try { return JSON.parse(str) } catch { return null }
+}
+
 const activeAlerts = computed(() => {
   // 依赖 elapsedSeconds 使 computed 每秒重算，进度条/耗时实时刷新
   const _now = elapsedSeconds.value
@@ -657,17 +667,18 @@ const activeAlerts = computed(() => {
 
   const running: Array<{
     title: string
+    operator: string
     team: string
     parentPhase: string
     directParent: string
     progress: number
+    remaining: string
+    remainingPct: number
     limit: string
     elapsed: string
     statusLabel: string
     level: 'warn' | 'info' | 'danger'
     seq: number
-    operator: string       // 实时操作人（来自 logs / WS 事件）
-    operatorLive: boolean  // 是否为实时获取的操作人（true=真实操作中，false=回退到分配人）
   }> = []
 
   const pending: typeof running = []
@@ -681,21 +692,26 @@ const activeAlerts = computed(() => {
         : 1
       const limitMin = s.timeout_minutes || 120
       const limitSec = limitMin * 60
-      const pct = Math.min(99, Math.round((elapsedSec / limitSec) * 100))
-      const liveOp = stepLiveOperators.value[s.id]
+      const attrs = typeof (s as any).attributes === 'string'
+        ? safeParseJSON((s as any).attributes)
+        : (s as any).attributes
+      const operatorName = attrs?.operator
+      const remainingSec = Math.max(0, limitSec - elapsedSec)
+      const remainingPct = Math.round((remainingSec / limitSec) * 100)
       running.push({
         title: s.name,
+        operator: operatorName || '',
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
-        progress: pct,
+        progress: remainingPct,
+        remaining: fmtHMS(remainingSec),
+        remainingPct,
         limit: fmtHMS(limitSec),
         elapsed: fmtHMS(elapsedSec),
-        statusLabel: pct >= 80 ? '即将超时' : '进行中',
-        level: pct >= 80 ? 'danger' : 'warn',
+        statusLabel: remainingPct <= 20 ? '即将超时' : '进行中',
+        level: remainingPct <= 20 ? 'danger' : remainingPct <= 50 ? 'warn' : 'warn',
         seq: s.seq,
-        operator: liveOp || s.assignee_names || '',
-        operatorLive: !!liveOp,
       })
     })
 
@@ -704,19 +720,24 @@ const activeAlerts = computed(() => {
     .filter(s => s.status === 'pending')
     .forEach((s) => {
       const limitMin = s.timeout_minutes || 120
+      const attrs = typeof (s as any).attributes === 'string'
+        ? safeParseJSON((s as any).attributes)
+        : (s as any).attributes
+      const operatorName = attrs?.operator
       pending.push({
         title: s.name,
+        operator: operatorName || '',
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
-        progress: 0,
+        progress: 100,
+        remaining: fmtHMS(limitMin * 60),
+        remainingPct: 100,
         limit: fmtHMS(limitMin * 60),
         elapsed: '待启动',
         statusLabel: '待执行',
         level: 'info',
         seq: s.seq,
-        operator: s.assignee_names || '',
-        operatorLive: false,
       })
     })
 
@@ -840,22 +861,6 @@ async function loadData() {
     if (componentDestroyed) return
     recentLogs.value = logs.slice(0, 30)
 
-    // 从全部日志构建"步骤实时操作人"映射：取每个步骤最新一条带 operator_name 的日志
-    const liveOps: Record<number, string> = {}
-    // 后端返回 logs 可能按时间倒序，先按 created_at 升序遍历，让后写覆盖先写，最终保留最新
-    const logsAsc = [...logs].sort((a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    for (const log of logsAsc) {
-      const sid = log.step_instance_id
-      if (!sid) continue
-      const name = log.operator_name
-      if (name && name !== '流程引擎' && name !== 'System') {
-        liveOps[sid] = name
-      }
-    }
-    stepLiveOperators.value = liveOps
-
     loading.value = false
     error.value = null
     tick()
@@ -959,22 +964,16 @@ function applyStepEvent(eventType: string, payload: any) {
 
   // 推入一条本地日志
   const logAction = LOG_EVENTS[eventType] || eventType
-  const operatorName = payload.executor || payload.operator_name || payload.operator || '流程引擎'
   const newLog: StepInstanceLog = {
     id: Date.now(),
     step_instance_id: stepId,
     action: logAction,
     operator_id: 0,
-    operator_name: operatorName,
+    operator_name: payload.executor || '流程引擎',
     content: payload.remark || payload.comment || payload.issue_desc || '',
     created_at: new Date().toISOString(),
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
-
-  // 实时更新"操作人"映射（仅写入真实人员名，不覆盖为系统）
-  if (operatorName && operatorName !== '流程引擎' && operatorName !== 'System') {
-    stepLiveOperators.value = { ...stepLiveOperators.value, [stepId]: operatorName }
-  }
 
   // 重新计算 KPI
   recomputeKpis()
@@ -1281,7 +1280,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     margin-top: -2px;
     .drill-title {
       font-family: $font-cn;
-      font-size: clamp(24px, 2.35vw, 42px);
+      font-size: clamp(18px, 2vw, 36px);
       font-weight: 900;
       letter-spacing: 4px;
       margin: 0;
@@ -1290,6 +1289,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         0 0 10px rgba(0, 153, 255, 0.95),
         0 0 24px rgba(0, 153, 255, 0.6);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1;
     }
     .drill-title-en {
       display: block;
@@ -1829,125 +1831,191 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
 // ===== Alerts =====
 .warn-list {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 6px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
   .alert-card {
     position: relative;
-    background: linear-gradient(180deg, rgba(20, 22, 35, 0.86), rgba(16, 26, 47, 0.72));
-    border: 1px solid rgba(130, 150, 180, 0.3);
-    border-left: 3px solid $warn;
-    padding: 10px 12px 12px;
-    display: flex; flex-direction: column; gap: 6px;
-    &.alert-danger { border-left-color: $danger; }
-    &.alert-info { border-left-color: $neon; }
+    background: linear-gradient(135deg, rgba(12, 18, 36, 0.92), rgba(8, 14, 30, 0.85));
+    border: 1px solid rgba(0, 212, 255, 0.12);
+    border-radius: 3px;
+    padding: 8px 10px 8px 14px;
+    display: flex; flex-direction: column; gap: 5px;
+    overflow: hidden;
+
+    // 顶部状态指示条（替代左边框）
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, $warn, rgba(255, 182, 72, 0.2));
+    }
+
+    &.alert-danger::before {
+      background: linear-gradient(90deg, $danger, rgba(255, 77, 106, 0.2));
+    }
+    &.alert-info::before {
+      background: linear-gradient(90deg, $neon, rgba(0, 212, 255, 0.15));
+    }
+
+    // 运行中卡片微光
+    &.alert-warn {
+      border-color: rgba(255, 182, 72, 0.2);
+      box-shadow: inset 0 0 20px rgba(255, 140, 40, 0.04);
+    }
+    &.alert-danger {
+      border-color: rgba(255, 77, 106, 0.25);
+      box-shadow: inset 0 0 20px rgba(255, 77, 106, 0.05);
+    }
+    &.alert-info {
+      border-color: rgba(0, 212, 255, 0.15);
+    }
   }
   .alert-head {
     display: flex; align-items: center; gap: 6px;
-    .alert-arrow { color: $warn; font-size: 10px; }
+    .alert-indicator {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: $warn;
+      box-shadow: 0 0 6px rgba(255, 182, 72, 0.7);
+      flex-shrink: 0;
+      animation: indicator-pulse 1.6s ease-in-out infinite;
+    }
     .alert-title {
       flex: 1;
-      font-size: 13px; color: #ffffff; font-weight: 800;
+      font-size: 12px; color: #e8f0ff; font-weight: 700;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    // 实时操作人芯片：LIVE（绿色脉动）/ ASSIGN（灰色静态）
-    .alert-operator {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 1px 7px 1px 5px;
-      font-family: $font-mono;
-      font-size: 10px;
-      letter-spacing: 0.6px;
-      border-radius: 2px;
-      background: rgba(120, 140, 170, 0.12);
-      border: 1px solid rgba(120, 140, 170, 0.35);
-      color: rgba(180, 200, 230, 0.85);
-      white-space: nowrap;
-      flex-shrink: 0;
-      max-width: 38%;
-
-      .op-led {
-        width: 6px; height: 6px; border-radius: 50%;
-        background: rgba(180, 200, 230, 0.6);
-        flex-shrink: 0;
-      }
-      .op-label {
-        font-weight: 700;
-        opacity: 0.7;
-      }
-      .op-name {
-        font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-        font-weight: 700;
-        font-size: 11px;
-        color: #c8d8ee;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      // LIVE 状态：绿色脉动 + 描边发光
-      &.is-live {
-        background: rgba(46, 204, 113, 0.12);
-        border-color: rgba(46, 204, 113, 0.55);
-        color: #b8f0cf;
-        box-shadow: 0 0 8px rgba(46, 204, 113, 0.18);
-        animation: alert-op-glow 2s ease-in-out infinite;
-
-        .op-led-live {
-          background: #2ecc71;
-          box-shadow:
-            0 0 4px #2ecc71,
-            0 0 10px rgba(46, 204, 113, 0.7);
-          animation: alert-op-led 1s ease-in-out infinite;
-        }
-        .op-label { color: #6fdd99; opacity: 1; }
-        .op-name { color: #e8ffe8; text-shadow: 0 0 6px rgba(46, 204, 113, 0.4); }
-      }
+      letter-spacing: 0.5px;
     }
     .alert-status-badge {
-      font-family: $font-mono; font-size: 10px; font-weight: 700;
-      padding: 2px 8px; letter-spacing: 0.5px;
+      font-family: $font-mono; font-size: 9px; font-weight: 700;
+      padding: 1px 7px; letter-spacing: 0.8px;
       border-radius: 2px; white-space: nowrap; flex-shrink: 0;
-      &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.14); border: 1px solid rgba(255, 182, 72, 0.35); }
-      &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.12); border: 1px solid rgba(255, 77, 106, 0.35); }
-      &.badge-info { color: $neon; background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3); }
+      &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.12); border: 1px solid rgba(255, 182, 72, 0.3); }
+      &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); animation: badge-danger-flash 1s ease-in-out infinite; }
+      &.badge-info { color: $neon; background: rgba(0, 212, 255, 0.08); border: 1px solid rgba(0, 212, 255, 0.25); }
     }
   }
   .alert-bar {
-    height: 4px; background: rgba(255, 255, 255, 0.06);
-    position: relative; overflow: hidden;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
     .alert-bar-fill {
       position: absolute; top: 0; left: 0; bottom: 0;
-      background: linear-gradient(90deg, $warn, $neon);
-      box-shadow: 0 0 6px rgba(255, 182, 72, 0.5);
+      border-radius: 4px;
+      transition: width 1s linear;
+    }
+    .alert-bar-remaining {
+      position: absolute;
+      right: 8px; top: 50%;
+      transform: translateY(-50%);
+      font-family: $font-mono;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+      z-index: 1;
     }
   }
+  // 充裕（>50%剩余）- 青绿色
+  .bar-urgency-warn .alert-bar-fill {
+    background: linear-gradient(90deg, rgba(0, 180, 140, 0.5), #00d4a8);
+    box-shadow: 0 0 8px rgba(0, 212, 168, 0.3);
+  }
+  .bar-urgency-warn .alert-bar-remaining {
+    color: rgba(0, 212, 168, 0.9);
+  }
+  // 即将超时（<20%剩余）- 红色脉冲
+  .bar-urgency-danger .alert-bar-fill {
+    background: linear-gradient(90deg, rgba(255, 77, 106, 0.5), $danger);
+    box-shadow: 0 0 10px rgba(255, 77, 106, 0.5);
+    animation: bar-danger-pulse 1s ease-in-out infinite;
+  }
+  .bar-urgency-danger .alert-bar-remaining {
+    color: $danger;
+    animation: remaining-flash 1s ease-in-out infinite;
+  }
+  // 待执行 - 青蓝色满格
+  .bar-urgency-info .alert-bar-fill {
+    background: linear-gradient(90deg, rgba(0, 160, 200, 0.3), rgba(0, 212, 255, 0.5));
+    box-shadow: 0 0 6px rgba(0, 212, 255, 0.2);
+  }
+  .bar-urgency-info .alert-bar-remaining {
+    color: rgba(0, 212, 255, 0.7);
+  }
   .alert-foot {
-    display: flex; justify-content: space-between;
-    .alert-meta { font-family: $font-mono; font-size: 10px; color: $text-dim; }
+    display: flex; gap: 0;
+    .alert-meta {
+      flex: 1;
+      display: flex; align-items: center; gap: 3px;
+      .meta-icon {
+        font-size: 7px;
+        color: rgba(0, 212, 255, 0.45);
+        line-height: 1;
+      }
+      .meta-label {
+        font-size: 9px;
+        color: rgba(110, 141, 181, 0.6);
+        letter-spacing: 0.5px;
+      }
+      .meta-val {
+        font-family: $font-mono;
+        font-size: 10px;
+        color: rgba(200, 220, 245, 0.85);
+        font-weight: 600;
+      }
+      .operator-val {
+        color: rgba(0, 212, 255, 0.8);
+      }
+    }
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
-    border-top: 1px dashed $line; padding-top: 5px;
-    font-family: $font-mono; font-size: 11px; font-weight: 600;
+    padding-top: 5px;
+    border-top: 1px solid rgba(0, 212, 255, 0.1);
+    font-size: 11px;
     overflow: hidden;
     .hierarchy-phase {
-      color: rgba(0, 212, 255, 0.72);
+      font-weight: 600;
+      color: rgba(0, 212, 255, 0.85);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
-    .hierarchy-sep {
-      color: rgba(180, 220, 255, 0.3); margin: 0 4px;
+    .hierarchy-dash {
+      color: rgba(200, 220, 245, 0.6); margin: 0 6px;
       font-weight: 400;
     }
     .hierarchy-task {
-      color: rgba(180, 220, 255, 0.55);
+      font-weight: 600;
+      color: rgba(200, 220, 245, 0.75);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
   }
+}
+
+@keyframes indicator-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(255, 182, 72, 0.7); }
+  50% { opacity: 0.5; box-shadow: 0 0 10px rgba(255, 182, 72, 0.9); }
+}
+
+@keyframes badge-danger-flash {
+  0%, 100% { border-color: rgba(255, 77, 106, 0.3); }
+  50% { border-color: rgba(255, 77, 106, 0.8); box-shadow: 0 0 6px rgba(255, 77, 106, 0.4); }
+}
+
+@keyframes bar-danger-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes remaining-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 // ===== Footer =====
@@ -1978,7 +2046,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       gap: 8px;
 
       .drill-title {
-        font-size: 22px;
+        font-size: 18px;
         letter-spacing: 2px;
       }
 
@@ -2195,7 +2263,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
   .warn-list {
     .alert-card {
-      padding: 8px;
+      padding: 6px 8px 6px 10px;
     }
 
     .alert-head {
@@ -2203,20 +2271,31 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         font-size: 10px;
       }
 
+      .alert-indicator {
+        width: 4px; height: 4px;
+      }
+
       .alert-status-badge {
         font-size: 8px;
-        padding: 1px 5px;
+        padding: 1px 4px;
       }
     }
 
-    .alert-foot {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3px 6px;
+    .alert-bar {
+      height: 6px;
+      .alert-bar-remaining { display: none; }
+    }
 
+    .alert-foot {
       .alert-meta {
-        font-size: 8px;
+        .meta-icon { display: none; }
+        .meta-label { font-size: 8px; }
+        .meta-val { font-size: 9px; }
       }
+    }
+
+    .alert-hierarchy {
+      font-size: 9px;
     }
   }
 
@@ -2238,29 +2317,5 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
-  .alert-operator.is-live,
-  .alert-operator .op-led-live { animation: none !important; }
-}
-
-// 操作人芯片动效（LIVE 状态）
-@keyframes alert-op-led {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 4px #2ecc71, 0 0 10px rgba(46, 204, 113, 0.7);
-  }
-  50% {
-    transform: scale(1.35);
-    box-shadow: 0 0 8px #2ecc71, 0 0 18px rgba(46, 204, 113, 0.95);
-  }
-}
-@keyframes alert-op-glow {
-  0%, 100% {
-    border-color: rgba(46, 204, 113, 0.55);
-    box-shadow: 0 0 8px rgba(46, 204, 113, 0.18);
-  }
-  50% {
-    border-color: rgba(46, 204, 113, 0.85);
-    box-shadow: 0 0 14px rgba(46, 204, 113, 0.4);
-  }
 }
 </style>

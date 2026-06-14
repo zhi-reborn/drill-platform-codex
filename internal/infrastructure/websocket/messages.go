@@ -5,34 +5,34 @@ import "time"
 // 消息事件类型
 const (
 	// 系统事件
-	EventPing   = "ping"   // 客户端心跳
-	EventPong   = "pong"   // 服务端心跳响应
-	EventError  = "error"  // 错误消息
-	EventInfo   = "info"   // 信息消息
+	EventPing  = "ping"  // 客户端心跳
+	EventPong  = "pong"  // 服务端心跳响应
+	EventError = "error" // 错误消息
+	EventInfo  = "info"  // 信息消息
 
 	// 演练状态事件
-	EventDrillStarted    = "drill_started"     // 演练开始
-	EventDrillPaused     = "drill_paused"      // 演练暂停
-	EventDrillResumed    = "drill_resumed"     // 演练恢复
-	EventDrillCompleted  = "drill_completed"   // 演练完成
-	EventDrillTerminated = "drill_terminated"  // 演练终止
+	EventDrillStarted    = "drill_started"    // 演练开始
+	EventDrillPaused     = "drill_paused"     // 演练暂停
+	EventDrillResumed    = "drill_resumed"    // 演练恢复
+	EventDrillCompleted  = "drill_completed"  // 演练完成
+	EventDrillTerminated = "drill_terminated" // 演练终止
 
 	// 步骤状态事件
-	EventStepStarted   = "step_started"   // 步骤开始
-	EventStepComplete  = "step_complete"  // 步骤完成
-	EventStepIssue     = "step_issue"     // 步骤上报异常
-	EventStepSkipped   = "step_skipped"   // 步骤跳过
-	EventStepTimeout   = "step_timeout"   // 步骤超时
+	EventStepStarted  = "step_started"  // 步骤开始
+	EventStepComplete = "step_complete" // 步骤完成
+	EventStepIssue    = "step_issue"    // 步骤上报异常
+	EventStepSkipped  = "step_skipped"  // 步骤跳过
+	EventStepTimeout  = "step_timeout"  // 步骤超时
 
 	// 预警事件
 	EventTimeoutWarning = "timeout_warning" // 超时预警
 	EventTimeoutAlert   = "timeout_alert"   // 超时告警
 
 	// 控制事件
-	EventControlPause     = "control_pause"      // 暂停指令
-	EventControlResume    = "control_resume"     // 恢复指令
-	EventControlTerminate = "control_terminate"  // 终止指令
-	EventControlComment   = "control_comment"    // 指挥评论
+	EventControlPause     = "control_pause"     // 暂停指令
+	EventControlResume    = "control_resume"    // 恢复指令
+	EventControlTerminate = "control_terminate" // 终止指令
+	EventControlComment   = "control_comment"   // 指挥评论
 )
 
 // 通道类型
@@ -87,9 +87,9 @@ func NewErrorMessage(message string) WSMessage {
 
 // 心跳配置
 const (
-	PingPeriod    = 30 * time.Second  // 服务端发送 ping 的间隔
-	PongWait      = 60 * time.Second  // 等待 pong 的超时时间
-	WriteWait     = 10 * time.Second  // 写入超时时间
+	PingPeriod     = 30 * time.Second // 服务端发送 ping 的间隔
+	PongWait       = 60 * time.Second // 等待 pong 的超时时间
+	WriteWait      = 10 * time.Second // 写入超时时间
 	MaxMessageSize = 4096             // 最大消息大小 (4KB)
 )
 
@@ -106,12 +106,12 @@ type StepChangePayload struct {
 	Comment        string `json:"comment,omitempty"`
 
 	// 扩展字段：支持前端增量更新，无需额外 API 请求
-	StartTime   *string `json:"start_time,omitempty"`   // ISO8601
-	EndTime     *string `json:"end_time,omitempty"`     // ISO8601
-	TimeoutAt   *string `json:"timeout_at,omitempty"`   // ISO8601
-	Remark      string  `json:"remark,omitempty"`
-	IssueDesc   string  `json:"issue_desc,omitempty"`
-	AssigneeNames string `json:"assignee_names,omitempty"`
+	StartTime     *string `json:"start_time,omitempty"` // ISO8601
+	EndTime       *string `json:"end_time,omitempty"`   // ISO8601
+	TimeoutAt     *string `json:"timeout_at,omitempty"` // ISO8601
+	Remark        string  `json:"remark,omitempty"`
+	IssueDesc     string  `json:"issue_desc,omitempty"`
+	AssigneeNames string  `json:"assignee_names,omitempty"`
 }
 
 // 超时预警 Payload 结构
@@ -137,18 +137,18 @@ type DrillStatusPayload struct {
 // 控制指令 Payload 结构
 type ControlPayload struct {
 	DrillID  uint   `json:"drill_id"`
-	Action   string `json:"action"`   // pause, resume, terminate
+	Action   string `json:"action"` // pause, resume, terminate
 	Operator string `json:"operator"`
 	Comment  string `json:"comment,omitempty"`
 }
 
 // 任务分配 Payload 结构
 type TaskAssignPayload struct {
-	UserID      uint   `json:"user_id"`
-	DrillID     uint   `json:"drill_id"`
-	StepID      uint   `json:"step_id"`
-	StepName    string `json:"step_name"`
-	DrillName   string `json:"drill_name"`
-	Deadline    int64  `json:"deadline"`
-	Action      string `json:"action"` // assigned, updated, completed, expired
+	UserID    uint   `json:"user_id"`
+	DrillID   uint   `json:"drill_id"`
+	StepID    uint   `json:"step_id"`
+	StepName  string `json:"step_name"`
+	DrillName string `json:"drill_name"`
+	Deadline  int64  `json:"deadline"`
+	Action    string `json:"action"` // assigned, updated, completed, expired
 }
