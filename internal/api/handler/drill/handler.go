@@ -734,10 +734,18 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 			return
 		}
 		if err = h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c))); err != nil {
+			if err == flowengine.ErrInvalidStatus {
+				response.BadRequest(c, "当前状态不支持重新派发")
+				return
+			}
 			response.InternalError(c, "内部错误")
 			return
 		}
 	} else if err != nil {
+		if err == flowengine.ErrInvalidStatus {
+			response.BadRequest(c, "当前状态不支持重新派发")
+			return
+		}
 		response.InternalError(c, "内部错误")
 		return
 	}
@@ -747,14 +755,24 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 	if contentRT == "" {
 		contentRT = "指挥员手动重新派发任务"
 	}
+	nowRT := time.Now()
+	var timeoutAtRT *time.Time
+	if target.step.TimeoutMinutes > 0 {
+		t := nowRT.Add(time.Duration(target.step.TimeoutMinutes) * time.Minute)
+		timeoutAtRT = &t
+	}
 	repository.DB.Model(&entity.StepInstance{}).
 		Where("id = ?", target.step.ID).
 		Updates(map[string]interface{}{
-			"status":     "running",
-			"start_time": time.Now(),
+			"status":          "running",
+			"actual_operator": nil,
+			"start_time":      nowRT,
+			"end_time":        nil,
+			"timeout_at":      timeoutAtRT,
+			"remark":          "",
+			"issue_desc":      "",
 		})
 
-	nowRT := time.Now()
 	repository.DB.Create(&entity.DrillInstanceLog{
 		DrillInstanceID: id,
 		Action:          "resume_task",

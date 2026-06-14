@@ -210,7 +210,9 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 
 	inst.CurrentStepIDs = append(inst.CurrentStepIDs, si.StepDefID)
 
-	e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, timeoutAt)
+	if !timeoutAt.IsZero() {
+		e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, timeoutAt)
+	}
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, si.Status)

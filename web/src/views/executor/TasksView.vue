@@ -618,6 +618,10 @@ function canStartTask(task: StepInstance): boolean {
 
   // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也不能开始
   if (preStepIds.length === 0 && task.parent_step_id) {
+    const parent = getWorkflowSteps().find((t: StepInstance) => t.id === task.parent_step_id)
+    if (parent?.step_type === 'parallel') {
+      return true
+    }
     const siblings = getWorkflowSteps().filter((t: StepInstance) =>
       t.parent_step_id === task.parent_step_id && t.id !== task.id
     )

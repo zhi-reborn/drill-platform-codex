@@ -312,6 +312,7 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	if steps, ok := GetCachedSteps(s.redis, id); ok {
+		s.reconcilePreStepIDs(id, steps)
 		return steps, nil
 	}
 	steps, err := s.stepRepo.FindStepsByDrillID(id)
@@ -444,7 +445,12 @@ func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepIn
 		siblingsOf[parentID][step.ID] = true
 	}
 
-	// 检查子步骤的 pre_step_ids 是否包含非同级步骤
+	stepMap := make(map[uint64]entity.StepInstance, len(steps))
+	for _, step := range steps {
+		stepMap[step.ID] = step
+	}
+
+	// 检查子步骤的 pre_step_ids 是否符合父级执行模式
 	needsRecompute := false
 	for _, step := range steps {
 		var parentID uint64
@@ -452,11 +458,18 @@ func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepIn
 			parentID = *step.ParentStepID
 		}
 		siblings := siblingsOf[parentID]
+		parent := stepMap[parentID]
 		var preIDs []uint64
 		if json.Unmarshal([]byte(step.PreStepIDs), &preIDs) == nil {
 			for _, preID := range preIDs {
-				// pre_step_ids 中的步骤应该是同级步骤
-				if !siblings[preID] {
+				if parentID > 0 && parent.StepType == "parallel" {
+					// 并行父步骤下，parallel 子步骤不应等待同级兄弟步骤。
+					if step.StepType == "parallel" && siblings[preID] {
+						needsRecompute = true
+						break
+					}
+				} else if !siblings[preID] {
+					// 非并行父级下，pre_step_ids 中的步骤应该是同级步骤。
 					needsRecompute = true
 					break
 				}

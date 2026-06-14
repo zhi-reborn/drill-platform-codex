@@ -313,6 +313,23 @@ func TestComputeInstancePreStepIDs_EdgeCases(t *testing.T) {
 				130: {120}, 131: {130},
 			},
 		},
+		{
+			name: "并行父任务下同级子步骤可同时开始",
+			setup: func() []entity.StepInstance {
+				return []entity.StepInstance{
+					{ID: 200, DrillInstanceID: 7, StepTemplateID: 200, Name: "前序任务", Seq: 1, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 210, DrillInstanceID: 7, StepTemplateID: 210, Name: "并行父任务", Seq: 2, StepType: "parallel", AssigneeIDs: "[]"},
+					{ID: 211, DrillInstanceID: 7, ParentStepID: ptrUint64(210), StepTemplateID: 211, Name: "子步骤1", Seq: 3, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 212, DrillInstanceID: 7, ParentStepID: ptrUint64(210), StepTemplateID: 212, Name: "子步骤2", Seq: 4, StepType: "serial", AssigneeIDs: "[]"},
+					{ID: 213, DrillInstanceID: 7, ParentStepID: ptrUint64(210), StepTemplateID: 213, Name: "子步骤3", Seq: 5, StepType: "parallel", AssigneeIDs: "[]"},
+				}
+			},
+			expected: map[uint64][]uint64{
+				200: {},
+				210: {200},
+				211: {200}, 212: {211}, 213: {200},
+			},
+		},
 	}
 
 	for _, tt := range tests {

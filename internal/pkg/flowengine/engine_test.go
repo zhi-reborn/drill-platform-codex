@@ -146,6 +146,38 @@ func TestStartFlow(t *testing.T) {
 	if inst.Steps[101].Status != StepStatusRunning {
 		t.Errorf("expected step1 status running, got %s", inst.Steps[101].Status)
 	}
+
+	if inst.Steps[101].TimeoutAt == nil {
+		t.Fatalf("expected step1 timeout to be scheduled")
+	}
+	if !e.timeoutScheduler.IsRegistered(inst.ID, 101) {
+		t.Fatalf("expected timeout scheduler to register step1")
+	}
+}
+
+func TestManualStartStepWithoutLoaderDoesNotRegisterZeroTimeout(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "manual-flow",
+		Steps: []*StepDef{
+			{ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 120, PreStepIDs: []int64{}},
+		},
+	}
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	inst.Status = FlowStatusRunning
+
+	if err := e.ManualStartStep(inst.ID, 101); err != nil {
+		t.Fatalf("ManualStartStep error: %v", err)
+	}
+
+	if inst.Steps[101].Status != StepStatusRunning {
+		t.Fatalf("expected step running, got %s", inst.Steps[101].Status)
+	}
+	if e.timeoutScheduler.IsRegistered(inst.ID, 101) {
+		t.Fatalf("expected no timeout registration when timeout deadline is unknown")
+	}
 }
 
 func TestCompleteStep_Serial(t *testing.T) {
@@ -416,6 +448,60 @@ func TestIntervene_ForceComplete(t *testing.T) {
 
 	if inst.Steps[103].Status != StepStatusRunning {
 		t.Errorf("expected step3 running, got %s", inst.Steps[103].Status)
+	}
+}
+
+func TestIntervene_ResumeTaskAllowsRedispatchTerminalStep(t *testing.T) {
+	cases := []StepStatus{
+		StepStatusCompleted,
+		StepStatusSkipped,
+		StepStatusTimeout,
+		StepStatusIssue,
+	}
+
+	for _, status := range cases {
+		t.Run(string(status), func(t *testing.T) {
+			e, _ := newTestEngine()
+			flowDef := newSerialFlowDef()
+			loader := &testStepLoader{
+				steps: map[int64]*StepDef{
+					101: {ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+				},
+			}
+			e.SetStepLoader(loader)
+
+			inst, _ := e.CreateInstance(flowDef, nil, 1)
+			inst.Status = FlowStatusRunning
+			inst.Steps[101].Status = status
+			operatorID := int64(9)
+			endedAt := time.Now()
+			inst.Steps[101].ActualOperator = &operatorID
+			inst.Steps[101].EndTime = &endedAt
+			inst.Steps[101].TimeoutAt = &endedAt
+			inst.Steps[101].IssueDesc = "old issue"
+			inst.Steps[101].Remark = "old remark"
+
+			target := int64(101)
+			if err := e.Intervene(inst.ID, ActionResumeTask, &target, 1); err != nil {
+				t.Fatalf("Intervene resume task error: %v", err)
+			}
+
+			if inst.Steps[101].Status != StepStatusRunning {
+				t.Errorf("expected step running after redispatch, got %s", inst.Steps[101].Status)
+			}
+			if inst.Steps[101].ActualOperator != nil {
+				t.Errorf("expected actual operator to be cleared")
+			}
+			if inst.Steps[101].EndTime != nil {
+				t.Errorf("expected end time to be cleared")
+			}
+			if inst.Steps[101].TimeoutAt == nil {
+				t.Errorf("expected timeout to be rescheduled")
+			}
+			if inst.Steps[101].IssueDesc != "" || inst.Steps[101].Remark != "" {
+				t.Errorf("expected issue and remark to be cleared")
+			}
+		})
 	}
 }
 

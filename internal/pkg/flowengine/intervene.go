@@ -216,7 +216,10 @@ func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID in
 		return ErrStepNotFound
 	}
 
-	if si.Status != StepStatusTimeout && si.Status != StepStatusIssue {
+	if si.Status != StepStatusCompleted &&
+		si.Status != StepStatusSkipped &&
+		si.Status != StepStatusTimeout &&
+		si.Status != StepStatusIssue {
 		return ErrInvalidStatus
 	}
 
@@ -238,8 +241,10 @@ func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID in
 	si.StartTime = &startTime
 
 	if stepDef != nil && stepDef.TimeoutMinutes > 0 && e.timeoutScheduler != nil {
+		timeoutAt := now.Add(time.Duration(stepDef.TimeoutMinutes) * time.Minute)
+		si.TimeoutAt = &timeoutAt
 		if !e.timeoutScheduler.IsRegistered(inst.ID, stepDefID) {
-			e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, now.Add(time.Duration(stepDef.TimeoutMinutes)*time.Minute))
+			e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, timeoutAt)
 		}
 	}
 

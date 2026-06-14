@@ -110,7 +110,11 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 				groupIDs := make([]uint64, 0, seg.endIdx-seg.startIdx)
 				for k := seg.startIdx; k < seg.endIdx; k++ {
 					gid := siblings[k]
-					computed[gid] = copyIDs(currentInherited)
+					if parentID != rootParentID && all[parentID] != nil && all[parentID].stepType == "parallel" {
+						computed[gid] = copyIDs(inherited)
+					} else {
+						computed[gid] = copyIDs(currentInherited)
+					}
 					computeLevel(gid, computed[gid])
 					groupIDs = append(groupIDs, gid)
 				}

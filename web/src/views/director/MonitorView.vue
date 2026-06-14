@@ -837,6 +837,10 @@ function getStepDependencyDisabledReason(step: any): string {
 
   // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也应禁用
   if (preStepIds.length === 0 && step.parent_step_id) {
+    const parent = steps.value.find(s => s.id === step.parent_step_id)
+    if (parent?.step_type === 'parallel') {
+      return ''
+    }
     const siblings = steps.value.filter(s =>
       s.parent_step_id === step.parent_step_id && s.id !== step.id
     )
