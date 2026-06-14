@@ -573,6 +573,7 @@ function isParentTask(task: StepInstance): boolean {
 
 // 终态集合
 const TERMINAL_STATUSES = ['completed', 'skipped', 'timeout', 'issue']
+const DEPENDENCY_SATISFIED_STATUSES = ['completed', 'timeout', 'issue']
 
 // 解析 pre_step_ids（API 返回的是 JSON 字符串）
 function parsePreStepIds(preStepIds: number[] | string | null | undefined): number[] {
@@ -610,7 +611,7 @@ function canStartTask(task: StepInstance): boolean {
       const preStep = getWorkflowSteps().find((t: StepInstance) => t.id === preId)
       // 前序步骤未找到，视为未完成
       if (!preStep) return false
-      return TERMINAL_STATUSES.includes(preStep.status)
+      return DEPENDENCY_SATISFIED_STATUSES.includes(preStep.status)
     })
     if (!allPreDone) return false
   }
@@ -621,7 +622,7 @@ function canStartTask(task: StepInstance): boolean {
       t.parent_step_id === task.parent_step_id && t.id !== task.id
     )
     const earlierPendingSibling = siblings.find((t: StepInstance) =>
-      t.seq < task.seq && t.step_type === 'serial' && !TERMINAL_STATUSES.includes(t.status)
+      t.seq < task.seq && t.step_type === 'serial' && !DEPENDENCY_SATISFIED_STATUSES.includes(t.status)
     )
     if (earlierPendingSibling) return false
   }

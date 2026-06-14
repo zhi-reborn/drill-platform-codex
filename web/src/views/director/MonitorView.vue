@@ -781,6 +781,7 @@ function isParentStep(step: any): boolean {
 
 // 终态集合：已完成/已跳过/已超时/异常
 const TERMINAL_STATUSES: StepStatus[] = ['completed', 'skipped', 'timeout', 'issue']
+const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'timeout', 'issue']
 
 // 判断步骤是否可以手动开始
 function canStartStep(step: any): boolean {
@@ -825,7 +826,7 @@ function getStepDependencyDisabledReason(step: any): string {
       if (!preStep) {
         // 前序步骤未找到，视为未完成
         pendingPreSteps.push(`步骤#${preId}`)
-      } else if (!TERMINAL_STATUSES.includes(preStep.status)) {
+      } else if (!DEPENDENCY_SATISFIED_STATUSES.includes(preStep.status)) {
         pendingPreSteps.push(preStep.name)
       }
     })
@@ -840,7 +841,7 @@ function getStepDependencyDisabledReason(step: any): string {
       s.parent_step_id === step.parent_step_id && s.id !== step.id
     )
     const earlierPendingSibling = siblings.find(s =>
-      s.seq < step.seq && s.step_type === 'serial' && !TERMINAL_STATUSES.includes(s.status)
+      s.seq < step.seq && s.step_type === 'serial' && !DEPENDENCY_SATISFIED_STATUSES.includes(s.status)
     )
     if (earlierPendingSibling) {
       return `前序步骤未完成：${earlierPendingSibling.name}`

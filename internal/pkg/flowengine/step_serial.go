@@ -60,12 +60,18 @@ func (e *Engine) allPredecessorsDone(inst *FlowInst, stepDefID int64) bool {
 		if !ok {
 			return false
 		}
-		if !isTerminalStatus(preSI.Status) {
+		if !isDependencySatisfiedStatus(preSI.Status) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isDependencySatisfiedStatus 判断前序依赖是否已满足。
+// 跳过是终态，但不代表流程依赖完成，不能解锁后续步骤。
+func isDependencySatisfiedStatus(status StepStatus) bool {
+	return status == StepStatusCompleted || status == StepStatusTimeout || status == StepStatusIssue
 }
 
 // isTerminalStatus 判断步骤是否处于终态（已完成/已跳过/已超时/异常）

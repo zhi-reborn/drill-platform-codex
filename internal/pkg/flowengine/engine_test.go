@@ -10,9 +10,9 @@ import (
 var _ PersistenceCallbacks = (*testCallbacks)(nil)
 
 type testCallbacks struct {
-	mu       sync.Mutex
-	flowLog  []string
-	stepLog  []string
+	mu        sync.Mutex
+	flowLog   []string
+	stepLog   []string
 	actionLog []string
 }
 
@@ -322,6 +322,73 @@ func TestIntervene_SkipStep(t *testing.T) {
 	}
 }
 
+func TestIntervene_SkipStepDoesNotAdvanceNextStep(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := newSerialFlowDef()
+	loader := &testStepLoader{
+		steps: map[int64]*StepDef{
+			101: {ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			102: {ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+			103: {ID: 103, Name: "step3", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{102}},
+		},
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	e.Start(inst.ID)
+	if err := e.CompleteStep(inst.ID, 101, 1, ""); err != nil {
+		t.Fatalf("CompleteStep step1 error: %v", err)
+	}
+
+	target := int64(102)
+	if err := e.Intervene(inst.ID, ActionSkip, &target, 1); err != nil {
+		t.Fatalf("Intervene skip error: %v", err)
+	}
+
+	if inst.Steps[102].Status != StepStatusSkipped {
+		t.Errorf("expected step2 skipped, got %s", inst.Steps[102].Status)
+	}
+	if inst.Steps[103].Status != StepStatusPending {
+		t.Errorf("expected step3 to remain pending, got %s", inst.Steps[103].Status)
+	}
+	for _, currentID := range inst.CurrentStepIDs {
+		if currentID == 103 {
+			t.Errorf("expected step3 not to be current after skip, got current steps %v", inst.CurrentStepIDs)
+		}
+	}
+}
+
+func TestManualStartStepRejectsSkippedPredecessor(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := newSerialFlowDef()
+	loader := &testStepLoader{
+		steps: map[int64]*StepDef{
+			101: {ID: 101, Name: "step1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{}},
+			102: {ID: 102, Name: "step2", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{101}},
+			103: {ID: 103, Name: "step3", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{102}},
+		},
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	e.Start(inst.ID)
+	if err := e.CompleteStep(inst.ID, 101, 1, ""); err != nil {
+		t.Fatalf("CompleteStep step1 error: %v", err)
+	}
+
+	target := int64(102)
+	if err := e.Intervene(inst.ID, ActionSkip, &target, 1); err != nil {
+		t.Fatalf("Intervene skip error: %v", err)
+	}
+
+	if err := e.ManualStartStep(inst.ID, 103); err != ErrPreStepsNotDone {
+		t.Fatalf("expected ManualStartStep to reject skipped predecessor, got %v", err)
+	}
+	if inst.Steps[103].Status != StepStatusPending {
+		t.Errorf("expected step3 to remain pending, got %s", inst.Steps[103].Status)
+	}
+}
+
 func TestIntervene_ForceComplete(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()
@@ -443,7 +510,7 @@ func TestErrorCases(t *testing.T) {
 	}
 }
 
-func TestSkipAndComplete_ShouldReach100Progress(t *testing.T) {
+func TestSkipStep_ShouldNotAllowCompletingNextStep(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := &FlowDef{
 		ID:   1,
@@ -477,16 +544,16 @@ func TestSkipAndComplete_ShouldReach100Progress(t *testing.T) {
 		t.Errorf("expected progress 50 after skip, got %d", inst.ProgressPct)
 	}
 
-	if err := e.CompleteStep(inst.ID, 102, 2, ""); err != nil {
-		t.Fatalf("CompleteStep error: %v", err)
+	if inst.Steps[102].Status != StepStatusPending {
+		t.Errorf("expected step2 to remain pending after skip, got %s", inst.Steps[102].Status)
 	}
 
-	if inst.Status != FlowStatusCompleted {
-		t.Errorf("expected flow completed, got %s", inst.Status)
+	if err := e.CompleteStep(inst.ID, 102, 2, ""); err != ErrStepNotActive {
+		t.Fatalf("expected CompleteStep to reject pending step, got %v", err)
 	}
 
-	if inst.ProgressPct != 100 {
-		t.Errorf("expected progress 100, got %d", inst.ProgressPct)
+	if inst.Status != FlowStatusRunning {
+		t.Errorf("expected flow to remain running, got %s", inst.Status)
 	}
 }
 

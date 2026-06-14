@@ -155,8 +155,6 @@ func (e *Engine) handleSkip(inst *FlowInst, stepDefID int64, operatorID int64) e
 		}
 	}
 
-	// 推进流程（根据步骤类型自动选择对应的推进逻辑）
-	e.handleStepCompletion(inst, stepDefID)
 	e.updateProgress(inst)
 
 	return nil
