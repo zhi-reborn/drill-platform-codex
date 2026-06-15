@@ -204,6 +204,8 @@
       :style="{
         left: lp.leftPct + '%',
         top: lp.topPct + '%',
+        '--label-offset-y': lp.offsetY + 'px',
+        '--label-rotate': lp.rotate + 'deg',
       }"
     >
       <span class="ring-outer-label-dot">
@@ -470,16 +472,35 @@ const ringLabelPositions = computed(() => {
   const totalH = size.value + PAD_Y_TOP + PAD_Y_BOTTOM
   return ringLabels.value.map((lbl) => {
     const a = lbl.angleDeg * Math.PI / 180
+    const cosA = Math.cos(a)
+    const sinA = Math.sin(a)
     const r = labelR.value
-    const px = cx.value + r * Math.cos(a)
-    const py = cy.value + r * Math.sin(a)
+    const px = cx.value + r * cosA
+    const py = cy.value + r * sinA
     let align: 'left' | 'right' | 'center' = 'center'
-    if (Math.cos(a) > 0.2) align = 'left'
-    else if (Math.cos(a) < -0.2) align = 'right'
+    let offsetY = 0
+    let rotate = 0
+    // 水平对齐：左右区域向两侧推开
+    if (cosA > 0.2) align = 'left'
+    else if (cosA < -0.2) align = 'right'
+    // 顶部/底部区域：垂直偏移 + 旋转文字避免重叠
+    const isTop = sinA < -0.5
+    const isBottom = sinA > 0.5
+    if (isTop) {
+      // 顶部：文字向下偏移，微旋转
+      offsetY = 4
+      rotate = sinA < -0.85 ? 0 : (cosA > 0 ? -15 : 15)
+    } else if (isBottom) {
+      // 底部：文字向上偏移，微旋转
+      offsetY = -4
+      rotate = sinA > 0.85 ? 0 : (cosA > 0 ? 15 : -15)
+    }
     return {
       leftPct: (px / totalW) * 100,
       topPct: (py / totalH) * 100,
       align,
+      offsetY,
+      rotate,
     }
   })
 })
@@ -571,7 +592,7 @@ function chineseNum(n: number): string {
 .radar-sweep {
   transform-origin: center;
   transform-box: view-box;
-  animation: radar-rotate 5s linear infinite;
+  animation: radar-rotate 10s linear infinite;
   will-change: transform;
 }
 @keyframes radar-rotate {
@@ -656,7 +677,7 @@ function chineseNum(n: number): string {
 .ring-outer-label {
   position: absolute;
   z-index: 4;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, calc(-50% + var(--label-offset-y, 0px))) rotate(var(--label-rotate, 0deg));
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -667,10 +688,10 @@ function chineseNum(n: number): string {
   transform: translate(-50%, -50%);
 }
 .label-align-left {
-  transform: translate(4px, -50%);
+  transform: translate(4px, calc(-50% + var(--label-offset-y, 0px))) rotate(var(--label-rotate, 0deg));
 }
 .label-align-right {
-  transform: translate(calc(-100% - 4px), -50%);
+  transform: translate(calc(-100% - 4px), calc(-50% + var(--label-offset-y, 0px))) rotate(var(--label-rotate, 0deg));
   flex-direction: row-reverse;
 }
 .ring-outer-label-dot {

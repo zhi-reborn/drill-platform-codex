@@ -24,9 +24,6 @@
               {{ task.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="task.executor_team" label="执行组">
-            <el-tag type="info">{{ task.executor_team }}</el-tag>
-          </el-descriptions-item>
           <el-descriptions-item v-if="task.phase_step" label="环节">
             {{ task.phase_step }}
           </el-descriptions-item>
@@ -53,9 +50,6 @@
           </el-descriptions-item>
           <el-descriptions-item v-if="task.attributes.cooperating_department" label="配合部门">
             {{ task.attributes.cooperating_department }}
-          </el-descriptions-item>
-          <el-descriptions-item v-if="task.attributes.responsible_team" label="责任团队">
-            {{ task.attributes.responsible_team }}
           </el-descriptions-item>
           <el-descriptions-item v-if="task.attributes.operator" label="操作人">
             {{ task.attributes.operator }}

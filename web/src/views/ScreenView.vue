@@ -204,7 +204,11 @@
               </span>
               <div class="panel-scan-line" />
             </div>
-            <div class="panel-body warn-list" ref="warnListRef">
+            <div
+              class="panel-body warn-list"
+              ref="warnListRef"
+              :style="{ '--visible-alert-count': Math.max(visibleAlerts.length, 1) }"
+            >
               <div
                 v-for="(alert, ai) in visibleAlerts"
                 :key="ai"
@@ -747,19 +751,20 @@ const activeAlerts = computed(() => {
   return [...sortedRunning, ...sortedPending]
 })
 
-// 可见步骤数量：只显示能完整放入容器的卡片，避免底部截断
-const ALERT_CARD_HEIGHT = 110 // 卡片高度（含 gap）
-const MORE_TIP_HEIGHT = 36    // 底部"还有N个步骤"提示的高度
+// 可见步骤数量：按容器高度自适应，卡片再弹性分配剩余空间
+const ALERT_CARD_IDEAL_HEIGHT = 112
+const ALERT_CARD_GAP = 9
+const MORE_TIP_HEIGHT = 34
 const containerHeight = ref(0)
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
   const _t = elapsedSeconds.value
   const available = containerHeight.value
-  if (!available) return 5 // 容器高度未就绪时默认显示 5 个
-  // 如果有更多步骤，需要为 more-tip 预留空间
-  const hasMore = activeAlerts.value.length > Math.floor(available / ALERT_CARD_HEIGHT)
-  const reserved = hasMore ? MORE_TIP_HEIGHT : 0
-  const count = Math.floor((available - reserved) / ALERT_CARD_HEIGHT)
+  if (!available) return 5
+  const firstPass = Math.max(1, Math.floor((available + ALERT_CARD_GAP) / (ALERT_CARD_IDEAL_HEIGHT + ALERT_CARD_GAP)))
+  const hasMore = activeAlerts.value.length > firstPass
+  const reserved = hasMore ? MORE_TIP_HEIGHT + ALERT_CARD_GAP : 0
+  const count = Math.floor((available - reserved + ALERT_CARD_GAP) / (ALERT_CARD_IDEAL_HEIGHT + ALERT_CARD_GAP))
   return Math.min(Math.max(count, 1), activeAlerts.value.length)
 })
 const visibleAlerts = computed(() => activeAlerts.value.slice(0, visibleAlertCount.value))
@@ -1831,18 +1836,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
 // ===== Alerts =====
 .warn-list {
-  display: flex; flex-direction: column; gap: 6px;
-  overflow-y: auto;
+  --visible-alert-count: 5;
+  display: flex; flex-direction: column; gap: clamp(7px, 0.95vh, 11px);
+  overflow: hidden;
   flex: 1;
   min-height: 0;
+  padding-bottom: clamp(8px, 1.15vh, 14px);
   .alert-card {
     position: relative;
     background: linear-gradient(135deg, rgba(12, 18, 36, 0.92), rgba(8, 14, 30, 0.85));
     border: 1px solid rgba(0, 212, 255, 0.12);
     border-radius: 3px;
-    padding: 8px 10px 8px 14px;
+    padding: clamp(8px, 1vh, 12px) clamp(10px, 1vw, 14px) clamp(8px, 1vh, 12px) clamp(14px, 1.15vw, 18px);
     display: flex; flex-direction: column; gap: 5px;
     overflow: hidden;
+    flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * 9px) / var(--visible-alert-count));
+    min-height: 94px;
+    max-height: 132px;
 
     // 顶部状态指示条（替代左边框）
     &::before {
@@ -1885,7 +1895,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
     .alert-title {
       flex: 1;
-      font-size: 12px; color: #e8f0ff; font-weight: 700;
+      font-size: clamp(12px, 0.95vw, 15px); color: #e8f0ff; font-weight: 700;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       letter-spacing: 0.5px;
     }
@@ -1948,9 +1958,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     color: rgba(0, 212, 255, 0.7);
   }
   .alert-foot {
-    display: flex; gap: 0;
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 1vw, 16px);
+    row-gap: 3px;
+    flex-wrap: wrap;
     .alert-meta {
-      flex: 1;
+      flex: 0 0 auto;
+      min-width: max-content;
       display: flex; align-items: center; gap: 3px;
       .meta-icon {
         font-size: 7px;
@@ -1961,12 +1976,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         font-size: 9px;
         color: rgba(110, 141, 181, 0.6);
         letter-spacing: 0.5px;
+        white-space: nowrap;
       }
       .meta-val {
         font-family: $font-mono;
         font-size: 10px;
         color: rgba(200, 220, 245, 0.85);
         font-weight: 600;
+        max-width: 92px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .operator-val {
         color: rgba(0, 212, 255, 0.8);
@@ -1975,9 +1995,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
-    padding-top: 5px;
+    margin-top: auto;
+    padding-top: clamp(5px, 0.75vh, 8px);
     border-top: 1px solid rgba(0, 212, 255, 0.1);
-    font-size: 11px;
+    font-size: clamp(11px, 0.82vw, 13px);
     overflow: hidden;
     .hierarchy-phase {
       font-weight: 600;
@@ -1995,6 +2016,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
+  }
+  .empty-tip,
+  .more-tip {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: rgba(160, 205, 245, 0.62);
+    font-family: $font-mono;
+    font-size: clamp(11px, 0.85vw, 13px);
+    letter-spacing: 0.08em;
+    border-top: 1px dashed rgba(0, 212, 255, 0.16);
+    background: linear-gradient(90deg, transparent, rgba(0, 120, 190, 0.08), transparent);
+  }
+  .more-tip {
+    margin-top: auto;
   }
 }
 
