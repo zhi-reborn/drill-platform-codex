@@ -28,7 +28,7 @@ func NewCASClient(serverURL string) *CASClient {
 	return &CASClient{
 		serverURL: strings.TrimRight(serverURL, "/"),
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 	}
 }

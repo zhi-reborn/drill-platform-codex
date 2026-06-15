@@ -56,7 +56,7 @@ ldap:
   groupBaseDN: "ou=groups,dc=example,dc=com"
   groupFilter: "(memberUid=%s)"
   groupNameAttribute: "cn"
-  timeoutSeconds: 10
+  timeoutSeconds: 60
 
 oss:
   provider: local  # local, aliyun, qiniu

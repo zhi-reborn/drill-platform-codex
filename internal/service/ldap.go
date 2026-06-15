@@ -64,7 +64,7 @@ func normalizeLDAPConfig(cfg LDAPConfig) LDAPConfig {
 		cfg.GroupNameAttribute = "cn"
 	}
 	if cfg.TimeoutSeconds <= 0 {
-		cfg.TimeoutSeconds = 10
+		cfg.TimeoutSeconds = 60
 	}
 	return cfg
 }
