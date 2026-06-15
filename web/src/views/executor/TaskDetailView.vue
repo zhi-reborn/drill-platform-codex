@@ -27,9 +27,6 @@
           <el-descriptions-item v-if="task.executor_team" label="执行组">
             <el-tag type="info">{{ task.executor_team }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="分配给">
-            {{ assignedNames || '未分配' }}
-          </el-descriptions-item>
           <el-descriptions-item v-if="task.phase_step" label="环节">
             {{ task.phase_step }}
           </el-descriptions-item>
