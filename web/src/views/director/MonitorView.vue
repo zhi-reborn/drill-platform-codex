@@ -149,15 +149,12 @@
                     {{ step.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
                   </el-tag>
                 </el-descriptions-item>
-                <el-descriptions-item v-if="step.assignee_names" label="执行人">
-                  {{ step.assignee_names }}
+                <el-descriptions-item v-if="getStepOperator(step)" label="操作人">
+                  {{ getStepOperator(step) }}
                 </el-descriptions-item>
                 <el-descriptions-item v-if="step.timeout_minutes" label="超时">
                   {{ step.timeout_minutes }} 分钟
                   <span v-if="step.timeout_at" class="timeout-countdown">({{ getCountdown(step.timeout_at) }})</span>
-                </el-descriptions-item>
-                <el-descriptions-item v-if="step.executor_team" label="团队">
-                  {{ step.executor_team }}
                 </el-descriptions-item>
               </el-descriptions>
             </div>
@@ -1086,6 +1083,15 @@ function getCountdown(timeoutAt: string): string {
   const mins = Math.floor(diff / 60)
   const secs = diff % 60
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+function getStepOperator(step: any): string {
+  if (!step) return ''
+  let attrs = step.attributes
+  if (typeof attrs === 'string') {
+    try { attrs = JSON.parse(attrs) } catch { return '' }
+  }
+  return attrs?.operator || ''
 }
 
 // WebSocket 实时刷新 — 区分事件类型，步骤事件增量更新
