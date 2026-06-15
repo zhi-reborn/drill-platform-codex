@@ -218,10 +218,6 @@
       </span>
       <span class="ring-outer-label-text">
         {{ ringLabels[idx].text }}
-        <span v-if="ringLabels[idx].isRunning" class="running-tag">
-          <span class="running-tag-dot"></span>
-          <span class="running-tag-text">RUNNING</span>
-        </span>
       </span>
     </div>
 
