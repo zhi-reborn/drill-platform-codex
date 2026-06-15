@@ -121,7 +121,7 @@ func uint64Ptr(v uint64) *uint64 {
 	return &v
 }
 
-func TestGetMyTasksReturnsExplicitTeamOrRoleAssignedTasks(t *testing.T) {
+func TestGetMyTasksReturnsOnlyUserAssignedTasks(t *testing.T) {
 	withTaskTestDB(t, func(db *gorm.DB) {
 		insertTaskTestUser(t, db, entity.User{ID: 7, Username: "executor", RealName: "执行员", Role: "executor", Department: "研发部"})
 		insertTaskTestUser(t, db, entity.User{ID: 8, Username: "other-executor", RealName: "其他执行员", Role: "executor", Department: "研发部"})
@@ -145,18 +145,48 @@ func TestGetMyTasksReturnsExplicitTeamOrRoleAssignedTasks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetMyTasks: %v", err)
 		}
-		if len(tasks) != 4 {
-			t.Fatalf("expected 4 assigned tasks, got %d: %#v", len(tasks), tasks)
+		if len(tasks) != 2 {
+			t.Fatalf("expected 2 operator-owned tasks, got %d: %#v", len(tasks), tasks)
 		}
 		got := map[uint64]bool{}
 		for _, task := range tasks {
 			got[task.ID] = true
 		}
-		if !got[1] || !got[2] || !got[7] || !got[9] {
-			t.Fatalf("expected exact, team, operator, and actual-operator assigned tasks, got %#v", got)
+		if !got[7] || !got[9] {
+			t.Fatalf("expected operator and actual-operator tasks, got %#v", got)
 		}
-		if got[3] || got[4] || got[5] || got[6] || got[8] {
-			t.Fatalf("tasks assigned to another team or another user must not be returned: %#v", got)
+		if got[1] || got[2] || got[3] || got[4] || got[5] || got[6] || got[8] {
+			t.Fatalf("tasks not owned by current operator must not be returned: %#v", got)
+		}
+	})
+}
+
+func TestCompleteStepRejectsExplicitAssigneeOnlyTask(t *testing.T) {
+	withTaskTestDB(t, func(db *gorm.DB) {
+		insertTaskTestUser(t, db, entity.User{ID: 7, Username: "executor", RealName: "执行员", Role: "executor", Department: "研发部"})
+		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 1, DrillInstanceID: 10, StepTemplateID: 101, Name: "精确分配", Seq: 1, Status: "running", AssigneeIDs: "[7]", DefaultAssigneeRole: "executor"})
+
+		svc := NewTaskService(repository.NewStepRepo())
+		svc.SetUserRepo(repository.NewUserRepo())
+
+		if err := svc.CompleteStep(1, 7, "done"); err == nil {
+			t.Fatalf("expected explicit-assignee-only task to be rejected")
+		}
+	})
+}
+
+func TestCompleteStepRejectsDepartmentOnlyTask(t *testing.T) {
+	withTaskTestDB(t, func(db *gorm.DB) {
+		insertTaskTestUser(t, db, entity.User{ID: 7, Username: "executor", RealName: "执行员", Role: "executor", Department: "研发部"})
+		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 2, DrillInstanceID: 10, StepTemplateID: 102, Name: "部门分配", Seq: 2, Status: "running", AssigneeIDs: "[]", DefaultAssigneeRole: "executor", ExecutorTeam: "研发部"})
+
+		svc := NewTaskService(repository.NewStepRepo())
+		svc.SetUserRepo(repository.NewUserRepo())
+
+		if err := svc.CompleteStep(2, 7, "done"); err == nil {
+			t.Fatalf("expected department-only task to be rejected")
 		}
 	})
 }

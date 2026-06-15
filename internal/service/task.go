@@ -45,37 +45,6 @@ func (s *TaskService) SetRedis(redis RedisClient) {
 	s.redis = redis
 }
 
-func assigneeIDsContain(assigneeIDs string, userID uint64) bool {
-	ids, ok := parseAssigneeIDs(assigneeIDs)
-	if !ok {
-		return false
-	}
-	for _, id := range ids {
-		if id == userID {
-			return true
-		}
-	}
-	return false
-}
-
-func parseAssigneeIDs(assigneeIDs string) ([]uint64, bool) {
-	if assigneeIDs == "" || assigneeIDs == "[]" || assigneeIDs == "null" {
-		return nil, false
-	}
-	var ids []uint64
-	if err := json.Unmarshal([]byte(assigneeIDs), &ids); err != nil {
-		return nil, false
-	}
-	return ids, len(ids) > 0
-}
-
-func implicitAssigneeMatches(step *entity.StepInstance, user *entity.User) bool {
-	if step.ExecutorTeam != "" {
-		return user.Department == step.ExecutorTeam
-	}
-	return false
-}
-
 func parseStepAttributes(attributes string) map[string]string {
 	if attributes == "" || attributes == "{}" || attributes == "null" {
 		return nil
@@ -103,16 +72,7 @@ func canExecutorOperateStep(step *entity.StepInstance, user *entity.User) bool {
 	if matched, hasOperator := operatorAttributeMatches(step, user); hasOperator {
 		return matched
 	}
-	ids, hasExplicitAssignees := parseAssigneeIDs(step.AssigneeIDs)
-	if hasExplicitAssignees {
-		for _, id := range ids {
-			if id == user.ID {
-				return true
-			}
-		}
-		return false
-	}
-	return implicitAssigneeMatches(step, user)
+	return false
 }
 
 func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*entity.StepInstance, error) {
@@ -135,7 +95,7 @@ func (s *TaskService) checkExecutorPermission(stepID uint64, userID uint64) (*en
 	}
 
 	if !canExecutorOperateStep(step, user) {
-		return nil, fmt.Errorf("该任务未分配给您或您所在部门，无法操作")
+		return nil, fmt.Errorf("该任务未分配给您，无法操作")
 	}
 
 	return step, nil
@@ -169,7 +129,7 @@ func (s *TaskService) GetMyTasks(userID uint64) ([]entity.StepInstance, error) {
 	// 只返回当前用户可操作的任务；流程排序由前端使用全量步骤骨架完成。
 	filtered := steps[:0]
 	for _, step := range steps {
-		if assigneeIDsContain(step.AssigneeIDs, userID) || (user != nil && canExecutorOperateStep(&step, user)) {
+		if user != nil && canExecutorOperateStep(&step, user) {
 			filtered = append(filtered, step)
 		}
 	}

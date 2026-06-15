@@ -747,23 +747,19 @@ const activeAlerts = computed(() => {
   return [...sortedRunning, ...sortedPending]
 })
 
-// 可见步骤数量：动态测量实际卡片高度，自动适配屏幕
-const MORE_TIP_HEIGHT = 20    // 底部"还有N个步骤"提示的高度
-const CARD_GAP = 5            // 卡片间距（与 CSS gap 一致）
+// 可见步骤数量：只显示能完整放入容器的卡片，避免底部截断
+const ALERT_CARD_HEIGHT = 110 // 卡片高度（含 gap）
+const MORE_TIP_HEIGHT = 36    // 底部"还有N个步骤"提示的高度
 const containerHeight = ref(0)
-const measuredCardHeight = ref(0) // 动态测量的卡片高度
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
   const _t = elapsedSeconds.value
   const available = containerHeight.value
   if (!available) return 5 // 容器高度未就绪时默认显示 5 个
-  const cardH = measuredCardHeight.value || 100 // 未测量时用估算值
-  const unitH = cardH + CARD_GAP
   // 如果有更多步骤，需要为 more-tip 预留空间
-  const maxFit = Math.floor(available / unitH)
-  const hasMore = activeAlerts.value.length > maxFit
+  const hasMore = activeAlerts.value.length > Math.floor(available / ALERT_CARD_HEIGHT)
   const reserved = hasMore ? MORE_TIP_HEIGHT : 0
-  const count = Math.floor((available - reserved) / unitH)
+  const count = Math.floor((available - reserved) / ALERT_CARD_HEIGHT)
   return Math.min(Math.max(count, 1), activeAlerts.value.length)
 })
 const visibleAlerts = computed(() => activeAlerts.value.slice(0, visibleAlertCount.value))
@@ -842,11 +838,6 @@ function tick() {
   // 更新容器高度（用于截断计算）
   if (warnListRef.value) {
     containerHeight.value = warnListRef.value.clientHeight
-    // 动态测量第一个卡片的实际高度
-    const firstCard = warnListRef.value.querySelector('.alert-card') as HTMLElement
-    if (firstCard) {
-      measuredCardHeight.value = firstCard.offsetHeight
-    }
   }
 }
 
@@ -1252,8 +1243,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 12px 20px 0;
-  gap: 6px;
+  padding: 12px 20px 4px;
+  gap: 8px;
 }
 
 // ===== HEADER =====
@@ -1623,7 +1614,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .screen-main {
   display: grid;
   grid-template-columns: minmax(180px, 18vw) minmax(340px, 1fr) minmax(240px, 24vw);
-  gap: 12px;
+  gap: 20px;
   flex: 1;
   min-height: 0;
   padding: 0;
@@ -1701,7 +1692,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px 4px;
+  padding: 10px 12px;
   min-height: 0;
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
@@ -1714,7 +1705,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 .more-tip {
   text-align: center; color: $text-dim;
-  font-size: 11px; padding: 6px 0 4px;
+  font-size: 11px; padding: 6px 0 16px;
   font-family: $font-mono;
   letter-spacing: 1px;
   border-top: 1px dashed $line;
@@ -1840,18 +1831,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
 // ===== Alerts =====
 .warn-list {
-  display: flex; flex-direction: column; gap: 5px;
+  display: flex; flex-direction: column; gap: 6px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
   .alert-card {
-    flex-shrink: 0;
     position: relative;
     background: linear-gradient(135deg, rgba(12, 18, 36, 0.92), rgba(8, 14, 30, 0.85));
     border: 1px solid rgba(0, 212, 255, 0.12);
     border-radius: 3px;
-    padding: 7px 10px 7px 14px;
-    display: flex; flex-direction: column; gap: 4px;
+    padding: 8px 10px 8px 14px;
+    display: flex; flex-direction: column; gap: 5px;
     overflow: hidden;
 
     // 顶部状态指示条（替代左边框）
@@ -1895,7 +1885,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
     .alert-title {
       flex: 1;
-      font-size: 13px; color: #e8f0ff; font-weight: 700;
+      font-size: 12px; color: #e8f0ff; font-weight: 700;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       letter-spacing: 0.5px;
     }
@@ -1909,19 +1899,19 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
   }
   .alert-bar {
-    height: 6px;
+    height: 8px;
     background: rgba(255, 255, 255, 0.04);
-    border-radius: 3px;
+    border-radius: 4px;
     position: relative;
     overflow: hidden;
     .alert-bar-fill {
       position: absolute; top: 0; left: 0; bottom: 0;
-      border-radius: 3px;
+      border-radius: 4px;
       transition: width 1s linear;
     }
     .alert-bar-remaining {
       position: absolute;
-      right: 6px; top: 50%;
+      right: 8px; top: 50%;
       transform: translateY(-50%);
       font-family: $font-mono;
       font-size: 8px;
@@ -1985,7 +1975,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
-    padding-top: 4px;
+    padding-top: 5px;
     border-top: 1px solid rgba(0, 212, 255, 0.1);
     font-size: 11px;
     overflow: hidden;
@@ -2032,7 +2022,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .screen-footer {
   display: flex; justify-content: space-between;
   padding: 0;
-  height: 8px;
+  height: 16px;
   flex-shrink: 0;
   font-family: $font-display; font-size: 10px;
   color: $text-mute; letter-spacing: 2px;

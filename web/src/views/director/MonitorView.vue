@@ -414,12 +414,6 @@
                 <el-form-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="责任部门">{{ selectedStep.attributes?.responsible_department || '-' }}</el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="配合部门">{{ selectedStep.attributes?.cooperating_department || '-' }}</el-form-item>
-              </el-col>
-              <el-col :span="12">
                 <el-form-item label="操作人">{{ selectedStep.attributes?.operator || '-' }}</el-form-item>
               </el-col>
               <el-col :span="12">
@@ -449,12 +443,6 @@
             </el-row>
           </el-form>
           <el-form v-else ref="editFormRef" :model="editForm" label-position="left" label-width="100px" size="default">
-            <el-form-item label="责任部门">
-              <el-input v-model="editForm.attributes.responsible_department" placeholder="责任部门" clearable />
-            </el-form-item>
-            <el-form-item label="配合部门">
-              <el-input v-model="editForm.attributes.cooperating_department" placeholder="配合部门" clearable />
-            </el-form-item>
             <el-form-item label="操作人">
               <el-autocomplete
                 :model-value="editForm.attributes.operator"
