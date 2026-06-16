@@ -1174,9 +1174,10 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return
 
-  // 步骤事件：全量刷新步骤数据（步骤完成会级联更新父步骤状态）
+  // 步骤事件：先尝试增量更新，再延迟做权威刷新，避免大步骤树同步重绘卡顿
   if (event.startsWith('step_')) {
-    scheduleDrillDataRefresh()
+    patchLocalStep(payload)
+    scheduleDrillDataRefresh(600)
     return
   }
 
@@ -1225,6 +1226,24 @@ function patchLocalStep(payload: any) {
   const newSteps = [...steps.value]
   newSteps[idx] = step
   steps.value = newSteps
+}
+
+function patchLocalStepStatus(step: StepInstance, status: StepStatus) {
+  const payload: any = {
+    step_id: step.id,
+    new_status: status,
+  }
+  if (status === 'running') {
+    payload.start_time = step.start_time || new Date().toISOString()
+  }
+  if (['completed', 'skipped', 'timeout', 'issue'].includes(status)) {
+    payload.end_time = step.end_time || new Date().toISOString()
+  }
+  patchLocalStep(payload)
+}
+
+function schedulePostStepActionRefresh() {
+  scheduleDrillDataRefresh(600)
 }
 
 // 只刷新实例详情（1 个 API）
@@ -1367,8 +1386,9 @@ async function handleTerminate() {
 async function handleStartStep(step: StepInstance) {
   try {
     await drillApi.startStep(drillId.value, getStepOperationId(step))
+    patchLocalStepStatus(step, 'running')
     ElMessage.success('步骤已开始')
-    scheduleDrillDataRefresh(0)
+    schedulePostStepActionRefresh()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1390,8 +1410,9 @@ async function confirmStepAction(message: string, action: () => Promise<void>) {
 async function handleSkipStep(step: StepInstance) {
   try {
     await drillApi.skipStep(drillId.value, getStepOperationId(step), 'director skipped')
+    patchLocalStepStatus(step, 'skipped')
     ElMessage.success('步骤已跳过')
-    scheduleDrillDataRefresh(0)
+    schedulePostStepActionRefresh()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1400,8 +1421,9 @@ async function handleSkipStep(step: StepInstance) {
 async function handleResumeTask(step: StepInstance) {
   try {
     await drillApi.resumeTask(drillId.value, getStepOperationId(step))
+    patchLocalStepStatus(step, 'running')
     ElMessage.success('任务已重新派发')
-    scheduleDrillDataRefresh(0)
+    schedulePostStepActionRefresh()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1412,12 +1434,14 @@ async function handleDirectorComplete(step: StepInstance) {
     // pending 状态下后端 CompleteStep 会校验失败,自动降级为强制完成
     if (step.status === 'pending') {
       await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组完成任务：${step.name}`)
+      patchLocalStepStatus(step, 'completed')
       ElMessage.success(`步骤「${step.name}」已完成`)
     } else {
       await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
+      patchLocalStepStatus(step, 'completed')
       ElMessage.success('步骤已完成')
     }
-    scheduleDrillDataRefresh(0)
+    schedulePostStepActionRefresh()
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1426,8 +1450,9 @@ async function handleDirectorComplete(step: StepInstance) {
 async function handleForceComplete(step: StepInstance) {
   try {
     await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组强制完成步骤：${step.name}`)
+    patchLocalStepStatus(step, 'completed')
     ElMessage.success(`步骤「${step.name}」已强制完成`)
-    scheduleDrillDataRefresh(0)
+    schedulePostStepActionRefresh()
   } catch (error) {
     ElMessage.error('强制完成失败')
   }
