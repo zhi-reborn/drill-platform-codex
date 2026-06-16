@@ -315,42 +315,42 @@
                     size="small"
                     @click="handleDirectorComplete(row)"
                   >完成</el-button>
-                  <el-popconfirm
+                  <el-button
                     v-if="['timeout', 'issue'].includes(row.status)"
-                    title="步骤异常/超时，确认强制完成？"
-                    @confirm="handleForceComplete(row)"
+                    type="success"
+                    link
+                    size="small"
+                    @click="confirmStepAction('步骤异常/超时，确认强制完成？', () => handleForceComplete(row))"
                   >
-                    <template #reference>
-                      <el-button type="success" link size="small">完成</el-button>
-                    </template>
-                  </el-popconfirm>
-                  <el-popconfirm
+                    完成
+                  </el-button>
+                  <el-button
                     v-if="['pending', 'running', 'timeout'].includes(row.status)"
-                    title="确认跳过此步骤？"
-                    @confirm="handleSkipStep(row)"
+                    type="warning"
+                    link
+                    size="small"
+                    @click="confirmStepAction('确认跳过此步骤？', () => handleSkipStep(row))"
                   >
-                    <template #reference>
-                      <el-button type="warning" link size="small">跳过</el-button>
-                    </template>
-                  </el-popconfirm>
-                  <el-popconfirm
+                    跳过
+                  </el-button>
+                  <el-button
                     v-if="['pending', 'running', 'timeout'].includes(row.status)"
-                    title="确认强制完成此步骤？"
-                    @confirm="handleForceComplete(row)"
+                    type="danger"
+                    link
+                    size="small"
+                    @click="confirmStepAction('确认强制完成此步骤？', () => handleForceComplete(row))"
                   >
-                    <template #reference>
-                      <el-button type="danger" link size="small">强制完成</el-button>
-                    </template>
-                  </el-popconfirm>
-                  <el-popconfirm
+                    强制完成
+                  </el-button>
+                  <el-button
                     v-if="['timeout', 'completed', 'skipped'].includes(row.status)"
-                    title="确认重新派发此步骤？"
-                    @confirm="handleResumeTask(row)"
+                    type="primary"
+                    link
+                    size="small"
+                    @click="confirmStepAction('确认重新派发此步骤？', () => handleResumeTask(row))"
                   >
-                    <template #reference>
-                      <el-button type="primary" link size="small">重新派发</el-button>
-                    </template>
-                  </el-popconfirm>
+                    重新派发
+                  </el-button>
                 </template>
                 <span v-else class="parent-hint">
                   子任务全部完成后自动完成
@@ -514,9 +514,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance, StepStatus } from '@/types'
@@ -583,8 +583,8 @@ const route = useRoute()
 const router = useRouter()
 
 const instance = ref<DrillInstance | null>(null)
-const steps = ref<StepInstance[]>([])
-const logs = ref<any[]>([])
+const steps = shallowRef<StepInstance[]>([])
+const logs = shallowRef<any[]>([])
 
 // WebSocket
 let ws: WebSocket | null = null
@@ -824,8 +824,23 @@ function canStartStep(step: any): boolean {
   return !getStartDisabledReason(step)
 }
 
+const stepStartDisabledReasonMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const step of sortedSteps.value) {
+    map.set(step.id, resolveStartDisabledReason(step))
+  }
+  return map
+})
+
 // 获取步骤不能开始的原因，返回空字符串表示可以开始
 function getStartDisabledReason(step: any): string {
+  if (typeof step.id === 'number') {
+    return stepStartDisabledReasonMap.value.get(step.id) ?? resolveStartDisabledReason(step)
+  }
+  return resolveStartDisabledReason(step)
+}
+
+function resolveStartDisabledReason(step: any): string {
   if (instance.value?.status !== 'running') return '演练未处于执行中状态'
   if (step.status !== 'pending') return '步骤不在待执行状态'
   if (isParentStep(step)) return '父步骤不可手动开始'
@@ -1356,6 +1371,19 @@ async function handleStartStep(step: StepInstance) {
     scheduleDrillDataRefresh(0)
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
+  }
+}
+
+async function confirmStepAction(message: string, action: () => Promise<void>) {
+  try {
+    await ElMessageBox.confirm(message, '确认操作', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await action()
+  } catch {
+    // 取消操作或弹窗关闭，不提示错误
   }
 }
 
