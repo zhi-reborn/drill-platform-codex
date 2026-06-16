@@ -158,6 +158,12 @@ const stepId = computed(() => {
   return typeof id === 'string' ? parseInt(id, 10) : 0
 })
 
+const routeParentHint = computed(() => {
+  if (route.query.parent === '1') return true
+  if (route.query.parent === '0') return false
+  return null
+})
+
 function formatDeadline(dateStr: string): string {
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -178,7 +184,7 @@ function formatTime(dateStr: string): string {
   })
 }
 
-async function loadTask() {
+async function loadTask(options: { checkParent?: boolean } = {}) {
   if (!stepId.value) return
   loading.value = true
   try {
@@ -191,8 +197,13 @@ async function loadTask() {
     }
     task.value = data
 
+    if (routeParentHint.value !== null) {
+      isParentTask.value = routeParentHint.value
+      return
+    }
+
     // 检查是否为父任务：加载该演练所有步骤，确认是否有子步骤指向本任务
-    if (data && data.drill_instance_id) {
+    if (options.checkParent !== false && data && data.drill_instance_id) {
       try {
         const allSteps = await drillApi.getSteps(data.drill_instance_id)
         isParentTask.value = allSteps.some(
@@ -215,7 +226,7 @@ async function handleStart() {
   try {
     await taskApi.start(stepId.value)
     ElMessage.success('任务已开始')
-    await loadTask()
+    await loadTask({ checkParent: false })
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
@@ -231,7 +242,7 @@ async function handleComplete() {
     })
     await taskApi.complete(stepId.value, actionForm.value.remark)
     ElMessage.success('任务已完成')
-    await loadTask()
+    await loadTask({ checkParent: false })
   } catch (error: any) {
     if (error === 'cancel') return
     ElMessage.error(error.response?.data?.message || error.message || '操作失败')
@@ -252,7 +263,7 @@ async function handleReportIssue() {
     })
     await taskApi.reportIssue(stepId.value, actionForm.value.remark)
     ElMessage.success('异常已上报')
-    await loadTask()
+    await loadTask({ checkParent: false })
   } catch (error: any) {
     if (error === 'cancel') return
     ElMessage.error(error.response?.data?.message || error.message || '上报失败')

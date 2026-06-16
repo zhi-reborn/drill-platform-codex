@@ -514,7 +514,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
@@ -598,27 +598,38 @@ const drillId = computed(() => {
 
 const isValidDrill = computed(() => drillId.value > 0)
 
-const drillSteps = computed(() => {
-  return steps.value.sort((a, b) => a.seq - b.seq)
+const sortedSteps = computed(() => {
+  return [...steps.value].sort((a, b) => a.seq - b.seq)
 })
 
-// 递归收集所有叶子步骤（用于状态聚合）
-function collectLeafSteps(node: any): StepInstance[] {
-  if (!node.children || node.children.length === 0) {
-    return [node]
+const drillSteps = computed(() => sortedSteps.value)
+
+const stepById = computed(() => {
+  const map = new Map<number, StepInstance>()
+  for (const step of sortedSteps.value) {
+    map.set(step.id, step)
   }
-  const leaves: StepInstance[] = []
-  for (const child of node.children) {
-    leaves.push(...collectLeafSteps(child))
+  return map
+})
+
+const childrenByParentId = computed(() => {
+  const map = new Map<number, StepInstance[]>()
+  for (const step of sortedSteps.value) {
+    if (!step.parent_step_id) continue
+    const children = map.get(step.parent_step_id) || []
+    children.push(step)
+    map.set(step.parent_step_id, children)
   }
-  return leaves
-}
+  return map
+})
+
+const parentIdSet = computed(() => new Set(childrenByParentId.value.keys()))
 
 // 将扁平步骤数据转换为树形结构
 // 优先使用 parent_step_id 建立真实的层级关系
 // 仅当数据无层级关系时，才退回到 phase/phase_step 虚拟分组
 const drillStepTree = computed(() => {
-  const sorted = [...steps.value].sort((a, b) => a.seq - b.seq)
+  const sorted = sortedSteps.value
 
   // 建立 step → node 映射
   const stepMap = new Map<number, any>()
@@ -743,30 +754,70 @@ function toggleExpandAll(data: any[], expand: boolean) {
 
 // 父步骤/分组状态聚合显示
 function getStepStatusText(row: any): { text: string; isParent: boolean } {
-  if (!row.children || row.children.length === 0) {
-    return { text: row.status, isParent: false }
-  }
-  const leaves = collectLeafSteps(row)
-  const total = leaves.length
-  const completed = leaves.filter(c => ['completed', 'skipped', 'timeout', 'issue'].includes(c.status)).length
-  const running = leaves.filter(c => c.status === 'running').length
-  // 有进行中的子任务时，优先展示进度+进行中数量
-  if (running > 0) {
-    return { text: `${completed}/${total} 已完成 · ${running} 进行中`, isParent: true }
-  }
-  const label = row._isGroup ? '已完成' : '子任务已完成'
-  return { text: `${completed}/${total} ${label}`, isParent: true }
+  return stepTreeMetaMap.value.get(row.id)?.statusText || { text: row.status, isParent: false }
 }
 
 // 检查是否为父步骤（虚拟分组节点 或 有子步骤的真实步骤）
 function isParentStep(step: any): boolean {
   if (step._isGroup) return true
-  return steps.value.some(s => s.parent_step_id === step.id)
+  return stepTreeMetaMap.value.get(step.id)?.isParent || parentIdSet.value.has(step.id)
 }
 
 // 终态集合：已完成/已跳过/已超时/异常
 const TERMINAL_STATUSES: StepStatus[] = ['completed', 'skipped', 'timeout', 'issue']
 const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'timeout', 'issue']
+const terminalStatusSet = new Set<StepStatus>(TERMINAL_STATUSES)
+const dependencySatisfiedStatusSet = new Set<StepStatus>(DEPENDENCY_SATISFIED_STATUSES)
+
+type StepTreeMeta = {
+  depth: number
+  siblingIndex: number
+  isParent: boolean
+  statusText: { text: string; isParent: boolean }
+}
+
+const stepTreeMetaMap = computed(() => {
+  const metaMap = new Map<number | string, StepTreeMeta>()
+
+  function visit(nodes: any[], depth: number) {
+    let total = 0
+    let completed = 0
+    let running = 0
+
+    nodes.forEach((node, index) => {
+      const hasChildren = Boolean(node.children?.length)
+      const childSummary = hasChildren ? visit(node.children, depth + 1) : null
+      const nodeTotal = childSummary?.total ?? 1
+      const nodeCompleted = childSummary?.completed ?? (terminalStatusSet.has(node.status) ? 1 : 0)
+      const nodeRunning = childSummary?.running ?? (node.status === 'running' ? 1 : 0)
+      const isParent = Boolean(node._isGroup || hasChildren)
+      const statusText = isParent
+        ? {
+            text: nodeRunning > 0
+              ? `${nodeCompleted}/${nodeTotal} 已完成 · ${nodeRunning} 进行中`
+              : `${nodeCompleted}/${nodeTotal} ${node._isGroup ? '已完成' : '子任务已完成'}`,
+            isParent: true,
+          }
+        : { text: node.status, isParent: false }
+
+      metaMap.set(node.id, {
+        depth,
+        siblingIndex: index + 1,
+        isParent,
+        statusText,
+      })
+
+      total += nodeTotal
+      completed += nodeCompleted
+      running += nodeRunning
+    })
+
+    return { total, completed, running }
+  }
+
+  visit(drillStepTree.value, 0)
+  return metaMap
+})
 
 // 判断步骤是否可以手动开始
 function canStartStep(step: any): boolean {
@@ -785,7 +836,7 @@ function getStartDisabledReason(step: any): string {
   // 检查父步骤链是否可被激活：pending 祖先允许由后端自动启动，但祖先自身的依赖必须已满足
   let ancestor = step
   while (ancestor.parent_step_id) {
-    const parent = steps.value.find(s => s.id === ancestor.parent_step_id)
+    const parent = stepById.value.get(ancestor.parent_step_id)
     if (!parent) break
     if (parent.status === 'pending') {
       const parentDependencyReason = getStepDependencyDisabledReason(parent)
@@ -807,11 +858,11 @@ function getStepDependencyDisabledReason(step: any): string {
   if (preStepIds.length > 0) {
     const pendingPreSteps: string[] = []
     preStepIds.forEach((preId: number) => {
-      const preStep = steps.value.find(s => s.id === preId)
+      const preStep = stepById.value.get(preId)
       if (!preStep) {
         // 前序步骤未找到，视为未完成
         pendingPreSteps.push(`步骤#${preId}`)
-      } else if (!DEPENDENCY_SATISFIED_STATUSES.includes(preStep.status)) {
+      } else if (!dependencySatisfiedStatusSet.has(preStep.status)) {
         pendingPreSteps.push(preStep.name)
       }
     })
@@ -822,15 +873,13 @@ function getStepDependencyDisabledReason(step: any): string {
 
   // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也应禁用
   if (preStepIds.length === 0 && step.parent_step_id) {
-    const parent = steps.value.find(s => s.id === step.parent_step_id)
+    const parent = stepById.value.get(step.parent_step_id)
     if (parent?.step_type === 'parallel') {
       return ''
     }
-    const siblings = steps.value.filter(s =>
-      s.parent_step_id === step.parent_step_id && s.id !== step.id
-    )
+    const siblings = childrenByParentId.value.get(step.parent_step_id) || []
     const earlierPendingSibling = siblings.find(s =>
-      s.seq < step.seq && s.step_type === 'serial' && !DEPENDENCY_SATISFIED_STATUSES.includes(s.status)
+      s.id !== step.id && s.seq < step.seq && s.step_type === 'serial' && !dependencySatisfiedStatusSet.has(s.status)
     )
     if (earlierPendingSibling) {
       return `前序步骤未完成：${earlierPendingSibling.name}`
@@ -842,34 +891,21 @@ function getStepDependencyDisabledReason(step: any): string {
 
 // 计算步骤在树中的深度（0=根/阶段, 1=环节, 2=任务, 3=步骤）
 function getStepDepth(step: any): number {
-  if (step._isGroup) return step._groupType === 'phase' ? 0 : 1
+  const meta = stepTreeMetaMap.value.get(step.id)
+  if (meta) return meta.depth
   let depth = 0
   let current = step
   while (current.parent_step_id) {
     depth++
-    const parent = steps.value.find(s => s.id === current.parent_step_id)
+    const parent = stepById.value.get(current.parent_step_id)
     if (!parent) break
     current = parent
   }
   return depth
 }
 
-// 同级节点编号映射：step.id → 在同父节点下的序号（1-based）
-const siblingIndexMap = computed(() => {
-  const map = new Map<number, number>()
-  function assignSiblings(nodes: any[]) {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]
-      map.set(node.id, i + 1)
-      if (node.children?.length) assignSiblings(node.children)
-    }
-  }
-  assignSiblings(drillStepTree.value)
-  return map
-})
-
 function getSiblingIndex(step: any): number {
-  return siblingIndexMap.value.get(step.id) || 0
+  return stepTreeMetaMap.value.get(step.id)?.siblingIndex || 0
 }
 
 // 深度→层级标签
@@ -893,7 +929,7 @@ function stepRowClassName({ row }: { row: any }): string {
 }
 
 const completedSteps = computed(() => {
-  return steps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
+  return sortedSteps.value.filter(s => terminalStatusSet.has(s.status)).length
 })
 
 const totalSteps = computed(() => {
@@ -905,15 +941,11 @@ const progressPercentage = computed(() => {
 })
 
 const runningSteps = computed(() => {
-  return steps.value
-    .filter(s => s.status === 'running')
-    .sort((a, b) => a.seq - b.seq)
+  return sortedSteps.value.filter(s => s.status === 'running')
 })
 
 const issueSteps = computed(() => {
-  return steps.value
-    .filter(s => s.status === 'timeout' || s.status === 'issue')
-    .sort((a, b) => a.seq - b.seq)
+  return sortedSteps.value.filter(s => s.status === 'timeout' || s.status === 'issue')
 })
 
 const canPause = computed(() => instance.value?.status === 'running')
@@ -1084,6 +1116,9 @@ function getStepOperator(step: any): string {
 
 // WebSocket 实时刷新 — 区分事件类型，步骤事件增量更新
 let logDebounceTimer: number | null = null
+let drillRefreshTimer: number | null = null
+let drillDataLoading = false
+let drillDataReloadQueued = false
 let componentDestroyed = false
 
 function connectWebSocket() {
@@ -1102,7 +1137,7 @@ function connectWebSocket() {
       handleWSMessage(msg)
     } catch {
       // 解析失败时兜底全量刷新
-      loadDrillData()
+      scheduleDrillDataRefresh()
     }
   }
   ws.onerror = () => {
@@ -1126,7 +1161,7 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
 
   // 步骤事件：全量刷新步骤数据（步骤完成会级联更新父步骤状态）
   if (event.startsWith('step_')) {
-    loadDrillData()
+    scheduleDrillDataRefresh()
     return
   }
 
@@ -1139,6 +1174,17 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
 
   // 其他事件：只刷新日志
   refreshLogs()
+}
+
+function scheduleDrillDataRefresh(delay = 120) {
+  if (componentDestroyed) return
+  if (drillRefreshTimer) {
+    clearTimeout(drillRefreshTimer)
+  }
+  drillRefreshTimer = window.setTimeout(() => {
+    drillRefreshTimer = null
+    loadDrillData()
+  }, delay)
 }
 
 // 增量更新本地步骤数据（不调 API）
@@ -1209,6 +1255,15 @@ async function loadDrillData() {
     router.replace('/director/drills')
     return
   }
+  if (drillDataLoading) {
+    drillDataReloadQueued = true
+    return
+  }
+  if (drillRefreshTimer) {
+    clearTimeout(drillRefreshTimer)
+    drillRefreshTimer = null
+  }
+  drillDataLoading = true
   try {
     instance.value = await drillApi.getDetail(drillId.value)
     if (componentDestroyed) return
@@ -1226,11 +1281,6 @@ async function loadDrillData() {
       pre_step_ids: parsePreStepIds(step.pre_step_ids),
     }))
     steps.value = stepsData
-
-    // 数据加载后自动展开所有树形节点
-    nextTick(() => {
-      expandAllSteps()
-    })
 
     const logsData = await drillApi.getLogs(drillId.value)
     if (componentDestroyed) return
@@ -1250,6 +1300,12 @@ async function loadDrillData() {
       ElMessage.error(error?.message || '加载数据失败')
     }
     console.error('Failed to load drill data:', error)
+  } finally {
+    drillDataLoading = false
+    if (drillDataReloadQueued && !componentDestroyed) {
+      drillDataReloadQueued = false
+      scheduleDrillDataRefresh(0)
+    }
   }
 }
 
@@ -1297,7 +1353,7 @@ async function handleStartStep(step: StepInstance) {
   try {
     await drillApi.startStep(drillId.value, getStepOperationId(step))
     ElMessage.success('步骤已开始')
-    await loadDrillData()
+    scheduleDrillDataRefresh(0)
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1307,7 +1363,7 @@ async function handleSkipStep(step: StepInstance) {
   try {
     await drillApi.skipStep(drillId.value, getStepOperationId(step), 'director skipped')
     ElMessage.success('步骤已跳过')
-    loadDrillData()
+    scheduleDrillDataRefresh(0)
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1317,7 +1373,7 @@ async function handleResumeTask(step: StepInstance) {
   try {
     await drillApi.resumeTask(drillId.value, getStepOperationId(step))
     ElMessage.success('任务已重新派发')
-    loadDrillData()
+    scheduleDrillDataRefresh(0)
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1333,7 +1389,7 @@ async function handleDirectorComplete(step: StepInstance) {
       await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
       ElMessage.success('步骤已完成')
     }
-    loadDrillData()
+    scheduleDrillDataRefresh(0)
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1343,7 +1399,7 @@ async function handleForceComplete(step: StepInstance) {
   try {
     await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组强制完成步骤：${step.name}`)
     ElMessage.success(`步骤「${step.name}」已强制完成`)
-    loadDrillData()
+    scheduleDrillDataRefresh(0)
   } catch (error) {
     ElMessage.error('强制完成失败')
   }
@@ -1424,6 +1480,10 @@ onUnmounted(() => {
     ws = null
   }
   stopFallbackPolling()
+  if (drillRefreshTimer) {
+    clearTimeout(drillRefreshTimer)
+    drillRefreshTimer = null
+  }
 })
 </script>
 

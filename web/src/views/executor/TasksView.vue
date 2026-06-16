@@ -290,7 +290,8 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck } from '@element-plus/icons-vue'
-import type { StepInstance } from '@/types/instance'
+import type { StepAttributes } from '@/types/template'
+import type { StepInstance, StepStatus } from '@/types/instance'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import EmptyBox from '@/components/common/EmptyBox.vue'
@@ -316,6 +317,71 @@ const myTasksCount = computed(() => tasks.value.length)
 const pendingTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'pending').length)
 const inProgressTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'running').length)
 const completedTasksCount = computed(() => tasks.value.filter((t: StepInstance) => t.status === 'completed').length)
+
+const workflowSteps = computed(() => drillFlowSteps.value.length > 0 ? drillFlowSteps.value : tasks.value)
+
+const workflowStepById = computed(() => {
+  const map = new Map<number, StepInstance>()
+  for (const step of workflowSteps.value) {
+    map.set(step.id, step)
+  }
+  return map
+})
+
+const workflowChildrenByParentId = computed(() => {
+  const map = new Map<number, StepInstance[]>()
+  for (const step of workflowSteps.value) {
+    if (!step.parent_step_id) continue
+    const children = map.get(step.parent_step_id) || []
+    children.push(step)
+    map.set(step.parent_step_id, children)
+  }
+  return map
+})
+
+const parentTaskIdSet = computed(() => new Set(workflowChildrenByParentId.value.keys()))
+
+const workflowDepthMap = computed(() => {
+  const map = new Map<number, number>()
+  for (const step of workflowSteps.value) {
+    let depth = 0
+    let pid = step.parent_step_id
+    const visited = new Set<number>()
+    while (pid && !visited.has(pid)) {
+      visited.add(pid)
+      depth++
+      pid = workflowStepById.value.get(pid)?.parent_step_id
+    }
+    map.set(step.id, depth)
+  }
+  return map
+})
+
+const sectionChildCountMap = computed(() => {
+  const map = new Map<number, number>()
+  for (const [parentId, children] of workflowChildrenByParentId.value) {
+    const leafCount = children.filter(child => !parentTaskIdSet.value.has(child.id)).length
+    map.set(parentId, leafCount)
+  }
+  return map
+})
+
+const taskOperatorMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const task of tasks.value) {
+    const attrs = task.attributes as StepAttributes | string | null | undefined
+    if (!attrs) continue
+    if (typeof attrs === 'string') {
+      try {
+        const parsed = JSON.parse(attrs)
+        if (parsed?.operator) map.set(task.id, parsed.operator)
+      } catch { /* ignore */ }
+    } else if (attrs.operator) {
+      map.set(task.id, attrs.operator)
+    }
+  }
+  return map
+})
 
 // 活跃演练（带任务统计）
 const activeDrillsWithTasks = computed(() => {
@@ -430,16 +496,19 @@ function sortTasksByFlowOrder(visibleTasks: StepInstance[], flowSteps: StepInsta
   for (const task of visibleTasks) visibleMap.set(task.id, task)
 
   const ordered: StepInstance[] = []
+  const orderedIds = new Set<number>()
   for (const step of flattenTreeOrder(flowSteps)) {
     const visibleTask = visibleMap.get(step.id)
     if (visibleTask) {
       ordered.push(visibleTask)
+      orderedIds.add(visibleTask.id)
     }
   }
 
   for (const task of flattenTreeOrder(visibleTasks)) {
-    if (!ordered.some(orderedTask => orderedTask.id === task.id)) {
+    if (!orderedIds.has(task.id)) {
       ordered.push(task)
+      orderedIds.add(task.id)
     }
   }
   return ordered
@@ -459,16 +528,7 @@ const getStatusClass = (status: string) => {
 }
 
 function getStepDepth(task: StepInstance): number {
-  let depth = 0
-  let pid = task.parent_step_id
-  const visited = new Set<number>()
-  while (pid && !visited.has(pid)) {
-    visited.add(pid)
-    depth++
-    const parent = getWorkflowSteps().find(t => t.id === pid)
-    pid = parent?.parent_step_id ?? undefined
-  }
-  return depth
+  return workflowDepthMap.value.get(task.id) || 0
 }
 
 function getFlowIndent(task: StepInstance): string {
@@ -482,24 +542,12 @@ function getStepDepthLabel(task: StepInstance): string {
 }
 
 function getSectionChildCount(task: StepInstance): string {
-  const workflowSteps = getWorkflowSteps()
-  const children = workflowSteps.filter(t => t.parent_step_id === task.id)
-  const leafCount = children.filter(c => !workflowSteps.some(x => x.parent_step_id === c.id)).length
+  const leafCount = sectionChildCountMap.value.get(task.id) || 0
   return leafCount > 0 ? `${leafCount} 项` : ''
 }
 
-function getWorkflowSteps(): StepInstance[] {
-  return drillFlowSteps.value.length > 0 ? drillFlowSteps.value : tasks.value
-}
-
 function getTaskOperator(task: StepInstance): string {
-  if (!task.attributes || typeof task.attributes !== 'string') return ''
-  try {
-    const attributes = JSON.parse(task.attributes)
-    return attributes.operator || ''
-  } catch {
-    return ''
-  }
+  return taskOperatorMap.value.get(task.id) || ''
 }
 
 function getActivityTypeTag(type: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
@@ -568,12 +616,12 @@ function formatDeadline(d: string): string {
 
 // 检查是否为父任务（有其他任务的 parent_step_id 指向它）
 function isParentTask(task: StepInstance): boolean {
-  return getWorkflowSteps().some((t: StepInstance) => t.parent_step_id === task.id)
+  return parentTaskIdSet.value.has(task.id)
 }
 
 // 终态集合
-const TERMINAL_STATUSES = ['completed', 'skipped', 'timeout', 'issue']
-const DEPENDENCY_SATISFIED_STATUSES = ['completed', 'timeout', 'issue']
+const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'timeout', 'issue']
+const dependencySatisfiedStatusSet = new Set<StepStatus>(DEPENDENCY_SATISFIED_STATUSES)
 
 // 解析 pre_step_ids（API 返回的是 JSON 字符串）
 function parsePreStepIds(preStepIds: number[] | string | null | undefined): number[] {
@@ -590,6 +638,16 @@ function parsePreStepIds(preStepIds: number[] | string | null | undefined): numb
   return []
 }
 
+function parseStepAttributes(attributes: StepAttributes | string | null | undefined): StepAttributes {
+  if (!attributes) return {}
+  if (typeof attributes !== 'string') return attributes
+  try {
+    return JSON.parse(attributes)
+  } catch {
+    return {}
+  }
+}
+
 // 判断任务是否满足开始条件（前序步骤全部完成，父步骤已开始）
 function canStartTask(task: StepInstance): boolean {
   if (task.status !== 'pending') return false
@@ -598,7 +656,7 @@ function canStartTask(task: StepInstance): boolean {
   // 检查父步骤链是否已激活：所有祖先必须处于 running 状态
   let currentAncestorId = task.parent_step_id
   while (currentAncestorId) {
-    const parent = tasks.value.find((t: StepInstance) => t.id === currentAncestorId)
+    const parent = workflowStepById.value.get(currentAncestorId)
     if (!parent) break
     if (parent.status !== 'running' && parent.status !== 'completed') return false
     currentAncestorId = parent.parent_step_id
@@ -608,25 +666,23 @@ function canStartTask(task: StepInstance): boolean {
   const preStepIds = task.pre_step_ids || []
   if (preStepIds.length > 0) {
     const allPreDone = preStepIds.every((preId: number) => {
-      const preStep = getWorkflowSteps().find((t: StepInstance) => t.id === preId)
+      const preStep = workflowStepById.value.get(preId)
       // 前序步骤未找到，视为未完成
       if (!preStep) return false
-      return DEPENDENCY_SATISFIED_STATUSES.includes(preStep.status)
+      return dependencySatisfiedStatusSet.has(preStep.status)
     })
     if (!allPreDone) return false
   }
 
   // 串行步骤兜底检查：如果 pre_step_ids 为空但同级存在更早的未完成串行步骤，也不能开始
   if (preStepIds.length === 0 && task.parent_step_id) {
-    const parent = getWorkflowSteps().find((t: StepInstance) => t.id === task.parent_step_id)
+    const parent = workflowStepById.value.get(task.parent_step_id)
     if (parent?.step_type === 'parallel') {
       return true
     }
-    const siblings = getWorkflowSteps().filter((t: StepInstance) =>
-      t.parent_step_id === task.parent_step_id && t.id !== task.id
-    )
+    const siblings = workflowChildrenByParentId.value.get(task.parent_step_id) || []
     const earlierPendingSibling = siblings.find((t: StepInstance) =>
-      t.seq < task.seq && t.step_type === 'serial' && !DEPENDENCY_SATISFIED_STATUSES.includes(t.status)
+      t.id !== task.id && t.seq < task.seq && t.step_type === 'serial' && !dependencySatisfiedStatusSet.has(t.status)
     )
     if (earlierPendingSibling) return false
   }
@@ -662,7 +718,11 @@ function handleFilterChange() {
 
 // 跳转到任务详情
 function goToTaskDetail(taskId: number) {
-  router.push(`/executor/tasks/${taskId}`)
+  const task = workflowStepById.value.get(taskId) || tasks.value.find((t: StepInstance) => t.id === taskId)
+  router.push({
+    path: `/executor/tasks/${taskId}`,
+    query: task ? { parent: isParentTask(task) ? '1' : '0' } : undefined,
+  })
 }
 
 // 查看大屏
@@ -671,7 +731,7 @@ function viewScreen(drillId: number) {
 }
 
 // 加载数据
-async function loadTasks(options: { silent?: boolean } = {}): Promise<void> {
+async function loadTasks(options: { silent?: boolean; lightweight?: boolean } = {}): Promise<void> {
   if (!options.silent) loading.value = true
   try {
     // 加载我的任务
@@ -680,35 +740,41 @@ async function loadTasks(options: { silent?: boolean } = {}): Promise<void> {
     tasks.value = rawTasks.map((t: StepInstance) => ({
       ...t,
       pre_step_ids: parsePreStepIds(t.pre_step_ids),
+      attributes: parseStepAttributes(t.attributes),
     }))
-    
-    // 加载演练列表
-    const drillResult = await drillApi.getList({ page: 1, page_size: 50 })
-    instances.value = drillResult.list
+
+    if (!options.lightweight) {
+      // 加载演练列表
+      const drillResult = await drillApi.getList({ page: 1, page_size: 50 })
+      instances.value = drillResult.list
+    }
+
     if (selectedDrillId.value) {
       await loadDrillFlowSteps(selectedDrillId.value)
     }
-    
-    // 加载最近活动（从演练日志）
-    const allLogs: any[] = []
-    for (const drill of instances.value.slice(0, 10)) {
-      try {
-        const logs = await drillApi.getLogs(drill.id)
-        logs.forEach((log: any) => {
-          allLogs.push({
-            type: log.action,
-            drill_name: drill.name,
-            operator: log.operator_name || '流程引擎',
-            created_at: log.created_at,
+
+    if (!options.lightweight) {
+      // 加载最近活动（从演练日志）
+      const allLogs: any[] = []
+      for (const drill of instances.value.slice(0, 10)) {
+        try {
+          const logs = await drillApi.getLogs(drill.id)
+          logs.forEach((log: any) => {
+            allLogs.push({
+              type: log.action,
+              drill_name: drill.name,
+              operator: log.operator_name || '流程引擎',
+              created_at: log.created_at,
+            })
           })
-        })
-      } catch (e) {
-        // 忽略错误
+        } catch (e) {
+          // 忽略错误
+        }
       }
+      recentActivity.value = allLogs
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5)
     }
-    recentActivity.value = allLogs
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 5)
   } catch (error) {
     ElMessage.error('加载任务失败')
     console.error('Failed to load tasks:', error)
@@ -723,6 +789,7 @@ async function loadDrillFlowSteps(drillId: number): Promise<void> {
     drillFlowSteps.value = rawSteps.map((t: StepInstance) => ({
       ...t,
       pre_step_ids: parsePreStepIds(t.pre_step_ids),
+      attributes: parseStepAttributes(t.attributes),
     }))
   } catch (error) {
     console.error('Failed to load drill flow steps:', error)
@@ -733,17 +800,65 @@ async function loadDrillFlowSteps(drillId: number): Promise<void> {
 let wsConnections: WebSocket[] = []
 let componentDestroyed = false
 let refreshTimer: number | null = null
+let taskDataLoading = false
+let queuedTaskRefresh: { lightweight: boolean } | null = null
 
-function scheduleTaskRefresh() {
+async function refreshTasks(options: { silent?: boolean; lightweight?: boolean } = {}) {
+  const lightweight = Boolean(options.lightweight)
+  if (taskDataLoading) {
+    queuedTaskRefresh = {
+      lightweight: queuedTaskRefresh ? queuedTaskRefresh.lightweight && lightweight : lightweight,
+    }
+    return
+  }
+
+  taskDataLoading = true
+  try {
+    await loadTasks(options)
+  } finally {
+    taskDataLoading = false
+    if (queuedTaskRefresh && !componentDestroyed) {
+      const next = queuedTaskRefresh
+      queuedTaskRefresh = null
+      scheduleTaskRefresh(next)
+    }
+  }
+}
+
+function scheduleTaskRefresh(options: { lightweight?: boolean } = {}) {
   if (refreshTimer !== null) {
     window.clearTimeout(refreshTimer)
   }
   refreshTimer = window.setTimeout(() => {
     refreshTimer = null
-    loadTasks({ silent: true }).then(() => {
-      connectAllDrills()
+    refreshTasks({ silent: true, lightweight: options.lightweight }).then(() => {
+      if (!options.lightweight) {
+        connectAllDrills()
+      }
     })
   }, 300)
+}
+
+function patchLocalStep(stepId: number, payload: any, eventType: string) {
+  const newStatus = payload.new_status || mapEventToStatus(eventType)
+  const patchList = (list: StepInstance[]) => {
+    const idx = list.findIndex((t: StepInstance) => t.id === stepId)
+    if (idx === -1) return list
+    const next = [...list]
+    next[idx] = {
+      ...next[idx],
+      ...(newStatus ? { status: newStatus as StepStatus } : {}),
+      ...(payload.remark ? { remark: payload.remark } : {}),
+      ...(payload.issue_desc ? { issue_desc: payload.issue_desc } : {}),
+      ...(payload.start_time ? { start_time: payload.start_time } : {}),
+      ...(payload.end_time ? { end_time: payload.end_time } : {}),
+      ...(payload.timeout_at ? { timeout_at: payload.timeout_at } : {}),
+    }
+    return next
+  }
+
+  tasks.value = patchList(tasks.value)
+  drillFlowSteps.value = patchList(drillFlowSteps.value)
 }
 
 function connectDrillWS(drillId: number) {
@@ -762,19 +877,13 @@ function connectDrillWS(drillId: number) {
       if (eventType.startsWith('step_') && payload) {
         const stepId = Number(payload.step_id ?? payload.id)
         if (stepId) {
-          const idx = tasks.value.findIndex((t: StepInstance) => t.id === stepId)
-          if (idx !== -1) {
-            const newStatus = payload.new_status || mapEventToStatus(eventType)
-            if (newStatus) tasks.value[idx].status = newStatus as any
-            if (payload.remark) tasks.value[idx].remark = payload.remark
-            if (payload.issue_desc) tasks.value[idx].issue_desc = payload.issue_desc
-          }
+          patchLocalStep(stepId, payload, eventType)
         }
-        scheduleTaskRefresh()
+        scheduleTaskRefresh({ lightweight: Boolean(selectedDrillId.value) })
       }
       // 演练状态变化时全量刷新
       if (eventType.startsWith('drill_')) {
-        scheduleTaskRefresh()
+        scheduleTaskRefresh({ lightweight: false })
       }
     } catch { /* ignore */ }
   }
