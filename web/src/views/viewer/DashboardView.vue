@@ -66,6 +66,10 @@
                   <el-icon><Monitor /></el-icon>
                   大屏
                 </el-button>
+                <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                  <el-icon><DataBoard /></el-icon>
+                  大屏2
+                </el-button>
               </div>
             </el-card>
           </el-col>
@@ -105,7 +109,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Monitor } from '@element-plus/icons-vue'
+import { Monitor, DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import { drillApi } from '@/api/modules/drill'
@@ -192,6 +196,10 @@ function formatDuration(seconds: number): string {
 
 function viewScreen(drillId: number) {
   router.push(`/screen/${drillId}`)
+}
+
+function viewScreen2(drillId: number) {
+  router.push(`/viewer/screen/${drillId}`)
 }
 
 async function loadDashboard() {

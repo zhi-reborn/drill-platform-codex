@@ -57,6 +57,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/DrillListView.vue'),
         meta: { title: '全部演练', icon: 'Monitor' },
       },
+      {
+        path: 'screen/:id(\\d+)',
+        name: 'AdminScreen',
+        component: () => import('@/views/director/ScreenView2.vue'),
+        meta: { title: '数据大屏', icon: 'DataBoard', hidden: true },
+      },
     ],
   },
 

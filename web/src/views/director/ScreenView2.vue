@@ -1,5 +1,5 @@
 <template>
-  <div class="screen-root">
+  <div class="screen-root cyber-command-screen">
     <!-- 加载 -->
     <div v-if="loading" class="overlay-state">
       <div class="loader-ring" />
@@ -14,124 +14,83 @@
 
     <!-- 主屏 -->
     <template v-else>
-      <div class="bg-grid" />
-      <div class="bg-glow bg-glow-tl" />
-      <div class="bg-glow bg-glow-br" />
+      <div class="cyber-bg cyber-bg-grid" />
+      <div class="cyber-bg cyber-bg-beams" />
+      <div class="cyber-bg cyber-bg-scan" />
 
-      <!-- 顶部信息栏 -->
-      <header class="top-bar">
-        <div class="tb-line" />
-        <div class="tb-left">
-          <span class="elapsed-time">{{ displayTime }}</span>
+      <header class="command-header">
+        <div class="header-title-shell">
+          <h1 class="command-title">应急处置指挥中心</h1>
         </div>
-        <div class="tb-center">
-          <div class="tb-title-row">
-            <h1 class="tb-title">{{ instance?.name || '灾备演练' }}</h1>
-            <span class="tb-status" :class="'st-' + (instance?.status || 'pending')">{{ statusLabel }}</span>
-          </div>
-        </div>
-        <div class="tb-right">
-          <div class="progress-wrap">
-            <div class="progress-track">
-              <div class="progress-fill" :style="{ width: (instance?.progress_pct || 0) + '%' }" />
-              <div class="progress-glow" :style="{ left: (instance?.progress_pct || 0) + '%' }" />
-            </div>
-            <span class="progress-text">{{ instance?.progress_pct || 0 }}%</span>
-          </div>
+        <div class="header-meta">
+          <span class="system-label">演练进度</span>
+          <span class="system-time">{{ instance?.progress_pct ?? 0 }}%</span>
           <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
-            </svg>
+            <el-icon><FullScreen /></el-icon>
           </button>
-          <template v-if="canControl">
-            <button v-if="instance?.status === 'pending'" class="btn-ctrl start" @click="handleStart" title="开始演练">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <button v-if="instance?.status === 'running'" class="btn-ctrl pause" @click="handlePause" title="暂停">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-            </button>
-            <button v-if="instance?.status === 'paused'" class="btn-ctrl resume" @click="handleResume" title="恢复">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <button v-if="instance?.status === 'running' || instance?.status === 'paused'" class="btn-ctrl end" @click="handleTerminate" title="结束">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
-            </button>
-</template>
+        </div>
+        <div v-if="canControl" class="control-strip">
+          <button v-if="instance?.status === 'pending'" class="control-btn good" @click="handleStart">开始</button>
+
         </div>
       </header>
 
-      <!-- 主体 -->
-      <main class="main-body">
-        <!-- 流程树区域 -->
-        <section class="flow-area">
-          <div class="flow-label">演练流程</div>
-          <canvas ref="flowCanvasRef" class="flow-canvas" />
-          <div class="flow-legend">
-            <span class="lg-item"><span class="lg-dot lg-done" />已完成</span>
-            <span class="lg-item"><span class="lg-dot lg-running" />执行中</span>
-            <span class="lg-item"><span class="lg-dot lg-pending" />待执行</span>
+      <main class="command-main">
+        <section class="phase-card-strip">
+          <article v-for="(phase, index) in phaseCards" :key="phase.name" class="phase-card" :class="['is-' + phase.status, { active: phase.active }]">
+            <div class="phase-accent" />
+            <div class="phase-head">
+              <h2>阶段{{ index + 1 }} {{ phase.name }}</h2>
+              <span class="phase-status">{{ phase.statusText }}</span>
+            </div>
+            <div class="phase-segments" :aria-label="phase.statusText">
+              <span v-for="seg in phase.segmentCount" :key="seg" :class="{ filled: seg <= phase.filledSegments }" />
+            </div>
+            <div class="phase-stats">
+              <span><b>{{ phase.completedPhaseSteps }}</b>/{{ phase.totalPhaseSteps }}<em>环节</em></span>
+              <span><b>{{ phase.completedSteps }}</b>/{{ phase.totalSteps }}<em>步骤</em></span>
+            </div>
+          </article>
+        </section>
+
+        <section class="flow-board">
+          <div class="flow-row flow-row-top">
+            <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
+              <div class="flow-node" :class="'is-' + node.status">
+                <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+              </div>
+              <span v-if="index < topFlowNodes.length - 1" class="flow-arrow right" />
+              <span v-else class="flow-arrow turn" />
+            </div>
+          </div>
+          <div class="flow-row flow-row-bottom">
+            <div v-for="(node, index) in bottomFlowNodes" :key="node.id" class="flow-node-wrap">
+              <span v-if="index > 0" class="flow-arrow left" />
+              <div class="flow-node" :class="'is-' + node.status">
+                <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+              </div>
+            </div>
           </div>
         </section>
 
-        <!-- 右侧面板 -->
-        <aside class="right-panel">
-          <!-- 待办 & 控制 -->
-          <div class="rp-block rp-tasks">
-            <div class="rp-hd">
-              <svg class="rp-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 9v4"/><circle cx="12" cy="15" r="1"/></svg>
-              <span>待办任务</span>
-              <span class="rp-badge">{{ runningSteps.length }}</span>
-            </div>
-            <div class="rp-body">
-              <div v-if="runningSteps.length === 0" class="rp-empty">无进行中的任务</div>
-              <div v-for="s in runningSteps" :key="s.id" class="task-row" :class="[{ 'task-timeout': s.status === 'timeout' }]">
-                <span class="task-status" :class="'ts-' + s.status" />
-                <span class="task-name">{{ s.name }}</span>
-                <template v-if="isDirector && !isParentStep(s)">
-                  <button class="task-btn task-btn-skip" title="跳过" @click="skipTask(s)">↷</button>
-                  <button class="task-btn task-btn-done" title="强制完成" @click="forceCompleteTask(s)">✓</button>
-                </template>
-              </div>
-            </div>
+        <section class="execution-section">
+          <div class="execution-title">
+            <h2>执行中步骤</h2>
+            <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
           </div>
-
-          <!-- 实时消息流 -->
-          <div class="rp-block rp-logs">
-            <div class="rp-hd">
-              <svg class="rp-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-              <span>实时消息</span>
-            </div>
-            <div ref="logContainerRef" class="rp-body log-body">
-              <div v-if="displayLogs.length === 0" class="rp-empty">等待消息推送...</div>
-              <div v-for="(log, i) in displayLogs" :key="i" class="log-row" :class="'log-' + log.type">
-                <span class="log-time">{{ log.time }}</span>
-                <span class="log-icon">{{ log.icon }}</span>
-                <span class="log-msg">{{ log.msg }}</span>
+          <div class="execution-carousel">
+            <article v-for="task in executionCards" :key="task.id" class="execution-card" :class="'is-' + task.status">
+              <div class="task-card-head">
+                <strong>{{ task.name }}</strong>
+                <span>{{ task.statusText }}</span>
               </div>
-            </div>
+              <div class="task-progress">
+                <div :style="{ width: task.progress + '%' }" />
+              </div>
+              <p>{{ task.phaseText }}</p>
+            </article>
           </div>
-
-          <!-- 计时与预警 -->
-          <div class="rp-block rp-timer">
-            <div class="rp-hd">
-              <svg class="rp-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-              <span>计时预警</span>
-            </div>
-            <div class="timer-body">
-              <div class="timer-step-name">{{ currentRunningStep?.name || '无进行中环节' }}</div>
-              <div class="timer-countdown" :class="{ warning: stepRemaining <= 60 && stepRemaining > 0, danger: stepRemaining <= 0 && currentRunningStep }">
-                {{ stepRemainingStr }}
-              </div>
-              <div class="timer-label">{{ stepRemainingLabel }}</div>
-              <div class="timer-ov">
-                <div class="timer-ov-bar">
-                  <div class="timer-ov-fill" :style="{ width: (instance?.progress_pct || 0) + '%' }" />
-                </div>
-                <span class="timer-ov-text">整体进度 {{ instance?.progress_pct || 0 }}%</span>
-              </div>
-            </div>
-          </div>
-        </aside>
+        </section>
       </main>
 
       <!-- 任务完成弹窗 -->
@@ -151,25 +110,6 @@
         </div>
       </Transition>
 
-      <!-- 底部公告栏 -->
-      <footer class="bottom-bar">
-        <div class="bb-line" />
-        <div class="bb-item bb-left">
-          <svg class="bb-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-          <span class="bb-label">紧急联系人</span>
-          <span class="bb-val">{{ emergencyContact }}</span>
-        </div>
-        <div class="bb-item bb-center">
-          <svg class="bb-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span class="bb-label">注意事项</span>
-          <span class="bb-val">{{ drillNotes }}</span>
-        </div>
-        <div class="bb-item bb-right">
-          <svg class="bb-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span class="bb-label">演练时间</span>
-          <span class="bb-val">{{ scheduleText }}</span>
-        </div>
-      </footer>
     </template>
   </div>
 </template>
@@ -177,6 +117,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { FullScreen } from '@element-plus/icons-vue'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance, DrillStatus } from '@/types/instance'
@@ -233,6 +174,11 @@ let pollingTimer: ReturnType<typeof setInterval> | null = null
 const statusLabel = computed(() => {
   if (!instance.value) return '加载中'
   return DRILL_STATUS_LABELS[instance.value.status as DrillStatus] || instance.value.status
+})
+
+const currentSystemTime = computed(() => {
+  const d = new Date(now.value)
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 })
 
 const elapsed = computed(() => {
@@ -444,6 +390,75 @@ const treeData = computed<TreeNodePhase[]>(() => {
   }
   return result
 })
+
+const phaseCards = computed(() => {
+  const activeName = findActivePhaseName()
+  const fallbackActiveIdx = treeData.value.findIndex(p => getPhaseStatus(p) === 'running')
+  return treeData.value.map((phase, index) => {
+    const allSteps = phase.phaseSteps.flatMap(ps => ps.stepNodes)
+    const status = getPhaseStatus(phase)
+    const completedSteps = allSteps.filter(s => s.status === 'completed' || s.status === 'skipped').length
+    const totalSteps = allSteps.length || 1
+    const completedPhaseSteps = phase.phaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length
+    const totalPhaseSteps = phase.phaseSteps.length || 1
+    const segmentCount = 20
+    const filledSegments = Math.round((completedSteps / totalSteps) * segmentCount)
+    return {
+      name: phase.name,
+      status,
+      statusText: status === 'done' ? '已完成' : status === 'running' ? '异常' : '待开始',
+      active: activeName ? activeName === phase.name : index === fallbackActiveIdx,
+      completedSteps,
+      totalSteps,
+      completedPhaseSteps,
+      totalPhaseSteps,
+      segmentCount,
+      filledSegments,
+      timeText: phaseTimeText(allSteps),
+    }
+  })
+})
+
+const flowNodes = computed(() => {
+  const source = currentPhaseData.value?.phaseSteps.length
+    ? currentPhaseData.value.phaseSteps
+    : treeData.value.flatMap(p => p.phaseSteps)
+  return source.slice(0, 12).map((ps, index) => ({
+    id: `${ps.name}-${index}`,
+    name: ps.name,
+    index: index + 1,
+    status: getPhaseStepStatus(ps) === 'done' ? 'done' : getPhaseStepStatus(ps) === 'running' ? 'running' : 'pending',
+  }))
+})
+
+const topFlowNodes = computed(() => flowNodes.value.slice(0, Math.ceil(flowNodes.value.length / 2)))
+const bottomFlowNodes = computed(() => flowNodes.value.slice(Math.ceil(flowNodes.value.length / 2)).reverse())
+
+const executionCards = computed(() => {
+  const active = runningSteps.value.length ? runningSteps.value : steps.value.filter(s => s.status === 'pending').slice(0, 8)
+  return active.slice(0, 8).map(step => {
+    const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' || step.status === 'timeout' ? 100 : 0
+    return {
+      id: step.id,
+      name: step.name,
+      status: step.status,
+      statusText: step.status === 'running' ? '执行中' : step.status === 'timeout' ? '异常' : step.status === 'pending' ? '待执行' : '已完成',
+      progress,
+      timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
+      phaseText: `${step.phase || '当前阶段'} — ${step.phase_step || step.executor_team || '执行任务'}`,
+      raw: step,
+    }
+  })
+})
+
+function phaseTimeText(phaseSteps: StepInstance[]): string {
+  const starts = phaseSteps.map(s => s.start_time).filter(Boolean) as string[]
+  const ends = phaseSteps.map(s => s.end_time).filter(Boolean) as string[]
+  if (!starts.length) return '--:-- / 21:19'
+  const start = new Date(Math.min(...starts.map(t => new Date(t).getTime())))
+  const end = ends.length ? new Date(Math.max(...ends.map(t => new Date(t).getTime()))) : new Date(now.value)
+  return `${pad(start.getHours())}:${pad(start.getMinutes())} / ${pad(end.getHours())}:${pad(end.getMinutes())}`
+}
 
 // ======== Canvas 流程树 ========
 
@@ -2315,6 +2330,532 @@ function fmtTime(ts: string): string {
   to { width: 0%; }
 }
 
+/* ===== 参考图样式：大屏2 ===== */
+
+.cyber-command-screen {
+  position: relative;
+  margin: 0;
+  height: 100vh;
+  grid-template-rows: clamp(76px, 8vh, 96px) minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(12, 70, 132, 0.44), transparent 34%),
+    radial-gradient(circle at 78% 70%, rgba(79, 36, 36, 0.22), transparent 28%),
+    linear-gradient(180deg, #071a35 0%, #041024 52%, #020916 100%);
+  color: #dce9ff;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  letter-spacing: 0;
+  border: 1px solid rgba(39, 165, 230, 0.45);
+  box-shadow: inset 0 0 40px rgba(0, 180, 255, 0.16);
+}
+
+.cyber-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cyber-bg-grid {
+  background-image:
+    linear-gradient(115deg, transparent 0 13%, rgba(32, 119, 194, 0.14) 13.2%, transparent 13.7%),
+    linear-gradient(75deg, transparent 0 18%, rgba(32, 119, 194, 0.12) 18.2%, transparent 18.8%),
+    linear-gradient(rgba(65, 167, 244, 0.035) 1px, transparent 1px);
+  background-size: 310px 100%, 420px 100%, 100% 5px;
+  opacity: 0.72;
+}
+
+.cyber-bg-beams {
+  background:
+    linear-gradient(90deg, rgba(0, 217, 255, 0.16), transparent 18%, transparent 82%, rgba(0, 217, 255, 0.14)),
+    radial-gradient(ellipse at 50% 42%, rgba(0, 183, 255, 0.14), transparent 42%);
+}
+
+.cyber-bg-scan {
+  background: repeating-linear-gradient(180deg, transparent 0 3px, rgba(28, 112, 182, 0.06) 3px 5px);
+  mix-blend-mode: screen;
+}
+
+.command-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(18px, 2.4vw, 44px);
+  border-bottom: 3px solid rgba(0, 206, 255, 0.72);
+  background: linear-gradient(90deg, rgba(9, 74, 137, 0.72), rgba(5, 24, 52, 0.86) 34%, rgba(8, 35, 70, 0.76));
+  box-shadow: 0 8px 32px rgba(0, 178, 255, 0.12);
+}
+
+.header-title-shell {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(12px, 1.4vw, 28px);
+  min-width: 0;
+}
+
+.command-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(25px, 2.2vw, 42px);
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(21, 183, 255, 0.82);
+  white-space: nowrap;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 1.3vw, 24px);
+  color: #ebf5ff;
+  font-family: "Courier New", monospace;
+  font-size: clamp(15px, 1.3vw, 24px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.system-label {
+  color: rgba(138, 169, 205, 0.62);
+  font-family: "Microsoft YaHei", sans-serif;
+  font-weight: 500;
+}
+
+.btn-fullscreen {
+  width: clamp(34px, 3vw, 52px);
+  height: clamp(34px, 3vw, 52px);
+  border: 1px solid rgba(0, 217, 255, 0.65);
+  border-radius: 2px;
+  background: rgba(0, 47, 82, 0.54);
+  color: #03dcff;
+  box-shadow: inset 0 0 16px rgba(0, 191, 255, 0.16), 0 0 16px rgba(0, 191, 255, 0.12);
+}
+
+.control-strip {
+  position: absolute;
+  right: clamp(18px, 2.4vw, 44px);
+  bottom: -32px;
+  display: flex;
+  gap: 8px;
+}
+
+.control-btn {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 217, 255, 0.45);
+  background: rgba(4, 23, 49, 0.84);
+  color: #bdefff;
+  cursor: pointer;
+}
+
+.control-btn.good { color: #25f3a2; border-color: rgba(37, 243, 162, 0.45); }
+.control-btn.warn { color: #ffd166; border-color: rgba(255, 209, 102, 0.45); }
+.control-btn.danger { color: #ff4d7d; border-color: rgba(255, 77, 125, 0.55); }
+
+.command-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: clamp(118px, 15vh, 170px) minmax(260px, 1fr) clamp(150px, 20vh, 190px);
+  gap: clamp(8px, 1.1vh, 16px);
+  padding: clamp(10px, 1.2vh, 18px) clamp(18px, 2vw, 36px) clamp(8px, 1vh, 16px);
+  overflow: hidden;
+}
+
+.phase-card-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(26px, 4vw, 86px);
+}
+
+.phase-card {
+  position: relative;
+  min-width: 0;
+  padding: clamp(12px, 1.25vw, 22px) clamp(16px, 1.5vw, 26px);
+  border: 1px solid rgba(72, 124, 177, 0.36);
+  border-top-width: 4px;
+  background: linear-gradient(180deg, rgba(5, 24, 52, 0.88), rgba(4, 14, 31, 0.46));
+  box-shadow: inset 0 0 24px rgba(0, 180, 255, 0.06);
+}
+
+.phase-card::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: calc(clamp(26px, 4vw, 86px) * -0.78);
+  width: clamp(24px, 3vw, 60px);
+  height: 2px;
+  background: linear-gradient(90deg, #16d9ff, transparent);
+}
+
+.phase-card:last-child::after { display: none; }
+.phase-card.is-done { border-top-color: #08dcff; }
+.phase-card.is-running { border-top-color: #ff3f70; }
+.phase-card.is-pending { border-top-color: rgba(112, 138, 166, 0.72); opacity: 0.78; }
+
+.phase-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #05e2ff, transparent);
+  opacity: 0.5;
+}
+
+.phase-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.phase-head h2 {
+  margin: 0;
+  font-size: clamp(17px, 1.45vw, 26px);
+  color: #f5fbff;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.phase-status {
+  flex: 0 0 auto;
+  padding: 5px 13px;
+  border: 1px solid currentColor;
+  color: #00d9ff;
+  background: rgba(0, 95, 145, 0.18);
+}
+
+.is-running .phase-status { color: #ff4575; background: rgba(255, 69, 117, 0.12); }
+.is-pending .phase-status { color: #6990b6; }
+
+.phase-segments {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+  margin: clamp(10px, 1.1vh, 18px) 0 clamp(8px, 0.8vh, 14px);
+}
+
+.phase-segments span {
+  height: clamp(7px, 1vh, 12px);
+  background: rgba(83, 120, 158, 0.34);
+  box-shadow: inset 0 0 6px rgba(8, 30, 62, 0.55);
+}
+
+.phase-segments span.filled {
+  background: linear-gradient(180deg, #17eaff, #0794c5);
+  box-shadow: 0 0 8px rgba(0, 232, 255, 0.34);
+}
+
+.phase-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: clamp(14px, 1.2vw, 22px);
+  color: #d8efff;
+  font-family: "Courier New", monospace;
+  font-size: clamp(22px, 2vw, 38px);
+  font-weight: 700;
+  text-shadow: 0 0 12px rgba(28, 222, 255, 0.42);
+}
+
+.phase-stats span {
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(8, 214, 255, 0.12), rgba(5, 45, 90, 0.16));
+  box-shadow: inset 0 0 16px rgba(0, 206, 255, 0.12), 0 0 18px rgba(0, 216, 255, 0.08);
+}
+
+.phase-stats b {
+  color: #ffffff;
+  font-size: 1.42em;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.72), 0 0 24px rgba(16, 224, 255, 0.62);
+}
+
+.phase-stats em {
+  margin-left: 12px;
+  color: #9eeeff;
+  font-style: normal;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 0.76em;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 226, 255, 0.48);
+}
+
+.flow-board {
+  --flow-row-gap: clamp(26px, 4vh, 52px);
+  --arrow-gap: clamp(40px, 4vw, 68px);
+  --arrow-margin: 8px;
+  --tag-half-h: calc(clamp(14px, 1.4vh, 22px) + clamp(15px, 1.3vw, 24px) * 0.6 + 2px);
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-content: center;
+  row-gap: var(--flow-row-gap);
+  padding: clamp(12px, 2vh, 38px) clamp(28px, 4vw, 80px);
+  min-height: 0;
+}
+
+.flow-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: stretch;
+  column-gap: var(--arrow-gap);
+}
+
+.flow-node-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.flow-node {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.node-tag {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(14px, 1.4vh, 22px) clamp(14px, 1.2vw, 24px);
+  border-radius: clamp(10px, 1vw, 16px);
+  border: 2px solid rgba(0, 210, 255, 0.64);
+  color: #12e4ff;
+  font-size: clamp(15px, 1.3vw, 24px);
+  font-weight: 700;
+  background: rgba(4, 31, 55, 0.76);
+  box-shadow: 0 0 28px rgba(0, 209, 255, 0.18), inset 0 0 18px rgba(0, 209, 255, 0.12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 0 10px rgba(0, 211, 255, 0.24);
+}
+
+.flow-node.is-pending {
+  color: #4e779d;
+}
+
+.flow-node.is-pending .node-tag {
+  border-color: rgba(78, 119, 157, 0.48);
+  color: #5b83a8;
+  box-shadow: none;
+}
+
+.flow-node.is-running .node-tag {
+  border-color: #ff3f70;
+  color: #ff6b95;
+  box-shadow: 0 0 28px rgba(255, 63, 112, 0.22), inset 0 0 18px rgba(255, 63, 112, 0.12);
+  animation: node-pulse 2s ease-in-out infinite;
+}
+
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 28px rgba(255, 63, 112, 0.22), inset 0 0 18px rgba(255, 63, 112, 0.12); }
+  50% { box-shadow: 0 0 40px rgba(255, 63, 112, 0.4), inset 0 0 22px rgba(255, 63, 112, 0.2); }
+}
+
+.flow-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  background: linear-gradient(90deg, #24e9ff, #1dff9a);
+  box-shadow: 0 0 10px rgba(0, 245, 194, 0.5);
+  z-index: 1;
+}
+
+.flow-arrow::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+}
+
+.flow-arrow.right {
+  left: calc(100% + var(--arrow-margin));
+  width: calc(var(--arrow-gap) - var(--arrow-margin) * 2);
+}
+
+.flow-arrow.right::after {
+  right: -1px;
+  border-left: 12px solid #1dff9a;
+}
+
+.flow-arrow.left {
+  right: calc(100% + var(--arrow-margin));
+  width: calc(var(--arrow-gap) - var(--arrow-margin) * 2);
+  background: linear-gradient(90deg, #1dff9a, #24e9ff);
+}
+
+.flow-arrow.left::after {
+  left: -1px;
+  border-right: 12px solid #1dff9a;
+}
+
+.flow-arrow.turn {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--tag-half-h) + 8px);
+  width: 5px;
+  height: calc(100% - var(--tag-half-h) * 2 + var(--flow-row-gap) - 24px);
+  background: linear-gradient(180deg, #24e9ff, #1dff9a);
+  box-shadow: 0 0 14px rgba(0, 245, 194, 0.65), 0 0 4px rgba(36, 233, 255, 0.9);
+  border-radius: 3px;
+  transform: translateX(-50%);
+  z-index: 1;
+  animation: turn-flow 2.4s ease-in-out infinite;
+}
+
+@keyframes turn-flow {
+  0%, 100% { box-shadow: 0 0 14px rgba(0, 245, 194, 0.65), 0 0 4px rgba(36, 233, 255, 0.9); }
+  50% { box-shadow: 0 0 22px rgba(0, 245, 194, 0.9), 0 0 8px rgba(36, 233, 255, 1); }
+}
+
+.flow-arrow.turn::after {
+  left: 50%;
+  top: auto;
+  bottom: -2px;
+  transform: translateX(-50%);
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 14px solid #1dff9a;
+  border-bottom: none;
+  filter: drop-shadow(0 0 6px rgba(0, 245, 194, 0.8));
+}
+
+.execution-section {
+  position: relative;
+  display: grid;
+  grid-template-rows: clamp(34px, 4vh, 44px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.execution-title {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(18px, 1.8vw, 34px);
+  border-left: 4px solid #03dfff;
+  border-right: 4px solid #03dfff;
+  background: linear-gradient(90deg, rgba(9, 91, 167, 0.9), rgba(7, 50, 96, 0.72), rgba(4, 22, 45, 0.18));
+  box-shadow: 0 0 24px rgba(0, 193, 255, 0.16);
+}
+
+.execution-title h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(17px, 1.35vw, 24px);
+  font-weight: 800;
+}
+
+.execution-title span {
+  color: #627f9f;
+  font-size: clamp(13px, 1vw, 18px);
+}
+
+.execution-title span.live {
+  color: #21f69e;
+  text-shadow: 0 0 10px rgba(33, 246, 158, 0.52);
+}
+
+.execution-title span::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.execution-carousel {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  gap: clamp(10px, 1.1vw, 18px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-height: 0;
+  padding: clamp(6px, 0.8vh, 12px) clamp(18px, 1.8vw, 34px) 0;
+  scrollbar-color: rgba(0, 219, 255, 0.45) transparent;
+}
+
+.execution-card {
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: clamp(10px, 1vw, 16px);
+  border: 1px solid rgba(0, 190, 255, 0.28);
+  border-radius: 3px;
+  background: rgba(2, 12, 29, 0.86);
+  box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08);
+}
+
+.task-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-card-head strong {
+  color: #e8f3ff;
+  font-size: clamp(15px, 1.1vw, 22px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-card-head span {
+  padding: 3px 10px;
+  border: 1px solid rgba(0, 207, 255, 0.44);
+  border-radius: 2px;
+  color: #0bdfff;
+  background: rgba(0, 207, 255, 0.08);
+  white-space: nowrap;
+}
+
+.task-progress {
+  height: 11px;
+  margin: 14px 0 11px;
+  border-radius: 12px;
+  background: rgba(50, 102, 132, 0.5);
+  overflow: hidden;
+}
+
+.task-progress div {
+  height: 100%;
+  background: linear-gradient(90deg, #146f90, #12d7f5);
+  box-shadow: 0 0 10px rgba(18, 215, 245, 0.42);
+}
+
+.execution-card p {
+  margin: 14px 0 0;
+  color: #8aa2bf;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .phase-card-strip { gap: 18px; }
+  .phase-card::after { display: none; }
+  .flow-board { padding-inline: 24px; }
+}
+
 /* 弹窗动画 */
 .modal-enter-active {
   transition: all 0.3s ease-out;
@@ -2339,6 +2880,22 @@ function fmtTime(ts: string): string {
 /* 隐藏此页面的面包屑 */
 .app-main:has(.screen-root) .app-breadcrumb {
   display: none !important;
+}
+
+/* 大屏2 进入角色路由时也要独占视口；旧 /screen/:id 不经过该布局，不受影响。 */
+.app-layout:has(.screen-root) .app-header,
+.app-layout:has(.screen-root) .app-sidebar {
+  display: none !important;
+}
+
+.app-layout:has(.screen-root) .app-main {
+  margin-left: 0 !important;
+  padding-top: 0 !important;
+  min-height: 100vh !important;
+}
+
+.app-layout:has(.screen-root) .app-content {
+  padding: 0 !important;
 }
 
 /* 阻断此页面所有父容器的滚动条 */

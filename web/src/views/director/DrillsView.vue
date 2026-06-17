@@ -50,13 +50,17 @@
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click="viewMonitor(row)">
               详情
             </el-button>
             <el-button text type="success" size="small" @click="viewScreen(row)">
               大屏
+            </el-button>
+            <el-button text type="warning" size="small" @click="viewScreen2(row)">
+              <el-icon><DataBoard /></el-icon>
+              大屏2
             </el-button>
             <el-button text type="danger" size="small" @click="handleDelete(row)">
               删除
@@ -92,6 +96,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance } from '@/types'
 import { drillApi } from '@/api/modules/drill'
 import { DRILL_STATUS_LABELS } from '@/types/instance'
@@ -167,6 +172,10 @@ function viewMonitor(row: DrillInstance) {
 
 function viewScreen(row: DrillInstance) {
   router.push(`/screen/${row.id}`)
+}
+
+function viewScreen2(row: DrillInstance) {
+  router.push(`/director/screen/${row.id}`)
 }
 
 function handleDelete(row: DrillInstance) {

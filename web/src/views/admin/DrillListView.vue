@@ -40,13 +40,17 @@
             {{ row.start_time ? formatTime(row.start_time) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click="viewDetail(row)">
               详情
             </el-button>
             <el-button text type="success" size="small" @click="viewScreen(row)">
               大屏
+            </el-button>
+            <el-button text type="warning" size="small" @click="viewScreen2(row)">
+              <el-icon><DataBoard /></el-icon>
+              大屏2
             </el-button>
           </template>
         </el-table-column>
@@ -71,6 +75,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import { drillApi } from '@/api/modules/drill'
@@ -120,6 +125,10 @@ function viewDetail(instance: DrillInstance) {
 
 function viewScreen(instance: DrillInstance) {
   router.push(`/screen/${instance.id}`)
+}
+
+function viewScreen2(instance: DrillInstance) {
+  router.push(`/admin/screen/${instance.id}`)
 }
 
 function handleFilterChange() {

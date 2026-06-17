@@ -9,8 +9,9 @@
           <stop offset="100%" stop-color="#ff6900" />
         </linearGradient>
         <linearGradient id="grad-done" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0066cc" />
-          <stop offset="100%" stop-color="#00a0c8" />
+          <stop offset="0%" stop-color="#b8ffd4" />
+          <stop offset="45%" stop-color="#34ff97" />
+          <stop offset="100%" stop-color="#00b86b" />
         </linearGradient>
         <linearGradient id="grad-pending" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#1a3a6a" />
@@ -184,8 +185,8 @@
         :key="'rll' + idx"
         :x1="lp.x1" :y1="lp.y1"
         :x2="lp.x2" :y2="lp.y2"
-        :stroke="ringLabels[idx].isRunning ? 'rgba(255, 180, 74, 0.58)' : 'rgba(0, 212, 255, 0.2)'"
-        :stroke-width="ringLabels[idx].isRunning ? 1.5 : 1"
+        :stroke="ringLabels[idx].isRunning ? 'rgba(255, 180, 74, 0.58)' : (ringLabels[idx].isDone ? 'rgba(52, 255, 151, 0.48)' : 'rgba(0, 212, 255, 0.2)')"
+        :stroke-width="ringLabels[idx].isRunning || ringLabels[idx].isDone ? 1.5 : 1"
         :class="{ 'label-line-running': ringLabels[idx].isRunning }"
       />
       <!-- 环节节点圆点 -->
@@ -193,11 +194,11 @@
         v-for="(lp, idx) in ringLabelLines"
         :key="'rlc' + idx"
         :cx="lp.x2" :cy="lp.y2"
-        :r="ringLabels[idx].isRunning ? 4 : 2.5"
-        :fill="ringLabels[idx].isRunning ? '#ffb44a' : '#00d4ff'"
-        :opacity="ringLabels[idx].isRunning ? 0.95 : 0.5"
+        :r="ringLabels[idx].isRunning ? 4 : (ringLabels[idx].isDone ? 3.4 : 2.5)"
+        :fill="ringLabels[idx].isRunning ? '#ffb44a' : (ringLabels[idx].isDone ? '#34ff97' : '#00d4ff')"
+        :opacity="ringLabels[idx].isRunning ? 0.95 : (ringLabels[idx].isDone ? 0.9 : 0.5)"
         :class="{ 'label-node-running': ringLabels[idx].isRunning }"
-        :filter="ringLabels[idx].isRunning ? 'url(#glow-strong)' : ''"
+        :filter="ringLabels[idx].isRunning || ringLabels[idx].isDone ? 'url(#glow-strong)' : ''"
       />
       <!-- 运行中环节节点波纹效果 -->
       <g v-for="(rp, idx) in runningRipples" :key="'rp' + idx" :transform="`translate(${rp.cx}, ${rp.cy})`">
@@ -275,9 +276,9 @@ const props = defineProps<{
 }>()
 
 const size = computed(() => props.size ?? 520)
-const PAD_X = 90  // 左右预留空间（加大以容纳更多标签）
-const PAD_Y_TOP = 85  // 顶部预留（加大以容纳倾斜标签）
-const PAD_Y_BOTTOM = 100  // 底部预留（标签文字需要更多空间）
+const PAD_X = 118  // 左右预留空间（容纳错层标签）
+const PAD_Y_TOP = 102  // 顶部预留（容纳外层倾斜标签）
+const PAD_Y_BOTTOM = 118  // 底部预留（容纳外层倾斜标签）
 const containerSize = computed(() => ({
   width: size.value + PAD_X * 2,
   height: size.value + PAD_Y_TOP + PAD_Y_BOTTOM,
@@ -399,6 +400,7 @@ const nodeProgressArcs = computed(() => {
     opacity: number
     status: string
     isRunning: boolean
+    isDone: boolean
   }[] = []
 
   for (let pi = 0; pi < segCount.value; pi++) {
@@ -422,7 +424,7 @@ const nodeProgressArcs = computed(() => {
       const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
       const progress = ns.progress / 100
       const isRunning = ns.status === 'running'
-      const isDone = ns.status === 'completed'
+      const isDone = ns.status === 'completed' || ns.status === 'done'
       const isIssue = ns.status === 'issue' || ns.status === 'timeout'
 
       // 背景弧（完整弧段，暗色）
@@ -449,7 +451,7 @@ const nodeProgressArcs = computed(() => {
       // 颜色
       let fgColor = '#1a3a6a'
       let fgOpacity = 0.3
-      if (isDone) { fgColor = '#00a0c8'; fgOpacity = 0.85 }
+      if (isDone) { fgColor = '#34ff97'; fgOpacity = 0.9 }
       else if (isRunning) { fgColor = '#ff9a2f'; fgOpacity = 1 }
       else if (isIssue) { fgColor = '#ff4444'; fgOpacity = 0.9 }
       else if (progress > 0) { fgColor = '#0088bb'; fgOpacity = 0.6 }
@@ -460,6 +462,7 @@ const nodeProgressArcs = computed(() => {
         opacity: 1,
         status: ns.status,
         isRunning: false,
+        isDone: false,
       })
 
       if (fgPath) {
@@ -469,6 +472,7 @@ const nodeProgressArcs = computed(() => {
           opacity: fgOpacity,
           status: ns.status,
           isRunning,
+          isDone,
         })
       }
     }
@@ -479,7 +483,16 @@ const nodeProgressArcs = computed(() => {
 
 // 外圈环节标签：从各阶段的 phaseNames 实时获取，围绕对应阶段的弧段分布
 const ringLabels = computed(() => {
-  const labels: { text: string; active: boolean; phaseIdx: number; angleDeg: number; isRunning: boolean }[] = []
+  const labels: {
+    text: string
+    active: boolean
+    phaseIdx: number
+    nodeIdx: number
+    nodeCount: number
+    angleDeg: number
+    isRunning: boolean
+    isDone: boolean
+  }[] = []
 
   for (let pi = 0; pi < segCount.value; pi++) {
     const names = props.phaseNames?.[pi] || []
@@ -501,15 +514,26 @@ const ringLabels = computed(() => {
         text: names[ni],
         active: pi === props.currentIndex,
         phaseIdx: pi,
+        nodeIdx: ni,
+        nodeCount: names.length,
         angleDeg,
         isRunning: ns.status === 'running',
+        isDone: ns.status === 'completed' || ns.status === 'done',
       })
     }
   }
   return labels
 })
 
-const labelR = computed(() => outerR.value + 30)
+function labelRadius(label: { nodeIdx: number; nodeCount: number }): number {
+  if (label.nodeCount >= 8) {
+    return outerR.value + (label.nodeIdx % 2 === 0 ? 20 : 46)
+  }
+  if (label.nodeCount >= 5) {
+    return outerR.value + (label.nodeIdx % 2 === 0 ? 24 : 38)
+  }
+  return outerR.value + 30
+}
 
 const ringLabelPositions = computed(() => {
   const totalW = size.value + PAD_X * 2
@@ -518,8 +542,8 @@ const ringLabelPositions = computed(() => {
     const a = lbl.angleDeg * Math.PI / 180
     const cosA = Math.cos(a)
     const sinA = Math.sin(a)
-    // 所有标签与中心环保持相同距离
-    const r = labelR.value
+    // 多环节阶段采用内外两条标签车道，字体不缩小也能减少局部拥挤。
+    const r = labelRadius(lbl)
     const px = cx.value + r * cosA
     const py = cy.value + r * sinA
     const flipped = cosA < -0.08
@@ -551,7 +575,7 @@ const ringLabelPositions = computed(() => {
 const ringLabelLines = computed(() => {
   return ringLabels.value.map((lbl) => {
     const a = lbl.angleDeg * Math.PI / 180
-    const rLabel = labelR.value - 4
+    const rLabel = labelRadius(lbl) - 2
     const rRing = outerR.value + 8   // 环端（稍超出刻度）
     return {
       x1: cx.value + rLabel * Math.cos(a),
@@ -696,29 +720,29 @@ function chineseNum(n: number): string {
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 5;
-  width: 48px;
-  height: 48px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(4, 18, 48, 0.85);
-  border: 2px solid rgba(0, 212, 255, 0.45);
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+  background: rgba(5, 22, 56, 0.94);
+  border: 2px solid rgba(0, 212, 255, 0.72);
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.32);
   transition: all 0.3s ease;
 }
 .phase-node-text {
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  color: #8cb8e0;
+  font-size: 13px;
+  font-weight: 900;
+  color: #d5ecff;
   letter-spacing: 1px;
   white-space: nowrap;
 }
 .phase-node-done {
   border-color: rgba(0, 160, 200, 0.6);
   background: rgba(0, 40, 70, 0.75);
-  .phase-node-text { color: #5aafcc; }
+  .phase-node-text { color: #9ee8ff; }
 }
 .phase-node-active {
   border-color: #ff9a2f;
@@ -813,36 +837,37 @@ function chineseNum(n: number): string {
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  max-width: 96px;
-  padding: 1px 5px;
-  background: linear-gradient(90deg, rgba(4, 18, 48, 0.75), rgba(4, 18, 48, 0));
+  max-width: 138px;
+  padding: 3px 7px;
+  background: linear-gradient(90deg, rgba(4, 18, 48, 0.9), rgba(4, 18, 48, 0.18));
 }
 .ring-outer-label-flipped .ring-outer-label-content {
   left: auto;
   right: 8px;
-  background: linear-gradient(270deg, rgba(4, 18, 48, 0.75), rgba(4, 18, 48, 0));
+  background: linear-gradient(270deg, rgba(4, 18, 48, 0.9), rgba(4, 18, 48, 0.18));
 }
 .ring-outer-label-text {
   display: block;
-  max-width: 86px;
+  max-width: 126px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: rgba(178, 216, 246, 0.72);
-  font-size: 10px;
-  line-height: 1.1;
+  color: rgba(219, 240, 255, 0.88);
+  font-size: 13px;
+  line-height: 1.18;
+  font-weight: 800;
   letter-spacing: 0.2px;
   text-shadow: 0 0 8px rgba(2, 14, 36, 0.95);
 }
 .ring-outer-label-active .ring-outer-label-text {
-  color: rgba(220, 240, 255, 0.92);
+  color: rgba(255, 255, 255, 0.98);
 }
 .ring-outer-label-running {
   z-index: 7;
   .ring-outer-label-content {
     background: linear-gradient(90deg, rgba(84, 42, 8, 0.88), rgba(84, 42, 8, 0));
     border-radius: 3px;
-    padding: 2px 6px;
+    padding: 4px 8px;
     box-shadow: 0 0 12px rgba(255, 154, 47, 0.35);
     animation: label-bg-pulse 1.8s ease-in-out infinite;
   }
@@ -910,17 +935,19 @@ function chineseNum(n: number): string {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
+  width: min(62%, 300px);
+  min-width: 0;
   text-align: center;
   z-index: 3;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .center-caption {
-  font-size: 14px;
-  color: #a0c4f0;
+  font-size: 17px;
+  color: #d9edff;
   letter-spacing: 4px;
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-weight: 500;
-  text-shadow: 0 0 10px rgba(0, 120, 255, 0.3);
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(0, 120, 255, 0.5);
   position: relative;
   padding-bottom: 8px;
   &::after {
@@ -939,13 +966,13 @@ function chineseNum(n: number): string {
   font-family: 'Share Tech Mono', monospace;
   color: #00d4ff;
   text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
-  .num-num { font-size: 18px; }
-  .num-sep { font-size: 16px; opacity: 0.5; }
-  .num-den { font-size: 16px; opacity: 0.7; }
+  .num-num { font-size: 22px; }
+  .num-sep { font-size: 19px; opacity: 0.72; }
+  .num-den { font-size: 19px; opacity: 0.85; }
 }
 .center-pct {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 78px;
+  font-size: 92px;
   font-weight: 900;
   line-height: 1;
   color: #ffffff;
@@ -953,12 +980,20 @@ function chineseNum(n: number): string {
     0 4px 0 rgba(255, 122, 0, 0.9),
     0 0 18px rgba(255, 122, 0, 0.7),
     0 0 42px rgba(38, 118, 255, 0.5);
-  .pct-unit { font-size: 34px; opacity: 0.95; margin-left: 2px; }
+  .pct-unit { font-size: 40px; opacity: 0.98; margin-left: 2px; }
 }
 .center-hint {
-  font-size: 11px;
-  color: #6e8db5;
-  letter-spacing: 1px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 800;
+  color: #e6f7ff;
+  letter-spacing: 1.2px;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.42);
   margin-top: 2px;
 }
 </style>

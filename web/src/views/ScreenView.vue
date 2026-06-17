@@ -36,9 +36,7 @@
           <h1 class="drill-title">应急处置指挥中心</h1>
         </div>
         <div class="header-meta">
-          <span class="meta-label">系统时间</span>
-          <span class="meta-divider">|</span>
-          <span class="meta-value">{{ systemTime }}</span>
+          <span class="meta-value">{{ currentDrill.name || '未命名演练' }}</span>
         </div>
         <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
@@ -58,7 +56,6 @@
             <span class="status-dot" :class="'dot-' + (currentDrill.status || '')" />
             <span class="kpi-value-text" :class="'txt-' + (currentDrill.status || '')">{{ drillStatusLabel }}</span>
           </div>
-          <span class="kpi-sub">{{ currentDrill?.name || '未命名演练' }}</span>
         </div>
 
         <div class="kpi-card kpi-progress-card">
@@ -89,7 +86,6 @@
                 <span class="node-separator">/</span>
                 <span class="node-total">{{ totalCount }}</span>
               </div>
-              <span class="progress-sub-label">完成节点</span>
             </div>
           </div>
         </div>
@@ -99,25 +95,19 @@
           <div class="kpi-copy">
             <span class="kpi-label-zh">总耗时</span>
           </div>
-          <div class="kpi-value-row mono">
-            <span class="kpi-value-num">{{ elapsedParts.h }}</span>
-            <span class="kpi-value-sep">:</span>
-            <span class="kpi-value-num">{{ elapsedParts.m }}</span>
-            <span class="kpi-value-sep">:</span>
-            <span class="kpi-value-num">{{ elapsedParts.s }}</span>
+          <div class="kpi-value-row kpi-queue-row">
+            <span class="kpi-value-num">{{ totalDurationText }}</span>
           </div>
-          <span class="kpi-sub">开始 {{ drillStartTime ? formatHM(drillStartTime) : '--:--' }} 预计剩余 {{ estimatedRemaining }}</span>
         </div>
 
         <div class="kpi-card">
           <span class="kpi-orb" />
           <div class="kpi-copy">
-            <span class="kpi-label-zh">当前阶段/环节</span>
+            <span class="kpi-label-zh">当前阶段</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value-text">阶段{{ currentPhaseIndex + 1 }}</span>
+            <span class="kpi-value-text">阶段{{ chineseNum(currentPhaseIndex + 1) }}</span>
           </div>
-          <span class="kpi-sub">{{ currentPhaseName }} · {{ todayStr }}</span>
         </div>
       </section>
 
@@ -141,16 +131,11 @@
             >
               <div class="stage-card-top">
                 <div class="stage-name-block">
-                  <span class="stage-index">阶段{{ idx + 1 }}</span>
                   <span class="stage-name">{{ stage.name }}</span>
                 </div>
                 <span class="stage-badge" :class="'badge-' + stage.status">
                   {{ stageBadgeLabel(stage.status) }}
                 </span>
-              </div>
-              <div class="stage-card-mid">
-                <span class="stage-time">{{ stage.timeRange }}</span>
-                <span class="stage-meta-label">已耗时/限额</span>
               </div>
               <div class="stage-segments">
                 <span
@@ -185,7 +170,7 @@
               :progress="progressPercent"
               :center-numerator="completedCount"
               :center-denominator="totalCount"
-              :center-hint="`阶段${currentPhaseIndex + 1} · ${currentPhaseName}`"
+              :center-hint="`阶段${chineseNum(currentPhaseIndex + 1)} · ${currentPhaseName}`"
               :size="ringSize"
             />
           </div>
@@ -221,27 +206,12 @@
                   <span class="alert-title">{{ alert.title }}</span>
                   <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
                 </div>
-                <!-- 剩余时间进度条 -->
-                <div class="alert-bar" :class="'bar-urgency-' + alert.level">
-                  <div class="alert-bar-fill" :style="{ width: alert.progress + '%' }" />
-                  <span class="alert-bar-remaining">{{ alert.remainingPct }}%</span>
-                </div>
                 <!-- 元数据行 -->
                 <div class="alert-foot">
                   <span v-if="alert.operator" class="alert-meta">
                     <span class="meta-icon">◈</span>
                     <span class="meta-label">操作人</span>
                     <span class="meta-val operator-val">{{ alert.operator }}</span>
-                  </span>
-                  <span class="alert-meta">
-                    <span class="meta-icon">◷</span>
-                    <span class="meta-label">限时</span>
-                    <span class="meta-val">{{ alert.limit }}</span>
-                  </span>
-                  <span v-if="alert.elapsed !== '待启动'" class="alert-meta">
-                    <span class="meta-icon">▶</span>
-                    <span class="meta-label">已耗时</span>
-                    <span class="meta-val">{{ alert.elapsed }}</span>
                   </span>
                 </div>
                 <!-- 层级路径：环节名 - 任务名 -->
@@ -288,10 +258,6 @@ let componentDestroyed = false
 
 // 顶部时间
 const systemTime = ref(formatSystemTime(new Date()))
-const todayStr = computed(() => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-})
 
 // 当前路由 drill id
 const drillId = computed(() => {
@@ -400,42 +366,14 @@ const drillStartTime = computed(() =>
   (currentDrill.value as any)?.start_time || (currentDrill.value as any)?.started_at || null
 )
 
-// 总耗时（演练开始至今 / 已完成时刻起算）
+// 驱动实时刷新和运行中状态计算
 const elapsedSeconds = ref(0)
-const elapsedParts = computed(() => {
-  const t = elapsedSeconds.value
-  return {
-    h: String(Math.floor(t / 3600)).padStart(2, '0'),
-    m: String(Math.floor((t % 3600) / 60)).padStart(2, '0'),
-    s: String(t % 60).padStart(2, '0'),
-  }
-})
-
-// 预计剩余时间（基于运行中/待执行步骤的 timeout 汇总）
-const estimatedRemaining = computed(() => {
-  // 依赖 elapsedSeconds 每秒刷新
-  const _t = elapsedSeconds.value
-  const nowMs = Date.now()
-  const running = leafSteps.value.filter(s => s.status === 'running')
-  const pending = leafSteps.value.filter(s => s.status === 'pending')
-  if (running.length === 0 && pending.length === 0) return '--'
-  let remainSec = 0
-  for (const s of running) {
-    if (s.start_time && s.timeout_minutes) {
-      const elapsed = (nowMs - new Date(s.start_time).getTime()) / 1000
-      remainSec += Math.max(0, s.timeout_minutes * 60 - elapsed)
-    } else {
-      remainSec += (s.timeout_minutes || 120) * 60
-    }
-  }
-  for (const s of pending) {
-    remainSec += (s.timeout_minutes || 120) * 60
-  }
-  if (remainSec <= 0) return '0m'
-  const h = Math.floor(remainSec / 3600)
-  const m = Math.ceil((remainSec % 3600) / 60)
-  if (h > 0) return `${h}h${m > 0 ? m + 'm' : ''}`
-  return `${m}m`
+const totalDurationText = computed(() => {
+  if (!drillStartTime.value) return '--:--:--'
+  const h = Math.floor(elapsedSeconds.value / 3600)
+  const m = Math.floor((elapsedSeconds.value % 3600) / 60)
+  const s = elapsedSeconds.value % 60
+  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
 })
 
 // 状态标签
@@ -640,34 +578,25 @@ const ringPhaseNodeStatuses = computed(() => {
 
 const ringSize = computed(() => {
   // 基于视口高度动态计算，确保不溢出
-  // 可用高度 ≈ 100vh - header(46) - kpi(88) - gaps(8*3) - padding(16)
-  const availableH = viewportHeight.value - 46 - 88 - 24 - 16
+  // 可用高度 ≈ 100vh - header(58) - kpi(108) - footer(16) - gaps(12*3) - padding(20)
+  const availableH = viewportHeight.value - 58 - 108 - 16 - 36 - 20
   // PhaseRing 实际高度 = ringSize + PAD_Y_TOP + PAD_Y_BOTTOM
-  // PAD_Y_TOP=60, PAD_Y_BOTTOM=90 → 总 padding=150
-  const maxRingFromH = availableH - 150
+  // PAD_Y_TOP=102, PAD_Y_BOTTOM=118 → 总 padding=220
+  const maxRingFromH = availableH - 220
   // 基于宽度限制
-  const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 420 : 560
+  const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 440 : 620
   return Math.min(maxRingFromW, Math.max(280, maxRingFromH))
 })
 
 // === 告警 ===
 // 从步骤的"进行中"或异常中推算
-// 格式化秒数为 HH:MM:SS
-function fmtHMS(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
-}
-
 function safeParseJSON(str: string): Record<string, any> | null {
   try { return JSON.parse(str) } catch { return null }
 }
 
 const activeAlerts = computed(() => {
-  // 依赖 elapsedSeconds 使 computed 每秒重算，进度条/耗时实时刷新
+  // 依赖 elapsedSeconds 使 computed 每秒重算
   const _now = elapsedSeconds.value
-  const nowMs = Date.now()
 
   const running: Array<{
     title: string
@@ -675,11 +604,6 @@ const activeAlerts = computed(() => {
     team: string
     parentPhase: string
     directParent: string
-    progress: number
-    remaining: string
-    remainingPct: number
-    limit: string
-    elapsed: string
     statusLabel: string
     level: 'warn' | 'info' | 'danger'
     seq: number
@@ -691,30 +615,18 @@ const activeAlerts = computed(() => {
   leafSteps.value
     .filter(s => s.status === 'running')
     .forEach(s => {
-      const elapsedSec = s.start_time
-        ? Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
-        : 1
-      const limitMin = s.timeout_minutes || 120
-      const limitSec = limitMin * 60
       const attrs = typeof (s as any).attributes === 'string'
         ? safeParseJSON((s as any).attributes)
         : (s as any).attributes
       const operatorName = attrs?.operator
-      const remainingSec = Math.max(0, limitSec - elapsedSec)
-      const remainingPct = Math.round((remainingSec / limitSec) * 100)
       running.push({
         title: s.name,
         operator: operatorName || '',
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
-        progress: remainingPct,
-        remaining: fmtHMS(remainingSec),
-        remainingPct,
-        limit: fmtHMS(limitSec),
-        elapsed: fmtHMS(elapsedSec),
-        statusLabel: remainingPct <= 20 ? '即将超时' : '进行中',
-        level: remainingPct <= 20 ? 'danger' : remainingPct <= 50 ? 'warn' : 'warn',
+        statusLabel: '执行中',
+        level: 'warn',
         seq: s.seq,
       })
     })
@@ -723,7 +635,6 @@ const activeAlerts = computed(() => {
   leafSteps.value
     .filter(s => s.status === 'pending')
     .forEach((s) => {
-      const limitMin = s.timeout_minutes || 120
       const attrs = typeof (s as any).attributes === 'string'
         ? safeParseJSON((s as any).attributes)
         : (s as any).attributes
@@ -734,11 +645,6 @@ const activeAlerts = computed(() => {
         team: s.executor_team || '运维部',
         parentPhase: findParentPhase(s.id),
         directParent: findDirectParent(s.id),
-        progress: 100,
-        remaining: fmtHMS(limitMin * 60),
-        remainingPct: 100,
-        limit: fmtHMS(limitMin * 60),
-        elapsed: '待启动',
         statusLabel: '待执行',
         level: 'info',
         seq: s.seq,
@@ -809,6 +715,10 @@ function stageBadgeLabel(status: string): string {
     done: '已完成', running: '进行中', pending: '待开始', issue: '异常',
   }
   return map[status] || status
+}
+
+function chineseNum(n: number): string {
+  return ['一', '二', '三', '四', '五', '六'][n - 1] || String(n)
 }
 
 function formatTime(dateStr: string | null | undefined): string {
@@ -1089,8 +999,8 @@ $ok: #00ff9c;
 $warn: #ffb648;
 $danger: #ff4d6a;
 $text: #d6e8ff;
-$text-dim: #6e8db5;
-$text-mute: #4a6b91;
+$text-dim: #a9c7ec;
+$text-mute: #7f9fc7;
 
 $font-display: 'Orbitron', 'Rajdhani', 'Microsoft YaHei', sans-serif;
 $font-mono: 'Share Tech Mono', 'Consolas', monospace;
@@ -1102,9 +1012,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 48%, rgba(0, 76, 180, 0.24), transparent 32%),
-    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.12), transparent 18%),
-    linear-gradient(180deg, #071226 0%, #020713 100%);
+    radial-gradient(circle at 50% 48%, rgba(0, 96, 205, 0.18), transparent 34%),
+    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.08), transparent 18%),
+    linear-gradient(180deg, #061229 0%, #020815 100%);
   color: $text;
   font-family: $font-cn;
   user-select: none;
@@ -1134,7 +1044,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       linear-gradient(60deg, rgba(40, 99, 180, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(40, 99, 180, 0.08) 75%, rgba(40, 99, 180, 0.08));
     background-position: 0 0, 0 0, 18px 32px, 18px 32px, 0 0, 18px 32px;
     background-size: 36px 64px;
-    opacity: 0.24;
+    opacity: 0.14;
     mask-image: radial-gradient(circle at center, #000 0%, transparent 82%);
     pointer-events: none;
   }
@@ -1248,7 +1158,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 12px 20px 4px;
+  padding: 12px 18px 6px;
   gap: 8px;
 }
 
@@ -1259,11 +1169,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: 16px;
-  height: 46px;
+  height: 58px;
   background:
     linear-gradient(90deg, rgba(37, 130, 255, 0.26), rgba(13, 37, 74, 0.1) 44%, rgba(20, 50, 96, 0.35));
   border: 0;
-  padding: 0 28px 0 18px;
+  padding: 0 32px 0 24px;
   box-shadow: inset 0 -1px 0 rgba(111, 178, 255, 0.35);
 
   &::before, &::after {
@@ -1285,7 +1195,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     margin-top: -2px;
     .drill-title {
       font-family: $font-cn;
-      font-size: clamp(18px, 2vw, 36px);
+      font-size: clamp(24px, 2.25vw, 44px);
       font-weight: 900;
       letter-spacing: 4px;
       margin: 0;
@@ -1314,11 +1224,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     justify-self: end;
     display: flex; align-items: center; gap: 10px;
     font-family: $font-mono;
-    .meta-label { color: $text-dim; font-size: 12px; letter-spacing: 2px; }
+    .meta-label { color: $text-dim; font-size: 14px; letter-spacing: 2px; font-weight: 700; }
     .meta-divider { color: $text-mute; }
     .meta-value {
       color: #ecf6ff;
-      font-size: clamp(13px, 1.1vw, 18px);
+      font-size: clamp(16px, 1.25vw, 22px);
       font-weight: 700;
       text-shadow: 0 0 8px rgba(95, 171, 255, 0.6);
       letter-spacing: 1px;
@@ -1328,7 +1238,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     grid-column: 3;
     position: static;
     background: transparent; border: 1px solid $line;
-    color: $neon; width: 28px; height: 28px;
+    color: $neon; width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; border-radius: 2px;
     transition: all 0.2s;
@@ -1397,9 +1307,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .kpi-orb {
     position: absolute;
     left: 24px;
-    top: 18px;
-    width: 38px;
-    height: 38px;
+    top: 14px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     background:
       radial-gradient(circle at 36% 34%, #9ffcff 0 14%, #00d4ff 15% 28%, rgba(20, 255, 189, 0.85) 29% 45%, rgba(0, 74, 165, 0.7) 46% 100%);
@@ -1410,7 +1320,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     &::before {
       content: '';
       position: absolute;
-      inset: 8px -11px;
+      inset: 7px -10px;
       border: 1px solid rgba(0, 212, 255, 0.64);
       border-radius: 50%;
       transform: rotate(-8deg);
@@ -1419,29 +1329,35 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     &::after {
       content: '';
       position: absolute;
-      left: 13px;
-      bottom: -20px;
-      width: 18px;
-      height: 18px;
+      left: 12px;
+      bottom: -17px;
+      width: 15px;
+      height: 15px;
       border-radius: 50%;
       border: 2px solid rgba(0, 212, 255, 0.54);
       box-shadow: 0 0 10px rgba(0, 212, 255, 0.55);
     }
   }
   .kpi-copy {
-    grid-column: 1;
-    grid-row: 1 / 3;
+    position: absolute;
+    left: 80px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
+    min-width: 0;
+    height: 24px;
   }
   .kpi-label-zh {
     display: block;
     position: relative;
-    font-size: clamp(13px, 1vw, 18px);
-    font-weight: 800;
+    font-size: clamp(16px, 1.08vw, 20px);
+    line-height: 1;
+    font-weight: 900;
     color: #f0f7ff;
-    letter-spacing: 1px;
-    padding-bottom: 6px;
+    letter-spacing: 0.8px;
+    padding-bottom: 5px;
+    white-space: nowrap;
     &::after {
       content: '';
       position: absolute;
@@ -1465,10 +1381,15 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .kpi-value-row {
     grid-column: 2;
-    grid-row: 1 / 3;
+    grid-row: 1;
     justify-self: end;
+    align-self: center;
     margin-top: 0;
-    display: flex; align-items: baseline; gap: 4px;
+    max-width: calc(100% - 112px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     &.mono { gap: 2px; }
   }
   .kpi-status-row {
@@ -1479,36 +1400,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .kpi-value-num {
     font-family: $font-mono;
-    font-size: clamp(24px, 2vw, 38px);
+    font-size: clamp(24px, 1.8vw, 36px);
     font-weight: 800;
     color: #2cf8d8;
     text-shadow: 0 0 12px rgba(44, 248, 216, 0.42);
     line-height: 1;
   }
   .kpi-value-unit {
-    font-family: $font-mono; font-size: 18px; color: #c8fff5; opacity: 0.85;
+    font-family: $font-cn; font-size: clamp(15px, 1vw, 19px); color: #c8fff5; opacity: 0.92; font-weight: 800;
   }
   .kpi-value-sep {
     font-family: $font-mono; font-size: clamp(18px, 1.7vw, 28px); color: #2cf8d8; opacity: 0.75;
     transform: translateY(-2px);
   }
   .kpi-value-text {
-    font-size: clamp(18px, 1.6vw, 27px); font-weight: 800; color: #ff7a00;
+    font-size: clamp(20px, 1.6vw, 29px); font-weight: 900; color: #ff8a1f;
     text-shadow: 0 0 12px rgba(255, 122, 0, 0.5);
-  }
-  .kpi-sub {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    font-size: 11px;
-    color: rgba(180, 220, 255, 0.62);
-    margin-top: 0;
-    padding-top: 6px;
-    font-family: $font-mono;
-    letter-spacing: 0.04em;
-    border-top: 1px solid rgba(0, 212, 255, 0.12);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .kpi-node-count {
     margin-left: 10px;
@@ -1523,6 +1431,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       align-items: center;
       gap: 12px;
     }
+  }
+  .kpi-queue-row {
+    align-items: center;
+    gap: 10px;
   }
   .progress-ring-wrap {
     position: relative;
@@ -1566,8 +1478,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .progress-node-block {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
   }
   .node-count-row {
     display: flex;
@@ -1584,12 +1495,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       color: rgba(255, 255, 255, 0.55);
       font-weight: 600;
     }
-  }
-  .progress-sub-label {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
-    font-family: $font-mono;
-    letter-spacing: 1px;
   }
   .status-dot {
     width: 10px; height: 10px; border-radius: 50%;
@@ -1618,8 +1523,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== MAIN GRID =====
 .screen-main {
   display: grid;
-  grid-template-columns: minmax(180px, 18vw) minmax(340px, 1fr) minmax(240px, 24vw);
-  gap: 20px;
+  grid-template-columns: minmax(280px, 19vw) minmax(680px, 1fr) minmax(340px, 22vw);
+  gap: 18px;
   flex: 1;
   min-height: 0;
   padding: 0;
@@ -1636,8 +1541,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-header {
   position: relative;
   display: flex; align-items: center; gap: 8px;
-  height: 34px;
-  padding: 0 12px 0 24px;
+  height: 44px;
+  padding: 0 16px 0 28px;
   background:
     linear-gradient(90deg, rgba(0, 116, 255, 0.62), rgba(8, 29, 67, 0.38) 52%, transparent 100%);
   border-bottom: 0;
@@ -1649,7 +1554,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     &.tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
   }
   .panel-title-zh {
-    font-size: clamp(14px, 1.2vw, 24px);
+    font-size: clamp(20px, 1.35vw, 28px);
     font-weight: 900;
     color: #ffffff;
     letter-spacing: 2px;
@@ -1664,13 +1569,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     margin-left: auto;
     background: $neon-soft; border: 1px solid $neon;
     color: $neon; font-family: $font-mono;
-    font-size: 11px; padding: 0 6px; height: 18px;
+    font-size: 16px; line-height: 1; padding: 0 8px; height: 24px;
     display: inline-flex; align-items: center;
   }
   .panel-realtime {
     margin-left: auto;
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 11px; color: $ok; font-family: $font-display;
+    font-size: 15px; line-height: 1;
+    color: $ok; font-family: $font-display;
     letter-spacing: 1px;
     .rt-dot {
       width: 6px; height: 6px; border-radius: 50%;
@@ -1697,7 +1603,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 14px;
   min-height: 0;
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
@@ -1710,7 +1616,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 .more-tip {
   text-align: center; color: $text-dim;
-  font-size: 11px; padding: 6px 0 16px;
+  font-size: 15px; padding: 8px 0 16px;
   font-family: $font-mono;
   letter-spacing: 1px;
   border-top: 1px dashed $line;
@@ -1721,60 +1627,73 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   background: transparent;
   min-height: 0;
   .stages-list {
-    display: flex; flex-direction: column; gap: 14px;
+    display: flex; flex-direction: column; gap: 16px;
     min-height: 0;
     flex: 1;
   }
   .stage-card {
     position: relative;
-    background: linear-gradient(90deg, rgba(11, 21, 38, 0.88), rgba(10, 20, 40, 0.42));
-    border: 1px solid rgba(70, 96, 130, 0.28);
-    border-left: 3px solid rgba(160, 176, 196, 0.48);
-    padding: 8px 12px 9px;
+    background: linear-gradient(90deg, rgba(15, 32, 62, 0.94), rgba(9, 22, 48, 0.76));
+    border: 1px solid rgba(106, 157, 215, 0.34);
+    border-left: 5px solid rgba(160, 200, 242, 0.7);
+    padding: 14px 16px;
     flex: 1;
     min-height: 0;
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex; flex-direction: column; gap: 12px;
     justify-content: center;
     transition: all 0.2s;
 
-    &.stage-done { border-left-color: $neon; }
+    &.stage-done {
+      background: linear-gradient(90deg, rgba(9, 58, 42, 0.94), rgba(7, 31, 35, 0.78));
+      border-color: rgba(52, 255, 151, 0.46);
+      border-left-color: #34ff97;
+      box-shadow: 0 0 18px rgba(52, 255, 151, 0.18), inset 0 0 18px rgba(52, 255, 151, 0.09);
+    }
     &.stage-running {
-      background: linear-gradient(90deg, rgba(74, 35, 6, 0.88), rgba(19, 17, 22, 0.54));
+      background: linear-gradient(90deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
       border-color: #ff9a2f;
       border-left-color: #ff7a00;
-      box-shadow: 0 0 16px rgba(255, 122, 0, 0.24), inset 0 0 16px rgba(255, 122, 0, 0.08);
+      box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
     }
     &.stage-issue { border-left-color: $danger; }
   }
   .stage-card-top {
-    display: flex; align-items: center; justify-content: space-between;
-    .stage-name-block { display: flex; align-items: baseline; gap: 8px; }
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-width: 0;
+    .stage-name-block { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
     .stage-index {
-      font-family: $font-mono; font-size: 14px;
+      font-family: $font-mono; font-size: 17px;
       color: #ffffff; font-weight: 900;
       text-shadow: 0 0 8px rgba(255, 255, 255, 0.42);
     }
     .stage-name {
-      font-size: 13px; color: $text; font-weight: 700;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: clamp(16px, 1.05vw, 20px); color: #f2f8ff; font-weight: 900;
     }
   }
   .stage-badge {
-    font-size: 11px; padding: 2px 8px;
-    border-radius: 1px; letter-spacing: 1px;
-    &.badge-done { background: rgba(0, 212, 255, 0.15); color: $neon; border: 1px solid $line-strong; }
+    flex-shrink: 0;
+    font-size: 16px; padding: 5px 12px;
+    border-radius: 2px; letter-spacing: 1.4px;
+    font-weight: 900;
+    &.badge-done {
+      background: rgba(52, 255, 151, 0.18);
+      color: #d8ffe9;
+      border: 1px solid rgba(52, 255, 151, 0.72);
+      box-shadow: 0 0 12px rgba(52, 255, 151, 0.28), inset 0 0 10px rgba(52, 255, 151, 0.12);
+      text-shadow: 0 0 8px rgba(52, 255, 151, 0.62);
+    }
     &.badge-running { background: rgba(255, 122, 0, 0.14); color: #ffc179; border: 1px solid rgba(255, 122, 0, 0.62); }
     &.badge-pending { background: rgba(110, 141, 181, 0.15); color: $text-dim; border: 1px solid $line; }
     &.badge-issue { background: rgba(255, 77, 106, 0.18); color: $danger; border: 1px solid rgba(255, 77, 106, 0.4); }
   }
-  .stage-card-mid {
-    display: flex; align-items: center; justify-content: space-between;
-    .stage-time { font-family: $font-mono; font-size: 13px; color: $text; font-weight: 600; }
-    .stage-meta-label { font-size: 10px; color: $text-mute; letter-spacing: 1px; }
-  }
   .stage-segments {
-    display: flex; gap: 2px; height: 6px;
+    display: flex; gap: 3px; height: 9px;
     .segment { flex: 1; background: rgba(255, 255, 255, 0.05); }
-    .segment.seg-done { background: linear-gradient(180deg, $neon, $neon-dim); box-shadow: 0 0 4px rgba(0, 212, 255, 0.4); }
+    .segment.seg-done { background: linear-gradient(180deg, #b8ffd4, #34ff97 48%, #00b86b); box-shadow: 0 0 6px rgba(52, 255, 151, 0.54); }
     .segment.seg-active { background: linear-gradient(180deg, #ff9a2f, #ff7a00); box-shadow: 0 0 6px #ff7a00; animation: pulse 1.2s ease-in-out infinite; }
     .segment.seg-todo { background: rgba(110, 141, 181, 0.25); }
     .segment.seg-empty { background: transparent; border: 1px dashed rgba(110, 141, 181, 0.2); }
@@ -1783,8 +1702,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; justify-content: space-between;
     .stage-meta {
       display: flex; flex-direction: column; gap: 1px;
-      .meta-key { font-size: 10px; color: $text-mute; letter-spacing: 1px; }
-      .meta-val { font-family: $font-mono; font-size: 12px; color: $text; font-weight: 600; }
+      .meta-key {
+        font-size: 15px;
+        color: rgba(214, 244, 255, 0.94);
+        letter-spacing: 1.8px;
+        font-weight: 800;
+        text-shadow: 0 0 8px rgba(0, 212, 255, 0.42);
+      }
+      .meta-val { font-family: $font-mono; font-size: 18px; color: #f1fbff; font-weight: 800; }
     }
   }
 }
@@ -1837,22 +1762,22 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Alerts =====
 .warn-list {
   --visible-alert-count: 5;
-  display: flex; flex-direction: column; gap: clamp(7px, 0.95vh, 11px);
+  display: flex; flex-direction: column; gap: clamp(10px, 1.2vh, 14px);
   overflow: hidden;
   flex: 1;
   min-height: 0;
   padding-bottom: clamp(8px, 1.15vh, 14px);
   .alert-card {
     position: relative;
-    background: linear-gradient(135deg, rgba(12, 18, 36, 0.92), rgba(8, 14, 30, 0.85));
-    border: 1px solid rgba(0, 212, 255, 0.12);
+    background: linear-gradient(135deg, rgba(15, 30, 58, 0.96), rgba(8, 18, 40, 0.9));
+    border: 1px solid rgba(0, 212, 255, 0.24);
     border-radius: 3px;
-    padding: clamp(8px, 1vh, 12px) clamp(10px, 1vw, 14px) clamp(8px, 1vh, 12px) clamp(14px, 1.15vw, 18px);
-    display: flex; flex-direction: column; gap: 5px;
+    padding: clamp(12px, 1.25vh, 16px) clamp(14px, 1.1vw, 18px) clamp(12px, 1.25vh, 16px) clamp(18px, 1.25vw, 22px);
+    display: flex; flex-direction: column; gap: 9px;
     overflow: hidden;
     flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * 9px) / var(--visible-alert-count));
-    min-height: 94px;
-    max-height: 132px;
+    min-height: 112px;
+    max-height: 152px;
 
     // 顶部状态指示条（替代左边框）
     &::before {
@@ -1872,21 +1797,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
     // 运行中卡片微光
     &.alert-warn {
-      border-color: rgba(255, 182, 72, 0.2);
-      box-shadow: inset 0 0 20px rgba(255, 140, 40, 0.04);
+      border-color: rgba(255, 182, 72, 0.34);
+      box-shadow: inset 0 0 22px rgba(255, 140, 40, 0.08);
     }
     &.alert-danger {
-      border-color: rgba(255, 77, 106, 0.25);
-      box-shadow: inset 0 0 20px rgba(255, 77, 106, 0.05);
+      border-color: rgba(255, 77, 106, 0.42);
+      box-shadow: inset 0 0 22px rgba(255, 77, 106, 0.1);
     }
     &.alert-info {
-      border-color: rgba(0, 212, 255, 0.15);
+      border-color: rgba(0, 212, 255, 0.28);
     }
   }
   .alert-head {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; gap: 9px;
     .alert-indicator {
-      width: 6px; height: 6px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: $warn;
       box-shadow: 0 0 6px rgba(255, 182, 72, 0.7);
@@ -1895,72 +1820,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
     .alert-title {
       flex: 1;
-      font-size: clamp(12px, 0.95vw, 15px); color: #e8f0ff; font-weight: 700;
+      font-size: clamp(17px, 1.08vw, 22px); color: #f5f9ff; font-weight: 900;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       letter-spacing: 0.5px;
     }
     .alert-status-badge {
-      font-family: $font-mono; font-size: 9px; font-weight: 700;
-      padding: 1px 7px; letter-spacing: 0.8px;
+      font-family: $font-cn; font-size: 14px; line-height: 1; font-weight: 900;
+      padding: 3px 9px; letter-spacing: 0.8px;
       border-radius: 2px; white-space: nowrap; flex-shrink: 0;
       &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.12); border: 1px solid rgba(255, 182, 72, 0.3); }
       &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); animation: badge-danger-flash 1s ease-in-out infinite; }
       &.badge-info { color: $neon; background: rgba(0, 212, 255, 0.08); border: 1px solid rgba(0, 212, 255, 0.25); }
     }
   }
-  .alert-bar {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 4px;
-    position: relative;
-    overflow: hidden;
-    .alert-bar-fill {
-      position: absolute; top: 0; left: 0; bottom: 0;
-      border-radius: 4px;
-      transition: width 1s linear;
-    }
-    .alert-bar-remaining {
-      position: absolute;
-      right: 8px; top: 50%;
-      transform: translateY(-50%);
-      font-family: $font-mono;
-      font-size: 8px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
-      z-index: 1;
-    }
-  }
-  // 充裕（>50%剩余）- 青绿色
-  .bar-urgency-warn .alert-bar-fill {
-    background: linear-gradient(90deg, rgba(0, 180, 140, 0.5), #00d4a8);
-    box-shadow: 0 0 8px rgba(0, 212, 168, 0.3);
-  }
-  .bar-urgency-warn .alert-bar-remaining {
-    color: rgba(0, 212, 168, 0.9);
-  }
-  // 即将超时（<20%剩余）- 红色脉冲
-  .bar-urgency-danger .alert-bar-fill {
-    background: linear-gradient(90deg, rgba(255, 77, 106, 0.5), $danger);
-    box-shadow: 0 0 10px rgba(255, 77, 106, 0.5);
-    animation: bar-danger-pulse 1s ease-in-out infinite;
-  }
-  .bar-urgency-danger .alert-bar-remaining {
-    color: $danger;
-    animation: remaining-flash 1s ease-in-out infinite;
-  }
-  // 待执行 - 青蓝色满格
-  .bar-urgency-info .alert-bar-fill {
-    background: linear-gradient(90deg, rgba(0, 160, 200, 0.3), rgba(0, 212, 255, 0.5));
-    box-shadow: 0 0 6px rgba(0, 212, 255, 0.2);
-  }
-  .bar-urgency-info .alert-bar-remaining {
-    color: rgba(0, 212, 255, 0.7);
-  }
   .alert-foot {
     display: flex;
     align-items: center;
-    gap: clamp(10px, 1vw, 16px);
+    gap: clamp(12px, 1vw, 18px);
     row-gap: 3px;
     flex-wrap: wrap;
     .alert-meta {
@@ -1968,51 +1844,71 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       min-width: max-content;
       display: flex; align-items: center; gap: 3px;
       .meta-icon {
-        font-size: 7px;
-        color: rgba(0, 212, 255, 0.45);
+        font-size: 10px;
+        color: rgba(0, 212, 255, 0.7);
         line-height: 1;
       }
       .meta-label {
-        font-size: 9px;
-        color: rgba(110, 141, 181, 0.6);
-        letter-spacing: 0.5px;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        font-size: 14px;
+        color: rgba(222, 246, 255, 0.96);
+        letter-spacing: 1.2px;
+        font-weight: 800;
         white-space: nowrap;
+        text-shadow: 0 0 8px rgba(0, 212, 255, 0.38);
+        &::after {
+          content: '';
+          width: 1px;
+          height: 12px;
+          margin: 0 7px;
+          border-radius: 1px;
+          background: linear-gradient(180deg, transparent, rgba(44, 248, 216, 0.9), transparent);
+          box-shadow: 0 0 8px rgba(44, 248, 216, 0.55);
+        }
       }
       .meta-val {
         font-family: $font-mono;
-        font-size: 10px;
-        color: rgba(200, 220, 245, 0.85);
-        font-weight: 600;
-        max-width: 92px;
+        font-size: 14px;
+        color: rgba(232, 244, 255, 0.95);
+        font-weight: 800;
+        max-width: 132px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .operator-val {
-        color: rgba(0, 212, 255, 0.8);
+        color: rgba(44, 248, 216, 0.95);
       }
     }
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
+    min-height: clamp(28px, 2.8vh, 36px);
     margin-top: auto;
-    padding-top: clamp(5px, 0.75vh, 8px);
+    padding-top: clamp(6px, 0.8vh, 9px);
+    padding-bottom: 2px;
     border-top: 1px solid rgba(0, 212, 255, 0.1);
-    font-size: clamp(11px, 0.82vw, 13px);
-    overflow: hidden;
+    font-size: clamp(14px, 0.95vw, 17px);
+    line-height: 1.35;
+    overflow: visible;
     .hierarchy-phase {
       font-weight: 600;
       color: rgba(0, 212, 255, 0.85);
+      line-height: 1.35;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
     .hierarchy-dash {
       color: rgba(200, 220, 245, 0.6); margin: 0 6px;
       font-weight: 400;
+      line-height: 1.35;
     }
     .hierarchy-task {
       font-weight: 600;
-      color: rgba(200, 220, 245, 0.75);
+      color: rgba(226, 240, 255, 0.86);
+      line-height: 1.35;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
@@ -2026,7 +1922,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     flex-shrink: 0;
     color: rgba(160, 205, 245, 0.62);
     font-family: $font-mono;
-    font-size: clamp(11px, 0.85vw, 13px);
+    font-size: clamp(14px, 0.95vw, 16px);
     letter-spacing: 0.08em;
     border-top: 1px dashed rgba(0, 212, 255, 0.16);
     background: linear-gradient(90deg, transparent, rgba(0, 120, 190, 0.08), transparent);
@@ -2046,16 +1942,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   50% { border-color: rgba(255, 77, 106, 0.8); box-shadow: 0 0 6px rgba(255, 77, 106, 0.4); }
 }
 
-@keyframes bar-danger-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-@keyframes remaining-flash {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
 // ===== Footer =====
 .screen-footer {
   display: flex; justify-content: space-between;
@@ -2064,6 +1950,92 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   flex-shrink: 0;
   font-family: $font-display; font-size: 10px;
   color: $text-mute; letter-spacing: 2px;
+}
+
+@media (max-width: 1200px) {
+  .kpi-row {
+    height: 82px;
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding: 10px 12px 8px 58px;
+    column-gap: 8px;
+
+    .kpi-orb {
+      left: 16px;
+      top: 14px;
+      width: 28px;
+      height: 28px;
+
+      &::before {
+        inset: 6px -8px;
+      }
+
+      &::after {
+        left: 10px;
+        bottom: -14px;
+        width: 12px;
+        height: 12px;
+      }
+    }
+
+    .kpi-copy {
+      left: 58px;
+    }
+
+    .kpi-label-zh {
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .kpi-value-row {
+      max-width: calc(100% - 82px);
+      gap: 4px;
+    }
+
+    &.kpi-progress-card {
+      .kpi-value-row.kpi-progress-row {
+        gap: 6px;
+      }
+    }
+
+    .kpi-value-num {
+      font-size: 22px;
+    }
+
+    .kpi-value-text {
+      font-size: 18px;
+    }
+
+    .progress-ring-wrap {
+      width: 38px;
+      height: 38px;
+    }
+
+    .progress-ring-text {
+      font-size: 11px;
+      small {
+        font-size: 7px;
+      }
+    }
+
+    .node-count-row {
+      gap: 2px;
+
+      .kpi-value-num {
+        font-size: 18px;
+      }
+
+      .node-total {
+        font-size: 12px;
+      }
+
+      .node-separator {
+        font-size: 11px;
+      }
+    }
+  }
 }
 
 @media (max-width: 1000px) {
@@ -2126,7 +2098,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
     .kpi-orb {
       left: 14px;
-      top: 20px;
+      top: 50%;
       width: 28px;
       height: 28px;
 
@@ -2142,10 +2114,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       }
     }
 
+    .kpi-copy {
+      left: 54px;
+    }
+
     .kpi-label-zh {
-      font-size: 11px;
+      font-size: 12px;
       letter-spacing: 0;
-      line-height: 1.2;
+      line-height: 1.1;
       padding-bottom: 4px;
       &::after {
         width: 16px;
@@ -2157,6 +2133,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       font-size: 7px;
       letter-spacing: 2px;
       line-height: 1.2;
+    }
+
+    .kpi-value-row {
+      max-width: calc(100% - 72px);
     }
 
     .kpi-value-num {
@@ -2176,15 +2156,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       white-space: nowrap;
     }
 
-    .kpi-sub {
-      font-size: 7px;
-      letter-spacing: 0;
-      color: rgba(180, 220, 255, 0.55);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .kpi-node-count {
       margin-left: 4px;
       font-size: 8px;
@@ -2201,9 +2172,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         font-size: 8px;
       }
     }
-    .progress-sub-label {
-      font-size: 8px;
-    }
     .node-count-row {
       .kpi-value-num {
         font-size: 16px;
@@ -2218,7 +2186,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 
   .screen-main {
-    grid-template-columns: 190px minmax(260px, 1fr) 190px;
+    grid-template-columns: 174px minmax(320px, 1fr) 168px;
     gap: 10px;
     padding: 0;
   }
@@ -2276,24 +2244,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       padding: 1px 5px;
     }
 
-    .stage-card-mid {
-      .stage-time {
-        font-size: 10px;
-      }
-
-      .stage-meta-label {
-        font-size: 8px;
-      }
-    }
-
     .stage-card-bottom {
       .stage-meta {
         .meta-key {
-          font-size: 8px;
+          font-size: 11px;
         }
 
         .meta-val {
-          font-size: 10px;
+          font-size: 11px;
         }
       }
     }
@@ -2314,21 +2272,16 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       }
 
       .alert-status-badge {
-        font-size: 8px;
+        font-size: 10px;
         padding: 1px 4px;
       }
-    }
-
-    .alert-bar {
-      height: 6px;
-      .alert-bar-remaining { display: none; }
     }
 
     .alert-foot {
       .alert-meta {
         .meta-icon { display: none; }
-        .meta-label { font-size: 8px; }
-        .meta-val { font-size: 9px; }
+        .meta-label { font-size: 11px; }
+        .meta-val { font-size: 11px; }
       }
     }
 

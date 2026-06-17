@@ -74,6 +74,10 @@
                     <el-icon><Monitor /></el-icon>
                     大屏
                   </el-button>
+                  <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏2
+                  </el-button>
                   <el-button type="primary" size="small" @click.stop.prevent="goToDrillTasks(drill.id)">
                     <el-icon><ArrowRight /></el-icon>
                     查看任务
@@ -124,6 +128,10 @@
           <el-button type="success" @click="viewScreen(selectedDrillId)">
             <el-icon><Monitor /></el-icon>
             大屏
+          </el-button>
+          <el-button type="warning" @click="viewScreen2(selectedDrillId)">
+            <el-icon><DataBoard /></el-icon>
+            大屏2
           </el-button>
         </div>
         <div class="filter-group">
@@ -289,7 +297,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck } from '@element-plus/icons-vue'
+import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck, DataBoard } from '@element-plus/icons-vue'
 import type { StepAttributes } from '@/types/template'
 import type { StepInstance, StepStatus } from '@/types/instance'
 import type { DrillInstance } from '@/types'
@@ -728,6 +736,11 @@ function goToTaskDetail(taskId: number) {
 // 查看大屏
 function viewScreen(drillId: number) {
   router.push(`/screen/${drillId}`)
+}
+
+// 查看大屏2
+function viewScreen2(drillId: number | null) {
+  if (drillId) router.push(`/executor/screen/${drillId}`)
 }
 
 // 加载数据
