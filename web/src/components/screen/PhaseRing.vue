@@ -740,9 +740,10 @@ function chineseNum(n: number): string {
   white-space: nowrap;
 }
 .phase-node-done {
-  border-color: rgba(0, 160, 200, 0.6);
-  background: rgba(0, 40, 70, 0.75);
-  .phase-node-text { color: #9ee8ff; }
+  border-color: rgba(52, 255, 151, 0.72);
+  background: rgba(6, 46, 32, 0.85);
+  box-shadow: 0 0 16px rgba(52, 255, 151, 0.32), inset 0 0 8px rgba(52, 255, 151, 0.12);
+  .phase-node-text { color: #b8ffd4; text-shadow: 0 0 8px rgba(52, 255, 151, 0.5); }
 }
 .phase-node-active {
   border-color: #ff9a2f;

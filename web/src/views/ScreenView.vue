@@ -1007,6 +1007,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  /* 统一缩放基准：所有 vw 字号基于此，保持比例一致 */
+  font-size: clamp(14px, 0.92vw, 17px);
   background:
     radial-gradient(circle at 50% 48%, rgba(0, 96, 205, 0.18), transparent 34%),
     radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.08), transparent 18%),
@@ -1191,7 +1193,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     margin-top: -2px;
     .drill-title {
       font-family: $font-cn;
-      font-size: clamp(24px, 2.25vw, 44px);
+      font-size: clamp(20px, 2.6em, 44px);
       font-weight: 900;
       letter-spacing: 4px;
       margin: 0;
@@ -1208,7 +1210,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       display: block;
       margin-top: 0;
       font-family: $font-display;
-      font-size: clamp(9px, 1vw, 15px);
+      font-size: clamp(8px, 0.9em, 15px);
       font-weight: 700;
       letter-spacing: 7px;
       color: rgba(194, 214, 255, 0.66);
@@ -1220,11 +1222,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     justify-self: end;
     display: flex; align-items: center; gap: 10px;
     font-family: $font-mono;
-    .meta-label { color: $text-dim; font-size: 14px; letter-spacing: 2px; font-weight: 700; }
+    .meta-label { color: $text-dim; font-size: 0.88em; letter-spacing: 2px; font-weight: 700; }
     .meta-divider { color: $text-mute; }
     .meta-value {
       color: #ecf6ff;
-      font-size: clamp(16px, 1.25vw, 22px);
+      font-size: clamp(14px, 1.35em, 22px);
       font-weight: 700;
       text-shadow: 0 0 8px rgba(95, 171, 255, 0.6);
       letter-spacing: 1px;
@@ -1347,7 +1349,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: block;
     position: relative;
     max-width: 100%;
-    font-size: clamp(15px, 1vw, 19px);
+    font-size: clamp(13px, 1.15em, 19px);
     line-height: 1;
     font-weight: 900;
     color: #f0f7ff;
@@ -1400,23 +1402,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .kpi-value-num {
     font-family: $font-mono;
-    font-size: clamp(24px, 1.8vw, 36px);
+    font-size: clamp(20px, 2.1em, 36px);
     font-weight: 800;
     color: #2cf8d8;
     text-shadow: 0 0 12px rgba(44, 248, 216, 0.42);
     line-height: 1;
   }
   .kpi-value-unit {
-    font-family: $font-cn; font-size: clamp(15px, 1vw, 19px); color: #c8fff5; opacity: 0.92; font-weight: 800;
+    font-family: $font-cn; font-size: clamp(13px, 1.1em, 19px); color: #c8fff5; opacity: 0.92; font-weight: 800;
   }
   .kpi-value-sep {
-    font-family: $font-mono; font-size: clamp(18px, 1.7vw, 28px); color: #2cf8d8; opacity: 0.75;
+    font-family: $font-mono; font-size: clamp(15px, 1.6em, 28px); color: #2cf8d8; opacity: 0.75;
     transform: translateY(-2px);
   }
   .kpi-value-text {
     display: block;
     max-width: clamp(66px, 5.8vw, 112px);
-    font-size: clamp(17px, 1.22vw, 23px); font-weight: 900; color: #ff8a1f;
+    font-size: clamp(15px, 1.4em, 23px); font-weight: 900; color: #ff8a1f;
     text-align: right;
     text-shadow: 0 0 12px rgba(255, 122, 0, 0.5);
     white-space: nowrap;
@@ -1559,7 +1561,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     &.tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
   }
   .panel-title-zh {
-    font-size: clamp(20px, 1.35vw, 28px);
+    font-size: clamp(16px, 1.6em, 28px);
     font-weight: 900;
     color: #ffffff;
     letter-spacing: 2px;
@@ -1677,12 +1679,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: clamp(16px, 1.05vw, 20px); color: #f2f8ff; font-weight: 900;
+      font-size: clamp(14px, 1.2em, 20px); color: #f2f8ff; font-weight: 900;
     }
   }
   .stage-badge {
     flex-shrink: 0;
-    font-size: 16px; padding: 5px 12px;
+    font-size: clamp(12px, 0.95em, 16px); padding: 5px 12px;
     border-radius: 2px; letter-spacing: 1.4px;
     font-weight: 900;
     &.badge-done {
@@ -1711,13 +1713,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-meta {
       display: flex; flex-direction: column; gap: 1px;
       .meta-key {
-        font-size: 15px;
+        font-size: clamp(12px, 0.9em, 15px);
         color: rgba(214, 244, 255, 0.94);
         letter-spacing: 1.8px;
         font-weight: 800;
         text-shadow: 0 0 8px rgba(0, 212, 255, 0.42);
       }
-      .meta-val { font-family: $font-mono; font-size: 18px; color: #f1fbff; font-weight: 800; }
+      .meta-val { font-family: $font-mono; font-size: clamp(14px, 1.1em, 18px); color: #f1fbff; font-weight: 800; }
     }
   }
 }
@@ -1960,7 +1962,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   color: $text-mute; letter-spacing: 2px;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1080px) {
   .kpi-row {
     height: 82px;
     gap: 10px;
@@ -1993,7 +1995,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .kpi-label-zh {
-      font-size: 14px;
+      font-size: 0.82em;
       letter-spacing: 0;
     }
 
@@ -2009,11 +2011,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .kpi-value-num {
-      font-size: 22px;
+      font-size: 1.3em;
     }
 
     .kpi-value-text {
-      font-size: 18px;
+      font-size: 1.05em;
     }
 
     .progress-ring-wrap {
@@ -2127,7 +2129,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .kpi-label-zh {
-      font-size: 12px;
+      font-size: 0.72em;
       letter-spacing: 0;
       line-height: 1.1;
       padding-bottom: 4px;
@@ -2148,19 +2150,19 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .kpi-value-num {
-      font-size: 18px;
+      font-size: 1.1em;
     }
 
     .kpi-value-sep {
-      font-size: 14px;
+      font-size: 0.85em;
     }
 
     .kpi-value-unit {
-      font-size: 11px;
+      font-size: 0.68em;
     }
 
     .kpi-value-text {
-      font-size: 15px;
+      font-size: 0.9em;
       white-space: nowrap;
     }
 
@@ -2204,7 +2206,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     padding: 0 8px 0 18px;
 
     .panel-title-zh {
-      font-size: 14px;
+      font-size: 0.85em;
       letter-spacing: 1px;
     }
 
@@ -2240,7 +2242,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       }
 
       .stage-name {
-        font-size: 10px;
+        font-size: 0.65em;
         max-width: 86px;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -2249,7 +2251,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .stage-badge {
-      font-size: 9px;
+      font-size: 0.56em;
       padding: 1px 5px;
     }
 
@@ -2261,11 +2263,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-card-bottom {
       .stage-meta {
         .meta-key {
-          font-size: 11px;
+          font-size: 0.68em;
         }
 
         .meta-val {
-          font-size: 11px;
+          font-size: 0.68em;
         }
       }
     }
