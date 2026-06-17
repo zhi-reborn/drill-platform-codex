@@ -393,6 +393,17 @@ const STAGE_NAMES = [
   '基线指标与备份',
 ]
 
+const buildStageSegments = (finished: number, total: number, active: boolean) => {
+  const segCount = 18
+  if (total <= 0) return Array.from({ length: segCount }, () => 'empty')
+  const doneCount = finished >= total ? segCount : Math.floor((finished / total) * segCount)
+  return Array.from({ length: segCount }, (_, i) => {
+    if (i < doneCount) return 'done'
+    if (active && finished < total && i === doneCount) return 'active'
+    return 'todo'
+  })
+}
+
 const stages = computed(() => {
   // 依赖 elapsedSeconds 每秒刷新，使未结束阶段的截止时间实时跳动
   const _tick = elapsedSeconds.value
@@ -433,15 +444,7 @@ const stages = computed(() => {
         if (t) endStr = new Date(Date.now() + t * 60000).toISOString()
       }
       const timeRange = `${formatHM(started)} / ${formatHM(endStr)}`
-      // 段落
-      const segCount = 18
-      const segs: string[] = []
-      for (let i = 0; i < segCount; i++) {
-        if (i < finishedLeaves) segs.push('done')
-        else if (i === finishedLeaves && running) segs.push('active')
-        else if (i < totalLeaves) segs.push('todo')
-        else segs.push('empty')
-      }
+      const segs = buildStageSegments(finishedLeaves, totalLeaves, running)
       const team = leaves.find(s => s.executor_team)?.executor_team
         || leaves.find(s => s.assignee_names)?.assignee_names
         || '运维部'
@@ -481,14 +484,7 @@ const stages = computed(() => {
       if (t) endStr = new Date(Date.now() + t * 60000).toISOString()
     }
     const timeRange = `${formatHM(started)} / ${formatHM(endStr)}`
-    const segCount = 18
-    const segs: string[] = []
-    for (let i = 0; i < segCount; i++) {
-      if (i < finished) segs.push('done')
-      else if (i === finished && running) segs.push('active')
-      else if (i < slice.length) segs.push('todo')
-      else segs.push('empty')
-    }
+    const segs = buildStageSegments(finished, slice.length, running)
     const team = slice.find(s => s.executor_team)?.executor_team
       || slice.find(s => s.assignee_names)?.assignee_names
       || '运维部'
@@ -1284,11 +1280,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     linear-gradient(90deg, rgba(14, 50, 112, 0.82), rgba(10, 26, 57, 0.36)),
     linear-gradient(180deg, rgba(53, 138, 255, 0.18), transparent);
   border: 1px solid rgba(105, 165, 255, 0.38);
-  padding: 12px 22px 10px 80px;
+  padding: 12px 18px 10px 80px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr auto;
-  column-gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, max-content);
+  grid-template-rows: 1fr;
+  column-gap: 10px;
   align-items: center;
   overflow: hidden;
   transition: all 0.3s;
@@ -1339,25 +1335,27 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
   }
   .kpi-copy {
-    position: absolute;
-    left: 80px;
-    top: 50%;
-    transform: translateY(-50%);
+    grid-column: 1;
+    grid-row: 1;
     display: flex;
     align-items: center;
     min-width: 0;
     height: 24px;
+    overflow: hidden;
   }
   .kpi-label-zh {
     display: block;
     position: relative;
-    font-size: clamp(16px, 1.08vw, 20px);
+    max-width: 100%;
+    font-size: clamp(15px, 1vw, 19px);
     line-height: 1;
     font-weight: 900;
     color: #f0f7ff;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     padding-bottom: 5px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     &::after {
       content: '';
       position: absolute;
@@ -1385,11 +1383,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     justify-self: end;
     align-self: center;
     margin-top: 0;
-    max-width: calc(100% - 112px);
+    max-width: 100%;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 6px;
     min-width: 0;
+    overflow: hidden;
     &.mono { gap: 2px; }
   }
   .kpi-status-row {
@@ -1414,9 +1414,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     transform: translateY(-2px);
   }
   .kpi-value-text {
-    font-size: clamp(20px, 1.6vw, 29px); font-weight: 900; color: #ff8a1f;
+    display: block;
+    max-width: clamp(66px, 5.8vw, 112px);
+    font-size: clamp(17px, 1.22vw, 23px); font-weight: 900; color: #ff8a1f;
+    text-align: right;
     text-shadow: 0 0 12px rgba(255, 122, 0, 0.5);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .kpi-node-count {
     margin-left: 10px;
@@ -1639,7 +1644,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     padding: 14px 16px;
     flex: 1;
     min-height: 0;
-    display: flex; flex-direction: column; gap: 12px;
+    display: flex; flex-direction: column; gap: 10px;
     justify-content: center;
     transition: all 0.2s;
 
@@ -1660,6 +1665,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .stage-card-top {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     min-width: 0;
+    flex-shrink: 0;
     .stage-name-block { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
     .stage-index {
       font-family: $font-mono; font-size: 17px;
@@ -1692,6 +1698,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .stage-segments {
     display: flex; gap: 3px; height: 9px;
+    flex-shrink: 0;
     .segment { flex: 1; background: rgba(255, 255, 255, 0.05); }
     .segment.seg-done { background: linear-gradient(180deg, #b8ffd4, #34ff97 48%, #00b86b); box-shadow: 0 0 6px rgba(52, 255, 151, 0.54); }
     .segment.seg-active { background: linear-gradient(180deg, #ff9a2f, #ff7a00); box-shadow: 0 0 6px #ff7a00; animation: pulse 1.2s ease-in-out infinite; }
@@ -1700,6 +1707,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .stage-card-bottom {
     display: flex; justify-content: space-between;
+    flex-shrink: 0;
     .stage-meta {
       display: flex; flex-direction: column; gap: 1px;
       .meta-key {
@@ -2219,6 +2227,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       padding: 6px 8px 7px;
       flex: 1;
       min-height: 0;
+      gap: 5px;
     }
 
     .stage-card-top {
@@ -2242,6 +2251,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-badge {
       font-size: 9px;
       padding: 1px 5px;
+    }
+
+    .stage-segments {
+      height: 6px;
+      gap: 2px;
     }
 
     .stage-card-bottom {

@@ -311,13 +311,36 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 }
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
-	if steps, ok := GetCachedSteps(s.redis, id); ok {
-		s.reconcilePreStepIDs(id, steps)
-		return steps, nil
+	recovered, err := s.recoverRunningDrillIfNeeded(id)
+	if err != nil {
+		return nil, err
 	}
+	if recovered {
+		InvalidateStepCache(s.redis, id)
+	}
+
+	running := s.isRunningDrill(id)
+	if !running {
+		if steps, ok := GetCachedSteps(s.redis, id); ok {
+			s.reconcilePreStepIDs(id, steps)
+			return steps, nil
+		}
+	}
+
 	steps, err := s.stepRepo.FindStepsByDrillID(id)
 	if err != nil {
 		return nil, err
+	}
+	if running && s.advanceRunningDrillFromTerminalSteps(id, steps) {
+		InvalidateStepCache(s.redis, id)
+		steps, err = s.stepRepo.FindStepsByDrillID(id)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !running {
+		SetCachedSteps(s.redis, id, steps)
 	}
 
 	// 协调父步骤状态：如果所有子步骤已终态但父步骤未终态，自动完成父步骤
@@ -326,8 +349,78 @@ func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	// 协调 pre_step_ids：如果 parallel 步骤的 pre_step_ids 包含同级步骤，重新计算
 	s.reconcilePreStepIDs(id, steps)
 
-	SetCachedSteps(s.redis, id, steps)
 	return steps, nil
+}
+
+func (s *DrillService) isRunningDrill(id uint64) bool {
+	if s.engine != nil {
+		if inst, ok := s.engine.GetInstance(int64(id)); ok {
+			return inst.Status == flowengine.FlowStatusRunning
+		}
+	}
+
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return false
+	}
+	return drill.Status == "running"
+}
+
+func (s *DrillService) recoverRunningDrillIfNeeded(id uint64) (bool, error) {
+	if s.engine == nil {
+		return false, nil
+	}
+	if _, ok := s.engine.GetInstance(int64(id)); ok {
+		return false, nil
+	}
+
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return false, err
+	}
+	if drill.Status != "running" {
+		return false, nil
+	}
+
+	return true, s.Recover(id)
+}
+
+func (s *DrillService) advanceRunningDrillFromTerminalSteps(id uint64, steps []entity.StepInstance) bool {
+	if s.engine == nil {
+		return false
+	}
+	inst, ok := s.engine.GetInstanceForMutate(int64(id))
+	if !ok || inst.Status != flowengine.FlowStatusRunning {
+		return false
+	}
+
+	for _, step := range steps {
+		if si, exists := inst.Steps[int64(step.StepTemplateID)]; exists {
+			si.ID = int64(step.ID)
+			si.Status = flowengine.StepStatus(step.Status)
+			si.StartTime = step.StartTime
+			si.EndTime = step.EndTime
+			si.TimeoutAt = step.TimeoutAt
+		}
+	}
+
+	before := make(map[int64]flowengine.StepStatus, len(inst.Steps))
+	for stepDefID, si := range inst.Steps {
+		before[stepDefID] = si.Status
+	}
+
+	for _, step := range steps {
+		if isStepTerminalStatus(flowengine.StepStatus(step.Status)) {
+			_ = s.engine.AdvanceFlow(int64(id), int64(step.StepTemplateID))
+		}
+	}
+
+	for stepDefID, oldStatus := range before {
+		if oldStatus == flowengine.StepStatusPending && inst.Steps[stepDefID].Status == flowengine.StepStatusRunning {
+			return true
+		}
+	}
+	return false
 }
 
 // reconcileParentStepsFromDB 基于 DB 数据协调父步骤状态，不依赖引擎内存

@@ -28,6 +28,10 @@ func (e *Engine) advanceSerialSteps(inst *FlowInst, completedStepDefID int64) {
 			log.Printf("[FLOW] advanceSerialSteps: step=%d status=%s (expected pending)", nextStepDefID, si.Status)
 			continue
 		}
+		if e.requiresManualStartAtPhaseBoundary(inst, completedStepDefID, nextStepDefID) {
+			log.Printf("[FLOW] advanceSerialSteps: step=%d waits for manual phase start after completedStep=%d", nextStepDefID, completedStepDefID)
+			continue
+		}
 
 		log.Printf("[FLOW] advanceSerialSteps: ACTIVATING step=%d name=%s", nextStepDefID, si.Name)
 		e.activateStep(inst, si)
@@ -47,6 +51,40 @@ func (e *Engine) findNextSteps(inst *FlowInst, completedStepDefID int64) []int64
 		}
 	}
 	return nextSteps
+}
+
+func (e *Engine) requiresManualStartAtPhaseBoundary(inst *FlowInst, completedStepDefID int64, nextStepDefID int64) bool {
+	completedRootID := e.rootStepID(inst, completedStepDefID)
+	nextRootID := e.rootStepID(inst, nextStepDefID)
+	if completedRootID == 0 || nextRootID == 0 || completedRootID == nextRootID {
+		return false
+	}
+
+	return e.hasChildSteps(inst, completedRootID) || e.hasChildSteps(inst, nextRootID)
+}
+
+func (e *Engine) rootStepID(inst *FlowInst, stepDefID int64) int64 {
+	current, exists := inst.Steps[stepDefID]
+	if !exists {
+		return 0
+	}
+	for current.ParentStepID != 0 {
+		parent, ok := inst.Steps[current.ParentStepID]
+		if !ok {
+			return 0
+		}
+		current = parent
+	}
+	return current.StepDefID
+}
+
+func (e *Engine) hasChildSteps(inst *FlowInst, stepDefID int64) bool {
+	for _, si := range inst.Steps {
+		if si.ParentStepID == stepDefID {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) allPredecessorsDone(inst *FlowInst, stepDefID int64) bool {

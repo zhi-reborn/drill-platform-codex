@@ -2462,44 +2462,89 @@ function fmtTime(ts: string): string {
 }
 
 .phase-card-strip {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(26px, 4vw, 86px);
+  gap: 0;
+  padding: 4px;
+  border: 1px solid rgba(48, 188, 235, 0.28);
+  border-radius: clamp(16px, 1.5vw, 26px);
+  background: linear-gradient(180deg, rgba(5, 25, 54, 0.72), rgba(2, 12, 30, 0.5));
+  box-shadow: inset 0 0 24px rgba(0, 205, 255, 0.06), 0 0 24px rgba(0, 166, 255, 0.06);
+  overflow: hidden;
+}
+
+.phase-card-strip::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(20, 226, 255, 0.1), rgba(20, 226, 255, 0.55), rgba(29, 255, 154, 0.24));
+  box-shadow: 0 0 14px rgba(20, 226, 255, 0.22);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .phase-card {
   position: relative;
+  z-index: 1;
   min-width: 0;
-  padding: clamp(12px, 1.25vw, 22px) clamp(16px, 1.5vw, 26px);
-  border: 1px solid rgba(72, 124, 177, 0.36);
-  border-top-width: 4px;
-  background: linear-gradient(180deg, rgba(5, 24, 52, 0.88), rgba(4, 14, 31, 0.46));
-  box-shadow: inset 0 0 24px rgba(0, 180, 255, 0.06);
+  padding: clamp(12px, 1.25vw, 22px) clamp(18px, 1.6vw, 30px);
+  border: 1px solid rgba(72, 124, 177, 0.28);
+  border-left: 0;
+  background: linear-gradient(180deg, rgba(6, 30, 64, 0.82), rgba(4, 14, 31, 0.56));
+  box-shadow: inset 0 -3px 0 rgba(65, 120, 170, 0.22);
+}
+
+.phase-card:first-child {
+  border-left: 1px solid rgba(72, 124, 177, 0.28);
+  border-radius: clamp(12px, 1.1vw, 20px) 0 0 clamp(12px, 1.1vw, 20px);
+}
+
+.phase-card:last-child {
+  border-radius: 0 clamp(12px, 1.1vw, 20px) clamp(12px, 1.1vw, 20px) 0;
 }
 
 .phase-card::after {
   content: "";
   position: absolute;
   top: 50%;
-  right: calc(clamp(26px, 4vw, 86px) * -0.78);
-  width: clamp(24px, 3vw, 60px);
-  height: 2px;
-  background: linear-gradient(90deg, #16d9ff, transparent);
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border-top: 1px solid rgba(48, 188, 235, 0.32);
+  border-right: 1px solid rgba(48, 188, 235, 0.32);
+  background: inherit;
+  transform: translateY(-50%) rotate(45deg);
+  box-shadow: 5px -5px 12px rgba(0, 200, 255, 0.05);
+  z-index: 2;
 }
 
 .phase-card:last-child::after { display: none; }
-.phase-card.is-done { border-top-color: #08dcff; }
-.phase-card.is-running { border-top-color: #ff3f70; }
-.phase-card.is-pending { border-top-color: rgba(112, 138, 166, 0.72); opacity: 0.78; }
+.phase-card.is-done {
+  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 22px rgba(47, 240, 160, 0.1);
+}
+.phase-card.is-running {
+  z-index: 3;
+  background: linear-gradient(180deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
+  box-shadow: inset 0 -4px 0 #ff7a00, inset 0 0 20px rgba(255, 122, 0, 0.12), 0 0 18px rgba(255, 122, 0, 0.32);
+}
+.phase-card.is-pending { opacity: 0.74; }
+.phase-card.active {
+  transform: translateY(-2px);
+  border-color: #ff9a2f;
+}
 
 .phase-accent {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: linear-gradient(180deg, #05e2ff, transparent);
-  opacity: 0.5;
+  left: clamp(12px, 1vw, 18px);
+  right: clamp(12px, 1vw, 18px);
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #05e2ff, transparent);
+  opacity: 0.42;
 }
 
 .phase-head {
@@ -2521,12 +2566,12 @@ function fmtTime(ts: string): string {
   flex: 0 0 auto;
   padding: 5px 13px;
   border: 1px solid currentColor;
-  color: #00d9ff;
-  background: rgba(0, 95, 145, 0.18);
+  color: #2ff0a0;
+  background: rgba(47, 240, 160, 0.12);
 }
 
-.is-running .phase-status { color: #ff4575; background: rgba(255, 69, 117, 0.12); }
-.is-pending .phase-status { color: #6990b6; }
+.is-running .phase-status { color: #ffc179; background: rgba(255, 122, 0, 0.14); }
+.is-pending .phase-status { color: #6990b6; background: rgba(105, 144, 182, 0.1); }
 
 .phase-segments {
   display: grid;
@@ -2550,35 +2595,35 @@ function fmtTime(ts: string): string {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  gap: clamp(14px, 1.2vw, 22px);
+  gap: clamp(10px, 1vw, 18px);
   color: #d8efff;
   font-family: "Courier New", monospace;
-  font-size: clamp(22px, 2vw, 38px);
+  font-size: clamp(16px, 1.35vw, 26px);
   font-weight: 700;
-  text-shadow: 0 0 12px rgba(28, 222, 255, 0.42);
+  text-shadow: 0 0 10px rgba(28, 222, 255, 0.34);
 }
 
 .phase-stats span {
-  padding: 4px 10px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(8, 214, 255, 0.12), rgba(5, 45, 90, 0.16));
-  box-shadow: inset 0 0 16px rgba(0, 206, 255, 0.12), 0 0 18px rgba(0, 216, 255, 0.08);
+  padding: 3px 8px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(8, 214, 255, 0.1), rgba(5, 45, 90, 0.14));
+  box-shadow: inset 0 0 12px rgba(0, 206, 255, 0.1), 0 0 14px rgba(0, 216, 255, 0.06);
 }
 
 .phase-stats b {
   color: #ffffff;
-  font-size: 1.42em;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.72), 0 0 24px rgba(16, 224, 255, 0.62);
+  font-size: 1.24em;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.64), 0 0 18px rgba(16, 224, 255, 0.52);
 }
 
 .phase-stats em {
-  margin-left: 12px;
+  margin-left: 8px;
   color: #9eeeff;
   font-style: normal;
   font-family: "Microsoft YaHei", sans-serif;
-  font-size: 0.76em;
+  font-size: 0.68em;
   font-weight: 700;
-  text-shadow: 0 0 10px rgba(0, 226, 255, 0.48);
+  text-shadow: 0 0 8px rgba(0, 226, 255, 0.42);
 }
 
 .flow-board {
@@ -2591,8 +2636,12 @@ function fmtTime(ts: string): string {
   grid-template-rows: 1fr 1fr;
   align-content: center;
   row-gap: var(--flow-row-gap);
-  padding: clamp(12px, 2vh, 38px) clamp(28px, 4vw, 80px);
+  padding: clamp(18px, 2.4vh, 42px) clamp(32px, 4.2vw, 84px);
   min-height: 0;
+  border: 1px solid rgba(57, 220, 255, 0.34);
+  border-radius: clamp(18px, 1.6vw, 28px);
+  background: linear-gradient(180deg, rgba(7, 32, 62, 0.28), rgba(4, 18, 38, 0.2));
+  box-shadow: inset 0 0 28px rgba(0, 195, 255, 0.08), 0 0 24px rgba(0, 184, 255, 0.08);
 }
 
 .flow-row {
@@ -2651,15 +2700,15 @@ function fmtTime(ts: string): string {
 }
 
 .flow-node.is-running .node-tag {
-  border-color: #ff3f70;
-  color: #ff6b95;
-  box-shadow: 0 0 28px rgba(255, 63, 112, 0.22), inset 0 0 18px rgba(255, 63, 112, 0.12);
+  border-color: #ff9a2f;
+  color: #ffc179;
+  box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
   animation: node-pulse 2s ease-in-out infinite;
 }
 
 @keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 28px rgba(255, 63, 112, 0.22), inset 0 0 18px rgba(255, 63, 112, 0.12); }
-  50% { box-shadow: 0 0 40px rgba(255, 63, 112, 0.4), inset 0 0 22px rgba(255, 63, 112, 0.2); }
+  0%, 100% { box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12); }
+  50% { box-shadow: 0 0 28px rgba(255, 122, 0, 0.46), inset 0 0 24px rgba(255, 122, 0, 0.2); }
 }
 
 .flow-arrow {

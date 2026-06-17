@@ -213,6 +213,105 @@ func TestCompleteStep_Serial(t *testing.T) {
 	}
 }
 
+func TestCompleteStepRequiresManualStartAtPhaseBoundary(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "phase-boundary-flow",
+		Steps: []*StepDef{
+			{ID: 100, Name: "phase1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5},
+			{ID: 110, Name: "phase1 task1", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 100},
+			{ID: 120, Name: "phase1 task2", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 100, PreStepIDs: []int64{110}},
+			{ID: 200, Name: "phase2", Seq: 4, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{100}},
+			{ID: 210, Name: "phase2 task1", Seq: 5, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 200, PreStepIDs: []int64{100}},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	if err := e.Start(inst.ID); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+
+	if inst.Steps[100].Status != StepStatusRunning || inst.Steps[110].Status != StepStatusRunning {
+		t.Fatalf("expected phase1 and first task running, got phase=%s task=%s", inst.Steps[100].Status, inst.Steps[110].Status)
+	}
+
+	if err := e.CompleteStep(inst.ID, 110, 1, ""); err != nil {
+		t.Fatalf("CompleteStep phase1 task1 error: %v", err)
+	}
+	if inst.Steps[120].Status != StepStatusRunning {
+		t.Fatalf("expected same-phase next task running, got %s", inst.Steps[120].Status)
+	}
+
+	if err := e.CompleteStep(inst.ID, 120, 1, ""); err != nil {
+		t.Fatalf("CompleteStep phase1 task2 error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 100, 1, ""); err != nil {
+		t.Fatalf("CompleteStep phase1 error: %v", err)
+	}
+	if inst.Steps[100].Status != StepStatusCompleted {
+		t.Fatalf("expected phase1 completed after all child tasks, got %s", inst.Steps[100].Status)
+	}
+	if inst.Steps[200].Status != StepStatusPending {
+		t.Fatalf("expected phase2 to wait for manual start, got %s", inst.Steps[200].Status)
+	}
+	if inst.Steps[210].Status != StepStatusPending {
+		t.Fatalf("expected phase2 first task to wait for manual start, got %s", inst.Steps[210].Status)
+	}
+
+	if err := e.ManualStartStep(inst.ID, 210); err != nil {
+		t.Fatalf("ManualStartStep phase2 task1 error: %v", err)
+	}
+	if inst.Steps[200].Status != StepStatusRunning || inst.Steps[210].Status != StepStatusRunning {
+		t.Fatalf("expected phase2 and first task running after manual start, got phase=%s task=%s", inst.Steps[200].Status, inst.Steps[210].Status)
+	}
+}
+
+func TestCompleteStepAutoStartsNextTaskWithinSamePhase(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "same-phase-task-flow",
+		Steps: []*StepDef{
+			{ID: 100, Name: "phase", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5},
+			{ID: 110, Name: "section", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 100},
+			{ID: 120, Name: "task2", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 110},
+			{ID: 121, Name: "task2 step", Seq: 4, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 120},
+			{ID: 130, Name: "task3", Seq: 5, StepType: StepTypeParallel, TimeoutMinutes: 5, ParentStepID: 110, PreStepIDs: []int64{120}},
+			{ID: 131, Name: "task3 first step", Seq: 6, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 130, PreStepIDs: []int64{120}},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	if err := e.Start(inst.ID); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+
+	if err := e.CompleteStep(inst.ID, 121, 1, ""); err != nil {
+		t.Fatalf("CompleteStep task2 child error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 120, 1, ""); err != nil {
+		t.Fatalf("CompleteStep task2 error: %v", err)
+	}
+
+	if inst.Steps[130].Status != StepStatusRunning {
+		t.Fatalf("expected same-phase next task running, got %s", inst.Steps[130].Status)
+	}
+	if inst.Steps[131].Status != StepStatusRunning {
+		t.Fatalf("expected same-phase next task first step running, got %s", inst.Steps[131].Status)
+	}
+}
+
 func TestCompleteStep_AllSteps(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()
