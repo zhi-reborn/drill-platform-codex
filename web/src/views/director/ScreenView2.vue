@@ -91,7 +91,10 @@
           </div>
           <div class="execution-carousel">
             <div class="exec-col exec-col-running">
-              <div class="exec-col-label"><span class="exec-dot running" />进行中</div>
+              <div class="exec-col-label">
+                <span><span class="exec-dot running" />进行中</span>
+                <em>{{ runningCards.length }}</em>
+              </div>
               <div class="exec-col-cards">
                 <article v-for="task in runningCards" :key="task.id" class="execution-card is-running">
                   <div class="card-scan" />
@@ -107,7 +110,10 @@
             </div>
             <div class="exec-divider" />
             <div class="exec-col exec-col-pending">
-              <div class="exec-col-label"><span class="exec-dot pending" />待执行</div>
+              <div class="exec-col-label">
+                <span><span class="exec-dot pending" />待执行</span>
+                <em class="pending-summary">还剩 {{ pendingTotalCount }} 个步骤待执行...</em>
+              </div>
               <div class="exec-col-cards">
                 <article v-for="task in pendingCards" :key="task.id" class="execution-card is-pending">
                   <div class="card-scan" />
@@ -498,7 +504,9 @@ function mapExecCard(step: StepInstance) {
 }
 
 const runningCards = computed(() => runningSteps.value.filter(isLeafStep).slice(0, 8).map(mapExecCard))
-const pendingCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).slice(0, 8).map(mapExecCard))
+const pendingStepCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).map(mapExecCard))
+const pendingTotalCount = computed(() => pendingStepCards.value.length)
+const pendingCards = computed(() => pendingStepCards.value.slice(0, 4))
 
 function phaseTimeText(phaseSteps: StepInstance[]): string {
   const starts = phaseSteps.map(s => s.start_time).filter(Boolean) as string[]
@@ -2514,9 +2522,6 @@ function fmtTime(ts: string): string {
   place-items: center;
   max-width: clamp(80px, 12vw, 200px);
   color: #f5fbff;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: clamp(15px, 1.25vw, 19px);
-  font-weight: 800;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -2540,6 +2545,7 @@ function fmtTime(ts: string): string {
   text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
 }
 
+.drill-name-tag,
 .system-label {
   font-family: "Microsoft YaHei", sans-serif;
   font-size: clamp(15px, 1.25vw, 19px);
@@ -2694,7 +2700,6 @@ function fmtTime(ts: string): string {
   box-shadow: inset 0 -4px 0 #ffb13d, inset 0 0 24px rgba(255, 177, 61, 0.18), 0 0 20px rgba(255, 154, 47, 0.24);
 }
 .phase-card.is-pending {
-  opacity: 0.88;
   border-color: rgba(112, 145, 176, 0.28);
   background: linear-gradient(180deg, rgba(30, 54, 82, 0.7), rgba(12, 24, 42, 0.58));
   box-shadow: inset 0 -4px 0 rgba(112, 145, 176, 0.42), inset 0 0 18px rgba(112, 145, 176, 0.08);
@@ -2755,7 +2760,7 @@ function fmtTime(ts: string): string {
 
 .is-done .phase-status { color: #2ff0a0; background: rgba(47, 240, 160, 0.13); box-shadow: 0 0 12px rgba(47, 240, 160, 0.18); }
 .is-running .phase-status { color: #ffb13d; background: rgba(255, 177, 61, 0.14); box-shadow: 0 0 14px rgba(255, 154, 47, 0.24); }
-.is-pending .phase-status { color: #8aa6bf; background: rgba(112, 145, 176, 0.12); }
+.is-pending .phase-status { color: #f5fbff; background: rgba(112, 145, 176, 0.14); box-shadow: 0 0 12px rgba(138, 207, 255, 0.16); }
 
 .phase-segments {
   display: grid;
@@ -2790,7 +2795,7 @@ function fmtTime(ts: string): string {
   align-items: center;
   justify-content: space-between;
   gap: clamp(6px, 0.75vw, 12px);
-  color: #d8efff;
+  color: #f5fbff;
   font-family: "Courier New", monospace;
   font-size: clamp(13px, 1.25vw, 20px);
   font-weight: 700;
@@ -2814,7 +2819,7 @@ function fmtTime(ts: string): string {
 
 .is-done .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(47, 240, 160, 0.48); }
 .is-running .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(255, 177, 61, 0.52); }
-.is-pending .phase-stats b { color: #d8e7f3; text-shadow: 0 0 12px rgba(138, 166, 191, 0.32); }
+.is-pending .phase-stats b { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(138, 207, 255, 0.36); }
 
 .phase-stats em {
   margin-left: 8px;
@@ -2838,21 +2843,51 @@ function fmtTime(ts: string): string {
   row-gap: var(--flow-row-gap);
   padding: clamp(18px, 2.4vh, 42px) clamp(32px, 4.2vw, 84px);
   min-height: 0;
-  border: 1px solid rgba(255, 176, 64, 0.42);
+  border: 2px solid rgba(255, 177, 61, 0.78);
   border-radius: clamp(18px, 1.6vw, 28px);
   background:
-    linear-gradient(180deg, rgba(99, 58, 10, 0.18), rgba(48, 31, 17, 0.16)),
-    radial-gradient(circle at 50% 50%, rgba(255, 177, 61, 0.08), transparent 48%);
-  box-shadow: inset 0 0 28px rgba(255, 177, 61, 0.08), 0 0 24px rgba(255, 154, 47, 0.12);
+    linear-gradient(180deg, rgba(99, 58, 10, 0.24), rgba(48, 31, 17, 0.18)),
+    radial-gradient(circle at 50% 50%, rgba(255, 177, 61, 0.12), transparent 48%),
+    linear-gradient(90deg, rgba(255, 177, 61, 0.08), rgba(47, 240, 160, 0.05), rgba(255, 177, 61, 0.08));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 226, 160, 0.3),
+    inset 0 0 34px rgba(255, 177, 61, 0.16),
+    0 0 0 1px rgba(255, 177, 61, 0.12),
+    0 0 28px rgba(255, 154, 47, 0.22),
+    0 0 56px rgba(255, 154, 47, 0.1);
   overflow: hidden;
+}
+
+.flow-board::before,
+.flow-board::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.flow-board::before {
+  inset: 10px;
+  border-radius: calc(clamp(18px, 1.6vw, 28px) - 8px);
+  border: 1px solid rgba(255, 215, 136, 0.38);
+  box-shadow: inset 0 0 18px rgba(255, 177, 61, 0.1);
+}
+
+.flow-board::after {
+  left: clamp(22px, 2.2vw, 40px);
+  right: clamp(22px, 2.2vw, 40px);
+  top: 0;
+  height: 5px;
+  background: linear-gradient(90deg, transparent, #ffb13d 15%, #ffd46a 50%, #ffb13d 85%, transparent);
+  box-shadow: 0 0 16px rgba(255, 177, 61, 0.72), 0 0 28px rgba(255, 154, 47, 0.36);
 }
 
 .flow-board-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 177, 61, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 177, 61, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(255, 177, 61, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 177, 61, 0.06) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
   pointer-events: none;
@@ -2904,13 +2939,15 @@ function fmtTime(ts: string): string {
 }
 
 .flow-node.is-pending {
-  color: #4e779d;
+  color: #f5fbff;
 }
 
 .flow-node.is-pending .node-tag {
   border-color: rgba(78, 119, 157, 0.48);
-  color: #5b83a8;
-  box-shadow: none;
+  color: #f5fbff;
+  background: linear-gradient(180deg, rgba(12, 42, 72, 0.86), rgba(6, 26, 48, 0.7));
+  box-shadow: 0 0 16px rgba(71, 188, 255, 0.14), inset 0 0 18px rgba(103, 232, 249, 0.08);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.42), 0 0 16px rgba(71, 188, 255, 0.34);
 }
 
 .flow-node.is-done .node-tag {
@@ -3070,8 +3107,9 @@ function fmtTime(ts: string): string {
 }
 
 .execution-title span {
-  color: #627f9f;
+  color: #f5fbff;
   font-size: clamp(13px, 1.1em, 18px);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.36), 0 0 14px rgba(41, 243, 255, 0.28);
 }
 
 .signal-bars {
@@ -3111,20 +3149,18 @@ function fmtTime(ts: string): string {
 }
 
 .execution-carousel {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.58fr) auto minmax(0, 2.9fr);
   align-items: stretch;
-  justify-content: center;
-  gap: 0;
+  gap: clamp(10px, 1vw, 16px);
   overflow: hidden;
   min-height: 0;
-  padding: clamp(6px, 0.8vh, 12px) clamp(12px, 1.4vw, 24px) 0;
+  padding: clamp(8px, 1vh, 14px) clamp(18px, 1.8vw, 28px) clamp(8px, 1vh, 14px);
 }
 
 .exec-col {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  max-width: 50%;
   min-width: 0;
   min-height: 0;
 }
@@ -3132,12 +3168,47 @@ function fmtTime(ts: string): string {
 .exec-col-label {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
-  padding-bottom: 6px;
-  color: #8aa2bf;
+  padding: 0 2px 7px;
+  color: #f5fbff;
   font-size: clamp(12px, 1em, 15px);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.exec-col-label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.exec-col-label em {
+  min-width: 24px;
+  padding: 1px 8px;
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  border-radius: 999px;
+  color: #f5fbff;
+  background: rgba(6, 28, 56, 0.72);
+  font-style: normal;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: inset 0 0 10px rgba(30, 172, 219, 0.1);
+}
+
+.exec-col-label .pending-summary {
+  max-width: min(100%, 220px);
+  padding: 2px 10px;
+  border-color: rgba(72, 212, 255, 0.34);
+  color: #f5fbff;
+  background:
+    linear-gradient(90deg, rgba(5, 35, 66, 0.72), rgba(2, 76, 108, 0.46)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.08) 0 1px, transparent 1px 18px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: inset 0 0 14px rgba(30, 172, 219, 0.16), 0 0 10px rgba(28, 221, 255, 0.08);
 }
 
 .exec-dot {
@@ -3159,21 +3230,29 @@ function fmtTime(ts: string): string {
 
 .exec-col-cards {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: clamp(160px, 18vw, 240px);
-  gap: clamp(6px, 0.8vw, 12px);
-  overflow-x: auto;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 0.9vw, 14px);
+  overflow: hidden;
   min-height: 0;
-  padding-bottom: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 219, 255, 0.35) transparent;
+  height: 100%;
+}
+
+.exec-col-running .exec-col-cards {
+  grid-template-columns: 1fr;
+}
+
+.exec-col-pending .exec-col-cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .exec-divider {
   width: 1px;
-  margin: 0 clamp(8px, 1vw, 16px);
-  background: linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.28), transparent);
-  flex-shrink: 0;
+  height: 100%;
+  background:
+    linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.4), transparent),
+    radial-gradient(circle at 50% 50%, rgba(47, 240, 160, 0.34), transparent 48%);
+  opacity: 0.85;
 }
 
 .exec-empty {
@@ -3181,25 +3260,42 @@ function fmtTime(ts: string): string {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 60px;
-  color: #4a6788;
+  min-height: 100%;
+  color: #f5fbff;
   font-size: 14px;
   font-weight: 600;
+  border: 1px dashed rgba(78, 119, 157, 0.28);
+  background: rgba(5, 20, 42, 0.42);
 }
 
 .execution-card {
   position: relative;
   min-width: 0;
-  height: 100%;
   box-sizing: border-box;
-  padding: clamp(10px, 1vw, 16px);
+  display: grid;
+  grid-template-rows: auto auto minmax(16px, auto);
+  align-content: space-between;
+  min-height: clamp(88px, 11vh, 126px);
+  height: 100%;
+  padding: clamp(10px, 0.95vw, 15px);
   border: 1px solid rgba(0, 190, 255, 0.28);
-  border-radius: 3px;
+  border-radius: 6px;
   background:
-    linear-gradient(180deg, rgba(2, 12, 29, 0.9), rgba(4, 24, 39, 0.78)),
-    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.035) 0 1px, transparent 1px 30px);
-  box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08);
+    linear-gradient(135deg, rgba(9, 30, 58, 0.96), rgba(3, 13, 31, 0.88)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.04) 0 1px, transparent 1px 28px);
+  box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
   overflow: hidden;
+}
+
+.execution-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(28, 221, 255, 0.82), transparent);
+  opacity: 0.7;
 }
 
 .card-scan {
@@ -3220,12 +3316,14 @@ function fmtTime(ts: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .task-card-head strong {
-  color: #e8f3ff;
-  font-size: clamp(15px, 1.3em, 22px);
+  color: #f5fbff;
+  font-size: clamp(15px, 1.18vw, 20px);
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3256,7 +3354,7 @@ function fmtTime(ts: string): string {
 
 .execution-card p {
   margin: 14px 0 0;
-  color: #8aa2bf;
+  color: #f5fbff;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3281,12 +3379,11 @@ function fmtTime(ts: string): string {
 
 .execution-card.is-pending {
   border-color: rgba(78, 119, 157, 0.4);
-  opacity: 0.82;
 }
 
 .execution-card.is-pending .task-card-head span {
   border-color: rgba(78, 119, 157, 0.5);
-  color: #6b8db0;
+  color: #f5fbff;
   background: rgba(78, 119, 157, 0.08);
 }
 
@@ -3346,7 +3443,7 @@ function fmtTime(ts: string): string {
   .command-header { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding-block: 6px; }
   .header-meta { justify-content: flex-end; min-width: 0; }
   .progress-console { flex: 0 0 auto; min-height: 32px; padding-inline: 8px; gap: 6px; }
-  .drill-name-tag { max-width: 90px; font-size: 13px; }
+  .drill-name-tag { max-width: clamp(96px, 13vw, 150px); }
   .phase-card-strip { gap: 6px; padding: 5px; }
   .phase-card {
     padding: 8px 9px 7px;
@@ -3382,6 +3479,17 @@ function fmtTime(ts: string): string {
     font-size: 0.78em;
   }
   .flow-board { padding-inline: 24px; }
+  .execution-carousel {
+    grid-template-columns: minmax(170px, 0.62fr) auto minmax(0, 2.45fr);
+    padding-inline: 18px;
+    gap: 10px;
+  }
+  .exec-col-pending .exec-col-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .execution-card {
+    min-height: clamp(84px, 10.6vh, 116px);
+  }
 }
 
 @media (max-width: 1060px) {
@@ -3404,11 +3512,15 @@ function fmtTime(ts: string): string {
     margin-left: 3px;
     font-size: 0.72em;
   }
-  .exec-col-cards {
-    grid-auto-columns: clamp(130px, 22vw, 180px);
-    gap: 5px;
+  .execution-carousel {
+    grid-template-columns: minmax(160px, 0.72fr) auto minmax(0, 2fr);
+    gap: 8px;
+    padding-inline: 12px;
   }
-  .exec-divider { margin-inline: 5px; }
+  .exec-col-cards { gap: 6px; }
+  .exec-col-pending .exec-col-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .execution-card { padding: 8px; }
   .task-card-head strong { font-size: 14px; }
   .task-card-head span { padding: 2px 6px; font-size: 11px; }

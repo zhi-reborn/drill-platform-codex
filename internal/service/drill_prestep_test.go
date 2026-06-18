@@ -137,6 +137,68 @@ func TestComputeInstancePreStepIDs(t *testing.T) {
 	}
 }
 
+func TestComputeInstancePreStepIDsSkipsUnchangedRows(t *testing.T) {
+	db := setupTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	steps := buildTestSteps()
+	expected := expectedPreStepIDs()
+	for i := range steps {
+		steps[i].PreStepIDs = preIDsToJSON(expected[steps[i].ID])
+		if err := db.Create(&steps[i]).Error; err != nil {
+			t.Fatalf("插入步骤 %s (id=%d) 失败: %v", steps[i].Name, steps[i].ID, err)
+		}
+	}
+
+	updateCount := 0
+	if err := db.Callback().Update().Before("gorm:update").Register("count_prestep_updates", func(tx *gorm.DB) {
+		updateCount++
+	}); err != nil {
+		t.Fatalf("注册 update callback 失败: %v", err)
+	}
+
+	svc := &DrillService{}
+	svc.computeInstancePreStepIDs(steps, nil)
+
+	if updateCount != 0 {
+		t.Fatalf("pre_step_ids 未变化时不应写库，实际执行了 %d 次 UPDATE", updateCount)
+	}
+}
+
+func TestReconcilePreStepIDsAllowsChildToInheritParentPreSteps(t *testing.T) {
+	db := setupTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	steps := []entity.StepInstance{
+		{ID: 10, DrillInstanceID: 8, StepTemplateID: 10, Name: "阶段1", Seq: 1, StepType: "serial", AssigneeIDs: "[]", PreStepIDs: "[]"},
+		{ID: 20, DrillInstanceID: 8, StepTemplateID: 20, Name: "阶段2", Seq: 2, StepType: "serial", AssigneeIDs: "[]", PreStepIDs: "[10]"},
+		{ID: 30, DrillInstanceID: 8, ParentStepID: ptrUint64(20), StepTemplateID: 30, Name: "阶段2子步骤", Seq: 3, StepType: "serial", AssigneeIDs: "[]", PreStepIDs: "[10]"},
+	}
+	for i := range steps {
+		if err := db.Create(&steps[i]).Error; err != nil {
+			t.Fatalf("插入步骤 %s (id=%d) 失败: %v", steps[i].Name, steps[i].ID, err)
+		}
+	}
+
+	queryCount := 0
+	if err := db.Callback().Query().Before("gorm:query").Register("count_reconcile_queries", func(tx *gorm.DB) {
+		queryCount++
+	}); err != nil {
+		t.Fatalf("注册 query callback 失败: %v", err)
+	}
+
+	svc := &DrillService{stepRepo: repository.NewStepRepo()}
+	svc.reconcilePreStepIDs(8, steps)
+
+	if queryCount != 0 {
+		t.Fatalf("合法继承父级前序时不应重算并重新查询，实际执行了 %d 次查询", queryCount)
+	}
+}
+
 func TestComputeInstancePreStepIDs_Instance91(t *testing.T) {
 	db := setupTestDB(t)
 	origDB := repository.DB

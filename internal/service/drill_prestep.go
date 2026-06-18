@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sort"
+	"strings"
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/repository"
@@ -45,6 +46,11 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 		all[p.id] = p
 	}
 
+	currentPreStepIDs := make(map[uint64]string, len(instanceSteps))
+	for _, step := range instanceSteps {
+		currentPreStepIDs[step.ID] = step.PreStepIDs
+	}
+
 	for parentID := range childrenOf {
 		ids := childrenOf[parentID]
 		sort.Slice(ids, func(i, j int) bool { return all[ids[i]].seq < all[ids[j]].seq })
@@ -56,7 +62,12 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 			ids = []uint64{}
 		}
 		b, _ := json.Marshal(ids)
-		db.Model(&entity.StepInstance{}).Where("id = ?", id).Update("pre_step_ids", string(b))
+		next := string(b)
+		if preStepIDsEqual(currentPreStepIDs[id], ids) {
+			return
+		}
+		db.Model(&entity.StepInstance{}).Where("id = ?", id).Update("pre_step_ids", next)
+		currentPreStepIDs[id] = next
 	}
 
 	computed := make(map[uint64][]uint64)
@@ -139,6 +150,28 @@ func (s *DrillService) computeInstancePreStepIDsTx(instanceSteps []entity.StepIn
 			writePre(id, nil)
 		}
 	}
+}
+
+func preStepIDsEqual(current string, expected []uint64) bool {
+	current = strings.TrimSpace(current)
+	if current == "" || current == "null" {
+		return false
+	}
+
+	var currentIDs []uint64
+	if err := json.Unmarshal([]byte(current), &currentIDs); err != nil {
+		return false
+	}
+
+	if len(currentIDs) != len(expected) {
+		return false
+	}
+	for i := range expected {
+		if currentIDs[i] != expected[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {

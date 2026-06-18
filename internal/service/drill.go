@@ -521,8 +521,7 @@ func (s *DrillService) reconcileParentStepsFromDB(drillID uint64, steps []entity
 	}
 }
 
-// reconcilePreStepIDs 检测子步骤的 pre_step_ids 是否包含非同级步骤
-// 子步骤只需要等父步骤激活即可，pre_step_ids 不应包含父步骤范围外的步骤
+// reconcilePreStepIDs 检测子步骤的 pre_step_ids 是否符合当前层级执行规则
 // 如果发现异常，重新计算所有 pre_step_ids
 func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepInstance) {
 	// 构建兄弟关系：parentID -> set of childIDs
@@ -562,9 +561,11 @@ func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepIn
 						break
 					}
 				} else if !siblings[preID] {
-					// 非并行父级下，pre_step_ids 中的步骤应该是同级步骤。
-					needsRecompute = true
-					break
+					// 子步骤可以继承父节点自身的前序；其他跨层前序需要重算。
+					if parentID == 0 || !preStepIDsContain(parent.PreStepIDs, preID) {
+						needsRecompute = true
+						break
+					}
 				}
 			}
 		}
@@ -589,6 +590,19 @@ func (s *DrillService) reconcilePreStepIDs(drillID uint64, steps []entity.StepIn
 	}
 
 	InvalidateStepCache(s.redis, drillID)
+}
+
+func preStepIDsContain(raw string, id uint64) bool {
+	var ids []uint64
+	if json.Unmarshal([]byte(raw), &ids) != nil {
+		return false
+	}
+	for _, currentID := range ids {
+		if currentID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *DrillService) InvalidateStepCache(drillID uint64) {
