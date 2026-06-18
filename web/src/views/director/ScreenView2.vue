@@ -60,7 +60,7 @@
           </article>
         </section>
 
-        <section class="flow-board">
+        <section class="flow-board" :class="{ 'all-done': allPhasesDone }">
           <div class="flow-board-grid" />
           <div class="flow-row flow-row-top">
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
@@ -494,6 +494,12 @@ const flowNodes = computed(() => {
 
 const topFlowNodes = computed(() => flowNodes.value.slice(0, Math.ceil(flowNodes.value.length / 2)))
 const bottomFlowNodes = computed(() => flowNodes.value.slice(Math.ceil(flowNodes.value.length / 2)).reverse())
+
+// 所有阶段是否全部完成
+const allPhasesDone = computed(() => {
+  if (!treeData.value.length) return false
+  return treeData.value.every(p => getPhaseStatus(p) === 'done')
+})
 
 // 过滤阶段节点（phase === phase_step）和环节节点（有子步骤的父步骤）
 function isLeafStep(s: StepInstance): boolean {
@@ -2938,6 +2944,37 @@ function fmtTime(ts: string): string {
   height: 5px;
   background: linear-gradient(90deg, transparent, #ffb13d 15%, #ffd46a 50%, #ffb13d 85%, transparent);
   box-shadow: 0 0 16px rgba(255, 177, 61, 0.72), 0 0 28px rgba(255, 154, 47, 0.36);
+}
+
+/* 全部完成时外框变绿 */
+.flow-board.all-done {
+  border-color: rgba(74, 222, 128, 0.82);
+  background:
+    linear-gradient(180deg, rgba(20, 83, 45, 0.28), rgba(12, 50, 30, 0.18)),
+    radial-gradient(circle at 50% 50%, rgba(74, 222, 128, 0.14), transparent 48%),
+    linear-gradient(90deg, rgba(74, 222, 128, 0.1), rgba(34, 197, 94, 0.06), rgba(74, 222, 128, 0.1));
+  box-shadow:
+    inset 0 0 0 1px rgba(187, 247, 208, 0.34),
+    inset 0 0 34px rgba(74, 222, 128, 0.18),
+    0 0 0 1px rgba(74, 222, 128, 0.16),
+    0 0 28px rgba(74, 222, 128, 0.26),
+    0 0 56px rgba(34, 197, 94, 0.14);
+}
+
+.flow-board.all-done::before {
+  border-color: rgba(187, 247, 208, 0.42);
+  box-shadow: inset 0 0 18px rgba(74, 222, 128, 0.12);
+}
+
+.flow-board.all-done::after {
+  background: linear-gradient(90deg, transparent, #4ade80 15%, #86efac 50%, #4ade80 85%, transparent);
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.78), 0 0 28px rgba(34, 197, 94, 0.4);
+}
+
+.flow-board.all-done .flow-board-grid {
+  background-image:
+    linear-gradient(rgba(74, 222, 128, 0.085) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 222, 128, 0.07) 1px, transparent 1px);
 }
 
 .flow-board-grid {
