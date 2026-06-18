@@ -313,7 +313,7 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	recovered, err := s.recoverRunningDrillIfNeeded(id)
 	if err != nil {
-		return nil, err
+		log.Printf("[GetSteps] recover drill %d failed (continue with db steps): %v", id, err)
 	}
 	if recovered {
 		InvalidateStepCache(s.redis, id)

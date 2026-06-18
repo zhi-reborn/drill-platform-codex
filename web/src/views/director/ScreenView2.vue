@@ -21,16 +21,14 @@
       <header class="command-header">
         <div class="header-scanline" />
         <div class="header-title-shell">
-          <span class="header-kicker">INCIDENT DRILL COMMAND</span>
           <h1 class="command-title">应急处置指挥中心</h1>
         </div>
         <div class="header-meta">
           <div class="progress-console">
+            <span class="drill-name-tag" :title="instance?.name">{{ instance?.name || '演练中' }}</span>
+            <span class="console-sep" />
             <span class="system-label">演练进度</span>
-            <div class="header-progress-track">
-              <div class="header-progress-fill" :style="{ width: (instance?.progress_pct ?? 0) + '%' }" />
-            </div>
-            <span class="system-time">{{ instance?.progress_pct ?? 0 }}%</span>
+            <span class="system-time">{{ liveProgressPct }}%</span>
           </div>
           <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
             <el-icon><FullScreen /></el-icon>
@@ -63,7 +61,6 @@
         </section>
 
         <section class="flow-board">
-          <div class="flow-hud-label">PROCESS ROUTE / LIVE ORCHESTRATION</div>
           <div class="flow-board-grid" />
           <div class="flow-row flow-row-top">
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
@@ -93,17 +90,37 @@
             </div>
           </div>
           <div class="execution-carousel">
-            <article v-for="task in executionCards" :key="task.id" class="execution-card" :class="'is-' + task.status">
-              <div class="card-scan" />
-              <div class="task-card-head">
-                <strong>{{ task.name }}</strong>
-                <span>{{ task.statusText }}</span>
+            <div class="exec-col exec-col-running">
+              <div class="exec-col-label"><span class="exec-dot running" />进行中</div>
+              <div class="exec-col-cards">
+                <article v-for="task in runningCards" :key="task.id" class="execution-card is-running">
+                  <div class="card-scan" />
+                  <div class="task-card-head">
+                    <strong>{{ task.name }}</strong>
+                    <span>{{ task.statusText }}</span>
+                  </div>
+                  <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
+                  <p>{{ task.phaseText }}</p>
+                </article>
+                <div v-if="!runningCards.length" class="exec-empty">暂无进行中步骤</div>
               </div>
-              <div class="task-progress">
-                <div :style="{ width: task.progress + '%' }" />
+            </div>
+            <div class="exec-divider" />
+            <div class="exec-col exec-col-pending">
+              <div class="exec-col-label"><span class="exec-dot pending" />待执行</div>
+              <div class="exec-col-cards">
+                <article v-for="task in pendingCards" :key="task.id" class="execution-card is-pending">
+                  <div class="card-scan" />
+                  <div class="task-card-head">
+                    <strong>{{ task.name }}</strong>
+                    <span>{{ task.statusText }}</span>
+                  </div>
+                  <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
+                  <p>{{ task.phaseText }}</p>
+                </article>
+                <div v-if="!pendingCards.length" class="exec-empty">暂无待执行步骤</div>
               </div>
-              <p>{{ task.phaseText }}</p>
-            </article>
+            </div>
           </div>
         </section>
       </main>
@@ -189,6 +206,13 @@ let pollingTimer: ReturnType<typeof setInterval> | null = null
 const statusLabel = computed(() => {
   if (!instance.value) return '加载中'
   return DRILL_STATUS_LABELS[instance.value.status as DrillStatus] || instance.value.status
+})
+
+// 实时进度：优先从 steps 计算，WebSocket 增量更新时自动同步
+const liveProgressPct = computed(() => {
+  if (!steps.value.length) return instance.value?.progress_pct ?? 0
+  const done = steps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
+  return Math.round((done / steps.value.length) * 100)
 })
 
 const currentSystemTime = computed(() => {
@@ -434,9 +458,13 @@ const phaseCards = computed(() => {
 })
 
 const flowNodes = computed(() => {
-  const source = currentPhaseData.value?.phaseSteps.length
-    ? currentPhaseData.value.phaseSteps
-    : treeData.value.flatMap(p => p.phaseSteps)
+  let source: TreeNodePhaseStep[] = []
+  if (currentPhaseData.value?.phaseSteps.length) {
+    const phase = currentPhaseData.value
+    source = phase.phaseSteps.filter(ps => ps.name !== phase.name)
+  } else {
+    source = treeData.value.flatMap(p => p.phaseSteps.filter(ps => ps.name !== p.name))
+  }
   return source.slice(0, 12).map((ps, index) => ({
     id: `${ps.name}-${index}`,
     name: ps.name,
@@ -448,22 +476,29 @@ const flowNodes = computed(() => {
 const topFlowNodes = computed(() => flowNodes.value.slice(0, Math.ceil(flowNodes.value.length / 2)))
 const bottomFlowNodes = computed(() => flowNodes.value.slice(Math.ceil(flowNodes.value.length / 2)).reverse())
 
-const executionCards = computed(() => {
-  const active = runningSteps.value.length ? runningSteps.value : steps.value.filter(s => s.status === 'pending').slice(0, 8)
-  return active.slice(0, 8).map(step => {
-    const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' ? 100 : 0
-    return {
-      id: step.id,
-      name: step.name,
-      status: step.status,
-      statusText: step.status === 'running' ? '进行中' : step.status === 'pending' ? '待执行' : '已完成',
-      progress,
-      timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
-      phaseText: `${step.phase || '当前阶段'} — ${step.phase_step || step.executor_team || '执行任务'}`,
-      raw: step,
-    }
-  })
-})
+// 过滤阶段节点（phase === phase_step）和环节节点（有子步骤的父步骤）
+function isLeafStep(s: StepInstance): boolean {
+  if (s.phase && s.phase_step && s.phase === s.phase_step) return false
+  if (isParentStep(s)) return false
+  return true
+}
+
+function mapExecCard(step: StepInstance) {
+  const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' ? 100 : 0
+  return {
+    id: step.id,
+    name: step.name,
+    status: step.status,
+    statusText: step.status === 'running' ? '进行中' : step.status === 'pending' ? '待执行' : '已完成',
+    progress,
+    timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
+    phaseText: `${step.phase || '当前阶段'} — ${step.phase_step || step.executor_team || '执行任务'}`,
+    raw: step,
+  }
+}
+
+const runningCards = computed(() => runningSteps.value.filter(isLeafStep).slice(0, 8).map(mapExecCard))
+const pendingCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).slice(0, 8).map(mapExecCard))
 
 function phaseTimeText(phaseSteps: StepInstance[]): string {
   const starts = phaseSteps.map(s => s.start_time).filter(Boolean) as string[]
@@ -1264,7 +1299,11 @@ function patchLocalStep(payload: any) {
   if (!newStatus) return
 
   const idx = steps.value.findIndex((s: StepInstance) => s.id === stepId)
-  if (idx === -1) return
+  if (idx === -1) {
+    // 本地没有该步骤，触发全量刷新
+    scheduleRefresh('steps')
+    return
+  }
 
   const step = { ...steps.value[idx] }
   step.status = newStatus
@@ -2429,19 +2468,9 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
+  align-items: center;
   min-width: 0;
-}
-
-.header-kicker {
-  color: rgba(103, 232, 249, 0.72);
-  font-family: "Courier New", monospace;
-  font-size: clamp(10px, 0.7vw, 13px);
-  font-weight: 700;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
+  min-height: 100%;
 }
 
 .command-title {
@@ -2449,6 +2478,7 @@ function fmtTime(ts: string): string {
   color: #ffffff;
   font-size: clamp(25px, 2.6em, 42px);
   font-weight: 900;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-shadow: 0 0 10px rgba(21, 183, 255, 0.82), 0 0 24px rgba(47, 240, 160, 0.2);
   white-space: nowrap;
@@ -2468,44 +2498,59 @@ function fmtTime(ts: string): string {
 }
 
 .progress-console {
-  display: grid;
-  grid-template-columns: auto minmax(130px, 18vw) auto;
+  display: flex;
   align-items: center;
-  gap: clamp(10px, 1vw, 18px);
-  padding: 9px 12px;
+  justify-content: center;
+  gap: clamp(8px, 0.8vw, 14px);
+  min-height: clamp(38px, 3.8vw, 54px);
+  padding: 0 12px;
   border: 1px solid rgba(103, 232, 249, 0.26);
   background: rgba(3, 18, 38, 0.48);
   box-shadow: inset 0 0 18px rgba(0, 217, 255, 0.08);
 }
 
-.header-progress-track {
-  position: relative;
-  height: 9px;
+.drill-name-tag {
+  display: inline-grid;
+  place-items: center;
+  max-width: clamp(80px, 12vw, 200px);
+  color: #f5fbff;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: clamp(15px, 1.25vw, 19px);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   overflow: hidden;
-  border: 1px solid rgba(103, 232, 249, 0.28);
-  background: linear-gradient(90deg, rgba(34, 54, 74, 0.75), rgba(8, 25, 45, 0.92));
+  text-overflow: ellipsis;
+  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
 }
 
-.header-progress-track::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 13px, rgba(255, 255, 255, 0.18) 13px 14px);
-  opacity: 0.42;
+.console-sep {
+  width: 1px;
+  height: clamp(16px, 1.6vw, 24px);
+  background: linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.5), transparent);
+  flex-shrink: 0;
 }
 
-.header-progress-fill {
-  position: relative;
-  height: 100%;
-  background: linear-gradient(90deg, #0fa4d8, #29f3ff 55%, #2ff0a0);
-  box-shadow: 0 0 12px rgba(41, 243, 255, 0.48);
-  transition: width 0.5s ease;
+.system-label,
+.system-time {
+  display: inline-grid;
+  place-items: center;
+  color: #f5fbff;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
 }
 
 .system-label {
-  color: rgba(138, 169, 205, 0.62);
   font-family: "Microsoft YaHei", sans-serif;
-  font-weight: 500;
+  font-size: clamp(15px, 1.25vw, 19px);
+  font-weight: 800;
+}
+
+.system-time {
+  font-size: clamp(17px, 1.5vw, 23px);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transform: translateY(0.06em);
 }
 
 .btn-fullscreen {
@@ -2544,7 +2589,7 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: clamp(118px, 15vh, 170px) minmax(260px, 1fr) clamp(150px, 20vh, 190px);
+  grid-template-rows: clamp(108px, 14vh, 150px) minmax(260px, 1fr) clamp(150px, 20vh, 190px);
   gap: clamp(8px, 1.1vh, 16px);
   padding: clamp(10px, 1.2vh, 18px) clamp(18px, 2vw, 36px) clamp(8px, 1vh, 16px);
   overflow: hidden;
@@ -2571,8 +2616,8 @@ function fmtTime(ts: string): string {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  padding: 4px;
+  gap: clamp(6px, 0.75vw, 12px);
+  padding: clamp(5px, 0.65vw, 10px);
   border: 1px solid rgba(48, 188, 235, 0.28);
   border-radius: clamp(16px, 1.5vw, 26px);
   background: linear-gradient(180deg, rgba(5, 25, 54, 0.72), rgba(2, 12, 30, 0.5));
@@ -2597,9 +2642,9 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   min-width: 0;
-  padding: clamp(12px, 1.25vw, 22px) clamp(18px, 1.6vw, 30px);
+  padding: clamp(9px, 0.95vw, 16px) clamp(10px, 1.15vw, 20px);
   border: 1px solid rgba(72, 124, 177, 0.28);
-  border-left: 0;
+  border-radius: clamp(10px, 1vw, 16px);
   background: linear-gradient(180deg, rgba(6, 30, 64, 0.82), rgba(4, 14, 31, 0.56));
   box-shadow: inset 0 -3px 0 rgba(65, 120, 170, 0.22);
   overflow: hidden;
@@ -2623,45 +2668,44 @@ function fmtTime(ts: string): string {
 
 .phase-card:first-child {
   border-left: 1px solid rgba(72, 124, 177, 0.28);
-  border-radius: clamp(12px, 1.1vw, 20px) 0 0 clamp(12px, 1.1vw, 20px);
-}
-
-.phase-card:last-child {
-  border-radius: 0 clamp(12px, 1.1vw, 20px) clamp(12px, 1.1vw, 20px) 0;
 }
 
 .phase-card::after {
   content: "";
   position: absolute;
-  top: 50%;
-  right: -14px;
-  width: 28px;
-  height: 28px;
-  border-top: 1px solid rgba(48, 188, 235, 0.32);
-  border-right: 1px solid rgba(48, 188, 235, 0.32);
-  background: inherit;
-  transform: translateY(-50%) rotate(45deg);
-  box-shadow: 5px -5px 12px rgba(0, 200, 255, 0.05);
+  top: 12px;
+  right: -6px;
+  bottom: 12px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(48, 188, 235, 0.34), transparent);
   z-index: 2;
 }
 
 .phase-card:last-child::after { display: none; }
 .phase-card.is-done {
-  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 22px rgba(47, 240, 160, 0.1);
+  border-color: rgba(47, 240, 160, 0.42);
+  background: linear-gradient(180deg, rgba(12, 74, 58, 0.86), rgba(5, 30, 32, 0.62));
+  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 24px rgba(47, 240, 160, 0.14);
 }
 .phase-card.is-running {
   z-index: 3;
-  background: linear-gradient(180deg, rgba(14, 69, 79, 0.92), rgba(6, 30, 45, 0.84));
-  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 20px rgba(47, 240, 160, 0.12), 0 0 18px rgba(41, 243, 255, 0.24);
+  border-color: rgba(255, 176, 64, 0.62);
+  background: linear-gradient(180deg, rgba(99, 58, 10, 0.92), rgba(48, 31, 17, 0.72));
+  box-shadow: inset 0 -4px 0 #ffb13d, inset 0 0 24px rgba(255, 177, 61, 0.18), 0 0 20px rgba(255, 154, 47, 0.24);
+}
+.phase-card.is-pending {
+  opacity: 0.88;
+  border-color: rgba(112, 145, 176, 0.28);
+  background: linear-gradient(180deg, rgba(30, 54, 82, 0.7), rgba(12, 24, 42, 0.58));
+  box-shadow: inset 0 -4px 0 rgba(112, 145, 176, 0.42), inset 0 0 18px rgba(112, 145, 176, 0.08);
 }
 
 .phase-card.is-running .phase-accent {
   animation: accent-flow 2.2s ease-in-out infinite;
 }
-.phase-card.is-pending { opacity: 0.74; }
 .phase-card.active {
   transform: translateY(-2px);
-  border-color: #ff9a2f;
+  border-color: #ffb13d;
 }
 
 .phase-accent {
@@ -2670,73 +2714,96 @@ function fmtTime(ts: string): string {
   right: clamp(12px, 1vw, 18px);
   bottom: 0;
   height: 3px;
-  background: linear-gradient(90deg, transparent, #05e2ff, transparent);
+  background: linear-gradient(90deg, transparent, #7d9fbd, transparent);
   opacity: 0.42;
 }
+
+.is-done .phase-accent { background: linear-gradient(90deg, transparent, #2ff0a0, transparent); opacity: 0.72; }
+.is-running .phase-accent { background: linear-gradient(90deg, transparent, #ffb13d, transparent); opacity: 0.86; }
+.is-pending .phase-accent { background: linear-gradient(90deg, transparent, #7d9fbd, transparent); opacity: 0.34; }
 
 .phase-head {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: clamp(6px, 0.7vw, 10px);
   align-items: center;
+  min-width: 0;
 }
 
 .phase-head h2 {
+  min-width: 0;
   margin: 0;
-  font-size: clamp(17px, 1.7em, 26px);
   color: #f5fbff;
+  font-size: clamp(15px, 1.45vw, 22px);
   font-weight: 800;
+  line-height: 1.15;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .phase-status {
   flex: 0 0 auto;
-  padding: 5px 13px;
+  padding: 4px clamp(7px, 0.8vw, 11px);
   border: 1px solid currentColor;
   color: #2ff0a0;
   background: rgba(47, 240, 160, 0.12);
-  font-size: 16px;
+  font-size: clamp(12px, 1.05vw, 15px);
   font-weight: 700;
+  line-height: 1;
 }
 
-.is-running .phase-status { color: #2ff0a0; background: rgba(47, 240, 160, 0.12); box-shadow: 0 0 12px rgba(47, 240, 160, 0.18); }
-.is-pending .phase-status { color: #6990b6; background: rgba(105, 144, 182, 0.1); }
+.is-done .phase-status { color: #2ff0a0; background: rgba(47, 240, 160, 0.13); box-shadow: 0 0 12px rgba(47, 240, 160, 0.18); }
+.is-running .phase-status { color: #ffb13d; background: rgba(255, 177, 61, 0.14); box-shadow: 0 0 14px rgba(255, 154, 47, 0.24); }
+.is-pending .phase-status { color: #8aa6bf; background: rgba(112, 145, 176, 0.12); }
 
 .phase-segments {
   display: grid;
   grid-template-columns: repeat(20, 1fr);
-  gap: 3px;
-  margin: clamp(10px, 1.1vh, 18px) 0 clamp(8px, 0.8vh, 14px);
+  gap: 2px;
+  margin: clamp(8px, 0.9vh, 14px) 0 clamp(6px, 0.7vh, 11px);
 }
 
 .phase-segments span {
-  height: clamp(7px, 1vh, 12px);
+  height: clamp(5px, 0.75vh, 9px);
   background: rgba(83, 120, 158, 0.34);
   box-shadow: inset 0 0 6px rgba(8, 30, 62, 0.55);
 }
 
 .phase-segments span.filled {
-  background: linear-gradient(180deg, #17eaff, #0794c5);
-  box-shadow: 0 0 8px rgba(0, 232, 255, 0.34);
+  background: linear-gradient(180deg, #8aa6bf, #506d88);
+  box-shadow: 0 0 8px rgba(138, 166, 191, 0.24);
+}
+
+.is-done .phase-segments span.filled {
+  background: linear-gradient(180deg, #45ffc0, #0bbd78);
+  box-shadow: 0 0 9px rgba(47, 240, 160, 0.36);
+}
+
+.is-running .phase-segments span.filled {
+  background: linear-gradient(180deg, #ffd46a, #ff9a2f);
+  box-shadow: 0 0 10px rgba(255, 177, 61, 0.42);
 }
 
 .phase-stats {
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  gap: clamp(10px, 1vw, 18px);
+  justify-content: space-between;
+  gap: clamp(6px, 0.75vw, 12px);
   color: #d8efff;
   font-family: "Courier New", monospace;
-  font-size: clamp(16px, 1.6em, 26px);
+  font-size: clamp(13px, 1.25vw, 20px);
   font-weight: 700;
   text-shadow: 0 0 10px rgba(28, 222, 255, 0.34);
 }
 
 .phase-stats span {
-  padding: 3px 8px;
-  border-radius: 9px;
+  min-width: 0;
+  padding: 2px clamp(5px, 0.55vw, 8px);
+  border-radius: 8px;
   background: linear-gradient(180deg, rgba(8, 214, 255, 0.1), rgba(5, 45, 90, 0.14));
   box-shadow: inset 0 0 12px rgba(0, 206, 255, 0.1), 0 0 14px rgba(0, 216, 255, 0.06);
+  white-space: nowrap;
 }
 
 .phase-stats b {
@@ -2745,14 +2812,18 @@ function fmtTime(ts: string): string {
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.64), 0 0 18px rgba(16, 224, 255, 0.52);
 }
 
+.is-done .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(47, 240, 160, 0.48); }
+.is-running .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(255, 177, 61, 0.52); }
+.is-pending .phase-stats b { color: #d8e7f3; text-shadow: 0 0 12px rgba(138, 166, 191, 0.32); }
+
 .phase-stats em {
   margin-left: 8px;
-  color: #9eeeff;
+  color: #ffffff;
   font-style: normal;
   font-family: "Microsoft YaHei", sans-serif;
   font-size: 0.88em;
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(0, 226, 255, 0.42);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.64), 0 0 18px rgba(16, 224, 255, 0.52);
 }
 
 .flow-board {
@@ -2767,33 +2838,21 @@ function fmtTime(ts: string): string {
   row-gap: var(--flow-row-gap);
   padding: clamp(18px, 2.4vh, 42px) clamp(32px, 4.2vw, 84px);
   min-height: 0;
-  border: 1px solid rgba(57, 220, 255, 0.34);
+  border: 1px solid rgba(255, 176, 64, 0.42);
   border-radius: clamp(18px, 1.6vw, 28px);
   background:
-    linear-gradient(180deg, rgba(7, 32, 62, 0.42), rgba(4, 18, 38, 0.28)),
-    radial-gradient(circle at 50% 50%, rgba(47, 240, 160, 0.08), transparent 46%);
-  box-shadow: inset 0 0 28px rgba(0, 195, 255, 0.08), 0 0 24px rgba(0, 184, 255, 0.08);
+    linear-gradient(180deg, rgba(99, 58, 10, 0.18), rgba(48, 31, 17, 0.16)),
+    radial-gradient(circle at 50% 50%, rgba(255, 177, 61, 0.08), transparent 48%);
+  box-shadow: inset 0 0 28px rgba(255, 177, 61, 0.08), 0 0 24px rgba(255, 154, 47, 0.12);
   overflow: hidden;
-}
-
-.flow-hud-label {
-  position: absolute;
-  left: clamp(18px, 1.8vw, 34px);
-  top: clamp(10px, 1vh, 16px);
-  z-index: 2;
-  color: rgba(103, 232, 249, 0.62);
-  font-family: "Courier New", monospace;
-  font-size: clamp(10px, 0.7vw, 12px);
-  font-weight: 700;
-  letter-spacing: 0.18em;
 }
 
 .flow-board-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(103, 232, 249, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(103, 232, 249, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(255, 177, 61, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 177, 61, 0.035) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
   pointer-events: none;
@@ -2854,16 +2913,44 @@ function fmtTime(ts: string): string {
   box-shadow: none;
 }
 
+.flow-node.is-done .node-tag {
+  border-color: rgba(47, 240, 160, 0.72);
+  color: #a8ffd9;
+  background: linear-gradient(180deg, rgba(12, 74, 58, 0.88), rgba(5, 30, 32, 0.68));
+  box-shadow: 0 0 18px rgba(47, 240, 160, 0.22), inset 0 0 20px rgba(47, 240, 160, 0.12), inset 0 -4px 0 #2ff0a0;
+  text-shadow: 0 0 10px rgba(47, 240, 160, 0.5);
+}
+
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow {
+  background: linear-gradient(90deg, #2ff0a0, #1bc98a);
+  box-shadow: 0 0 10px rgba(47, 240, 160, 0.5);
+}
+
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.right::after { border-left-color: #1bc98a; }
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.left::after { border-right-color: #1bc98a; }
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.turn::after { border-top-color: #1bc98a; }
+
 .flow-node.is-running .node-tag {
-  border-color: #2ff0a0;
-  color: #b8ffe6;
-  box-shadow: 0 0 18px rgba(47, 240, 160, 0.28), inset 0 0 20px rgba(47, 240, 160, 0.1);
+  border-color: rgba(255, 177, 61, 0.92);
+  color: #ffe1a3;
+  background: linear-gradient(180deg, rgba(99, 58, 10, 0.92), rgba(48, 31, 17, 0.72));
+  box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d;
+  text-shadow: 0 0 10px rgba(255, 177, 61, 0.55);
   animation: node-pulse 2s ease-in-out infinite;
 }
 
+.flow-node-wrap:has(.flow-node.is-running) .flow-arrow {
+  background: linear-gradient(90deg, #ffd46a, #ff9a2f);
+  box-shadow: 0 0 12px rgba(255, 177, 61, 0.62);
+}
+
+.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.right::after { border-left-color: #ff9a2f; }
+.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.left::after { border-right-color: #ff9a2f; }
+.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.turn::after { border-top-color: #ff9a2f; }
+
 @keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 18px rgba(47, 240, 160, 0.28), inset 0 0 20px rgba(47, 240, 160, 0.1); }
-  50% { box-shadow: 0 0 28px rgba(47, 240, 160, 0.42), inset 0 0 24px rgba(47, 240, 160, 0.18); }
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d; }
+  50% { box-shadow: 0 0 30px rgba(255, 154, 47, 0.42), inset 0 0 28px rgba(255, 177, 61, 0.24), inset 0 -4px 0 #ffb13d; }
 }
 
 .flow-arrow {
@@ -3024,15 +3111,80 @@ function fmtTime(ts: string): string {
 }
 
 .execution-carousel {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+  min-height: 0;
+  padding: clamp(6px, 0.8vh, 12px) clamp(12px, 1.4vw, 24px) 0;
+}
+
+.exec-col {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  max-width: 50%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.exec-col-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  color: #8aa2bf;
+  font-size: clamp(12px, 1em, 15px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.exec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.exec-dot.running {
+  background: #ffb13d;
+  box-shadow: 0 0 8px rgba(255, 177, 61, 0.7);
+}
+
+.exec-dot.pending {
+  background: #4e779d;
+  box-shadow: 0 0 6px rgba(78, 119, 157, 0.5);
+}
+
+.exec-col-cards {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 1fr);
-  gap: clamp(10px, 1.1vw, 18px);
+  grid-auto-columns: clamp(160px, 18vw, 240px);
+  gap: clamp(6px, 0.8vw, 12px);
   overflow-x: auto;
-  overflow-y: hidden;
   min-height: 0;
-  padding: clamp(6px, 0.8vh, 12px) clamp(18px, 1.8vw, 34px) 0;
-  scrollbar-color: rgba(0, 219, 255, 0.45) transparent;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 219, 255, 0.35) transparent;
+}
+
+.exec-divider {
+  width: 1px;
+  margin: 0 clamp(8px, 1vw, 16px);
+  background: linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.28), transparent);
+  flex-shrink: 0;
+}
+
+.exec-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 60px;
+  color: #4a6788;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .execution-card {
@@ -3111,6 +3263,38 @@ function fmtTime(ts: string): string {
   white-space: nowrap;
 }
 
+.execution-card.is-running {
+  border-color: rgba(255, 177, 61, 0.5);
+  box-shadow: inset 0 0 18px rgba(255, 154, 47, 0.1), 0 0 14px rgba(255, 154, 47, 0.08);
+}
+
+.execution-card.is-running .task-card-head span {
+  border-color: rgba(255, 177, 61, 0.6);
+  color: #ffd9a0;
+  background: rgba(255, 177, 61, 0.1);
+}
+
+.execution-card.is-running .task-progress div {
+  background: linear-gradient(90deg, #b8740e, #ffb13d);
+  box-shadow: 0 0 10px rgba(255, 177, 61, 0.42);
+}
+
+.execution-card.is-pending {
+  border-color: rgba(78, 119, 157, 0.4);
+  opacity: 0.82;
+}
+
+.execution-card.is-pending .task-card-head span {
+  border-color: rgba(78, 119, 157, 0.5);
+  color: #6b8db0;
+  background: rgba(78, 119, 157, 0.08);
+}
+
+.execution-card.is-pending .task-progress div {
+  background: linear-gradient(90deg, #2a4a66, #4e779d);
+  box-shadow: none;
+}
+
 @keyframes header-scan {
   0% { transform: translateX(-120%); opacity: 0; }
   12% { opacity: 1; }
@@ -3159,12 +3343,77 @@ function fmtTime(ts: string): string {
 }
 
 @media (max-width: 1180px) {
-  .command-header { grid-template-columns: 1fr; align-content: center; gap: 6px; padding-block: 8px; }
-  .header-meta { justify-content: space-between; }
-  .progress-console { grid-template-columns: auto minmax(120px, 1fr) auto; flex: 1; }
-  .phase-card-strip { gap: 18px; }
+  .command-header { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding-block: 6px; }
+  .header-meta { justify-content: flex-end; min-width: 0; }
+  .progress-console { flex: 0 0 auto; min-height: 32px; padding-inline: 8px; gap: 6px; }
+  .drill-name-tag { max-width: 90px; font-size: 13px; }
+  .phase-card-strip { gap: 6px; padding: 5px; }
+  .phase-card {
+    padding: 8px 9px 7px;
+    border-radius: 10px;
+  }
   .phase-card::after { display: none; }
+  .phase-head { gap: 5px; }
+  .phase-head h2 {
+    font-size: clamp(14px, 1.55vw, 16px);
+    letter-spacing: -0.02em;
+  }
+  .phase-status {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+  .phase-segments {
+    gap: 2px;
+    margin: 6px 0 5px;
+  }
+  .phase-segments span { height: 5px; }
+  .phase-stats {
+    gap: 4px;
+    font-size: clamp(13px, 1.6vw, 16px);
+  }
+  .phase-stats span {
+    flex: 1 1 0;
+    padding: 1px 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .phase-stats em {
+    margin-left: 4px;
+    font-size: 0.78em;
+  }
   .flow-board { padding-inline: 24px; }
+}
+
+@media (max-width: 1060px) {
+  .phase-card-strip {
+    gap: 5px;
+    padding-inline: 4px;
+  }
+  .phase-card { padding-inline: 8px; }
+  .phase-head h2 { font-size: 14px; }
+  .phase-status {
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+  .phase-stats {
+    font-size: 14px;
+    line-height: 1;
+  }
+  .phase-stats b { font-size: 1.12em; }
+  .phase-stats em {
+    margin-left: 3px;
+    font-size: 0.72em;
+  }
+  .exec-col-cards {
+    grid-auto-columns: clamp(130px, 22vw, 180px);
+    gap: 5px;
+  }
+  .exec-divider { margin-inline: 5px; }
+  .execution-card { padding: 8px; }
+  .task-card-head strong { font-size: 14px; }
+  .task-card-head span { padding: 2px 6px; font-size: 11px; }
+  .task-progress { height: 8px; margin: 8px 0 6px; }
+  .execution-card p { margin-top: 8px; font-size: 12px; }
 }
 
 /* 弹窗动画 */
