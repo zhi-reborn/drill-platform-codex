@@ -1582,7 +1582,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .panel-realtime {
     margin-left: auto;
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 15px; line-height: 1;
+    font-size: 17px; line-height: 1;
+    transform: scaleY(0.94);
+    transform-origin: center;
     color: $ok; font-family: $font-display;
     letter-spacing: 1px;
     .rt-dot {
@@ -1622,11 +1624,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   font-family: $font-mono;
 }
 .more-tip {
-  text-align: center; color: $text-dim;
-  font-size: 15px; padding: 8px 0 16px;
+  text-align: center; color: #f5f9ff;
+  font-size: 18px; padding: 8px 0 16px;
   font-family: $font-mono;
   letter-spacing: 1px;
   border-top: 1px dashed $line;
+  text-shadow: 0 0 12px rgba(0, 180, 255, 0.55);
 }
 
 // ===== Left stages =====
@@ -1713,8 +1716,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     .stage-meta {
       display: flex; flex-direction: column; gap: 1px;
       .meta-key {
-        font-size: clamp(12px, 0.9em, 15px);
-        color: rgba(214, 244, 255, 0.94);
+        font-size: clamp(13px, 1.02em, 17px);
+        color: rgba(220, 248, 255, 0.98);
         letter-spacing: 1.8px;
         font-weight: 800;
         text-shadow: 0 0 8px rgba(0, 212, 255, 0.42);

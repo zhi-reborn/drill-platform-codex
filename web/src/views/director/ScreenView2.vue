@@ -19,12 +19,19 @@
       <div class="cyber-bg cyber-bg-scan" />
 
       <header class="command-header">
+        <div class="header-scanline" />
         <div class="header-title-shell">
+          <span class="header-kicker">INCIDENT DRILL COMMAND</span>
           <h1 class="command-title">应急处置指挥中心</h1>
         </div>
         <div class="header-meta">
-          <span class="system-label">演练进度</span>
-          <span class="system-time">{{ instance?.progress_pct ?? 0 }}%</span>
+          <div class="progress-console">
+            <span class="system-label">演练进度</span>
+            <div class="header-progress-track">
+              <div class="header-progress-fill" :style="{ width: (instance?.progress_pct ?? 0) + '%' }" />
+            </div>
+            <span class="system-time">{{ instance?.progress_pct ?? 0 }}%</span>
+          </div>
           <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
             <el-icon><FullScreen /></el-icon>
           </button>
@@ -36,8 +43,10 @@
       </header>
 
       <main class="command-main">
+        <div class="main-radar-sweep" />
         <section class="phase-card-strip">
           <article v-for="(phase, index) in phaseCards" :key="phase.name" class="phase-card" :class="['is-' + phase.status, { active: phase.active }]">
+            <div class="phase-card-grid" />
             <div class="phase-accent" />
             <div class="phase-head">
               <h2>阶段{{ index + 1 }} {{ phase.name }}</h2>
@@ -54,6 +63,8 @@
         </section>
 
         <section class="flow-board">
+          <div class="flow-hud-label">PROCESS ROUTE / LIVE ORCHESTRATION</div>
+          <div class="flow-board-grid" />
           <div class="flow-row flow-row-top">
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
               <div class="flow-node" :class="'is-' + node.status">
@@ -76,10 +87,14 @@
         <section class="execution-section">
           <div class="execution-title">
             <h2>执行中步骤</h2>
-            <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
+            <div class="execution-signal">
+              <span class="signal-bars"><i /><i /><i /></span>
+              <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
+            </div>
           </div>
           <div class="execution-carousel">
             <article v-for="task in executionCards" :key="task.id" class="execution-card" :class="'is-' + task.status">
+              <div class="card-scan" />
               <div class="task-card-head">
                 <strong>{{ task.name }}</strong>
                 <span>{{ task.statusText }}</span>
@@ -217,7 +232,7 @@ const displayTime = computed(() => {
 })
 
 const runningSteps = computed(() => {
-  const tasks = steps.value.filter(s => s.status === 'running' || s.status === 'timeout')
+  const tasks = steps.value.filter(s => s.status === 'running')
   // 执行者只看自己部门的任务
   if (isExecutor.value && userDept.value) {
     return tasks.filter(s => (s.executor_team || '') === userDept.value)
@@ -247,7 +262,6 @@ const stepRemainingStr = computed(() => {
 
 const stepRemainingLabel = computed(() => {
   if (!currentRunningStep.value) return '等待开始'
-  if (stepRemaining.value <= 0) return '已超时'
   return '当前环节剩余'
 })
 
@@ -327,7 +341,7 @@ function findActivePhaseName(): string | null {
 // 阶段整体状态：done / running / pending
 function getPhaseStatus(phase: TreeNodePhase): string {
   const all = phase.phaseSteps.flatMap(ps => ps.stepNodes)
-  if (all.some(s => s.status === 'running' || s.status === 'timeout')) return 'running'
+  if (all.some(s => s.status === 'running')) return 'running'
   if (all.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
   return 'pending'
 }
@@ -406,7 +420,7 @@ const phaseCards = computed(() => {
     return {
       name: phase.name,
       status,
-      statusText: status === 'done' ? '已完成' : status === 'running' ? '异常' : '待开始',
+      statusText: status === 'done' ? '已完成' : status === 'running' ? '进行中' : '待开始',
       active: activeName ? activeName === phase.name : index === fallbackActiveIdx,
       completedSteps,
       totalSteps,
@@ -437,12 +451,12 @@ const bottomFlowNodes = computed(() => flowNodes.value.slice(Math.ceil(flowNodes
 const executionCards = computed(() => {
   const active = runningSteps.value.length ? runningSteps.value : steps.value.filter(s => s.status === 'pending').slice(0, 8)
   return active.slice(0, 8).map(step => {
-    const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' || step.status === 'timeout' ? 100 : 0
+    const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' ? 100 : 0
     return {
       id: step.id,
       name: step.name,
       status: step.status,
-      statusText: step.status === 'running' ? '执行中' : step.status === 'timeout' ? '异常' : step.status === 'pending' ? '待执行' : '已完成',
+      statusText: step.status === 'running' ? '进行中' : step.status === 'pending' ? '待执行' : '已完成',
       progress,
       timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
       phaseText: `${step.phase || '当前阶段'} — ${step.phase_step || step.executor_team || '执行任务'}`,
@@ -492,7 +506,7 @@ const TRANSITION_SPEED = 0.03 // 每帧推进量
 
 // 子阶段的状态
 function getPhaseStepStatus(ps: TreeNodePhaseStep): string {
-  if (ps.stepNodes.some(s => s.status === 'running' || s.status === 'timeout')) return 'running'
+  if (ps.stepNodes.some(s => s.status === 'running')) return 'running'
   if (ps.stepNodes.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
   return 'pending'
 }
@@ -524,9 +538,9 @@ const wheelData = computed(() => {
   let current: TreeNodePhaseStep | null = null
   let next: TreeNodePhaseStep | null = null
 
-  // 找到当前触发的子阶段（running/timeout）
+  // 找到当前触发的子阶段
   for (const ps of allPS) {
-    if (ps.stepNodes.some(s => s.status === 'running' || s.status === 'timeout')) {
+    if (ps.stepNodes.some(s => s.status === 'running')) {
       current = ps
       break
     }
@@ -813,7 +827,7 @@ function drawCurrentName(ctx: CanvasRenderingContext2D, x: number, cy: number, w
         ctx.fillText(`已耗时 ${m}m${s}s`, x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
       } else {
         ctx.fillStyle = '#4ADE80'
-        ctx.fillText('执行中', x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
+        ctx.fillText('进行中', x + w / 2, cy + (singleLineW > maxW ? 26 : 12))
       }
     }
   }
@@ -1009,7 +1023,7 @@ function drawPipelineNode(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   ctx.textBaseline = 'middle'
   ctx.fillText(label, cx, cy - 5)
 
-  const statusText = status === 'done' ? '已完成' : status === 'running' ? '执行中' : '待执行'
+  const statusText = status === 'done' ? '已完成' : status === 'running' ? '进行中' : '待执行'
   ctx.fillStyle = selected
     ? (status === 'running' ? '#4ADE80' : '#38BDF8')
     : status === 'done' ? '#4A90B0'
@@ -1052,7 +1066,6 @@ function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: nu
 function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step: StepInstance, rowW: number) {
   const isRunning = step.status === 'running'
   const isDone = step.status === 'completed' || step.status === 'skipped'
-  const isTimeout = step.status === 'timeout'
   const rowH = STEP_ROW_H - 2
   const r = 3
 
@@ -1064,10 +1077,6 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
     ctx.shadowColor = 'rgba(103, 232, 249, ' + (0.35 * pulse) + ')'
     ctx.shadowBlur = 8 * pulse
     ctx.fillStyle = 'rgba(0, 40, 60, 0.7)'
-  } else if (isTimeout) {
-    ctx.shadowColor = 'rgba(255, 215, 0, 0.15)'
-    ctx.shadowBlur = 3
-    ctx.fillStyle = 'rgba(50, 40, 10, 0.4)'
   } else if (isDone) {
     ctx.shadowBlur = 0
     ctx.fillStyle = 'rgba(0, 20, 35, 0.35)'
@@ -1078,15 +1087,10 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
   roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
   ctx.fill()
 
-  // running/timeout 边框
+  // running 边框
   if (isRunning) {
     ctx.strokeStyle = '#67E8F9'
     ctx.lineWidth = 1.5
-    roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
-    ctx.stroke()
-  } else if (isTimeout) {
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)'
-    ctx.lineWidth = 1
     roundRect(ctx, x, cy - rowH / 2, rowW, rowH, r)
     ctx.stroke()
   }
@@ -1095,7 +1099,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
   // 状态圆点（放大）
   const dotR = 5
   const dotX = x + 14
-  const dotColor = isRunning ? '#67E8F9' : isTimeout ? '#FFD700' : isDone ? '#38BDF8' : '#4A5568'
+  const dotColor = isRunning ? '#67E8F9' : isDone ? '#38BDF8' : '#4A5568'
   ctx.beginPath()
   ctx.arc(dotX, cy, dotR, 0, Math.PI * 2)
   ctx.fillStyle = dotColor
@@ -1111,7 +1115,7 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
 
   // 步骤名称
   const nameX = x + 28
-  ctx.fillStyle = isRunning ? '#67E8F9' : isTimeout ? '#FFD700' : isDone ? '#38BDF8' : '#6A8AAA'
+  ctx.fillStyle = isRunning ? '#67E8F9' : isDone ? '#38BDF8' : '#6A8AAA'
   ctx.font = (isRunning ? 'bold ' : '') + '11px "PingFang SC", "Microsoft YaHei", sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
@@ -1120,8 +1124,8 @@ function drawStepRow(ctx: CanvasRenderingContext2D, x: number, cy: number, step:
 
   // 状态文字（靠右）
   const statusX = x + rowW - 60
-  const statusLabel = isRunning ? '执行中' : isTimeout ? '超时' : isDone ? '已完成' : '待执行'
-  ctx.fillStyle = isRunning ? '#4ADE80' : isTimeout ? '#FFD700' : isDone ? '#4A90B0' : '#3A4A5A'
+  const statusLabel = isRunning ? '进行中' : isDone ? '已完成' : '待执行'
+  ctx.fillStyle = isRunning ? '#4ADE80' : isDone ? '#4A90B0' : '#3A4A5A'
   ctx.font = '10px "PingFang SC", sans-serif'
   ctx.fillText(statusLabel, statusX, cy)
 
@@ -1237,9 +1241,9 @@ function handleWSMessage(msg: any) {
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
     if (event === 'step_started') {
       addLog('info', '●', `${phasePrefix}${stepName} 已开始`)
-    } else if (['step_complete', 'step_timeout', 'step_skipped', 'step_issue'].includes(event)) {
+    } else if (['step_complete', 'step_skipped', 'step_issue'].includes(event)) {
       const label = logLabel(event)
-      const logType = event === 'step_timeout' ? 'warn' : event === 'step_issue' ? 'error' : 'info'
+      const logType = event === 'step_issue' ? 'error' : 'info'
       addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
       if (event === 'step_complete') {
         showCompletionModal(stepName, phaseName)
@@ -1248,11 +1252,7 @@ function handleWSMessage(msg: any) {
     return
   }
 
-  if (event === 'timeout_warning') {
-    const remaining = payload.remaining_sec || 0
-    const phasePrefix = phaseName ? `【${phaseName}】` : ''
-    addLog('warn', '⏰', `${phasePrefix}${stepName} 剩余 ${remaining} 秒`)
-  }
+  if (event === 'timeout_warning') return
 }
 
 // 增量更新本地步骤数据（不调 API）
@@ -1282,7 +1282,6 @@ function logLabel(event: string): string {
   const map: Record<string, string> = {
     step_started: '已开始',
     step_complete: '已完成',
-    step_timeout: '已超时',
     step_skipped: '已跳过',
     step_issue: '异常',
     drill_started: '演练开始',
@@ -1536,6 +1535,8 @@ function fmtTime(ts: string): string {
   background: #0B1121;
   color: #C0CDE0;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  /* 统一缩放基准：所有 vw 字号基于此，保持比例一致 */
+  font-size: clamp(14px, 0.92vw, 17px);
   display: grid;
   grid-template-rows: 80px 1fr 56px;
   grid-template-columns: 1fr;
@@ -2377,40 +2378,128 @@ function fmtTime(ts: string): string {
 .command-header {
   position: relative;
   z-index: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: clamp(18px, 2vw, 40px);
   padding: 0 clamp(18px, 2.4vw, 44px);
-  border-bottom: 3px solid rgba(0, 206, 255, 0.72);
-  background: linear-gradient(90deg, rgba(9, 74, 137, 0.72), rgba(5, 24, 52, 0.86) 34%, rgba(8, 35, 70, 0.76));
-  box-shadow: 0 8px 32px rgba(0, 178, 255, 0.12);
+  border-bottom: 1px solid rgba(67, 226, 255, 0.72);
+  background:
+    linear-gradient(90deg, rgba(12, 89, 151, 0.74), rgba(5, 24, 52, 0.9) 36%, rgba(8, 35, 70, 0.76)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.08) 0 1px, transparent 1px 54px);
+  box-shadow: 0 10px 36px rgba(0, 178, 255, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.command-header::before,
+.command-header::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.command-header::before {
+  inset: 8px clamp(10px, 1.4vw, 24px);
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  clip-path: polygon(0 0, 25% 0, 25% 1px, 75% 1px, 75% 0, 100% 0, 100% 100%, 72% 100%, 72% calc(100% - 1px), 28% calc(100% - 1px), 28% 100%, 0 100%);
+}
+
+.command-header::after {
+  left: clamp(18px, 2.4vw, 44px);
+  right: clamp(18px, 2.4vw, 44px);
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #29f3ff 18%, #2ff0a0 50%, #29f3ff 82%, transparent);
+  opacity: 0.86;
+  box-shadow: 0 0 14px rgba(41, 243, 255, 0.56);
+}
+
+.header-scanline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26%;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.18), transparent);
+  transform: translateX(-120%);
+  animation: header-scan 6.5s linear infinite;
+  pointer-events: none;
 }
 
 .header-title-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
-  align-items: baseline;
-  gap: clamp(12px, 1.4vw, 28px);
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
+}
+
+.header-kicker {
+  color: rgba(103, 232, 249, 0.72);
+  font-family: "Courier New", monospace;
+  font-size: clamp(10px, 0.7vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
 }
 
 .command-title {
   margin: 0;
   color: #ffffff;
-  font-size: clamp(25px, 2.2vw, 42px);
-  font-weight: 800;
-  text-shadow: 0 0 10px rgba(21, 183, 255, 0.82);
+  font-size: clamp(25px, 2.6em, 42px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 10px rgba(21, 183, 255, 0.82), 0 0 24px rgba(47, 240, 160, 0.2);
   white-space: nowrap;
 }
 
 .header-meta {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: clamp(12px, 1.3vw, 24px);
+  gap: clamp(12px, 1.3em, 24px);
   color: #ebf5ff;
   font-family: "Courier New", monospace;
-  font-size: clamp(15px, 1.3vw, 24px);
+  font-size: clamp(15px, 1.5em, 24px);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.progress-console {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 18vw) auto;
+  align-items: center;
+  gap: clamp(10px, 1vw, 18px);
+  padding: 9px 12px;
+  border: 1px solid rgba(103, 232, 249, 0.26);
+  background: rgba(3, 18, 38, 0.48);
+  box-shadow: inset 0 0 18px rgba(0, 217, 255, 0.08);
+}
+
+.header-progress-track {
+  position: relative;
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  background: linear-gradient(90deg, rgba(34, 54, 74, 0.75), rgba(8, 25, 45, 0.92));
+}
+
+.header-progress-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 13px, rgba(255, 255, 255, 0.18) 13px 14px);
+  opacity: 0.42;
+}
+
+.header-progress-fill {
+  position: relative;
+  height: 100%;
+  background: linear-gradient(90deg, #0fa4d8, #29f3ff 55%, #2ff0a0);
+  box-shadow: 0 0 12px rgba(41, 243, 255, 0.48);
+  transition: width 0.5s ease;
 }
 
 .system-label {
@@ -2461,6 +2550,23 @@ function fmtTime(ts: string): string {
   overflow: hidden;
 }
 
+.main-radar-sweep {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: min(68vw, 820px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background:
+    conic-gradient(from 0deg, transparent 0 78%, rgba(47, 240, 160, 0.1), rgba(41, 243, 255, 0.18), transparent 88% 100%),
+    radial-gradient(circle, transparent 0 58%, rgba(41, 243, 255, 0.1) 58.4% 58.8%, transparent 59.2% 100%);
+  opacity: 0.46;
+  animation: radar-sweep 16s linear infinite;
+  pointer-events: none;
+  will-change: transform;
+}
+
 .phase-card-strip {
   position: relative;
   display: grid;
@@ -2496,6 +2602,23 @@ function fmtTime(ts: string): string {
   border-left: 0;
   background: linear-gradient(180deg, rgba(6, 30, 64, 0.82), rgba(4, 14, 31, 0.56));
   box-shadow: inset 0 -3px 0 rgba(65, 120, 170, 0.22);
+  overflow: hidden;
+}
+
+.phase-card-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(103, 232, 249, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.phase-card > *:not(.phase-card-grid) {
+  position: relative;
+  z-index: 1;
 }
 
 .phase-card:first-child {
@@ -2528,8 +2651,12 @@ function fmtTime(ts: string): string {
 }
 .phase-card.is-running {
   z-index: 3;
-  background: linear-gradient(180deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
-  box-shadow: inset 0 -4px 0 #ff7a00, inset 0 0 20px rgba(255, 122, 0, 0.12), 0 0 18px rgba(255, 122, 0, 0.32);
+  background: linear-gradient(180deg, rgba(14, 69, 79, 0.92), rgba(6, 30, 45, 0.84));
+  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 20px rgba(47, 240, 160, 0.12), 0 0 18px rgba(41, 243, 255, 0.24);
+}
+
+.phase-card.is-running .phase-accent {
+  animation: accent-flow 2.2s ease-in-out infinite;
 }
 .phase-card.is-pending { opacity: 0.74; }
 .phase-card.active {
@@ -2556,7 +2683,7 @@ function fmtTime(ts: string): string {
 
 .phase-head h2 {
   margin: 0;
-  font-size: clamp(17px, 1.45vw, 26px);
+  font-size: clamp(17px, 1.7em, 26px);
   color: #f5fbff;
   font-weight: 800;
   white-space: nowrap;
@@ -2568,9 +2695,11 @@ function fmtTime(ts: string): string {
   border: 1px solid currentColor;
   color: #2ff0a0;
   background: rgba(47, 240, 160, 0.12);
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.is-running .phase-status { color: #ffc179; background: rgba(255, 122, 0, 0.14); }
+.is-running .phase-status { color: #2ff0a0; background: rgba(47, 240, 160, 0.12); box-shadow: 0 0 12px rgba(47, 240, 160, 0.18); }
 .is-pending .phase-status { color: #6990b6; background: rgba(105, 144, 182, 0.1); }
 
 .phase-segments {
@@ -2598,7 +2727,7 @@ function fmtTime(ts: string): string {
   gap: clamp(10px, 1vw, 18px);
   color: #d8efff;
   font-family: "Courier New", monospace;
-  font-size: clamp(16px, 1.35vw, 26px);
+  font-size: clamp(16px, 1.6em, 26px);
   font-weight: 700;
   text-shadow: 0 0 10px rgba(28, 222, 255, 0.34);
 }
@@ -2621,7 +2750,7 @@ function fmtTime(ts: string): string {
   color: #9eeeff;
   font-style: normal;
   font-family: "Microsoft YaHei", sans-serif;
-  font-size: 0.68em;
+  font-size: 0.88em;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(0, 226, 255, 0.42);
 }
@@ -2640,8 +2769,34 @@ function fmtTime(ts: string): string {
   min-height: 0;
   border: 1px solid rgba(57, 220, 255, 0.34);
   border-radius: clamp(18px, 1.6vw, 28px);
-  background: linear-gradient(180deg, rgba(7, 32, 62, 0.28), rgba(4, 18, 38, 0.2));
+  background:
+    linear-gradient(180deg, rgba(7, 32, 62, 0.42), rgba(4, 18, 38, 0.28)),
+    radial-gradient(circle at 50% 50%, rgba(47, 240, 160, 0.08), transparent 46%);
   box-shadow: inset 0 0 28px rgba(0, 195, 255, 0.08), 0 0 24px rgba(0, 184, 255, 0.08);
+  overflow: hidden;
+}
+
+.flow-hud-label {
+  position: absolute;
+  left: clamp(18px, 1.8vw, 34px);
+  top: clamp(10px, 1vh, 16px);
+  z-index: 2;
+  color: rgba(103, 232, 249, 0.62);
+  font-family: "Courier New", monospace;
+  font-size: clamp(10px, 0.7vw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.flow-board-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(103, 232, 249, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
+  pointer-events: none;
 }
 
 .flow-row {
@@ -2679,7 +2834,7 @@ function fmtTime(ts: string): string {
   border-radius: clamp(10px, 1vw, 16px);
   border: 2px solid rgba(0, 210, 255, 0.64);
   color: #12e4ff;
-  font-size: clamp(15px, 1.3vw, 24px);
+  font-size: clamp(15px, 1.5em, 24px);
   font-weight: 700;
   background: rgba(4, 31, 55, 0.76);
   box-shadow: 0 0 28px rgba(0, 209, 255, 0.18), inset 0 0 18px rgba(0, 209, 255, 0.12);
@@ -2700,15 +2855,15 @@ function fmtTime(ts: string): string {
 }
 
 .flow-node.is-running .node-tag {
-  border-color: #ff9a2f;
-  color: #ffc179;
-  box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
+  border-color: #2ff0a0;
+  color: #b8ffe6;
+  box-shadow: 0 0 18px rgba(47, 240, 160, 0.28), inset 0 0 20px rgba(47, 240, 160, 0.1);
   animation: node-pulse 2s ease-in-out infinite;
 }
 
 @keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12); }
-  50% { box-shadow: 0 0 28px rgba(255, 122, 0, 0.46), inset 0 0 24px rgba(255, 122, 0, 0.2); }
+  0%, 100% { box-shadow: 0 0 18px rgba(47, 240, 160, 0.28), inset 0 0 20px rgba(47, 240, 160, 0.1); }
+  50% { box-shadow: 0 0 28px rgba(47, 240, 160, 0.42), inset 0 0 24px rgba(47, 240, 160, 0.18); }
 }
 
 .flow-arrow {
@@ -2787,6 +2942,19 @@ function fmtTime(ts: string): string {
   display: grid;
   grid-template-rows: clamp(34px, 4vh, 44px) minmax(0, 1fr);
   min-height: 0;
+  border: 1px solid rgba(57, 220, 255, 0.18);
+  background: linear-gradient(180deg, rgba(3, 19, 39, 0.18), rgba(3, 12, 28, 0.08));
+  overflow: hidden;
+}
+
+.execution-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 0 42%, rgba(103, 232, 249, 0.08) 49%, transparent 56% 100%);
+  transform: translateX(-80%);
+  animation: panel-sweep 8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .execution-title {
@@ -2804,21 +2972,47 @@ function fmtTime(ts: string): string {
 .execution-title h2 {
   margin: 0;
   color: #ffffff;
-  font-size: clamp(17px, 1.35vw, 24px);
+  font-size: clamp(17px, 1.6em, 24px);
   font-weight: 800;
+}
+
+.execution-signal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .execution-title span {
   color: #627f9f;
-  font-size: clamp(13px, 1vw, 18px);
+  font-size: clamp(13px, 1.1em, 18px);
 }
+
+.signal-bars {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 4px);
+  align-items: end;
+  gap: 3px;
+  height: 18px;
+}
+
+.signal-bars i {
+  display: block;
+  width: 4px;
+  height: 7px;
+  background: #2ff0a0;
+  box-shadow: 0 0 8px rgba(47, 240, 160, 0.42);
+  animation: signal-rise 1.4s ease-in-out infinite;
+}
+
+.signal-bars i:nth-child(2) { height: 12px; animation-delay: 0.16s; }
+.signal-bars i:nth-child(3) { height: 17px; animation-delay: 0.32s; }
 
 .execution-title span.live {
   color: #21f69e;
   text-shadow: 0 0 10px rgba(33, 246, 158, 0.52);
 }
 
-.execution-title span::before {
+.execution-signal > span:last-child::before {
   content: "";
   display: inline-block;
   width: 9px;
@@ -2842,14 +3036,32 @@ function fmtTime(ts: string): string {
 }
 
 .execution-card {
+  position: relative;
   min-width: 0;
   height: 100%;
   box-sizing: border-box;
   padding: clamp(10px, 1vw, 16px);
   border: 1px solid rgba(0, 190, 255, 0.28);
   border-radius: 3px;
-  background: rgba(2, 12, 29, 0.86);
+  background:
+    linear-gradient(180deg, rgba(2, 12, 29, 0.9), rgba(4, 24, 39, 0.78)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.035) 0 1px, transparent 1px 30px);
   box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08);
+  overflow: hidden;
+}
+
+.card-scan {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(47, 240, 160, 0.1), transparent);
+  transform: translateX(-120%);
+  animation: card-scan 4.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.execution-card > *:not(.card-scan) {
+  position: relative;
+  z-index: 1;
 }
 
 .task-card-head {
@@ -2861,7 +3073,7 @@ function fmtTime(ts: string): string {
 
 .task-card-head strong {
   color: #e8f3ff;
-  font-size: clamp(15px, 1.1vw, 22px);
+  font-size: clamp(15px, 1.3em, 22px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2899,7 +3111,57 @@ function fmtTime(ts: string): string {
   white-space: nowrap;
 }
 
+@keyframes header-scan {
+  0% { transform: translateX(-120%); opacity: 0; }
+  12% { opacity: 1; }
+  58% { opacity: 0.55; }
+  100% { transform: translateX(420%); opacity: 0; }
+}
+
+@keyframes radar-sweep {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes accent-flow {
+  0%, 100% { opacity: 0.42; transform: scaleX(0.72); }
+  50% { opacity: 0.9; transform: scaleX(1); }
+}
+
+@keyframes panel-sweep {
+  0%, 32% { transform: translateX(-90%); opacity: 0; }
+  42% { opacity: 0.8; }
+  72%, 100% { transform: translateX(90%); opacity: 0; }
+}
+
+@keyframes signal-rise {
+  0%, 100% { opacity: 0.35; transform: scaleY(0.64); }
+  50% { opacity: 1; transform: scaleY(1); }
+}
+
+@keyframes card-scan {
+  0%, 38% { transform: translateX(-120%); opacity: 0; }
+  48% { opacity: 0.8; }
+  72%, 100% { transform: translateX(120%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-scanline,
+  .main-radar-sweep,
+  .phase-card.is-running .phase-accent,
+  .flow-node.is-running .node-tag,
+  .flow-arrow.turn,
+  .execution-section::before,
+  .signal-bars i,
+  .card-scan {
+    animation: none !important;
+  }
+}
+
 @media (max-width: 1180px) {
+  .command-header { grid-template-columns: 1fr; align-content: center; gap: 6px; padding-block: 8px; }
+  .header-meta { justify-content: space-between; }
+  .progress-console { grid-template-columns: auto minmax(120px, 1fr) auto; flex: 1; }
   .phase-card-strip { gap: 18px; }
   .phase-card::after { display: none; }
   .flow-board { padding-inline: 24px; }
