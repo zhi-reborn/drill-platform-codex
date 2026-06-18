@@ -41,7 +41,7 @@
       </header>
 
       <main class="command-main">
-        <div class="main-radar-sweep" />
+        <div class="main-rect-sweep" />
         <section class="phase-card-strip">
           <article v-for="(phase, index) in phaseCards" :key="phase.name" class="phase-card" :class="['is-' + phase.status, { active: phase.active }]">
             <div class="phase-card-grid" />
@@ -65,7 +65,12 @@
           <div class="flow-row flow-row-top">
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
               <div class="flow-node" :class="'is-' + node.status">
+                <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
                 <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
+                  <i class="node-gear" />
+                  <i class="node-live-dot" />
+                </span>
               </div>
               <span v-if="index < topFlowNodes.length - 1" class="flow-arrow right" />
               <span v-else class="flow-arrow turn" />
@@ -75,7 +80,12 @@
             <div v-for="(node, index) in bottomFlowNodes" :key="node.id" class="flow-node-wrap">
               <span v-if="index > 0" class="flow-arrow left" />
               <div class="flow-node" :class="'is-' + node.status">
+                <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
                 <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
+                  <i class="node-gear" />
+                  <i class="node-live-dot" />
+                </span>
               </div>
             </div>
           </div>
@@ -368,11 +378,13 @@ function findActivePhaseName(): string | null {
   return null
 }
 
-// 阶段整体状态：done / running / pending
+// 阶段整体状态：done / running / pending（仅看叶子步骤，避免父步骤状态滞后）
 function getPhaseStatus(phase: TreeNodePhase): string {
   const all = phase.phaseSteps.flatMap(ps => ps.stepNodes)
-  if (all.some(s => s.status === 'running')) return 'running'
-  if (all.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
+  const leafSteps = all.filter(isLeafStep)
+  const stepsToCheck = leafSteps.length > 0 ? leafSteps : all
+  if (stepsToCheck.some(s => s.status === 'running')) return 'running'
+  if (stepsToCheck.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
   return 'pending'
 }
 
@@ -440,13 +452,14 @@ const phaseCards = computed(() => {
   const fallbackActiveIdx = treeData.value.findIndex(p => getPhaseStatus(p) === 'running')
   return treeData.value.map((phase, index) => {
     const allSteps = phase.phaseSteps.flatMap(ps => ps.stepNodes)
+    const leafSteps = allSteps.filter(isLeafStep)
     const status = getPhaseStatus(phase)
-    const completedSteps = allSteps.filter(s => s.status === 'completed' || s.status === 'skipped').length
-    const totalSteps = allSteps.length || 1
+    const completedSteps = leafSteps.filter(s => s.status === 'completed' || s.status === 'skipped').length
+    const totalSteps = leafSteps.length
     const completedPhaseSteps = phase.phaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length
     const totalPhaseSteps = phase.phaseSteps.length || 1
     const segmentCount = 20
-    const filledSegments = Math.round((completedSteps / totalSteps) * segmentCount)
+    const filledSegments = Math.round((completedSteps / (totalSteps || 1)) * segmentCount)
     return {
       name: phase.name,
       status,
@@ -547,10 +560,12 @@ let transitionProgress = 1    // 直接显示，不做渐变
 let prevCurrentPSIdx = -1     // 上一帧的当前子阶段索引
 const TRANSITION_SPEED = 0.03 // 每帧推进量
 
-// 子阶段的状态
+// 子阶段的状态（仅看叶子步骤，避免父步骤状态滞后导致环节无法标记完成）
 function getPhaseStepStatus(ps: TreeNodePhaseStep): string {
-  if (ps.stepNodes.some(s => s.status === 'running')) return 'running'
-  if (ps.stepNodes.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
+  const leafSteps = ps.stepNodes.filter(isLeafStep)
+  const stepsToCheck = leafSteps.length > 0 ? leafSteps : ps.stepNodes
+  if (stepsToCheck.some(s => s.status === 'running')) return 'running'
+  if (stepsToCheck.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
   return 'pending'
 }
 
@@ -1270,7 +1285,7 @@ function handleWSMessage(msg: any) {
   if (event === 'ping' || event === 'pong') return
 
   if (['drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated'].includes(event)) {
-    scheduleRefresh('drill', 'logs')
+    scheduleRefresh('drill', 'steps', 'logs')
     if (event === 'drill_started') addLog('info', '▶', '演练已开始')
     else if (event === 'drill_paused') addLog('warn', '⏸', '演练已暂停')
     else if (event === 'drill_resumed') addLog('info', '▶', '演练已恢复')
@@ -1280,15 +1295,16 @@ function handleWSMessage(msg: any) {
 
   // 步骤事件：增量更新本地数据，不调 API
   if (event.startsWith('step_')) {
-    patchLocalStep(payload)
+    patchLocalStep(event, payload)
+    scheduleRefresh('steps', 'drill', 'logs')
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
     if (event === 'step_started') {
       addLog('info', '●', `${phasePrefix}${stepName} 已开始`)
-    } else if (['step_complete', 'step_skipped', 'step_issue'].includes(event)) {
+    } else if (['step_complete', 'step_completed', 'step_skipped', 'step_issue', 'step_timeout'].includes(event)) {
       const label = logLabel(event)
       const logType = event === 'step_issue' ? 'error' : 'info'
       addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
-      if (event === 'step_complete') {
+      if (event === 'step_complete' || event === 'step_completed') {
         showCompletionModal(stepName, phaseName)
       }
     }
@@ -1298,12 +1314,12 @@ function handleWSMessage(msg: any) {
   if (event === 'timeout_warning') return
 }
 
-// 增量更新本地步骤数据（不调 API）
-function patchLocalStep(payload: any) {
-  const stepId = payload.step_id || payload.stepId
+// 增量更新本地步骤数据，全量刷新会随后校准父级和阶段状态
+function patchLocalStep(event: string, payload: any) {
+  const stepId = Number(payload.step_id || payload.stepId || payload.id || payload.step_instance_id)
   if (!stepId) return
 
-  const newStatus = payload.new_status || payload.newStatus
+  const newStatus = payload.new_status || payload.newStatus || mapStepEventToStatus(event)
   if (!newStatus) return
 
   const idx = steps.value.findIndex((s: StepInstance) => s.id === stepId)
@@ -1325,12 +1341,26 @@ function patchLocalStep(payload: any) {
   steps.value = newSteps
 }
 
+function mapStepEventToStatus(event: string): string {
+  const map: Record<string, string> = {
+    step_started: 'running',
+    step_complete: 'completed',
+    step_completed: 'completed',
+    step_skipped: 'skipped',
+    step_issue: 'issue',
+    step_timeout: 'timeout',
+  }
+  return map[event] || ''
+}
+
 function logLabel(event: string): string {
   const map: Record<string, string> = {
     step_started: '已开始',
     step_complete: '已完成',
+    step_completed: '已完成',
     step_skipped: '已跳过',
     step_issue: '异常',
+    step_timeout: '已超时',
     drill_started: '演练开始',
     drill_paused: '已暂停',
     drill_resumed: '已恢复',
@@ -1516,7 +1546,7 @@ onMounted(() => {
     redrawCanvas()
   }, 1000)
   pollingTimer = setInterval(() => {
-    if (!wsConnected.value) scheduleRefresh('drill')
+    if (!wsConnected.value) scheduleRefresh('drill', 'steps', 'logs')
   }, 30000)
   window.addEventListener('resize', onResize)
 
@@ -2601,21 +2631,49 @@ function fmtTime(ts: string): string {
   overflow: hidden;
 }
 
-.main-radar-sweep {
+.main-rect-sweep {
   position: absolute;
-  left: 50%;
-  top: 48%;
-  width: min(68vw, 820px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  left: clamp(18px, 2vw, 36px);
+  right: clamp(18px, 2vw, 36px);
+  top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px) + clamp(8px, 1.1vh, 16px));
+  bottom: calc(clamp(8px, 1vh, 16px) + clamp(150px, 20vh, 190px) + clamp(8px, 1.1vh, 16px));
+  border-radius: 8px;
   background:
-    conic-gradient(from 0deg, transparent 0 78%, rgba(47, 240, 160, 0.1), rgba(41, 243, 255, 0.18), transparent 88% 100%),
-    radial-gradient(circle, transparent 0 58%, rgba(41, 243, 255, 0.1) 58.4% 58.8%, transparent 59.2% 100%);
-  opacity: 0.46;
-  animation: radar-sweep 16s linear infinite;
+    linear-gradient(90deg, transparent 0%, rgba(41, 243, 255, 0.04) 42%, rgba(47, 240, 160, 0.16) 48%, rgba(255, 213, 106, 0.22) 50%, rgba(47, 240, 160, 0.16) 52%, rgba(41, 243, 255, 0.04) 58%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, rgba(41, 243, 255, 0.08) 48%, rgba(255, 213, 106, 0.1) 50%, rgba(41, 243, 255, 0.08) 52%, transparent 100%);
+  border-left: 1px solid rgba(255, 213, 106, 0.22);
+  border-right: 1px solid rgba(47, 240, 160, 0.18);
+  box-shadow: inset 0 0 26px rgba(41, 243, 255, 0.08), 0 0 26px rgba(47, 240, 160, 0.08);
+  opacity: 0.62;
+  animation: rect-sweep 7.2s linear infinite;
   pointer-events: none;
-  will-change: transform;
+  transform: translateX(-112%);
+  will-change: transform, opacity;
+}
+
+.main-rect-sweep::before,
+.main-rect-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.main-rect-sweep::before {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(90deg, rgba(47, 240, 160, 0.1) 0 1px, transparent 1px 72px);
+  mix-blend-mode: screen;
+  opacity: 0.46;
+}
+
+.main-rect-sweep::after {
+  width: 10px;
+  left: 50%;
+  right: auto;
+  background: linear-gradient(180deg, transparent, rgba(255, 226, 160, 0.8), transparent);
+  box-shadow: 0 0 18px rgba(255, 213, 106, 0.62), 0 0 36px rgba(47, 240, 160, 0.32);
 }
 
 .phase-card-strip {
@@ -2910,6 +2968,7 @@ function fmtTime(ts: string): string {
 }
 
 .flow-node {
+  position: relative;
   width: 100%;
   display: flex;
   align-items: center;
@@ -2951,29 +3010,125 @@ function fmtTime(ts: string): string {
 }
 
 .flow-node.is-done .node-tag {
-  border-color: rgba(47, 240, 160, 0.72);
-  color: #a8ffd9;
-  background: linear-gradient(180deg, rgba(12, 74, 58, 0.88), rgba(5, 30, 32, 0.68));
-  box-shadow: 0 0 18px rgba(47, 240, 160, 0.22), inset 0 0 20px rgba(47, 240, 160, 0.12), inset 0 -4px 0 #2ff0a0;
-  text-shadow: 0 0 10px rgba(47, 240, 160, 0.5);
+  border-color: rgba(74, 222, 128, 0.88);
+  color: #d1fae5;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(187, 247, 208, 0.22), transparent 32%),
+    linear-gradient(180deg, rgba(22, 101, 52, 0.94), rgba(5, 40, 25, 0.74));
+  box-shadow:
+    0 0 26px rgba(74, 222, 128, 0.36),
+    inset 0 0 22px rgba(74, 222, 128, 0.18),
+    inset 0 -4px 0 #4ade80;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.62);
+}
+
+.flow-node.is-done .node-tag::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(220, 252, 231, 0.32), transparent);
+  transform: skewX(-18deg);
+  animation: done-shine 3.6s ease-in-out infinite;
+  animation-delay: 0.8s;
+  pointer-events: none;
 }
 
 .flow-node-wrap:has(.flow-node.is-done) .flow-arrow {
-  background: linear-gradient(90deg, #2ff0a0, #1bc98a);
-  box-shadow: 0 0 10px rgba(47, 240, 160, 0.5);
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6);
 }
 
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.right::after { border-left-color: #1bc98a; }
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.left::after { border-right-color: #1bc98a; }
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.turn::after { border-top-color: #1bc98a; }
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.right::after { border-left-color: #22c55e; }
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.left::after { border-right-color: #22c55e; }
+.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.turn::after { border-top-color: #22c55e; }
 
 .flow-node.is-running .node-tag {
   border-color: rgba(255, 177, 61, 0.92);
   color: #ffe1a3;
-  background: linear-gradient(180deg, rgba(99, 58, 10, 0.92), rgba(48, 31, 17, 0.72));
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 235, 170, 0.28), transparent 26%),
+    linear-gradient(180deg, rgba(114, 67, 12, 0.94), rgba(48, 31, 17, 0.74));
   box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d;
   text-shadow: 0 0 10px rgba(255, 177, 61, 0.55);
   animation: node-pulse 2s ease-in-out infinite;
+}
+
+.flow-node.is-running .node-tag::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 226, 160, 0.45);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.flow-node.is-running .node-tag::after {
+  content: "";
+  position: absolute;
+  top: -24%;
+  bottom: -24%;
+  left: -34%;
+  width: 28%;
+  background: linear-gradient(90deg, transparent, rgba(255, 244, 210, 0.5), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+  pointer-events: none;
+  animation: node-scan 2.4s ease-in-out infinite;
+}
+
+.node-ripple,
+.node-motion {
+  position: absolute;
+  pointer-events: none;
+}
+
+.node-ripple {
+  inset: -9px;
+  z-index: 1;
+  border-radius: clamp(12px, 1.1vw, 18px);
+  border: 1px solid rgba(255, 200, 92, 0.66);
+  box-shadow: 0 0 18px rgba(255, 177, 61, 0.34);
+  animation: node-ripple 1.9s ease-out infinite;
+}
+
+.node-motion {
+  top: -10px;
+  right: -10px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(255, 214, 118, 0.28), rgba(255, 154, 47, 0.08) 62%, transparent 68%);
+  filter: drop-shadow(0 0 10px rgba(255, 177, 61, 0.55));
+}
+
+.node-gear {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(7, 28, 48, 0.98) 0 28%, transparent 30%),
+    conic-gradient(from 0deg, #ffe7a8 0 10deg, transparent 10deg 30deg, #ffb13d 30deg 45deg, transparent 45deg 62deg, #ffe7a8 62deg 76deg, transparent 76deg 96deg, #ffb13d 96deg 112deg, transparent 112deg 136deg, #ffe7a8 136deg 150deg, transparent 150deg 170deg, #ffb13d 170deg 186deg, transparent 186deg 210deg, #ffe7a8 210deg 224deg, transparent 224deg 248deg, #ffb13d 248deg 264deg, transparent 264deg 288deg, #ffe7a8 288deg 302deg, transparent 302deg 326deg, #ffb13d 326deg 342deg, transparent 342deg 360deg);
+  box-shadow: inset 0 0 0 2px rgba(255, 214, 118, 0.72);
+  animation: node-gear-spin 1.8s linear infinite;
+}
+
+.node-live-dot {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff4cf;
+  box-shadow: 0 0 0 3px rgba(255, 177, 61, 0.24), 0 0 12px rgba(255, 226, 160, 0.82);
+  animation: node-live-blink 1.05s ease-in-out infinite;
 }
 
 .flow-node-wrap:has(.flow-node.is-running) .flow-arrow {
@@ -2988,6 +3143,32 @@ function fmtTime(ts: string): string {
 @keyframes node-pulse {
   0%, 100% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d; }
   50% { box-shadow: 0 0 30px rgba(255, 154, 47, 0.42), inset 0 0 28px rgba(255, 177, 61, 0.24), inset 0 -4px 0 #ffb13d; }
+}
+
+@keyframes done-shine {
+  0%, 55% { left: -60%; opacity: 0; }
+  65% { opacity: 1; }
+  85%, 100% { left: 160%; opacity: 0; }
+}
+
+@keyframes node-ripple {
+  0% { opacity: 0.76; transform: scale(0.96); }
+  70%, 100% { opacity: 0; transform: scale(1.18); }
+}
+
+@keyframes node-scan {
+  0%, 36% { opacity: 0; transform: translateX(0) skewX(-18deg); }
+  48% { opacity: 0.85; }
+  72%, 100% { opacity: 0; transform: translateX(520%) skewX(-18deg); }
+}
+
+@keyframes node-gear-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes node-live-blink {
+  0%, 100% { opacity: 0.5; transform: scale(0.84); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .flow-arrow {
@@ -3399,9 +3580,11 @@ function fmtTime(ts: string): string {
   100% { transform: translateX(420%); opacity: 0; }
 }
 
-@keyframes radar-sweep {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg); }
+@keyframes rect-sweep {
+  0% { opacity: 0; transform: translateX(-112%); }
+  9% { opacity: 0.62; }
+  82% { opacity: 0.62; }
+  100% { opacity: 0; transform: translateX(112%); }
 }
 
 @keyframes accent-flow {
@@ -3428,9 +3611,14 @@ function fmtTime(ts: string): string {
 
 @media (prefers-reduced-motion: reduce) {
   .header-scanline,
-  .main-radar-sweep,
+  .main-rect-sweep,
   .phase-card.is-running .phase-accent,
   .flow-node.is-running .node-tag,
+  .flow-node.is-running .node-tag::after,
+  .flow-node.is-done .node-tag::after,
+  .node-ripple,
+  .node-gear,
+  .node-live-dot,
   .flow-arrow.turn,
   .execution-section::before,
   .signal-bars i,

@@ -223,7 +223,7 @@
               </div>
               <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
               <div v-else-if="visibleAlerts.length < activeAlerts.length" class="more-tip">
-                还有 {{ totalCount - completedCount }} 个步骤待执行...
+                还有 {{ pendingCount }} 个步骤待执行...
               </div>
             </div>
           </div>
@@ -253,6 +253,9 @@ const viewportHeight = ref(window.innerHeight)
 
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
+let dataRefreshTimer: number | null = null
+let dataLoading = false
+let dataReloadQueued = false
 let timeTimer: number | null = null
 let componentDestroyed = false
 
@@ -356,6 +359,7 @@ const completedCount = computed(() =>
   leafSteps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
 )
 const totalCount = computed(() => leafSteps.value.length)
+const pendingCount = computed(() => leafSteps.value.filter(s => s.status === 'pending').length)
 const progressPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)
@@ -754,11 +758,16 @@ function tick() {
 
 // 数据加载
 async function loadData() {
+  if (dataLoading) {
+    dataReloadQueued = true
+    return
+  }
   if (!drillId.value) {
     error.value = '无效的演练 ID'
     loading.value = false
     return
   }
+  dataLoading = true
   try {
     const drill = await drillApi.getDetail(drillId.value)
     if (componentDestroyed) return
@@ -776,7 +785,7 @@ async function loadData() {
     error.value = null
     tick()
     // 仅在 WebSocket 未连接时建立连接，避免刷新数据时重连导致循环
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
       connectWebSocket()
     }
   } catch (err: any) {
@@ -784,6 +793,12 @@ async function loadData() {
     error.value = err.message || '加载数据失败'
     console.error('Failed to load drill data:', err)
     loading.value = false
+  } finally {
+    dataLoading = false
+    if (dataReloadQueued && !componentDestroyed) {
+      dataReloadQueued = false
+      scheduleDataRefresh()
+    }
   }
 }
 function handleRetry() {
@@ -793,16 +808,21 @@ function handleRetry() {
 // WebSocket
 const REFRESH_EVENTS = new Set([
   'step_change', 'drill_status',
-  'step_started', 'step_complete', 'step_issue', 'step_skipped', 'step_timeout',
+  'step_start', 'step_started', 'step_complete', 'step_completed', 'step_issue',
+  'step_skip', 'step_skipped', 'step_timeout', 'step_force_complete',
   'drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated',
   'timeout_warning', 'timeout_alert',
 ])
 const LOG_EVENTS: Record<string, string> = {
+  step_start: 'step_start',
   step_started: 'step_start',
   step_complete: 'step_complete',
+  step_completed: 'step_complete',
   step_issue: 'step_issue',
+  step_skip: 'step_skip',
   step_skipped: 'step_skip',
   step_timeout: 'step_timeout',
+  step_force_complete: 'force_complete',
   drill_started: 'drill_started',
   drill_paused: 'drill_paused',
   drill_resumed: 'drill_resumed',
@@ -812,6 +832,7 @@ const LOG_EVENTS: Record<string, string> = {
 
 function connectWebSocket() {
   if (componentDestroyed) return
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
   if (ws) ws.close()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const authStore = useAuthStore()
@@ -821,7 +842,7 @@ function connectWebSocket() {
     if (componentDestroyed) return
     try {
       const data = JSON.parse(event.data)
-      const eventType = data.type || data.event_type
+      const eventType = normalizeWsEvent(data.type || data.event_type || data.event)
       if (!eventType) return
 
       const payload = data.payload || data.data || data
@@ -833,9 +854,9 @@ function connectWebSocket() {
         applyDrillEvent(eventType, payload)
       }
 
-      // 全量刷新确保级联状态正确（延迟执行，让增量先生效）
+      // 合并刷新确保级联状态正确（延迟执行，让增量先生效）
       if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
-        loadData()
+        scheduleDataRefresh()
       }
     } catch (e) { /* ignore */ }
   }
@@ -849,21 +870,30 @@ function connectWebSocket() {
   }
 }
 
+function scheduleDataRefresh(delay = 160) {
+  if (componentDestroyed) return
+  if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
+  dataRefreshTimer = window.setTimeout(() => {
+    dataRefreshTimer = null
+    loadData()
+  }, delay)
+}
+
 // 增量应用步骤事件,避免每次都重拉 3 个 API
 function applyStepEvent(eventType: string, payload: any) {
   if (!payload) return
-  const stepId = Number(payload.step_id ?? payload.id)
+  const stepId = Number(payload.step_id ?? payload.stepId ?? payload.id ?? payload.step_instance_id)
   if (!stepId) {
-    loadData()
+    scheduleDataRefresh()
     return
   }
   const idx = drillSteps.value.findIndex(s => s.id === stepId)
   if (idx === -1) {
     // 找不到对应步骤,降级为全量刷新
-    loadData()
+    scheduleDataRefresh()
     return
   }
-  const target = drillSteps.value[idx]
+  const target = { ...drillSteps.value[idx] }
   const newStatus = payload.new_status || mapEventToStatus(eventType)
   if (newStatus) target.status = newStatus as StepStatus
   if (payload.start_time) target.start_time = payload.start_time
@@ -872,6 +902,10 @@ function applyStepEvent(eventType: string, payload: any) {
   if (payload.remark) target.remark = payload.remark
   if (payload.issue_desc) target.issue_desc = payload.issue_desc
   if (payload.assignee_names) target.assignee_names = payload.assignee_names
+
+  const nextSteps = [...drillSteps.value]
+  nextSteps[idx] = target
+  drillSteps.value = nextSteps
 
   // 推入一条本地日志
   const logAction = LOG_EVENTS[eventType] || eventType
@@ -911,9 +945,13 @@ function applyDrillEvent(eventType: string, payload: any) {
 
 function mapEventToStatus(eventType: string): string {
   const map: Record<string, string> = {
+    step_start: 'running',
     step_started: 'running',
     step_complete: 'completed',
+    step_completed: 'completed',
+    step_force_complete: 'completed',
     step_issue: 'issue',
+    step_skip: 'skipped',
     step_skipped: 'skipped',
     step_timeout: 'timeout',
     drill_started: 'running',
@@ -923,6 +961,16 @@ function mapEventToStatus(eventType: string): string {
     drill_terminated: 'terminated',
   }
   return map[eventType] || ''
+}
+
+function normalizeWsEvent(eventType: string): string {
+  const aliases: Record<string, string> = {
+    step_start: 'step_started',
+    step_skip: 'step_skipped',
+    step_completed: 'step_complete',
+    step_force_complete: 'step_complete',
+  }
+  return aliases[eventType] || eventType
 }
 
 function recomputeKpis() {
@@ -939,7 +987,7 @@ function startFallbackPolling() {
       stopFallbackPolling()
       return
     }
-    if (currentDrill.value?.status === 'running') loadData()
+    if (currentDrill.value?.status === 'running') scheduleDataRefresh(0)
   }, 5000)
 }
 
@@ -969,6 +1017,7 @@ onBeforeUnmount(() => {
   componentDestroyed = true
   window.removeEventListener('resize', handleResize)
   if (timeTimer) clearInterval(timeTimer)
+  if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
   stopFallbackPolling()
   if (ws) { ws.close(); ws = null }
 })
