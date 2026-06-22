@@ -34,6 +34,9 @@ request.interceptors.response.use(
     const status = error.response?.status
     const data = error.response?.data
     const message = data?.message
+    if (message) {
+      error.message = message
+    }
     switch (status) {
       case 401:
         // 不要对登录 API 的 401 执行跳转（已在登录页面）

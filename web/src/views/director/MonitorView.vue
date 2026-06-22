@@ -1419,7 +1419,7 @@ async function handleDirectorComplete(step: StepInstance) {
     }
     scheduleDrillDataRefresh(0)
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '操作失败')
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 

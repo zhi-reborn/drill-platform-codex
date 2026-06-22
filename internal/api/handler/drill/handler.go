@@ -33,6 +33,25 @@ func NewHandler(drillService *service.DrillService, authService *service.AuthSer
 	}
 }
 
+func stepStatusText(status string) string {
+	switch status {
+	case string(flowengine.StepStatusPending):
+		return "待执行"
+	case string(flowengine.StepStatusRunning):
+		return "进行中"
+	case string(flowengine.StepStatusCompleted):
+		return "已完成"
+	case string(flowengine.StepStatusSkipped):
+		return "已跳过"
+	case string(flowengine.StepStatusTimeout):
+		return "已超时"
+	case string(flowengine.StepStatusIssue):
+		return "异常"
+	default:
+		return status
+	}
+}
+
 func resolveStepOperationTarget(drillID, requestedID uint64) (*stepOperationTarget, error) {
 	var step entity.StepInstance
 	if err := repository.DB.Where("drill_instance_id = ? AND template_step_id = ?", drillID, requestedID).First(&step).Error; err != nil {
@@ -496,6 +515,10 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
+	if target.step.Status != string(flowengine.StepStatusRunning) {
+		response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
+		return
+	}
 
 	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
 	stepDefID := int64(target.stepDefID)
@@ -512,11 +535,19 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 			return
 		}
 		if err = h.drillService.Engine().DirectorCompleteStep(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, "内部错误")
+			if err == flowengine.ErrInvalidStatus || err == flowengine.ErrStepNotActive {
+				response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
+				return
+			}
+			response.InternalError(c, "完成步骤失败："+err.Error())
 			return
 		}
 	} else if err != nil {
-		response.InternalError(c, "内部错误")
+		if err == flowengine.ErrInvalidStatus || err == flowengine.ErrStepNotActive {
+			response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
+			return
+		}
+		response.InternalError(c, "完成步骤失败："+err.Error())
 		return
 	}
 
