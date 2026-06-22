@@ -1106,6 +1106,8 @@ function getStepOperator(step: any): string {
 // WebSocket 实时刷新 — 区分事件类型，步骤事件增量更新
 let logDebounceTimer: number | null = null
 let drillRefreshTimer: number | null = null
+let instanceRefreshTimer: number | null = null
+let instanceRefreshPromise: Promise<void> | null = null
 let drillDataLoading = false
 let drillDataReloadQueued = false
 let componentDestroyed = false
@@ -1151,16 +1153,18 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
 
   // 步骤事件携带完整变更信息，优先增量更新，避免每次操作后全量拉取步骤树。
   if (event.startsWith('step_')) {
-    patchLocalStep(payload)
-    refreshInstanceDetail()
+    const patched = patchLocalStep(payload)
+    scheduleInstanceDetailRefresh()
     refreshLogsDebounced()
-    scheduleDrillDataRefresh(250)
+    if (!patched) {
+      scheduleDrillDataRefresh(250)
+    }
     return
   }
 
   // 演练状态变更：刷新实例详情 + 日志
   if (event.startsWith('drill_')) {
-    refreshInstanceDetail()
+    scheduleInstanceDetailRefresh()
     refreshLogs()
     return
   }
@@ -1191,16 +1195,27 @@ function refreshLogsDebounced(delay = 250) {
   }, delay)
 }
 
+function scheduleInstanceDetailRefresh(delay = 180) {
+  if (componentDestroyed) return
+  if (instanceRefreshTimer) {
+    clearTimeout(instanceRefreshTimer)
+  }
+  instanceRefreshTimer = window.setTimeout(() => {
+    instanceRefreshTimer = null
+    refreshInstanceDetail()
+  }, delay)
+}
+
 // 增量更新本地步骤数据（不调 API）
-function patchLocalStep(payload: any) {
+function patchLocalStep(payload: any): boolean {
   const stepId = payload.step_id || payload.stepId
-  if (!stepId) return
+  if (!stepId) return false
 
   const idx = steps.value.findIndex(s => s.id === stepId)
-  if (idx === -1) return
+  if (idx === -1) return false
 
   const newStatus = payload.new_status || payload.newStatus
-  if (!newStatus) return
+  if (!newStatus) return false
 
   const step = { ...steps.value[idx] }
   step.status = newStatus === 'timeout' ? 'running' : newStatus
@@ -1214,13 +1229,24 @@ function patchLocalStep(payload: any) {
   const newSteps = [...steps.value]
   newSteps[idx] = step
   steps.value = newSteps
+  return true
 }
 
 // 只刷新实例详情（1 个 API）
 async function refreshInstanceDetail() {
+  if (instanceRefreshPromise) {
+    return instanceRefreshPromise
+  }
+  instanceRefreshPromise = (async () => {
+    try {
+      instance.value = await drillApi.getDetail(drillId.value)
+    } catch { /* 静默失败 */ }
+  })()
   try {
-    instance.value = await drillApi.getDetail(drillId.value)
-  } catch { /* 静默失败 */ }
+    await instanceRefreshPromise
+  } finally {
+    instanceRefreshPromise = null
+  }
 }
 
 // 只刷新日志（1 个 API）
@@ -1237,9 +1263,8 @@ function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
     new_status: newStatus,
     end_time: ['completed', 'skipped'].includes(newStatus) ? now : undefined,
   })
-  refreshInstanceDetail()
+  scheduleInstanceDetailRefresh()
   refreshLogsDebounced()
-  scheduleDrillDataRefresh(250)
 }
 
 function startFallbackPolling() {
@@ -1278,6 +1303,10 @@ async function loadDrillData() {
   if (drillRefreshTimer) {
     clearTimeout(drillRefreshTimer)
     drillRefreshTimer = null
+  }
+  if (instanceRefreshTimer) {
+    clearTimeout(instanceRefreshTimer)
+    instanceRefreshTimer = null
   }
   drillDataLoading = true
   try {
@@ -1515,6 +1544,10 @@ onUnmounted(() => {
   if (logDebounceTimer) {
     clearTimeout(logDebounceTimer)
     logDebounceTimer = null
+  }
+  if (instanceRefreshTimer) {
+    clearTimeout(instanceRefreshTimer)
+    instanceRefreshTimer = null
   }
 })
 </script>
