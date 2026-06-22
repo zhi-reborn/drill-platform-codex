@@ -79,7 +79,7 @@
                 </span>
               </div>
               <span v-if="index < topFlowNodes.length - 1" class="flow-arrow right" />
-              <span v-else class="flow-arrow turn" />
+              <span v-else-if="bottomFlowNodes.length" class="flow-arrow turn" />
             </div>
           </div>
           <div class="flow-row flow-row-bottom">
@@ -2764,17 +2764,22 @@ function fmtTime(ts: string): string {
 }
 
 .phase-card-strip {
+  --phase-gap: clamp(6px, 0.75vw, 12px);
+  --phase-card-w: calc((100% - var(--phase-gap) * 3) / 4);
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(6px, 0.75vw, 12px);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--phase-gap);
   padding: clamp(5px, 0.65vw, 10px);
   min-height: 0;
   border: 1px solid rgba(48, 188, 235, 0.28);
   border-radius: clamp(16px, 1.5vw, 26px);
   background: linear-gradient(180deg, rgba(5, 25, 54, 0.72), rgba(2, 12, 30, 0.5));
   box-shadow: inset 0 0 24px rgba(0, 205, 255, 0.06), 0 0 24px rgba(0, 166, 255, 0.06);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 232, 249, 0.42) rgba(3, 18, 38, 0.3);
 }
 
 .phase-card-strip::before {
@@ -2790,13 +2795,28 @@ function fmtTime(ts: string): string {
   pointer-events: none;
 }
 
+.phase-card-strip::-webkit-scrollbar {
+  height: 7px;
+}
+
+.phase-card-strip::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(3, 18, 38, 0.34);
+}
+
+.phase-card-strip::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(41, 243, 255, 0.36), rgba(47, 240, 160, 0.28));
+}
+
 .phase-card {
   position: relative;
   z-index: 1;
+  flex: 0 0 var(--phase-card-w);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-content: stretch;
-  min-width: 0;
+  min-width: 220px;
   min-height: 0;
   padding: clamp(7px, 0.72vw, 13px) clamp(10px, 1.15vw, 20px);
   border: 1px solid rgba(72, 124, 177, 0.28);
@@ -3873,7 +3893,11 @@ function fmtTime(ts: string): string {
   .header-meta { justify-content: flex-end; min-width: 0; }
   .progress-console { flex: 0 0 auto; min-height: 32px; padding-inline: 8px; gap: 6px; }
   .drill-name-tag { max-width: clamp(96px, 13vw, 150px); }
-  .phase-card-strip { gap: 6px; padding: 5px; }
+  .phase-card-strip {
+    --phase-gap: 6px;
+    gap: var(--phase-gap);
+    padding: 5px;
+  }
   .phase-card {
     padding: 7px 9px 6px;
     border-radius: 10px;

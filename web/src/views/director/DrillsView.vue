@@ -11,7 +11,7 @@
     <div class="page-content">
       <div class="table-toolbar">
         <div class="toolbar-left">
-          <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 120px">
+          <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 120px" @change="handleSearch">
             <el-option label="待启动" value="pending" />
             <el-option label="执行中" value="running" />
             <el-option label="已暂停" value="paused" />
@@ -20,11 +20,14 @@
           </el-select>
         </div>
         <div class="toolbar-right">
-          <el-input v-model="keyword" placeholder="搜索演练名称" clearable style="width: 200px" @input="loadDrills">
+          <el-input v-model="keyword" placeholder="搜索演练名称" clearable style="width: 220px" @keyup.enter="handleSearch" @clear="handleSearch">
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
+          <el-button type="primary" @click="handleSearch">
+            查询
+          </el-button>
         </div>
       </div>
 
@@ -116,6 +119,11 @@ const pagination = reactive({
   total: 0,
 })
 
+function handleSearch() {
+  pagination.page = 1
+  loadDrills()
+}
+
 async function loadDrills() {
   loading.value = true
   try {
@@ -126,8 +134,9 @@ async function loadDrills() {
     if (filterStatus.value) {
       params.status = filterStatus.value
     }
-    if (keyword.value) {
-      params.keyword = keyword.value
+    const searchKeyword = keyword.value.trim()
+    if (searchKeyword) {
+      params.keyword = searchKeyword
     }
     const result = await drillApi.getList(params)
     drills.value = result.list || []

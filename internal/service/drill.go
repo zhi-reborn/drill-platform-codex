@@ -291,8 +291,8 @@ func (s *DrillService) SetNotificationService(ns *NotificationService) {
 	s.notificationService = ns
 }
 
-func (s *DrillService) GetList(page, pageSize int, status string) ([]entity.DrillInstance, int64, error) {
-	return s.drillRepo.List(page, pageSize, status)
+func (s *DrillService) GetList(page, pageSize int, status string, keyword string) ([]entity.DrillInstance, int64, error) {
+	return s.drillRepo.List(page, pageSize, status, keyword)
 }
 
 func (s *DrillService) GetUserByID(id uint64) (*entity.User, error) {

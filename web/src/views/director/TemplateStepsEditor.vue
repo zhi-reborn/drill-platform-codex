@@ -672,6 +672,7 @@ async function loadDepartments() {
 
 // 加载模板步骤
 async function loadTemplateSteps() {
+  const previousPhaseName = activePhaseName.value
   try {
     const template = await templateApi.getById(templateId.value)
     if (!template) {
@@ -740,7 +741,11 @@ async function loadTemplateSteps() {
 
     phases.value = newPhases
     if (newPhases.length > 0) {
-      activePhaseName.value = newPhases[0].name
+      activePhaseName.value = newPhases.some(p => p.name === previousPhaseName)
+        ? previousPhaseName
+        : newPhases[0].name
+    } else {
+      activePhaseName.value = ''
     }
     // 在 phases 和 activePhaseName 都设置完后强制重建
     buildAndSyncTree()

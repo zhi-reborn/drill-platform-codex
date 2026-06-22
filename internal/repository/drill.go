@@ -2,6 +2,7 @@ package repository
 
 import (
 	"drill-platform/internal/domain/entity"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -21,7 +22,7 @@ func (r *DrillRepo) FindByID(id uint64) (*entity.DrillInstance, error) {
 	return &drill, nil
 }
 
-func (r *DrillRepo) List(page, pageSize int, status string) ([]entity.DrillInstance, int64, error) {
+func (r *DrillRepo) List(page, pageSize int, status string, keyword string) ([]entity.DrillInstance, int64, error) {
 	var drills []entity.DrillInstance
 	var total int64
 
@@ -29,9 +30,13 @@ func (r *DrillRepo) List(page, pageSize int, status string) ([]entity.DrillInsta
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
 
 	query.Count(&total)
-	err := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&drills).Error
+	err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&drills).Error
 	return drills, total, err
 }
 

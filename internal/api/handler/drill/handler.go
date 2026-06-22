@@ -110,7 +110,7 @@ func (h *Handler) List(c *gin.Context) {
 	q.Normalize()
 
 	status := c.Query("status")
-	drills, total, err := h.drillService.GetList(q.Page, q.PageSize, status)
+	drills, total, err := h.drillService.GetList(q.Page, q.PageSize, status, q.Keyword)
 	if err != nil {
 		response.InternalError(c, "获取演练列表失败")
 		return

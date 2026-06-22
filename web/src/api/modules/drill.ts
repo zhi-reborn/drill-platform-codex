@@ -2,7 +2,7 @@ import { apiRequest } from '../request'
 import type { DrillInstance, StepInstance } from '@/types/instance'
 
 export const drillApi = {
-  getList: (params?: { page?: number; page_size?: number; status?: string }) => {
+  getList: (params?: { page?: number; page_size?: number; status?: string; keyword?: string }) => {
     return apiRequest<{ list: DrillInstance[]; total: number; page: number; page_size: number }>({
       url: '/v1/drills',
       method: 'GET',
