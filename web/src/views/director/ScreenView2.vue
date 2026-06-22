@@ -3638,9 +3638,10 @@ function fmtTime(ts: string): string {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   grid-auto-rows: minmax(0, 1fr);
   gap: clamp(8px, 0.9vw, 14px);
-  overflow: hidden;
+  overflow: visible;
   min-height: 0;
-  height: 100%;
+  height: calc(100% - 6px);
+  padding-bottom: 6px;
 }
 
 .exec-col-running .exec-col-cards {
@@ -3695,9 +3696,9 @@ function fmtTime(ts: string): string {
   display: grid;
   grid-template-rows: auto auto minmax(16px, auto);
   align-content: space-between;
-  min-height: clamp(88px, 11vh, 126px);
+  min-height: clamp(78px, 9.6vh, 112px);
   height: 100%;
-  padding: clamp(10px, 0.95vw, 15px);
+  padding: clamp(9px, 0.82vw, 13px);
   border: 1px solid rgba(0, 190, 255, 0.28);
   border-radius: 6px;
   background:
@@ -3760,8 +3761,8 @@ function fmtTime(ts: string): string {
 }
 
 .task-progress {
-  height: 11px;
-  margin: 14px 0 11px;
+  height: 9px;
+  margin: 10px 0 8px;
   border-radius: 12px;
   background: rgba(50, 102, 132, 0.5);
   overflow: hidden;
@@ -3774,7 +3775,7 @@ function fmtTime(ts: string): string {
 }
 
 .execution-card p {
-  margin: 14px 0 0;
+  margin: 8px 0 0;
   color: #f5fbff;
   font-weight: 700;
   overflow: hidden;
@@ -3931,7 +3932,7 @@ function fmtTime(ts: string): string {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .execution-card {
-    min-height: clamp(84px, 10.6vh, 116px);
+    min-height: clamp(76px, 9.4vh, 108px);
   }
 }
 

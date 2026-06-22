@@ -1154,6 +1154,7 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
     patchLocalStep(payload)
     refreshInstanceDetail()
     refreshLogsDebounced()
+    scheduleDrillDataRefresh(250)
     return
   }
 
@@ -1177,10 +1178,6 @@ function scheduleDrillDataRefresh(delay = 120) {
     drillRefreshTimer = null
     loadDrillData()
   }, delay)
-}
-
-function isWebSocketOpen() {
-  return ws?.readyState === WebSocket.OPEN
 }
 
 function refreshLogsDebounced(delay = 250) {
@@ -1242,9 +1239,7 @@ function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
   })
   refreshInstanceDetail()
   refreshLogsDebounced()
-  if (!isWebSocketOpen()) {
-    scheduleDrillDataRefresh(800)
-  }
+  scheduleDrillDataRefresh(250)
 }
 
 function startFallbackPolling() {
