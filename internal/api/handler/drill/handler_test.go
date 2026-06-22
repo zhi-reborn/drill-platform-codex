@@ -298,3 +298,44 @@ func TestResolveStepOperationTargetKeepsTemplateIDLookup(t *testing.T) {
 		t.Fatalf("unexpected target: step=%d def=%d", target.step.ID, target.stepDefID)
 	}
 }
+
+func TestResolveStepOperationTargetPrefersInstanceIDWhenIDsCollide(t *testing.T) {
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	steps := []map[string]interface{}{
+		{
+			"id":                80,
+			"drill_instance_id": 7,
+			"template_step_id":  99,
+			"name":              "模板 ID 冲突步骤",
+			"seq":               1,
+			"status":            "completed",
+			"assignee_ids":      "[]",
+		},
+		{
+			"id":                99,
+			"drill_instance_id": 7,
+			"template_step_id":  100,
+			"name":              "真正要操作的实例步骤",
+			"seq":               2,
+			"status":            "running",
+			"assignee_ids":      "[]",
+		},
+	}
+	for _, step := range steps {
+		if err := db.Table("drill_instance_step").Create(step).Error; err != nil {
+			t.Fatalf("create instance step: %v", err)
+		}
+	}
+
+	target, err := resolveStepOperationTarget(7, 99)
+	if err != nil {
+		t.Fatalf("resolve target: %v", err)
+	}
+	if target.step.ID != 99 || target.stepDefID != 100 {
+		t.Fatalf("expected instance step 99/template step 100, got step=%d def=%d", target.step.ID, target.stepDefID)
+	}
+}

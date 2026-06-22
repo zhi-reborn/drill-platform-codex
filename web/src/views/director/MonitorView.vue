@@ -1001,7 +1001,7 @@ function normalizeStepForMonitor(step: StepInstance): StepInstance {
 }
 
 function getStepOperationId(step: StepInstance): number {
-  return step.step_template_id || step.id
+  return step.id
 }
 
 function calculateDuration(step: StepInstance): string {

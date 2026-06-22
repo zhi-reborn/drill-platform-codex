@@ -54,8 +54,8 @@ func stepStatusText(status string) string {
 
 func resolveStepOperationTarget(drillID, requestedID uint64) (*stepOperationTarget, error) {
 	var step entity.StepInstance
-	if err := repository.DB.Where("drill_instance_id = ? AND template_step_id = ?", drillID, requestedID).First(&step).Error; err != nil {
-		if err := repository.DB.Where("drill_instance_id = ? AND id = ?", drillID, requestedID).First(&step).Error; err != nil {
+	if err := repository.DB.Where("drill_instance_id = ? AND id = ?", drillID, requestedID).First(&step).Error; err != nil {
+		if err := repository.DB.Where("drill_instance_id = ? AND template_step_id = ?", drillID, requestedID).First(&step).Error; err != nil {
 			return nil, err
 		}
 	}
