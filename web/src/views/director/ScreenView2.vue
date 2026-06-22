@@ -72,7 +72,9 @@
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
               <div class="flow-node" :class="'is-' + node.status">
                 <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
-                <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                <span class="node-tag">
+                  <span class="node-label">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                </span>
                 <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
                   <i class="node-gear" />
                   <i class="node-live-dot" />
@@ -87,7 +89,9 @@
               <span v-if="index > 0" class="flow-arrow left" />
               <div class="flow-node" :class="'is-' + node.status">
                 <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
-                <span class="node-tag">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                <span class="node-tag">
+                  <span class="node-label">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                </span>
                 <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
                   <i class="node-gear" />
                   <i class="node-live-dot" />
@@ -123,7 +127,6 @@
                     <span>{{ task.statusText }}</span>
                   </div>
                   <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
-                  <p>{{ task.phaseText }}</p>
                 </article>
                 <div v-if="!runningCards.length" class="exec-empty">暂无进行中步骤</div>
               </div>
@@ -142,7 +145,6 @@
                     <span>{{ task.statusText }}</span>
                   </div>
                   <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
-                  <p>{{ task.phaseText }}</p>
                 </article>
                 <div v-if="!pendingCards.length" class="exec-empty">暂无待执行步骤</div>
               </div>
@@ -527,7 +529,6 @@ function mapExecCard(step: StepInstance) {
     statusText: step.status === 'running' ? '进行中' : step.status === 'pending' ? '待执行' : '已完成',
     progress,
     timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
-    phaseText: `${step.phase || '当前阶段'} — ${step.phase_step || step.executor_team || '执行任务'}`,
     raw: step,
   }
 }
@@ -3215,6 +3216,15 @@ function fmtTime(ts: string): string {
   text-shadow: 0 0 10px rgba(0, 211, 255, 0.24);
 }
 
+.node-label {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flow-node.is-pending {
   color: #f5fbff;
 }
@@ -3713,12 +3723,13 @@ function fmtTime(ts: string): string {
   position: relative;
   min-width: 0;
   box-sizing: border-box;
-  display: grid;
-  grid-template-rows: auto auto minmax(16px, auto);
-  align-content: space-between;
-  min-height: clamp(78px, 9.6vh, 112px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(10px, 1vh, 14px);
+  min-height: clamp(66px, 8.2vh, 96px);
   height: 100%;
-  padding: clamp(9px, 0.82vw, 13px);
+  padding: clamp(10px, 0.9vw, 14px);
   border: 1px solid rgba(0, 190, 255, 0.28);
   border-radius: 6px;
   background:
@@ -3760,9 +3771,12 @@ function fmtTime(ts: string): string {
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  min-height: 28px;
 }
 
 .task-card-head strong {
+  flex: 1;
+  min-width: 0;
   color: #f5fbff;
   font-size: clamp(15px, 1.18vw, 20px);
   line-height: 1.2;
@@ -3772,17 +3786,20 @@ function fmtTime(ts: string): string {
 }
 
 .task-card-head span {
+  flex-shrink: 0;
   padding: 3px 10px;
   border: 1px solid rgba(0, 207, 255, 0.44);
   border-radius: 2px;
   color: #0bdfff;
   background: rgba(0, 207, 255, 0.08);
+  line-height: 20px;
   white-space: nowrap;
 }
 
 .task-progress {
+  flex: 0 0 9px;
   height: 9px;
-  margin: 10px 0 8px;
+  margin: 0;
   border-radius: 12px;
   background: rgba(50, 102, 132, 0.5);
   overflow: hidden;
@@ -3792,15 +3809,6 @@ function fmtTime(ts: string): string {
   height: 100%;
   background: linear-gradient(90deg, #146f90, #12d7f5);
   box-shadow: 0 0 10px rgba(18, 215, 245, 0.42);
-}
-
-.execution-card p {
-  margin: 8px 0 0;
-  color: #f5fbff;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .execution-card.is-running {
@@ -3956,7 +3964,7 @@ function fmtTime(ts: string): string {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .execution-card {
-    min-height: clamp(76px, 9.4vh, 108px);
+    min-height: clamp(64px, 8vh, 92px);
   }
 }
 
@@ -4007,8 +4015,10 @@ function fmtTime(ts: string): string {
   .execution-card { padding: 8px; }
   .task-card-head strong { font-size: 14px; }
   .task-card-head span { padding: 2px 6px; font-size: 11px; }
-  .task-progress { height: 8px; margin: 8px 0 6px; }
-  .execution-card p { margin-top: 8px; font-size: 12px; }
+  .task-progress {
+    flex-basis: 8px;
+    height: 8px;
+  }
 }
 
 /* 弹窗动画 */
