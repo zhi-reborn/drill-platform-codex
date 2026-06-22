@@ -462,14 +462,6 @@ func (a *DrillFlowAdapter) SetupEventSubscriptions(engine *flowengine.Engine) {
 		}
 	}()
 
-	stepTimeoutCh := make(chan flowengine.Event, 100)
-	engine.GetEventBus().Subscribe(flowengine.EventStepTimeout, stepTimeoutCh)
-	go func() {
-		for evt := range stepTimeoutCh {
-			a.handleStepTimeout(evt)
-		}
-	}()
-
 	stepIssueCh := make(chan flowengine.Event, 100)
 	engine.GetEventBus().Subscribe(flowengine.EventStepIssue, stepIssueCh)
 	go func() {
@@ -501,20 +493,6 @@ func (a *DrillFlowAdapter) findStepInstance(drillID uint64, stepDefID int64) (*e
 func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 	drillID := uint64(evt.FlowInstID)
 	stepDefID := evt.StepDefID
-	payload := evt.Payload.(map[string]interface{})
-	var timeoutAt *time.Time
-	if ta, ok := payload["timeout_at"]; ok {
-		switch v := ta.(type) {
-		case time.Time:
-			if !v.IsZero() {
-				timeoutAt = &v
-			}
-		case *time.Time:
-			if v != nil && !v.IsZero() {
-				timeoutAt = v
-			}
-		}
-	}
 
 	stepInst, err := a.findStepInstance(drillID, stepDefID)
 	if err != nil {
@@ -525,9 +503,7 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 	updates := map[string]interface{}{
 		"status":     string(flowengine.StepStatusRunning),
 		"start_time": now,
-	}
-	if timeoutAt != nil && !timeoutAt.IsZero() {
-		updates["timeout_at"] = timeoutAt
+		"timeout_at": nil,
 	}
 	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(updates)
 
@@ -541,11 +517,6 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 
 	if a.wsManager != nil {
 		startTimeStr := now.Format(time.RFC3339)
-		var timeoutAtStr *string
-		if timeoutAt != nil && !timeoutAt.IsZero() {
-			s := timeoutAt.Format(time.RFC3339)
-			timeoutAtStr = &s
-		}
 		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
 			DrillID:        uint(drillID),
 			StepID:         uint(stepInst.ID),
@@ -556,13 +527,12 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 			NewStatus:      string(flowengine.StepStatusRunning),
 			Executor:       stepInst.AssigneeNames,
 			StartTime:      &startTimeStr,
-			TimeoutAt:      timeoutAtStr,
 			AssigneeNames:  stepInst.AssigneeNames,
 		})
 		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
 			"status":         string(flowengine.StepStatusRunning),
 			"start_time":     &startTimeStr,
-			"timeout_at":     timeoutAtStr,
+			"timeout_at":     nil,
 			"assignee_names": stepInst.AssigneeNames,
 		})
 	}
@@ -573,10 +543,6 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 	}
 
 	for _, userID := range assigneeIDs {
-		var deadline int64
-		if timeoutAt != nil && !timeoutAt.IsZero() {
-			deadline = timeoutAt.Unix()
-		}
 		if a.wsManager != nil {
 			a.wsManager.SendTaskUpdate(uint(userID), websocket.TaskAssignPayload{
 				UserID:    uint(userID),
@@ -584,7 +550,6 @@ func (a *DrillFlowAdapter) handleStepStart(evt flowengine.Event) {
 				StepID:    uint(stepInst.ID),
 				StepName:  stepInst.Name,
 				DrillName: drillName,
-				Deadline:  deadline,
 				Action:    "assigned",
 			})
 		}
@@ -907,112 +872,11 @@ func (a *DrillFlowAdapter) propagateStatusToParent(flowInstID int64, stepDefID i
 			})
 		}
 
-		// 超时/异常导致的父步骤自动完成，不自动推进后续步骤
+		// 异常导致的父步骤自动完成，不自动推进后续步骤
 		// 递归检查祖父步骤是否也需要自动完成
 		a.propagateStatusToParent(flowInstID, parentStepDefID, status, at)
 	}
-	// 如果还有子步骤未终态，父步骤保持 running 状态，不传播超时/异常
-}
-
-func (a *DrillFlowAdapter) handleStepTimeout(evt flowengine.Event) {
-	drillID := uint64(evt.FlowInstID)
-	stepDefID := evt.StepDefID
-
-	stepInst, err := a.findStepInstance(drillID, stepDefID)
-	if err != nil {
-		return
-	}
-
-	now := time.Now()
-	repository.DB.Model(&entity.StepInstance{}).Where("id = ?", stepInst.ID).Updates(map[string]interface{}{
-		"status":   string(flowengine.StepStatusTimeout),
-		"end_time": &now,
-	})
-
-	// 写操作日志
-	timeoutContent := ""
-	if stepInst.Phase != "" {
-		timeoutContent = fmt.Sprintf("【%s】%s 已超时", stepInst.Phase, stepInst.Name)
-	} else {
-		timeoutContent = fmt.Sprintf("%s 已超时", stepInst.Name)
-	}
-	repository.DB.Create(&entity.DrillInstanceLog{
-		DrillInstanceID: drillID,
-		StepInstanceID:  &stepInst.ID,
-		Action:          "timeout",
-		OperatorName:    "流程引擎",
-		Content:         timeoutContent,
-		CreatedAt:       now,
-	})
-
-	ctx := a.GetDrillContext(evt.FlowInstID)
-	drillName := ""
-	if ctx != nil {
-		drillName = ctx.Name
-	}
-
-	if a.wsManager != nil {
-		startTimeStr := ""
-		if stepInst.StartTime != nil {
-			startTimeStr = stepInst.StartTime.Format(time.RFC3339)
-		}
-		endTimeStr := now.Format(time.RFC3339)
-		a.wsManager.SendStepChange(uint(drillID), websocket.StepChangePayload{
-			DrillID:        uint(drillID),
-			StepID:         uint(stepInst.ID),
-			StepName:       stepInst.Name,
-			PhaseName:      stepInst.Phase,
-			PhaseStepName:  stepInst.PhaseStep,
-			PreviousStatus: string(flowengine.StepStatusRunning),
-			NewStatus:      string(flowengine.StepStatusTimeout),
-			Executor:       stepInst.AssigneeNames,
-			StartTime:      &startTimeStr,
-			EndTime:        &endTimeStr,
-			AssigneeNames:  stepInst.AssigneeNames,
-		})
-		PatchCachedStep(a.redis, drillID, uint(stepInst.ID), map[string]interface{}{
-			"status":         string(flowengine.StepStatusTimeout),
-			"start_time":     &startTimeStr,
-			"end_time":       &endTimeStr,
-			"assignee_names": stepInst.AssigneeNames,
-		})
-	}
-
-	if a.engine != nil {
-		inst, _ := a.engine.GetInstanceForMutate(evt.FlowInstID)
-		if inst != nil {
-			si, ok := inst.Steps[evt.StepDefID]
-			if ok {
-				si.Status = flowengine.StepStatusTimeout
-				si.EndTime = &now
-			}
-		}
-	}
-
-	var assigneeIDs []uint64
-	if stepInst.AssigneeIDs != "" && stepInst.AssigneeIDs != "[]" {
-		_ = json.Unmarshal([]byte(stepInst.AssigneeIDs), &assigneeIDs)
-	}
-
-	for _, userID := range assigneeIDs {
-		drillIDForNotif := drillID
-		stepIDForNotif := stepInst.ID
-		if a.notificationService != nil {
-			a.notificationService.CreateNotification(&entity.Notification{
-				UserID:  userID,
-				Type:    entity.NotificationTypeStepTimeout,
-				Title:   "步骤超时",
-				Content: fmt.Sprintf("[%s] 的步骤 [%s] 已超时", drillName, stepInst.Name),
-				DrillID: &drillIDForNotif,
-				StepID:  &stepIDForNotif,
-				IsRead:  false,
-			})
-		}
-	}
-
-	a.propagateStatusToParent(evt.FlowInstID, stepDefID, flowengine.StepStatusTimeout, now)
-
-	// 超时步骤不自动推进后续步骤，需要用户手动操作
+	// 如果还有子步骤未终态，父步骤保持 running 状态，不传播异常
 }
 
 func (a *DrillFlowAdapter) handleStepIssue(evt flowengine.Event) {

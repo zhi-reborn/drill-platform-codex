@@ -7,14 +7,14 @@ import (
 )
 
 type Services struct {
-	AuthService       *AuthService
-	TemplateService   *TemplateService
-	DrillService      *DrillService
-	TaskService       *TaskService
-	DisplayService    *DisplayService
-	ReportService     *ReportService
+	AuthService         *AuthService
+	TemplateService     *TemplateService
+	DrillService        *DrillService
+	TaskService         *TaskService
+	DisplayService      *DisplayService
+	ReportService       *ReportService
 	NotificationService *NotificationService
-	wsManager         *websocket.Manager
+	wsManager           *websocket.Manager
 }
 
 func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Services {
@@ -49,14 +49,14 @@ func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Service
 	taskService.SetRedis(redisClient)
 
 	s := &Services{
-		AuthService:       NewAuthService(userRepo),
-		TemplateService:   NewTemplateService(templateRepo),
-		DrillService:      drillService,
-		TaskService:       taskService,
-		DisplayService:    NewDisplayService(drillRepo, stepRepo),
-		ReportService:     NewReportService(drillRepo, stepRepo),
+		AuthService:         NewAuthService(userRepo),
+		TemplateService:     NewTemplateService(templateRepo),
+		DrillService:        drillService,
+		TaskService:         taskService,
+		DisplayService:      NewDisplayService(drillRepo, stepRepo),
+		ReportService:       NewReportService(drillRepo, stepRepo),
 		NotificationService: notificationService,
-		wsManager:         wsManager,
+		wsManager:           wsManager,
 	}
 
 	s.DrillService.SetEngine(engine, adapter)
@@ -67,8 +67,6 @@ func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Service
 	s.TaskService.SetWebSocketManager(wsManager)
 	s.DrillService.SetNotificationService(s.NotificationService)
 	s.TaskService.SetNotificationService(s.NotificationService)
-
-	engine.TimeoutScheduler().Start()
 
 	return s
 }

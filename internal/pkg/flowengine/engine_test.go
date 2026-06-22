@@ -117,7 +117,7 @@ func TestCreateInstance(t *testing.T) {
 	}
 }
 
-func TestStartFlow(t *testing.T) {
+func TestStartFlowDoesNotScheduleTimeout(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()
 	loader := &testStepLoader{
@@ -147,11 +147,11 @@ func TestStartFlow(t *testing.T) {
 		t.Errorf("expected step1 status running, got %s", inst.Steps[101].Status)
 	}
 
-	if inst.Steps[101].TimeoutAt == nil {
-		t.Fatalf("expected step1 timeout to be scheduled")
+	if inst.Steps[101].TimeoutAt != nil {
+		t.Fatalf("expected step1 timeout deadline to stay empty")
 	}
-	if !e.timeoutScheduler.IsRegistered(inst.ID, 101) {
-		t.Fatalf("expected timeout scheduler to register step1")
+	if e.timeoutScheduler.IsRegistered(inst.ID, 101) {
+		t.Fatalf("expected timeout scheduler not to register step1")
 	}
 }
 
@@ -635,8 +635,8 @@ func TestIntervene_ResumeTaskAllowsRedispatchTerminalStep(t *testing.T) {
 			if inst.Steps[101].EndTime != nil {
 				t.Errorf("expected end time to be cleared")
 			}
-			if inst.Steps[101].TimeoutAt == nil {
-				t.Errorf("expected timeout to be rescheduled")
+			if inst.Steps[101].TimeoutAt != nil {
+				t.Errorf("expected timeout to stay empty")
 			}
 			if inst.Steps[101].IssueDesc != "" || inst.Steps[101].Remark != "" {
 				t.Errorf("expected issue and remark to be cleared")

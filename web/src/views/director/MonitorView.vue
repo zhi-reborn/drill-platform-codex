@@ -67,12 +67,12 @@
         </div>
       </el-card>
 
-      <!-- 异常/超时步骤 -->
+      <!-- 异常步骤 -->
       <el-card v-if="issueSteps.length > 0" class="issue-card" shadow="never">
         <template #header>
           <div class="issue-header">
             <el-icon class="issue-icon"><Warning /></el-icon>
-            <span class="issue-title">异常/超时 ({{ issueSteps.length }})</span>
+            <span class="issue-title">异常 ({{ issueSteps.length }})</span>
           </div>
         </template>
         <div class="issue-list">
@@ -81,7 +81,7 @@
           :key="step.id"
           :title="step.name"
           :description="getIssueDescription(step)"
-          :type="step.status === 'timeout' ? 'warning' : 'error'"
+          type="error"
           :closable="false"
           show-icon
           class="issue-item"
@@ -90,7 +90,7 @@
             <div class="issue-actions">
               <ActionConfirm
                 :title="`重新派发：${step.name}`"
-                message="将步骤状态重置为运行中并重新计时超时，是否继续？"
+                message="将步骤状态重置为运行中，是否继续？"
                 type="warning"
                 @confirm="handleResumeTask(step)"
                 :disabled="instance?.status === 'paused'"
@@ -151,10 +151,6 @@
                 </el-descriptions-item>
                 <el-descriptions-item v-if="getStepOperator(step)" label="操作人">
                   {{ getStepOperator(step) }}
-                </el-descriptions-item>
-                <el-descriptions-item v-if="step.timeout_minutes" label="超时">
-                  {{ step.timeout_minutes }} 分钟
-                  <span v-if="step.timeout_at" class="timeout-countdown">({{ getCountdown(step.timeout_at) }})</span>
                 </el-descriptions-item>
               </el-descriptions>
             </div>
@@ -257,11 +253,6 @@
               </template>
             </template>
           </el-table-column>
-          <el-table-column prop="estimated_duration_minutes" label="预计耗时" width="80" align="center">
-            <template #default="{ row }">
-              {{ isParentStep(row) ? '-' : (row.estimated_duration_minutes ? `${row.estimated_duration_minutes}m` : '-') }}
-            </template>
-          </el-table-column>
           <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
             <template #default="{ row }">
               <template v-if="isParentStep(row)">-</template>
@@ -316,16 +307,16 @@
                     @click="handleDirectorComplete(row)"
                   >完成</el-button>
                   <el-button
-                    v-if="['timeout', 'issue'].includes(row.status)"
+                    v-if="row.status === 'issue'"
                     type="success"
                     link
                     size="small"
-                    @click="confirmStepAction('步骤异常/超时，确认强制完成？', () => handleForceComplete(row))"
+                    @click="confirmStepAction('步骤异常，确认强制完成？', () => handleForceComplete(row))"
                   >
                     完成
                   </el-button>
                   <el-button
-                    v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                    v-if="['pending', 'running'].includes(row.status)"
                     type="warning"
                     link
                     size="small"
@@ -334,7 +325,7 @@
                     跳过
                   </el-button>
                   <el-button
-                    v-if="['pending', 'running', 'timeout'].includes(row.status)"
+                    v-if="['pending', 'running'].includes(row.status)"
                     type="danger"
                     link
                     size="small"
@@ -343,7 +334,7 @@
                     强制完成
                   </el-button>
                   <el-button
-                    v-if="['timeout', 'completed', 'skipped'].includes(row.status)"
+                    v-if="['completed', 'skipped'].includes(row.status)"
                     type="primary"
                     link
                     size="small"
@@ -400,15 +391,6 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="阶段内步骤">{{ selectedStep.phase_step || '-' }}</el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="预计耗时">{{ selectedStep.estimated_duration_minutes ? `${selectedStep.estimated_duration_minutes} 分钟` : '-' }}</el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="预计启动偏移">{{ selectedStep.estimated_start_offset ? `${selectedStep.estimated_start_offset} 秒` : '-' }}</el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="超时时间(分钟)">{{ selectedStep.timeout_minutes || '-' }}</el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="执行团队">{{ selectedStep.executor_team || '-' }}</el-form-item>
@@ -534,7 +516,6 @@ const detailSaving = ref(false)
 const editFormRef = ref()
 
 const editForm = reactive({
-  timeout_minutes: 0,
   executor_team: '',
   assignee_names: '',
   remark: '',
@@ -763,9 +744,9 @@ function isParentStep(step: any): boolean {
   return stepTreeMetaMap.value.get(step.id)?.isParent || parentIdSet.value.has(step.id)
 }
 
-// 终态集合：已完成/已跳过/已超时/异常
-const TERMINAL_STATUSES: StepStatus[] = ['completed', 'skipped', 'timeout', 'issue']
-const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'timeout', 'issue']
+// 终态集合：已完成/已跳过/异常
+const TERMINAL_STATUSES: StepStatus[] = ['completed', 'skipped', 'issue']
+const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'issue']
 const terminalStatusSet = new Set<StepStatus>(TERMINAL_STATUSES)
 const dependencySatisfiedStatusSet = new Set<StepStatus>(DEPENDENCY_SATISFIED_STATUSES)
 
@@ -960,7 +941,7 @@ const runningSteps = computed(() => {
 })
 
 const issueSteps = computed(() => {
-  return sortedSteps.value.filter(s => s.status === 'timeout' || s.status === 'issue')
+  return sortedSteps.value.filter(s => s.status === 'issue')
 })
 
 const canPause = computed(() => instance.value?.status === 'running')
@@ -976,12 +957,14 @@ const isFinished = computed(() => {
 })
 
 const drillLogs = computed(() => {
-  return logs.value.map(log => ({
-    ...log,
-    step_name: null,
-    operator: log.operator_name,
-    remark: log.content,
-  }))
+  return logs.value
+    .filter(log => !['timeout', 'step_timeout'].includes(log.action))
+    .map(log => ({
+      ...log,
+      step_name: null,
+      operator: log.operator_name,
+      remark: typeof log.content === 'string' ? log.content.replace(/超时/g, '结束') : log.content,
+    }))
 })
 
 function parseStepAttributes(attributes: StepInstance['attributes'] | string | null | undefined) {
@@ -1006,6 +989,15 @@ function parsePreStepIds(preStepIds: number[] | string | null | undefined): numb
     }
   }
   return []
+}
+
+function normalizeStepForMonitor(step: StepInstance): StepInstance {
+  if (step.status !== 'timeout') return step
+  return {
+    ...step,
+    status: 'running',
+    timeout_at: null,
+  }
 }
 
 function getStepOperationId(step: StepInstance): number {
@@ -1048,10 +1040,8 @@ function getLogTypeTag(action: string): 'primary' | 'success' | 'warning' | 'dan
     step_complete: 'success',
     step_issue: 'danger',
     step_skip: 'info',
-    step_timeout: 'danger',
     force_complete: 'warning',
     resume_task: 'primary',
-    timeout: 'danger',
     skip: 'info',
   }
   return map[action] || 'info'
@@ -1068,10 +1058,8 @@ function getLogActionLabel(action: string): string {
     step_complete: '步骤完成',
     step_issue: '步骤异常',
     step_skip: '步骤跳过',
-    step_timeout: '步骤超时',
     force_complete: '强制完成',
     resume_task: '重新派发',
-    timeout: '系统超时',
     skip: '手动跳过',
     director_complete: '指挥组完成任务',
     step_complete_director: '指挥组完成任务',
@@ -1100,24 +1088,10 @@ function getStepTypeTag(stepType: string): 'primary' | 'success' | 'warning' | '
 }
 
 function getIssueDescription(step: StepInstance): string {
-  if (step.status === 'timeout') {
-    return `步骤已超时（限制 ${step.timeout_minutes || '?'} 分钟）`
-  }
   if (step.status === 'issue') {
     return '步骤执行异常，需要处理'
   }
   return ''
-}
-
-function getCountdown(timeoutAt: string): string {
-  if (!timeoutAt) return ''
-  const now = Date.now()
-  const target = new Date(timeoutAt).getTime()
-  const diff = Math.max(0, Math.floor((target - now) / 1000))
-  if (diff <= 0) return '已超时'
-  const mins = Math.floor(diff / 60)
-  const secs = diff % 60
-  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
 function getStepOperator(step: any): string {
@@ -1214,10 +1188,9 @@ function patchLocalStep(payload: any) {
   if (!newStatus) return
 
   const step = { ...steps.value[idx] }
-  step.status = newStatus
+  step.status = newStatus === 'timeout' ? 'running' : newStatus
   if (payload.start_time) step.start_time = payload.start_time
   if (payload.end_time) step.end_time = payload.end_time
-  if (payload.timeout_at) step.timeout_at = payload.timeout_at
   if (payload.assignee_names) step.assignee_names = payload.assignee_names
   if (payload.remark) step.remark = payload.remark
   if (payload.issue_desc) step.issue_desc = payload.issue_desc
@@ -1291,7 +1264,7 @@ async function loadDrillData() {
     if (componentDestroyed) return
     // 解析 attributes JSON 字符串为对象，解析 pre_step_ids 为数组
     stepsData = stepsData.map((step: StepInstance) => ({
-      ...step,
+      ...normalizeStepForMonitor(step),
       attributes: parseStepAttributes(step.attributes),
       pre_step_ids: parsePreStepIds(step.pre_step_ids),
     }))
@@ -1443,7 +1416,6 @@ function enterEditMode() {
   if (!selectedStep.value) return
   const s = selectedStep.value
   // 逐字段赋值(避免直接替换 reactive 对象丢失响应性)
-  editForm.timeout_minutes = s.timeout_minutes || 0
   editForm.executor_team = s.executor_team || ''
   editForm.assignee_names = s.assignee_names || ''
   editForm.remark = ''
@@ -1704,10 +1676,6 @@ onUnmounted(() => {
             color: $text-secondary;
           }
 
-          .timeout-countdown {
-            color: #e6a23c;
-            font-weight: $font-weight-semibold;
-          }
         }
       }
 

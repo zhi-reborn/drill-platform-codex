@@ -104,9 +104,6 @@ func (s *DrillService) Recover(id uint64) error {
 				si.ActualOperator = &op
 			}
 
-			if step.Status == "running" && step.TimeoutAt != nil {
-				s.engine.TimeoutScheduler().Register(int64(drill.ID), int64(step.StepTemplateID), int64(step.ID), *step.TimeoutAt)
-			}
 		}
 	}
 

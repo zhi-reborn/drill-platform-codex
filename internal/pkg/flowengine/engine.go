@@ -198,32 +198,14 @@ func (e *Engine) activateStep(inst *FlowInst, si *StepInst) {
 	log.Printf("[FLOW] activateStep: step=%d name=%s old=%s new=%s instID=%d",
 		si.StepDefID, si.Name, oldStatus, si.Status, si.ID)
 
-	var timeoutAt time.Time
-	loader := e.getStepLoader()
-	if loader != nil {
-		stepDef, err := loader.GetStepDef(inst.FlowDefID, si.StepDefID)
-		if err == nil && stepDef.TimeoutMinutes > 0 {
-			timeoutAt = now.Add(time.Duration(stepDef.TimeoutMinutes) * time.Minute)
-			si.TimeoutAt = &timeoutAt
-		}
-	}
-
 	inst.CurrentStepIDs = append(inst.CurrentStepIDs, si.StepDefID)
-
-	if !timeoutAt.IsZero() {
-		e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, timeoutAt)
-	}
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, si.Status)
-		if !timeoutAt.IsZero() {
-			cbs.OnStepStarted(si.ID, timeoutAt)
-		}
 	}
 
 	e.eventBus.emit(EventStepStart, inst.ID, si.ID, si.StepDefID, map[string]interface{}{
-		"step_name":  si.Name,
-		"timeout_at": timeoutAt,
+		"step_name": si.Name,
 	})
 
 	// 激活子步骤：父步骤开始后，自动激活其首批前序已满足的子步骤

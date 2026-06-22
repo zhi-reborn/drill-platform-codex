@@ -69,16 +69,6 @@ func (e *Engine) handleResume(inst *FlowInst) error {
 		return ErrInvalidStatus
 	}
 
-	loader := e.getStepLoader()
-	for _, si := range inst.Steps {
-		if si.Status == StepStatusRunning {
-			stepDef, _ := loader.GetStepDef(inst.FlowDefID, si.StepDefID)
-			if stepDef != nil && stepDef.TimeoutMinutes > 0 && si.TimeoutAt != nil {
-				e.timeoutScheduler.Register(inst.ID, si.StepDefID, si.ID, *si.TimeoutAt)
-			}
-		}
-	}
-
 	oldStatus := inst.Status
 	inst.Status = FlowStatusRunning
 
@@ -231,22 +221,9 @@ func (e *Engine) handleResumeTask(inst *FlowInst, stepDefID int64, operatorID in
 	si.IssueDesc = ""
 	si.Remark = ""
 
-	loader := e.getStepLoader()
-	var stepDef *StepDef
-	if loader != nil {
-		stepDef, _ = loader.GetStepDef(inst.FlowDefID, stepDefID)
-	}
 	now := time.Now()
 	startTime := now
 	si.StartTime = &startTime
-
-	if stepDef != nil && stepDef.TimeoutMinutes > 0 && e.timeoutScheduler != nil {
-		timeoutAt := now.Add(time.Duration(stepDef.TimeoutMinutes) * time.Minute)
-		si.TimeoutAt = &timeoutAt
-		if !e.timeoutScheduler.IsRegistered(inst.ID, stepDefID) {
-			e.timeoutScheduler.Register(inst.ID, stepDefID, si.ID, timeoutAt)
-		}
-	}
 
 	if cbs := e.getCallbacks(); cbs != nil {
 		cbs.OnStepStatusChanged(si.ID, oldStatus, StepStatusRunning)
