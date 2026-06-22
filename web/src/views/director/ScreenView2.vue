@@ -99,7 +99,7 @@
               <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
             </div>
           </div>
-          <div class="execution-carousel">
+          <div class="execution-carousel" :class="'running-count-' + Math.min(runningCards.length, 4)">
             <div class="exec-col exec-col-running">
               <div class="exec-col-label">
                 <span><span class="exec-dot running" />进行中</span>
@@ -1843,26 +1843,6 @@ function fmtTime(ts: string): string {
   gap: 12px;
 }
 
-.btn-fullscreen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 150, 255, 0.2);
-  background: rgba(0, 30, 60, 0.6);
-  color: #5A8AAA;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-fullscreen:hover {
-  border-color: rgba(56, 189, 248, 0.5);
-  color: #38BDF8;
-  background: rgba(0, 40, 80, 0.8);
-}
-
 .btn-ctrl {
   display: flex;
   align-items: center;
@@ -2533,7 +2513,7 @@ function fmtTime(ts: string): string {
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: clamp(12px, 1.3em, 24px);
+  gap: clamp(14px, 1.5em, 28px);
   color: #ebf5ff;
   font-family: "Courier New", monospace;
   font-size: clamp(15px, 1.5em, 24px);
@@ -2596,13 +2576,89 @@ function fmtTime(ts: string): string {
 }
 
 .btn-fullscreen {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: clamp(34px, 3vw, 52px);
   height: clamp(34px, 3vw, 52px);
   border: 1px solid rgba(0, 217, 255, 0.65);
-  border-radius: 2px;
-  background: rgba(0, 47, 82, 0.54);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(0, 60, 100, 0.7), rgba(0, 30, 60, 0.5)),
+    rgba(0, 47, 82, 0.54);
   color: #03dcff;
-  box-shadow: inset 0 0 16px rgba(0, 191, 255, 0.16), 0 0 16px rgba(0, 191, 255, 0.12);
+  box-shadow:
+    inset 0 0 16px rgba(0, 191, 255, 0.16),
+    0 0 16px rgba(0, 191, 255, 0.12),
+    inset 0 1px 0 rgba(103, 232, 249, 0.15);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.btn-fullscreen::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(103, 232, 249, 0.12);
+  border-radius: 3px;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+.btn-fullscreen::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent 0%, rgba(0, 217, 255, 0.08) 10%, transparent 20%);
+  animation: btn-rotate 6s linear infinite;
+  pointer-events: none;
+}
+
+.btn-fullscreen :deep(.el-icon) {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(16px, 1.4vw, 22px);
+  filter: drop-shadow(0 0 4px rgba(3, 220, 255, 0.5));
+  transition: all 0.3s ease;
+}
+
+.btn-fullscreen:hover {
+  border-color: rgba(103, 232, 249, 0.9);
+  background:
+    linear-gradient(135deg, rgba(0, 80, 130, 0.85), rgba(0, 50, 90, 0.7)),
+    rgba(0, 60, 100, 0.7);
+  color: #67e8f9;
+  box-shadow:
+    inset 0 0 20px rgba(0, 191, 255, 0.25),
+    0 0 24px rgba(0, 191, 255, 0.3),
+    0 0 48px rgba(0, 191, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.btn-fullscreen:hover::before {
+  border-color: rgba(103, 232, 249, 0.3);
+}
+
+.btn-fullscreen:hover :deep(.el-icon) {
+  filter: drop-shadow(0 0 8px rgba(103, 232, 249, 0.8));
+  transform: scale(1.08);
+}
+
+.btn-fullscreen:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow:
+    inset 0 0 24px rgba(0, 191, 255, 0.3),
+    0 0 8px rgba(0, 191, 255, 0.15);
+  transition-duration: 0.1s;
+}
+
+@keyframes btn-rotate {
+  to { transform: rotate(360deg); }
 }
 
 .control-strip {
@@ -2688,6 +2744,7 @@ function fmtTime(ts: string): string {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(6px, 0.75vw, 12px);
   padding: clamp(5px, 0.65vw, 10px);
+  min-height: 0;
   border: 1px solid rgba(48, 188, 235, 0.28);
   border-radius: clamp(16px, 1.5vw, 26px);
   background: linear-gradient(180deg, rgba(5, 25, 54, 0.72), rgba(2, 12, 30, 0.5));
@@ -2711,8 +2768,12 @@ function fmtTime(ts: string): string {
 .phase-card {
   position: relative;
   z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
   min-width: 0;
-  padding: clamp(9px, 0.95vw, 16px) clamp(10px, 1.15vw, 20px);
+  min-height: 0;
+  padding: clamp(7px, 0.72vw, 13px) clamp(10px, 1.15vw, 20px);
   border: 1px solid rgba(72, 124, 177, 0.28);
   border-radius: clamp(10px, 1vw, 16px);
   background: linear-gradient(180deg, rgba(6, 30, 64, 0.82), rgba(4, 14, 31, 0.56));
@@ -2829,8 +2890,9 @@ function fmtTime(ts: string): string {
 .phase-segments {
   display: grid;
   grid-template-columns: repeat(20, 1fr);
+  align-self: center;
   gap: 2px;
-  margin: clamp(8px, 0.9vh, 14px) 0 clamp(6px, 0.7vh, 11px);
+  margin: clamp(5px, 0.55vh, 9px) 0;
 }
 
 .phase-segments span {
@@ -2858,20 +2920,24 @@ function fmtTime(ts: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  align-self: end;
   gap: clamp(6px, 0.75vw, 12px);
+  min-height: 0;
   color: #f5fbff;
   font-family: "Courier New", monospace;
-  font-size: clamp(13px, 1.25vw, 20px);
+  font-size: clamp(12px, 1.08vw, 18px);
   font-weight: 700;
+  line-height: 1;
   text-shadow: 0 0 10px rgba(28, 222, 255, 0.34);
 }
 
 .phase-stats span {
   min-width: 0;
-  padding: 2px clamp(5px, 0.55vw, 8px);
+  padding: clamp(1px, 0.22vh, 3px) clamp(5px, 0.55vw, 8px);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(8, 214, 255, 0.1), rgba(5, 45, 90, 0.14));
   box-shadow: inset 0 0 12px rgba(0, 206, 255, 0.1), 0 0 14px rgba(0, 216, 255, 0.06);
+  line-height: 1.05;
   white-space: nowrap;
 }
 
@@ -3146,13 +3212,17 @@ function fmtTime(ts: string): string {
 }
 
 .node-gear {
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(7, 28, 48, 0.98) 0 28%, transparent 30%),
-    conic-gradient(from 0deg, #ffe7a8 0 10deg, transparent 10deg 30deg, #ffb13d 30deg 45deg, transparent 45deg 62deg, #ffe7a8 62deg 76deg, transparent 76deg 96deg, #ffb13d 96deg 112deg, transparent 112deg 136deg, #ffe7a8 136deg 150deg, transparent 150deg 170deg, #ffb13d 170deg 186deg, transparent 186deg 210deg, #ffe7a8 210deg 224deg, transparent 224deg 248deg, #ffb13d 248deg 264deg, transparent 264deg 288deg, #ffe7a8 288deg 302deg, transparent 302deg 326deg, #ffb13d 326deg 342deg, transparent 342deg 360deg);
-  box-shadow: inset 0 0 0 2px rgba(255, 214, 118, 0.72);
+    radial-gradient(circle, rgba(255, 248, 212, 0.98) 0 11%, rgba(255, 214, 118, 0.92) 12% 23%, rgba(255, 154, 47, 0.34) 24% 29%, transparent 30%),
+    conic-gradient(from 0deg, #fff1bd 0 10deg, transparent 10deg 30deg, #ffb13d 30deg 45deg, transparent 45deg 62deg, #fff1bd 62deg 76deg, transparent 76deg 96deg, #ffb13d 96deg 112deg, transparent 112deg 136deg, #fff1bd 136deg 150deg, transparent 150deg 170deg, #ffb13d 170deg 186deg, transparent 186deg 210deg, #fff1bd 210deg 224deg, transparent 224deg 248deg, #ffb13d 248deg 264deg, transparent 264deg 288deg, #fff1bd 288deg 302deg, transparent 302deg 326deg, #ffb13d 326deg 342deg, transparent 342deg 360deg);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 214, 118, 0.72),
+    inset 0 0 8px rgba(255, 244, 207, 0.28),
+    0 0 10px rgba(255, 177, 61, 0.46);
   animation: node-gear-spin 1.8s linear infinite;
 }
 
@@ -3368,12 +3438,27 @@ function fmtTime(ts: string): string {
 
 .execution-carousel {
   display: grid;
-  grid-template-columns: minmax(190px, 0.58fr) auto minmax(0, 2.9fr);
+  grid-template-columns: minmax(190px, auto) auto minmax(0, 1fr);
   align-items: stretch;
   gap: clamp(10px, 1vw, 16px);
   overflow: hidden;
   min-height: 0;
   padding: clamp(8px, 1vh, 14px) clamp(18px, 1.8vw, 28px) clamp(8px, 1vh, 14px);
+  transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 根据进行中任务数量自动扩展左侧列宽 */
+.execution-carousel.running-count-1 {
+  grid-template-columns: minmax(190px, 0.58fr) auto minmax(0, 2.9fr);
+}
+.execution-carousel.running-count-2 {
+  grid-template-columns: minmax(380px, 1.16fr) auto minmax(0, 2.3fr);
+}
+.execution-carousel.running-count-3 {
+  grid-template-columns: minmax(540px, 1.74fr) auto minmax(0, 1.7fr);
+}
+.execution-carousel.running-count-4 {
+  grid-template-columns: minmax(680px, 2.2fr) auto minmax(0, 1.2fr);
 }
 
 .exec-col {
@@ -3381,6 +3466,7 @@ function fmtTime(ts: string): string {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  transition: flex 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .exec-col-label {
@@ -3458,6 +3544,18 @@ function fmtTime(ts: string): string {
 
 .exec-col-running .exec-col-cards {
   grid-template-columns: 1fr;
+  transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 多个进行中任务时自动横向扩展 */
+.execution-carousel.running-count-2 .exec-col-running .exec-col-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.execution-carousel.running-count-3 .exec-col-running .exec-col-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.execution-carousel.running-count-4 .exec-col-running .exec-col-cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .exec-col-pending .exec-col-cards {
@@ -3503,6 +3601,7 @@ function fmtTime(ts: string): string {
     repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.04) 0 1px, transparent 1px 28px);
   box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
   overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .execution-card::before {
@@ -3671,7 +3770,7 @@ function fmtTime(ts: string): string {
   .drill-name-tag { max-width: clamp(96px, 13vw, 150px); }
   .phase-card-strip { gap: 6px; padding: 5px; }
   .phase-card {
-    padding: 8px 9px 7px;
+    padding: 7px 9px 6px;
     border-radius: 10px;
   }
   .phase-card::after { display: none; }
@@ -3686,7 +3785,7 @@ function fmtTime(ts: string): string {
   }
   .phase-segments {
     gap: 2px;
-    margin: 6px 0 5px;
+    margin: 4px 0;
   }
   .phase-segments span { height: 5px; }
   .phase-stats {
@@ -3705,9 +3804,21 @@ function fmtTime(ts: string): string {
   }
   .flow-board { padding-inline: 24px; }
   .execution-carousel {
-    grid-template-columns: minmax(170px, 0.62fr) auto minmax(0, 2.45fr);
+    grid-template-columns: minmax(170px, auto) auto minmax(0, 1fr);
     padding-inline: 18px;
     gap: 10px;
+  }
+  .execution-carousel.running-count-1 {
+    grid-template-columns: minmax(170px, 0.62fr) auto minmax(0, 2.45fr);
+  }
+  .execution-carousel.running-count-2 {
+    grid-template-columns: minmax(340px, 1.24fr) auto minmax(0, 1.9fr);
+  }
+  .execution-carousel.running-count-3 {
+    grid-template-columns: minmax(480px, 1.7fr) auto minmax(0, 1.4fr);
+  }
+  .execution-carousel.running-count-4 {
+    grid-template-columns: minmax(600px, 2.1fr) auto minmax(0, 1fr);
   }
   .exec-col-pending .exec-col-cards {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3738,9 +3849,21 @@ function fmtTime(ts: string): string {
     font-size: 0.72em;
   }
   .execution-carousel {
-    grid-template-columns: minmax(160px, 0.72fr) auto minmax(0, 2fr);
+    grid-template-columns: minmax(160px, auto) auto minmax(0, 1fr);
     gap: 8px;
     padding-inline: 12px;
+  }
+  .execution-carousel.running-count-1 {
+    grid-template-columns: minmax(160px, 0.72fr) auto minmax(0, 2fr);
+  }
+  .execution-carousel.running-count-2 {
+    grid-template-columns: minmax(300px, 1.3fr) auto minmax(0, 1.5fr);
+  }
+  .execution-carousel.running-count-3 {
+    grid-template-columns: minmax(420px, 1.8fr) auto minmax(0, 1fr);
+  }
+  .execution-carousel.running-count-4 {
+    grid-template-columns: minmax(520px, 2.2fr) auto minmax(0, 0.7fr);
   }
   .exec-col-cards { gap: 6px; }
   .exec-col-pending .exec-col-cards {
