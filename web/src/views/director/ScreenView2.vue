@@ -108,12 +108,12 @@
           <div
             class="execution-carousel"
             :class="['running-count-' + Math.min(runningCards.length, 4), { 'hide-pending': hidePendingExecution }]"
-            :style="{ '--running-card-count': Math.max(runningCards.length, 1) }"
           >
             <div class="exec-col exec-col-running">
               <div class="exec-col-label">
                 <span><span class="exec-dot running" />进行中</span>
-                <em>{{ runningCards.length }}</em>
+                <em>{{ runningTotalCount }}</em>
+                <em v-if="hiddenRunningCount" class="running-hidden-summary">另 {{ hiddenRunningCount }} 个进行中</em>
               </div>
               <div class="exec-col-cards">
                 <article v-for="task in runningCards" :key="task.id" class="execution-card is-running">
@@ -532,8 +532,11 @@ function mapExecCard(step: StepInstance) {
   }
 }
 
-const runningCards = computed(() => runningSteps.value.filter(isLeafStep).slice(0, 8).map(mapExecCard))
-const hidePendingExecution = computed(() => runningCards.value.length > 4)
+const runningStepCards = computed(() => runningSteps.value.filter(isLeafStep).map(mapExecCard))
+const runningTotalCount = computed(() => runningStepCards.value.length)
+const runningCards = computed(() => runningStepCards.value.slice(0, 4))
+const hiddenRunningCount = computed(() => Math.max(runningTotalCount.value - runningCards.value.length, 0))
+const hidePendingExecution = computed(() => runningTotalCount.value > 4)
 const pendingStepCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).map(mapExecCard))
 const pendingTotalCount = computed(() => pendingStepCards.value.length)
 const pendingCards = computed(() => pendingStepCards.value.slice(0, 4))
@@ -3582,6 +3585,7 @@ function fmtTime(ts: string): string {
   align-items: center;
   gap: 7px;
   min-width: 0;
+  margin-right: auto;
 }
 
 .exec-col-label em {
@@ -3598,6 +3602,7 @@ function fmtTime(ts: string): string {
   box-shadow: inset 0 0 10px rgba(30, 172, 219, 0.1);
 }
 
+.exec-col-label .running-hidden-summary,
 .exec-col-label .pending-summary {
   max-width: min(100%, 220px);
   padding: 2px 10px;
@@ -3654,7 +3659,7 @@ function fmtTime(ts: string): string {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .execution-carousel.hide-pending .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(var(--running-card-count), minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .exec-col-pending .exec-col-cards {
