@@ -1154,7 +1154,6 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
   // 步骤事件携带完整变更信息，优先增量更新，避免每次操作后全量拉取步骤树。
   if (event.startsWith('step_')) {
     const patched = patchLocalStep(payload)
-    scheduleInstanceDetailRefresh()
     refreshLogsDebounced()
     if (!patched) {
       scheduleDrillDataRefresh(250)
@@ -1256,6 +1255,10 @@ async function refreshLogs() {
   } catch { /* 静默失败 */ }
 }
 
+function isWebSocketOpen(): boolean {
+  return Boolean(ws && ws.readyState === WebSocket.OPEN)
+}
+
 function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
   const now = new Date().toISOString()
   patchLocalStep({
@@ -1263,8 +1266,10 @@ function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
     new_status: newStatus,
     end_time: ['completed', 'skipped'].includes(newStatus) ? now : undefined,
   })
-  scheduleInstanceDetailRefresh()
   refreshLogsDebounced()
+  if (!isWebSocketOpen()) {
+    scheduleDrillDataRefresh(800)
+  }
 }
 
 function startFallbackPolling() {

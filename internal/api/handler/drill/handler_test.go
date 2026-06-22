@@ -63,7 +63,16 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 			id INTEGER PRIMARY KEY,
 			template_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
-			status TEXT NOT NULL
+			status TEXT NOT NULL,
+			created_by INTEGER NOT NULL DEFAULT 1,
+			progress_pct INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE drill_template (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			category TEXT NOT NULL DEFAULT '',
+			status INTEGER NOT NULL DEFAULT 1,
+			created_by INTEGER NOT NULL DEFAULT 1
 		)`,
 		`CREATE TABLE drill_instance_step (
 			id INTEGER PRIMARY KEY,
@@ -97,6 +106,67 @@ func setupStepTargetTestDB(t *testing.T) *gorm.DB {
 		}
 	}
 	return db
+}
+
+func TestGetDetailDoesNotReturnStepsPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_template").Create(map[string]interface{}{
+		"id":   3,
+		"name": "模板",
+	}).Error; err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	if err := db.Table("drill_instance").Create(map[string]interface{}{
+		"id":          2,
+		"template_id": 3,
+		"name":        "大步骤演练",
+		"status":      "running",
+	}).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+	for _, step := range []map[string]interface{}{
+		{"id": 10, "drill_instance_id": 2, "template_step_id": 100, "name": "步骤1", "seq": 1, "status": "completed", "assignee_ids": "[]"},
+		{"id": 11, "drill_instance_id": 2, "template_step_id": 101, "name": "步骤2", "seq": 2, "status": "running", "assignee_ids": "[]"},
+	} {
+		if err := db.Table("drill_instance_step").Create(step).Error; err != nil {
+			t.Fatalf("create step: %v", err)
+		}
+	}
+
+	svc := drillservice.NewDrillService(
+		repository.NewDrillRepo(),
+		repository.NewTemplateRepo(),
+		repository.NewStepRepo(),
+		repository.NewUserRepo(),
+	)
+	handler := NewHandler(svc, nil)
+
+	router := gin.New()
+	router.GET("/drills/:id", handler.GetDetail)
+	req := httptest.NewRequest(http.MethodGet, "/drills/2", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected response data object, got %T", body["data"])
+	}
+	if _, ok := data["steps"]; ok {
+		t.Fatalf("expected detail payload to omit steps, got %s", resp.Body.String())
+	}
 }
 
 func TestSyncEngineStepsFromDBAllowsStartAfterDBPredecessorCompleted(t *testing.T) {

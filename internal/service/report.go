@@ -12,7 +12,7 @@ func NewReportService(drillRepo *repository.DrillRepo, stepRepo *repository.Step
 }
 
 func (s *ReportService) GetReport(drillID uint64) (interface{}, error) {
-	drill, err := s.drillRepo.FindByID(drillID)
+	drill, err := s.drillRepo.FindByIDWithSteps(drillID)
 	if err != nil {
 		return nil, err
 	}

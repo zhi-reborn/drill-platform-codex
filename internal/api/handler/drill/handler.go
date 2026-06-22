@@ -149,32 +149,6 @@ func (h *Handler) GetDetail(c *gin.Context) {
 		return
 	}
 
-	// 兜底: 重新从数据库拉取每个 step 的 action_params 并合并到 attributes
-	if len(drill.Steps) > 0 {
-		ids := make([]uint64, 0, len(drill.Steps))
-		for _, s := range drill.Steps {
-			ids = append(ids, s.ID)
-		}
-		type row struct {
-			ID          uint64
-			ActionParam string
-		}
-		var rows []row
-		repository.DB.Table("drill_instance_step").
-			Select("id, action_params").
-			Where("id IN ?", ids).
-			Scan(&rows)
-		m := make(map[uint64]string, len(rows))
-		for _, r := range rows {
-			m[r.ID] = r.ActionParam
-		}
-		for i := range drill.Steps {
-			if v, ok := m[drill.Steps[i].ID]; ok && v != "" && v != "null" {
-				drill.Steps[i].JSONAttributes = v
-			}
-		}
-	}
-
 	response.Success(c, drill)
 }
 

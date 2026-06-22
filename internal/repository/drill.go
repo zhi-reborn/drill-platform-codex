@@ -15,6 +15,15 @@ func NewDrillRepo() *DrillRepo {
 
 func (r *DrillRepo) FindByID(id uint64) (*entity.DrillInstance, error) {
 	var drill entity.DrillInstance
+	err := DB.Where("id = ?", id).Preload("Template").First(&drill).Error
+	if err != nil {
+		return nil, err
+	}
+	return &drill, nil
+}
+
+func (r *DrillRepo) FindByIDWithSteps(id uint64) (*entity.DrillInstance, error) {
+	var drill entity.DrillInstance
 	err := DB.Where("id = ?", id).Preload("Template").Preload("Steps").First(&drill).Error
 	if err != nil {
 		return nil, err

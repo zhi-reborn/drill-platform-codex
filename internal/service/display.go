@@ -12,7 +12,7 @@ func NewDisplayService(drillRepo *repository.DrillRepo, stepRepo *repository.Ste
 }
 
 func (s *DisplayService) GetDrillData(drillID uint64) (interface{}, error) {
-	drill, err := s.drillRepo.FindByID(drillID)
+	drill, err := s.drillRepo.FindByIDWithSteps(drillID)
 	if err != nil {
 		return nil, err
 	}
