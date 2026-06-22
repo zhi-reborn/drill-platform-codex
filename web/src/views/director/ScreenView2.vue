@@ -62,6 +62,10 @@
 
         <section class="flow-board" :class="{ 'all-done': allPhasesDone }">
           <div class="flow-board-grid" />
+          <div class="flow-board-label">
+            <span class="label-pulse" aria-hidden="true" />
+            <span>当前环节</span>
+          </div>
           <div class="flow-row flow-row-top">
             <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
               <div class="flow-node" :class="'is-' + node.status">
@@ -2419,11 +2423,8 @@ function fmtTime(ts: string): string {
 }
 
 .cyber-bg-grid {
-  background-image:
-    linear-gradient(115deg, transparent 0 13%, rgba(32, 119, 194, 0.14) 13.2%, transparent 13.7%),
-    linear-gradient(75deg, transparent 0 18%, rgba(32, 119, 194, 0.12) 18.2%, transparent 18.8%),
-    linear-gradient(rgba(65, 167, 244, 0.035) 1px, transparent 1px);
-  background-size: 310px 100%, 420px 100%, 100% 5px;
+  background-image: linear-gradient(rgba(65, 167, 244, 0.035) 1px, transparent 1px);
+  background-size: 100% 5px;
   opacity: 0.72;
 }
 
@@ -2971,20 +2972,19 @@ function fmtTime(ts: string): string {
   grid-template-rows: 1fr 1fr;
   align-content: center;
   row-gap: var(--flow-row-gap);
-  padding: clamp(18px, 2.4vh, 42px) clamp(32px, 4.2vw, 84px);
+  padding: clamp(34px, 4vh, 58px) clamp(32px, 4.2vw, 84px) clamp(18px, 2.4vh, 42px);
   min-height: 0;
-  border: 2px solid rgba(255, 177, 61, 0.78);
+  border: 2px solid rgba(67, 226, 255, 0.72);
   border-radius: clamp(18px, 1.6vw, 28px);
   background:
-    linear-gradient(180deg, rgba(99, 58, 10, 0.24), rgba(48, 31, 17, 0.18)),
-    radial-gradient(circle at 50% 50%, rgba(255, 177, 61, 0.12), transparent 48%),
-    linear-gradient(90deg, rgba(255, 177, 61, 0.08), rgba(47, 240, 160, 0.05), rgba(255, 177, 61, 0.08));
+    linear-gradient(90deg, rgba(12, 89, 151, 0.74), rgba(5, 24, 52, 0.9) 36%, rgba(8, 35, 70, 0.76)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.08) 0 1px, transparent 1px 54px);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 226, 160, 0.3),
-    inset 0 0 34px rgba(255, 177, 61, 0.16),
-    0 0 0 1px rgba(255, 177, 61, 0.12),
-    0 0 28px rgba(255, 154, 47, 0.22),
-    0 0 56px rgba(255, 154, 47, 0.1);
+    inset 0 0 0 1px rgba(103, 232, 249, 0.18),
+    inset 0 0 34px rgba(0, 178, 255, 0.12),
+    0 0 0 1px rgba(67, 226, 255, 0.12),
+    0 0 28px rgba(0, 178, 255, 0.16),
+    0 0 56px rgba(47, 240, 160, 0.08);
   overflow: hidden;
 }
 
@@ -2999,8 +2999,8 @@ function fmtTime(ts: string): string {
 .flow-board::before {
   inset: 10px;
   border-radius: calc(clamp(18px, 1.6vw, 28px) - 8px);
-  border: 1px solid rgba(255, 215, 136, 0.38);
-  box-shadow: inset 0 0 18px rgba(255, 177, 61, 0.1);
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  box-shadow: inset 0 0 18px rgba(41, 243, 255, 0.1);
 }
 
 .flow-board::after {
@@ -3008,8 +3008,8 @@ function fmtTime(ts: string): string {
   right: clamp(22px, 2.2vw, 40px);
   top: 0;
   height: 5px;
-  background: linear-gradient(90deg, transparent, #ffb13d 15%, #ffd46a 50%, #ffb13d 85%, transparent);
-  box-shadow: 0 0 16px rgba(255, 177, 61, 0.72), 0 0 28px rgba(255, 154, 47, 0.36);
+  background: linear-gradient(90deg, transparent, #29f3ff 18%, #2ff0a0 50%, #29f3ff 82%, transparent);
+  box-shadow: 0 0 16px rgba(41, 243, 255, 0.62), 0 0 28px rgba(47, 240, 160, 0.24);
 }
 
 /* 全部完成时外框变绿 */
@@ -3043,15 +3043,86 @@ function fmtTime(ts: string): string {
     linear-gradient(90deg, rgba(74, 222, 128, 0.07) 1px, transparent 1px);
 }
 
+.flow-board.all-done .flow-board-label {
+  border-color: rgba(134, 239, 172, 0.52);
+  background:
+    linear-gradient(90deg, rgba(20, 83, 45, 0.88), rgba(5, 30, 32, 0.72)),
+    rgba(5, 30, 32, 0.72);
+  box-shadow:
+    inset 0 0 14px rgba(74, 222, 128, 0.14),
+    0 0 18px rgba(74, 222, 128, 0.16);
+}
+
 .flow-board-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 177, 61, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 177, 61, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(103, 232, 249, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.045) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
   pointer-events: none;
+}
+
+.flow-board-label {
+  position: absolute;
+  top: clamp(12px, 1.4vh, 20px);
+  right: clamp(18px, 2vw, 34px);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: clamp(26px, 2.8vh, 36px);
+  padding: 0 clamp(12px, 1.2vw, 20px);
+  border: 1px solid rgba(103, 232, 249, 0.44);
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(7, 50, 96, 0.88), rgba(3, 18, 38, 0.72)),
+    rgba(3, 18, 38, 0.72);
+  color: #e8fbff;
+  font-size: clamp(13px, 1.08vw, 17px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55);
+  box-shadow:
+    inset 0 0 14px rgba(41, 243, 255, 0.12),
+    0 0 18px rgba(0, 178, 255, 0.14);
+}
+
+.flow-board-label::before,
+.flow-board-label::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.78));
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.flow-board-label::before {
+  right: calc(100% + 6px);
+}
+
+.flow-board-label::after {
+  left: calc(100% + 6px);
+  background: linear-gradient(90deg, rgba(103, 232, 249, 0.78), transparent);
+}
+
+.label-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ff0a0;
+  box-shadow: 0 0 8px rgba(47, 240, 160, 0.86), 0 0 16px rgba(47, 240, 160, 0.42);
+  animation: label-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes label-pulse {
+  0%, 100% { opacity: 0.58; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1.18); }
 }
 
 .flow-row {
