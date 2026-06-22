@@ -278,7 +278,20 @@ func (h *Handler) GetLogs(c *gin.Context) {
 		return
 	}
 
-	logs, err := h.drillService.GetLogs(id)
+	limit := 0
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		parsedLimit, parseErr := strconv.Atoi(rawLimit)
+		if parseErr != nil || parsedLimit <= 0 {
+			response.BadRequest(c, "无效的日志数量")
+			return
+		}
+		if parsedLimit > 200 {
+			parsedLimit = 200
+		}
+		limit = parsedLimit
+	}
+
+	logs, err := h.drillService.GetLogs(id, limit)
 	if err != nil {
 		response.InternalError(c, "获取日志失败")
 		return

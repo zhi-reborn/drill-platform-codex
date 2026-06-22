@@ -30,13 +30,14 @@ export const drillApi = {
     })
   },
 
-  getLogs: (id: number) => {
+  getLogs: (id: number, limit?: number) => {
     if (!Number.isFinite(id) || id <= 0) {
       return Promise.reject(new Error('无效的演练 ID'))
     }
     return apiRequest<any[]>({
       url: `/v1/drills/${id}/logs`,
       method: 'GET',
+      params: limit ? { limit } : undefined,
     })
   },
 

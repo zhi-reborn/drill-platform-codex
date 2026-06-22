@@ -1062,8 +1062,8 @@ func (s *DrillService) Terminate(id uint64) error {
 	return nil
 }
 
-func (s *DrillService) GetLogs(id uint64) ([]entity.DrillInstanceLog, error) {
-	return s.drillRepo.GetLogs(id, 0) // 0 → 默认 200 条
+func (s *DrillService) GetLogs(id uint64, limit int) ([]entity.DrillInstanceLog, error) {
+	return s.drillRepo.GetLogs(id, limit) // 0 → 默认 200 条
 }
 
 func (s *DrillService) Delete(id uint64) error {

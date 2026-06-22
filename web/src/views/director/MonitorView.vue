@@ -1109,6 +1109,7 @@ let drillRefreshTimer: number | null = null
 let drillDataLoading = false
 let drillDataReloadQueued = false
 let componentDestroyed = false
+const MONITOR_LOG_LIMIT = 50
 
 function connectWebSocket() {
   if (componentDestroyed) return
@@ -1148,9 +1149,11 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return
 
-  // 步骤事件：全量刷新步骤数据（步骤完成会级联更新父步骤状态）
+  // 步骤事件携带完整变更信息，优先增量更新，避免每次操作后全量拉取步骤树。
   if (event.startsWith('step_')) {
-    scheduleDrillDataRefresh()
+    patchLocalStep(payload)
+    refreshInstanceDetail()
+    refreshLogsDebounced()
     return
   }
 
@@ -1176,6 +1179,21 @@ function scheduleDrillDataRefresh(delay = 120) {
   }, delay)
 }
 
+function isWebSocketOpen() {
+  return ws?.readyState === WebSocket.OPEN
+}
+
+function refreshLogsDebounced(delay = 250) {
+  if (componentDestroyed) return
+  if (logDebounceTimer) {
+    clearTimeout(logDebounceTimer)
+  }
+  logDebounceTimer = window.setTimeout(() => {
+    logDebounceTimer = null
+    refreshLogs()
+  }, delay)
+}
+
 // 增量更新本地步骤数据（不调 API）
 function patchLocalStep(payload: any) {
   const stepId = payload.step_id || payload.stepId
@@ -1191,6 +1209,7 @@ function patchLocalStep(payload: any) {
   step.status = newStatus === 'timeout' ? 'running' : newStatus
   if (payload.start_time) step.start_time = payload.start_time
   if (payload.end_time) step.end_time = payload.end_time
+  if ('timeout_at' in payload) step.timeout_at = payload.timeout_at
   if (payload.assignee_names) step.assignee_names = payload.assignee_names
   if (payload.remark) step.remark = payload.remark
   if (payload.issue_desc) step.issue_desc = payload.issue_desc
@@ -1210,8 +1229,22 @@ async function refreshInstanceDetail() {
 // 只刷新日志（1 个 API）
 async function refreshLogs() {
   try {
-    logs.value = await drillApi.getLogs(drillId.value)
+    logs.value = await drillApi.getLogs(drillId.value, MONITOR_LOG_LIMIT)
   } catch { /* 静默失败 */ }
+}
+
+function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
+  const now = new Date().toISOString()
+  patchLocalStep({
+    step_id: step.id,
+    new_status: newStatus,
+    end_time: ['completed', 'skipped'].includes(newStatus) ? now : undefined,
+  })
+  refreshInstanceDetail()
+  refreshLogsDebounced()
+  if (!isWebSocketOpen()) {
+    scheduleDrillDataRefresh(800)
+  }
 }
 
 function startFallbackPolling() {
@@ -1270,7 +1303,7 @@ async function loadDrillData() {
     }))
     steps.value = stepsData
 
-    const logsData = await drillApi.getLogs(drillId.value)
+    const logsData = await drillApi.getLogs(drillId.value, MONITOR_LOG_LIMIT)
     if (componentDestroyed) return
     logs.value = logsData
 
@@ -1341,7 +1374,7 @@ async function handleStartStep(step: StepInstance) {
   try {
     await drillApi.startStep(drillId.value, getStepOperationId(step))
     ElMessage.success('步骤已开始')
-    scheduleDrillDataRefresh(0)
+    refreshAfterStepAction(step, 'running')
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1364,7 +1397,7 @@ async function handleSkipStep(step: StepInstance) {
   try {
     await drillApi.skipStep(drillId.value, getStepOperationId(step), 'director skipped')
     ElMessage.success('步骤已跳过')
-    scheduleDrillDataRefresh(0)
+    refreshAfterStepAction(step, 'skipped')
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1374,7 +1407,7 @@ async function handleResumeTask(step: StepInstance) {
   try {
     await drillApi.resumeTask(drillId.value, getStepOperationId(step))
     ElMessage.success('任务已重新派发')
-    scheduleDrillDataRefresh(0)
+    refreshAfterStepAction(step, 'running')
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '操作失败')
   }
@@ -1390,7 +1423,7 @@ async function handleDirectorComplete(step: StepInstance) {
       await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
       ElMessage.success('步骤已完成')
     }
-    scheduleDrillDataRefresh(0)
+    refreshAfterStepAction(step, 'completed')
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
@@ -1400,7 +1433,7 @@ async function handleForceComplete(step: StepInstance) {
   try {
     await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组强制完成步骤：${step.name}`)
     ElMessage.success(`步骤「${step.name}」已强制完成`)
-    scheduleDrillDataRefresh(0)
+    refreshAfterStepAction(step, 'completed')
   } catch (error) {
     ElMessage.error('强制完成失败')
   }
@@ -1483,6 +1516,10 @@ onUnmounted(() => {
   if (drillRefreshTimer) {
     clearTimeout(drillRefreshTimer)
     drillRefreshTimer = null
+  }
+  if (logDebounceTimer) {
+    clearTimeout(logDebounceTimer)
+    logDebounceTimer = null
   }
 })
 </script>
