@@ -27,8 +27,10 @@
           <div class="progress-console">
             <span class="drill-name-tag" :title="instance?.name">{{ instance?.name || '演练中' }}</span>
             <span class="console-sep" />
-            <span class="system-label">演练进度</span>
-            <span class="system-time">{{ liveProgressPct }}%</span>
+            <span class="progress-metric">
+              <span class="system-label">演练进度</span>
+              <span class="system-time">{{ liveProgressPct }}%</span>
+            </span>
           </div>
           <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
             <el-icon><FullScreen /></el-icon>
@@ -103,7 +105,11 @@
               <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
             </div>
           </div>
-          <div class="execution-carousel" :class="'running-count-' + Math.min(runningCards.length, 4)">
+          <div
+            class="execution-carousel"
+            :class="['running-count-' + Math.min(runningCards.length, 4), { 'hide-pending': hidePendingExecution }]"
+            :style="{ '--running-card-count': Math.max(runningCards.length, 1) }"
+          >
             <div class="exec-col exec-col-running">
               <div class="exec-col-label">
                 <span><span class="exec-dot running" />进行中</span>
@@ -122,8 +128,8 @@
                 <div v-if="!runningCards.length" class="exec-empty">暂无进行中步骤</div>
               </div>
             </div>
-            <div class="exec-divider" />
-            <div class="exec-col exec-col-pending">
+            <div v-if="!hidePendingExecution" class="exec-divider" />
+            <div v-if="!hidePendingExecution" class="exec-col exec-col-pending">
               <div class="exec-col-label">
                 <span><span class="exec-dot pending" />待执行</span>
                 <em class="pending-summary">还剩 {{ pendingTotalCount }} 个步骤待执行...</em>
@@ -527,6 +533,7 @@ function mapExecCard(step: StepInstance) {
 }
 
 const runningCards = computed(() => runningSteps.value.filter(isLeafStep).slice(0, 8).map(mapExecCard))
+const hidePendingExecution = computed(() => runningCards.value.length > 4)
 const pendingStepCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).map(mapExecCard))
 const pendingTotalCount = computed(() => pendingStepCards.value.length)
 const pendingCards = computed(() => pendingStepCards.value.slice(0, 4))
@@ -2523,6 +2530,7 @@ function fmtTime(ts: string): string {
 }
 
 .progress-console {
+  --console-text-h: clamp(20px, 1.8vw, 28px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2534,12 +2542,21 @@ function fmtTime(ts: string): string {
   box-shadow: inset 0 0 18px rgba(0, 217, 255, 0.08);
 }
 
+.progress-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(8px, 0.7vw, 12px);
+  min-width: 0;
+  height: var(--console-text-h);
+}
+
 .drill-name-tag {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
   max-width: clamp(80px, 12vw, 200px);
+  height: var(--console-text-h);
   color: #f5fbff;
-  line-height: 1;
+  line-height: var(--console-text-h);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2555,10 +2572,11 @@ function fmtTime(ts: string): string {
 
 .system-label,
 .system-time {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  height: var(--console-text-h);
   color: #f5fbff;
-  line-height: 1;
+  line-height: var(--console-text-h);
   text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
 }
 
@@ -2570,10 +2588,13 @@ function fmtTime(ts: string): string {
 }
 
 .system-time {
+  min-width: 3.2ch;
+  justify-content: flex-end;
   font-size: clamp(17px, 1.5vw, 23px);
   font-weight: 900;
-  letter-spacing: 0.04em;
-  transform: translateY(0.06em);
+  letter-spacing: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .btn-fullscreen {
@@ -3532,6 +3553,10 @@ function fmtTime(ts: string): string {
   grid-template-columns: minmax(680px, 2.2fr) auto minmax(0, 1.2fr);
 }
 
+.execution-carousel.hide-pending {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .exec-col {
   display: flex;
   flex-direction: column;
@@ -3618,7 +3643,7 @@ function fmtTime(ts: string): string {
   transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 多个进行中任务时自动横向扩展 */
+/* 多个进行中任务时单行横向扩展 */
 .execution-carousel.running-count-2 .exec-col-running .exec-col-cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -3627,6 +3652,9 @@ function fmtTime(ts: string): string {
 }
 .execution-carousel.running-count-4 .exec-col-running .exec-col-cards {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.execution-carousel.hide-pending .exec-col-running .exec-col-cards {
+  grid-template-columns: repeat(var(--running-card-count), minmax(0, 1fr));
 }
 
 .exec-col-pending .exec-col-cards {
@@ -3891,6 +3919,9 @@ function fmtTime(ts: string): string {
   .execution-carousel.running-count-4 {
     grid-template-columns: minmax(600px, 2.1fr) auto minmax(0, 1fr);
   }
+  .execution-carousel.hide-pending {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .exec-col-pending .exec-col-cards {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -3935,6 +3966,9 @@ function fmtTime(ts: string): string {
   }
   .execution-carousel.running-count-4 {
     grid-template-columns: minmax(520px, 2.2fr) auto minmax(0, 0.7fr);
+  }
+  .execution-carousel.hide-pending {
+    grid-template-columns: minmax(0, 1fr);
   }
   .exec-col-cards { gap: 6px; }
   .exec-col-pending .exec-col-cards {

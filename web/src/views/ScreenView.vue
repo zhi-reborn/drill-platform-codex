@@ -192,13 +192,17 @@
             <div
               class="panel-body warn-list"
               ref="warnListRef"
-              :style="{ '--visible-alert-count': Math.max(visibleAlerts.length, 1) }"
+              :style="{
+                '--visible-alert-count': Math.max(visibleAlerts.length, 1),
+                '--alert-card-gap': `${alertCardGap}px`,
+              }"
             >
               <div
                 v-for="(alert, ai) in visibleAlerts"
                 :key="ai"
                 class="alert-card"
                 :class="'alert-' + alert.level"
+                :ref="el => setAlertCardRef(el, ai)"
               >
                 <!-- 顶部：状态指示条 + 标题行 -->
                 <div class="alert-head">
@@ -222,7 +226,7 @@
                 </div>
               </div>
               <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
-              <div v-else-if="visibleAlerts.length < activeAlerts.length" class="more-tip">
+              <div v-else-if="visibleAlerts.length < activeAlerts.length" ref="moreTipRef" class="more-tip">
                 还有 {{ pendingCount }} 个步骤待执行...
               </div>
             </div>
@@ -237,7 +241,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
 import { CircleClose, FullScreen } from '@element-plus/icons-vue'
 import type { StepInstance, StepInstanceLog, DrillInstance, StepStatus, DrillStatus } from '@/types/instance'
@@ -273,6 +278,8 @@ const currentDrill = ref<DrillInstance | null>(null)
 const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
 const warnListRef = ref<HTMLElement | null>(null)
+const alertCardRefs = ref<HTMLElement[]>([])
+const moreTipRef = ref<HTMLElement | null>(null)
 
 // === 树形步骤辅助 ===
 // 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
@@ -657,20 +664,49 @@ const activeAlerts = computed(() => {
   return [...sortedRunning, ...sortedPending]
 })
 
-// 可见步骤数量：按紧凑任务条高度自适应，避免右侧步骤在窄屏上挤出容器
-const ALERT_CARD_IDEAL_HEIGHT = 88
-const ALERT_CARD_GAP = 8
-const MORE_TIP_HEIGHT = 30
+// 可见步骤数量：按容器和实际卡片尺寸自适应，避免在不同屏幕上写死展示数量
+const ALERT_CARD_FALLBACK_HEIGHT = 106
+const ALERT_CARD_FALLBACK_GAP = 9
+const MORE_TIP_FALLBACK_HEIGHT = 32
 const containerHeight = ref(0)
+const alertCardHeight = ref(ALERT_CARD_FALLBACK_HEIGHT)
+const alertCardGap = ref(ALERT_CARD_FALLBACK_GAP)
+const moreTipHeight = ref(MORE_TIP_FALLBACK_HEIGHT)
+let warnListResizeObserver: ResizeObserver | null = null
+
+function setAlertCardRef(el: Element | ComponentPublicInstance | null, index: number) {
+  if (el instanceof HTMLElement) alertCardRefs.value[index] = el
+}
+
+function measureWarnList() {
+  const list = warnListRef.value
+  if (!list) return
+
+  const style = window.getComputedStyle(list)
+  const paddingY = parseFloat(style.paddingTop || '0') + parseFloat(style.paddingBottom || '0')
+  containerHeight.value = Math.max(0, list.clientHeight - paddingY)
+  alertCardGap.value = parseFloat(style.rowGap || style.gap || '') || ALERT_CARD_FALLBACK_GAP
+
+  const firstCard = alertCardRefs.value.find(Boolean)
+  if (firstCard) {
+    const cardStyle = window.getComputedStyle(firstCard)
+    const minHeight = parseFloat(cardStyle.minHeight || '') || 0
+    alertCardHeight.value = Math.max(minHeight, ALERT_CARD_FALLBACK_HEIGHT)
+  }
+  if (moreTipRef.value) moreTipHeight.value = moreTipRef.value.getBoundingClientRect().height || MORE_TIP_FALLBACK_HEIGHT
+}
+
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
   const _t = elapsedSeconds.value
   const available = containerHeight.value
   if (!available) return 5
-  const firstPass = Math.max(1, Math.floor((available + ALERT_CARD_GAP) / (ALERT_CARD_IDEAL_HEIGHT + ALERT_CARD_GAP)))
+  const cardHeight = Math.max(alertCardHeight.value, 1)
+  const gap = alertCardGap.value
+  const firstPass = Math.max(1, Math.floor((available + gap) / (cardHeight + gap)))
   const hasMore = activeAlerts.value.length > firstPass
-  const reserved = hasMore ? MORE_TIP_HEIGHT + ALERT_CARD_GAP : 0
-  const count = Math.floor((available - reserved + ALERT_CARD_GAP) / (ALERT_CARD_IDEAL_HEIGHT + ALERT_CARD_GAP))
+  const reserved = hasMore ? moreTipHeight.value + gap : 0
+  const count = Math.floor((available - reserved + gap) / (cardHeight + gap))
   return Math.min(Math.max(count, 1), activeAlerts.value.length)
 })
 const visibleAlerts = computed(() => activeAlerts.value.slice(0, visibleAlertCount.value))
@@ -751,9 +787,7 @@ function tick() {
     }
   }
   // 更新容器高度（用于截断计算）
-  if (warnListRef.value) {
-    containerHeight.value = warnListRef.value.clientHeight
-  }
+  measureWarnList()
 }
 
 // 数据加载
@@ -1011,11 +1045,20 @@ onMounted(() => {
   componentDestroyed = false
   loadData()
   window.addEventListener('resize', handleResize)
+  nextTick(() => {
+    measureWarnList()
+    if (warnListRef.value && typeof ResizeObserver !== 'undefined') {
+      warnListResizeObserver = new ResizeObserver(measureWarnList)
+      warnListResizeObserver.observe(warnListRef.value)
+    }
+  })
   timeTimer = window.setInterval(tick, 1000)
 })
 onBeforeUnmount(() => {
   componentDestroyed = true
   window.removeEventListener('resize', handleResize)
+  warnListResizeObserver?.disconnect()
+  warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
   if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
   stopFallbackPolling()
@@ -1025,10 +1068,12 @@ onBeforeUnmount(() => {
 function handleResize() {
   viewportWidth.value = window.innerWidth
   viewportHeight.value = window.innerHeight
-  if (warnListRef.value) {
-    containerHeight.value = warnListRef.value.clientHeight
-  }
+  measureWarnList()
 }
+
+watch(visibleAlerts, () => {
+  nextTick(measureWarnList)
+}, { flush: 'post' })
 </script>
 
 <style lang="scss" scoped>
@@ -1827,22 +1872,26 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Alerts =====
 .warn-list {
   --visible-alert-count: 5;
-  display: flex; flex-direction: column; gap: clamp(7px, 0.9vh, 10px);
+  --alert-card-gap: 9px;
+  display: flex; flex-direction: column; gap: clamp(8px, 0.95vh, 11px);
   overflow: hidden;
   flex: 1;
   min-height: 0;
-  padding-bottom: clamp(6px, 0.8vh, 10px);
+  padding-bottom: clamp(8px, 0.95vh, 12px);
   .alert-card {
     position: relative;
     background: linear-gradient(135deg, rgba(15, 30, 58, 0.96), rgba(8, 18, 40, 0.9));
     border: 1px solid rgba(0, 212, 255, 0.24);
     border-radius: 3px;
-    padding: clamp(9px, 0.95vh, 12px) clamp(12px, 0.9vw, 16px) clamp(8px, 0.9vh, 11px) clamp(14px, 1vw, 18px);
-    display: flex; flex-direction: column; gap: clamp(5px, 0.65vh, 8px);
+    padding: clamp(10px, 1vh, 13px) clamp(12px, 0.9vw, 16px) clamp(10px, 1vh, 13px) clamp(14px, 1vw, 18px);
+    display: grid;
+    grid-template-rows: auto auto auto;
+    align-content: center;
+    gap: clamp(6px, 0.7vh, 8px);
     overflow: hidden;
-    flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * 8px) / var(--visible-alert-count));
-    min-height: 82px;
-    max-height: 118px;
+    flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * var(--alert-card-gap)) / var(--visible-alert-count));
+    min-height: 102px;
+    max-height: 132px;
 
     // 顶部状态指示条（替代左边框）
     &::before {
@@ -1907,6 +1956,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     gap: clamp(12px, 1vw, 18px);
     row-gap: 2px;
     flex-wrap: wrap;
+    min-height: 18px;
+    overflow: hidden;
     .alert-meta {
       flex: 0 0 auto;
       min-width: max-content;
@@ -1953,31 +2004,30 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
-    min-height: clamp(22px, 2.2vh, 28px);
-    margin-top: auto;
-    padding-top: clamp(4px, 0.55vh, 7px);
-    padding-bottom: 0;
+    min-height: 20px;
+    padding-top: clamp(5px, 0.6vh, 7px);
+    padding-bottom: 1px;
     border-top: 1px solid rgba(0, 212, 255, 0.1);
-    font-size: clamp(13px, 0.86vw, 15px);
-    line-height: 1.35;
+    font-size: clamp(12px, 0.78vw, 14px);
+    line-height: 1.2;
     min-width: 0;
     overflow: hidden;
     .hierarchy-phase {
       font-weight: 600;
       color: rgba(0, 212, 255, 0.85);
-      line-height: 1.35;
+      line-height: 1.2;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
     .hierarchy-dash {
       color: rgba(200, 220, 245, 0.6); margin: 0 6px;
       font-weight: 400;
-      line-height: 1.35;
+      line-height: 1.2;
     }
     .hierarchy-task {
       font-weight: 600;
       color: rgba(226, 240, 255, 0.86);
-      line-height: 1.35;
+      line-height: 1.2;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 45%;
     }
