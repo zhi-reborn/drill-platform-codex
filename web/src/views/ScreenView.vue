@@ -657,10 +657,10 @@ const activeAlerts = computed(() => {
   return [...sortedRunning, ...sortedPending]
 })
 
-// 可见步骤数量：按容器高度自适应，卡片再弹性分配剩余空间
-const ALERT_CARD_IDEAL_HEIGHT = 112
-const ALERT_CARD_GAP = 9
-const MORE_TIP_HEIGHT = 34
+// 可见步骤数量：按紧凑任务条高度自适应，避免右侧步骤在窄屏上挤出容器
+const ALERT_CARD_IDEAL_HEIGHT = 88
+const ALERT_CARD_GAP = 8
+const MORE_TIP_HEIGHT = 30
 const containerHeight = ref(0)
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
@@ -1025,6 +1025,9 @@ onBeforeUnmount(() => {
 function handleResize() {
   viewportWidth.value = window.innerWidth
   viewportHeight.value = window.innerHeight
+  if (warnListRef.value) {
+    containerHeight.value = warnListRef.value.clientHeight
+  }
 }
 </script>
 
@@ -1579,7 +1582,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== MAIN GRID =====
 .screen-main {
   display: grid;
-  grid-template-columns: minmax(280px, 19vw) minmax(680px, 1fr) minmax(340px, 22vw);
+  grid-template-columns: minmax(270px, 18vw) minmax(560px, 1fr) minmax(340px, 26vw);
   gap: 18px;
   flex: 1;
   min-height: 0;
@@ -1824,22 +1827,22 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Alerts =====
 .warn-list {
   --visible-alert-count: 5;
-  display: flex; flex-direction: column; gap: clamp(10px, 1.2vh, 14px);
+  display: flex; flex-direction: column; gap: clamp(7px, 0.9vh, 10px);
   overflow: hidden;
   flex: 1;
   min-height: 0;
-  padding-bottom: clamp(8px, 1.15vh, 14px);
+  padding-bottom: clamp(6px, 0.8vh, 10px);
   .alert-card {
     position: relative;
     background: linear-gradient(135deg, rgba(15, 30, 58, 0.96), rgba(8, 18, 40, 0.9));
     border: 1px solid rgba(0, 212, 255, 0.24);
     border-radius: 3px;
-    padding: clamp(12px, 1.25vh, 16px) clamp(14px, 1.1vw, 18px) clamp(12px, 1.25vh, 16px) clamp(18px, 1.25vw, 22px);
-    display: flex; flex-direction: column; gap: 9px;
+    padding: clamp(9px, 0.95vh, 12px) clamp(12px, 0.9vw, 16px) clamp(8px, 0.9vh, 11px) clamp(14px, 1vw, 18px);
+    display: flex; flex-direction: column; gap: clamp(5px, 0.65vh, 8px);
     overflow: hidden;
-    flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * 9px) / var(--visible-alert-count));
-    min-height: 112px;
-    max-height: 152px;
+    flex: 1 1 calc((100% - (var(--visible-alert-count) - 1) * 8px) / var(--visible-alert-count));
+    min-height: 82px;
+    max-height: 118px;
 
     // 顶部状态指示条（替代左边框）
     &::before {
@@ -1871,7 +1874,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
   }
   .alert-head {
-    display: flex; align-items: center; gap: 9px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
     .alert-indicator {
       width: 8px; height: 8px;
       border-radius: 50%;
@@ -1881,14 +1887,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       animation: indicator-pulse 1.6s ease-in-out infinite;
     }
     .alert-title {
-      flex: 1;
-      font-size: clamp(17px, 1.08vw, 22px); color: #f5f9ff; font-weight: 900;
+      min-width: 0;
+      font-size: clamp(16px, 1vw, 20px); color: #f5f9ff; font-weight: 900;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      letter-spacing: 0.5px;
+      letter-spacing: 0;
     }
     .alert-status-badge {
-      font-family: $font-cn; font-size: 14px; line-height: 1; font-weight: 900;
-      padding: 3px 9px; letter-spacing: 0.8px;
+      font-family: $font-cn; font-size: clamp(12px, 0.8vw, 14px); line-height: 1; font-weight: 900;
+      padding: 3px 8px; letter-spacing: 0.6px;
       border-radius: 2px; white-space: nowrap; flex-shrink: 0;
       &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.12); border: 1px solid rgba(255, 182, 72, 0.3); }
       &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); animation: badge-danger-flash 1s ease-in-out infinite; }
@@ -1899,7 +1905,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex;
     align-items: center;
     gap: clamp(12px, 1vw, 18px);
-    row-gap: 3px;
+    row-gap: 2px;
     flex-wrap: wrap;
     .alert-meta {
       flex: 0 0 auto;
@@ -1914,7 +1920,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         position: relative;
         display: inline-flex;
         align-items: center;
-        font-size: 14px;
+        font-size: clamp(12px, 0.82vw, 14px);
         color: rgba(222, 246, 255, 0.96);
         letter-spacing: 1.2px;
         font-weight: 800;
@@ -1932,10 +1938,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       }
       .meta-val {
         font-family: $font-mono;
-        font-size: 14px;
+        font-size: clamp(12px, 0.82vw, 14px);
         color: rgba(232, 244, 255, 0.95);
         font-weight: 800;
-        max-width: 132px;
+        max-width: clamp(104px, 8vw, 150px);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1947,14 +1953,15 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .alert-hierarchy {
     display: flex; align-items: center; gap: 0;
-    min-height: clamp(28px, 2.8vh, 36px);
+    min-height: clamp(22px, 2.2vh, 28px);
     margin-top: auto;
-    padding-top: clamp(6px, 0.8vh, 9px);
-    padding-bottom: 2px;
+    padding-top: clamp(4px, 0.55vh, 7px);
+    padding-bottom: 0;
     border-top: 1px solid rgba(0, 212, 255, 0.1);
-    font-size: clamp(14px, 0.95vw, 17px);
+    font-size: clamp(13px, 0.86vw, 15px);
     line-height: 1.35;
-    overflow: visible;
+    min-width: 0;
+    overflow: hidden;
     .hierarchy-phase {
       font-weight: 600;
       color: rgba(0, 212, 255, 0.85);
