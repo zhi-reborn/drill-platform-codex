@@ -284,12 +284,7 @@ const displayTime = computed(() => {
 })
 
 const runningSteps = computed(() => {
-  const tasks = steps.value.filter(s => s.status === 'running')
-  // 执行者只看自己部门的任务
-  if (isExecutor.value && userDept.value) {
-    return tasks.filter(s => (s.executor_team || '') === userDept.value)
-  }
-  return tasks
+  return steps.value.filter(s => s.status === 'running')
 })
 
 const parentStepIds = computed(() => {
