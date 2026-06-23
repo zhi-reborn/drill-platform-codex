@@ -537,7 +537,7 @@ const runningStepCards = computed(() => runningSteps.value.filter(isLeafStep).ma
 const runningTotalCount = computed(() => runningStepCards.value.length)
 const runningCards = computed(() => runningStepCards.value.slice(0, 4))
 const hiddenRunningCount = computed(() => Math.max(runningTotalCount.value - runningCards.value.length, 0))
-const hidePendingExecution = computed(() => runningTotalCount.value > 4)
+const hidePendingExecution = computed(() => runningTotalCount.value >= 4)
 const pendingStepCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).map(mapExecCard))
 const pendingTotalCount = computed(() => pendingStepCards.value.length)
 const pendingCards = computed(() => pendingStepCards.value.slice(0, 4))
@@ -3588,6 +3588,7 @@ function fmtTime(ts: string): string {
 
 .execution-carousel.hide-pending {
   grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .exec-col {
@@ -3690,7 +3691,28 @@ function fmtTime(ts: string): string {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .execution-carousel.hide-pending .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: clamp(12px, 1.2vw, 18px);
+}
+
+.execution-carousel.hide-pending .execution-card {
+  padding: clamp(12px, 1.15vw, 18px);
+}
+
+.execution-carousel.hide-pending .task-card-head {
+  align-items: flex-start;
+}
+
+.execution-carousel.hide-pending .task-card-head strong {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: clamp(16px, 1.32vw, 22px);
+  line-height: 1.28;
 }
 
 .exec-col-pending .exec-col-cards {
