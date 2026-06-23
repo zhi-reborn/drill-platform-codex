@@ -2551,7 +2551,7 @@ function fmtTime(ts: string): string {
   align-items: center;
   gap: clamp(8px, 0.7vw, 12px);
   min-width: 0;
-  height: var(--console-text-h);
+  line-height: 1;
 }
 
 .drill-name-tag {
@@ -2578,9 +2578,8 @@ function fmtTime(ts: string): string {
 .system-time {
   display: inline-flex;
   align-items: center;
-  height: var(--console-text-h);
   color: #f5fbff;
-  line-height: var(--console-text-h);
+  line-height: 1;
   text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
 }
 
@@ -2594,7 +2593,8 @@ function fmtTime(ts: string): string {
 .system-time {
   min-width: 3.2ch;
   justify-content: flex-end;
-  font-size: clamp(17px, 1.5vw, 23px);
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: clamp(15px, 1.25vw, 19px);
   font-weight: 900;
   letter-spacing: 0;
   text-align: right;
@@ -3704,13 +3704,10 @@ function fmtTime(ts: string): string {
 }
 
 .execution-carousel.hide-pending .task-card-head strong {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: normal;
-  line-clamp: 2;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   font-size: clamp(16px, 1.32vw, 22px);
   line-height: 1.28;
 }
