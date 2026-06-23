@@ -215,17 +215,31 @@
         </template>
         <el-table
           ref="stepsTableRef"
-          :data="drillStepTree"
+          :data="visibleStepRows"
           row-key="id"
-          :tree-props="{ children: 'children' }"
-          :default-expand-all="true"
           :row-class-name="stepRowClassName"
           style="width: 100%"
           size="small"
         >
           <el-table-column prop="name" label="步骤名" min-width="260" show-overflow-tooltip class-name="name-col">
             <template #default="{ row }">
-              <div class="step-name-cell">
+              <div
+                class="step-name-cell"
+                v-memo="[row.id, row.name, row.status, getStepDepth(row), getSiblingIndex(row)]"
+              >
+                <el-button
+                  v-if="hasExpandableChildren(row)"
+                  class="step-expand-toggle"
+                  link
+                  size="small"
+                  @click.stop="toggleStepExpanded(row)"
+                >
+                  <el-icon>
+                    <ArrowDown v-if="isStepExpanded(row)" />
+                    <ArrowRight v-else />
+                  </el-icon>
+                </el-button>
+                <span v-else class="step-expand-spacer" />
                 <span
                   class="depth-badge"
                   :class="`depth-badge-${getStepDepth(row)}`"
@@ -245,12 +259,14 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" width="140" align="center">
             <template #default="{ row }">
-              <template v-if="isParentStep(row)">
-                <span class="parent-status-text">{{ getStepStatusText(row).text }}</span>
-              </template>
-              <template v-else>
-                <DrillStatusBadge :status="row.status" type="step" />
-              </template>
+              <span v-memo="[row.id, row.status, getStepStatusText(row).text, isParentStep(row)]">
+                <template v-if="isParentStep(row)">
+                  <span class="parent-status-text">{{ getStepStatusText(row).text }}</span>
+                </template>
+                <template v-else>
+                  <DrillStatusBadge :status="row.status" type="step" />
+                </template>
+              </span>
             </template>
           </el-table-column>
           <el-table-column prop="default_assignee_role" label="角色" width="75" align="center">
@@ -280,7 +296,10 @@
           </el-table-column>
           <el-table-column label="操作" width="220" align="center" fixed="right">
             <template #default="{ row }">
-              <template v-if="!row._isGroup">
+              <div
+                v-if="!row._isGroup"
+                v-memo="[row.id, row.status, instance?.status, isParentStep(row), getStartDisabledReason(row)]"
+              >
                 <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
                 <template v-if="!isParentStep(row)">
                   <el-tooltip
@@ -346,7 +365,7 @@
                 <span v-else class="parent-hint">
                   子任务全部完成后自动完成
                 </span>
-              </template>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -496,11 +515,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
-import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance, StepStatus } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -508,6 +527,7 @@ import { drillApi } from '@/api/modules/drill'
 import { userApi } from '@/api/modules/user'
 import { useAuthStore } from '@/stores/auth'
 import { getMonitorRefreshPlan } from './monitorRefreshPolicy'
+import { buildStepTreeMetaMap, createMonitorStepTreeBuilder, flattenVisibleStepTree, getDefaultExpandedStepKeys, patchMonitorStepList } from './monitorStepTree'
 
 const stepsTableRef = ref()
 const selectedStep = ref<StepInstance | null>(null)
@@ -585,6 +605,7 @@ const sortedSteps = computed(() => {
 })
 
 const drillSteps = computed(() => sortedSteps.value)
+const monitorStepTreeBuilder = createMonitorStepTreeBuilder()
 
 const stepById = computed(() => {
   const map = new Map<number, StepInstance>()
@@ -607,131 +628,64 @@ const childrenByParentId = computed(() => {
 
 const parentIdSet = computed(() => new Set(childrenByParentId.value.keys()))
 
-// 将扁平步骤数据转换为树形结构
-// 优先使用 parent_step_id 建立真实的层级关系
-// 仅当数据无层级关系时，才退回到 phase/phase_step 虚拟分组
 const drillStepTree = computed(() => {
-  const sorted = sortedSteps.value
-
-  // 建立 step → node 映射
-  const stepMap = new Map<number, any>()
-  for (const step of sorted) {
-    stepMap.set(step.id, { ...step })
-  }
-
-  // 通过 parent_step_id 建立父子关系
-  const childIds = new Set<number>()
-  for (const step of sorted) {
-    if (step.parent_step_id && stepMap.has(step.parent_step_id)) {
-      const parent = stepMap.get(step.parent_step_id)!
-      if (!parent.children) parent.children = []
-      parent.children.push(stepMap.get(step.id)!)
-      childIds.add(step.id)
-    }
-  }
-
-  // 根步骤
-  const rootSteps = sorted.filter(s => !childIds.has(s.id)).map(s => stepMap.get(s.id)!)
-
-  // 判断数据是否已有真实层级：有 parent_step_id 关系的步骤数 > 0
-  const hasHierarchy = childIds.size > 0
-
-  if (hasHierarchy) {
-    // 数据本身有层级结构，直接用 parent_step_id 构建的树
-    return rootSteps
-  }
-
-  // 无层级数据：退回 phase → phase_step 虚拟分组
-  const phaseMap = new Map<string, any>()
-  const roots: any[] = []
-  let virtualSeq = -1
-
-  for (const step of rootSteps) {
-    const phase = step.phase || '未分类'
-
-    if (!phaseMap.has(phase)) {
-      const phaseNode = {
-        id: `__phase__${phase}`,
-        name: phase,
-        seq: virtualSeq--,
-        status: '',
-        step_type: 'phase',
-        timeout_minutes: 0,
-        default_assignee_role: '',
-        estimated_duration_minutes: 0,
-        attributes: {},
-        start_time: null,
-        end_time: null,
-        timeout_at: null,
-        assignee_names: '',
-        remark: '',
-        issue_desc: '',
-        executor_team: '',
-        step_template_id: 0,
-        drill_instance_id: 0,
-        children: [] as any[],
-        _isGroup: true,
-        _groupType: 'phase' as const,
-      }
-      phaseMap.set(phase, phaseNode)
-      roots.push(phaseNode)
-    }
-
-    const phaseNode = phaseMap.get(phase)!
-    const phaseStep = step.phase_step || '默认'
-
-    let phaseStepNode = phaseNode.children.find(
-      (c: any) => c._isGroup && c._groupType === 'phaseStep' && c.name === phaseStep
-    )
-    if (!phaseStepNode) {
-      phaseStepNode = {
-        id: `__phaseStep__${phase}__${phaseStep}`,
-        name: phaseStep,
-        seq: virtualSeq--,
-        status: '',
-        step_type: 'phaseStep',
-        timeout_minutes: 0,
-        default_assignee_role: '',
-        estimated_duration_minutes: 0,
-        attributes: {},
-        start_time: null,
-        end_time: null,
-        timeout_at: null,
-        assignee_names: '',
-        remark: '',
-        issue_desc: '',
-        executor_team: '',
-        step_template_id: 0,
-        drill_instance_id: 0,
-        children: [] as any[],
-        _isGroup: true,
-        _groupType: 'phaseStep' as const,
-      }
-      phaseNode.children.push(phaseStepNode)
-    }
-
-    phaseStepNode.children.push(step)
-  }
-
-  return roots
+  return monitorStepTreeBuilder.build(sortedSteps.value)
 })
+
+const defaultExpandedStepKeys = computed(() => getDefaultExpandedStepKeys(sortedSteps.value))
+const expandedStepKeys = ref<string[]>([])
+let usesDefaultExpandedKeys = true
+
+watch(defaultExpandedStepKeys, keys => {
+  if (usesDefaultExpandedKeys) {
+    expandedStepKeys.value = keys.map(String)
+  }
+}, { immediate: true })
+
+const visibleStepRows = computed(() => flattenVisibleStepTree(drillStepTree.value, expandedStepKeys.value))
+const expandedStepKeySet = computed(() => new Set(expandedStepKeys.value))
 
 // 全部展开/折叠
 function expandAllSteps() {
-  toggleExpandAll(drillStepTree.value, true)
+  usesDefaultExpandedKeys = false
+  expandedStepKeys.value = collectExpandableStepKeys(drillStepTree.value)
 }
 
 function collapseAllSteps() {
-  toggleExpandAll(drillStepTree.value, false)
+  usesDefaultExpandedKeys = false
+  expandedStepKeys.value = []
 }
 
-function toggleExpandAll(data: any[], expand: boolean) {
-  data.forEach(item => {
-    stepsTableRef.value?.toggleRowExpansion(item, expand)
-    if (item.children && item.children.length > 0) {
-      toggleExpandAll(item.children, expand)
-    }
-  })
+function collectExpandableStepKeys(data: any[]): string[] {
+  const keys: string[] = []
+  const visit = (items: any[]) => {
+    items.forEach(item => {
+      if (item.children?.length) {
+        keys.push(String(item.id))
+        visit(item.children)
+      }
+    })
+  }
+  visit(data)
+  return keys
+}
+
+function hasExpandableChildren(row: any): boolean {
+  return Boolean(stepTreeMetaMap.value.get(row.id)?.isParent)
+}
+
+function isStepExpanded(row: any): boolean {
+  return expandedStepKeySet.value.has(String(row.id))
+}
+
+function toggleStepExpanded(row: any) {
+  usesDefaultExpandedKeys = false
+  const key = String(row.id)
+  if (expandedStepKeySet.value.has(key)) {
+    expandedStepKeys.value = expandedStepKeys.value.filter(item => item !== key)
+  } else {
+    expandedStepKeys.value = [...expandedStepKeys.value, key]
+  }
 }
 
 // 父步骤/分组状态聚合显示
@@ -751,54 +705,8 @@ const DEPENDENCY_SATISFIED_STATUSES: StepStatus[] = ['completed', 'issue']
 const terminalStatusSet = new Set<StepStatus>(TERMINAL_STATUSES)
 const dependencySatisfiedStatusSet = new Set<StepStatus>(DEPENDENCY_SATISFIED_STATUSES)
 
-type StepTreeMeta = {
-  depth: number
-  siblingIndex: number
-  isParent: boolean
-  statusText: { text: string; isParent: boolean }
-}
-
 const stepTreeMetaMap = computed(() => {
-  const metaMap = new Map<number | string, StepTreeMeta>()
-
-  function visit(nodes: any[], depth: number) {
-    let total = 0
-    let completed = 0
-    let running = 0
-
-    nodes.forEach((node, index) => {
-      const hasChildren = Boolean(node.children?.length)
-      const childSummary = hasChildren ? visit(node.children, depth + 1) : null
-      const nodeTotal = childSummary?.total ?? 1
-      const nodeCompleted = childSummary?.completed ?? (terminalStatusSet.has(node.status) ? 1 : 0)
-      const nodeRunning = childSummary?.running ?? (node.status === 'running' ? 1 : 0)
-      const isParent = Boolean(node._isGroup || hasChildren)
-      const statusText = isParent
-        ? {
-            text: nodeRunning > 0
-              ? `${nodeCompleted}/${nodeTotal} 已完成 · ${nodeRunning} 进行中`
-              : `${nodeCompleted}/${nodeTotal} ${node._isGroup ? '已完成' : '子任务已完成'}`,
-            isParent: true,
-          }
-        : { text: node.status, isParent: false }
-
-      metaMap.set(node.id, {
-        depth,
-        siblingIndex: index + 1,
-        isParent,
-        statusText,
-      })
-
-      total += nodeTotal
-      completed += nodeCompleted
-      running += nodeRunning
-    })
-
-    return { total, completed, running }
-  }
-
-  visit(drillStepTree.value, 0)
-  return metaMap
+  return buildStepTreeMetaMap(drillStepTree.value)
 })
 
 // 判断步骤是否可以手动开始
@@ -1222,29 +1130,23 @@ function scheduleInstanceDetailRefresh(delay = 180) {
 }
 
 // 增量更新本地步骤数据（不调 API）
-function patchLocalStep(payload: any): boolean {
-  const stepId = payload.step_id || payload.stepId
-  if (!stepId) return false
-
-  const idx = steps.value.findIndex(s => s.id === stepId)
-  if (idx === -1) return false
-
-  const newStatus = payload.new_status || payload.newStatus
-  if (!newStatus) return false
-
-  const step = { ...steps.value[idx] }
-  step.status = newStatus === 'timeout' ? 'running' : newStatus
-  if (payload.start_time) step.start_time = payload.start_time
-  if (payload.end_time) step.end_time = payload.end_time
-  if ('timeout_at' in payload) step.timeout_at = payload.timeout_at
-  if (payload.assignee_names) step.assignee_names = payload.assignee_names
-  if (payload.remark) step.remark = payload.remark
-  if (payload.issue_desc) step.issue_desc = payload.issue_desc
-
+function replaceLocalStep(step: StepInstance) {
+  const idx = steps.value.findIndex(s => s.id === step.id)
+  if (idx === -1) return
   const newSteps = [...steps.value]
   newSteps[idx] = step
   steps.value = newSteps
-  return true
+}
+
+function applyLocalStepPatch(payload: any): StepInstance | null {
+  const result = patchMonitorStepList(steps.value, payload)
+  if (!result) return null
+  steps.value = result.steps
+  return result.previous
+}
+
+function patchLocalStep(payload: any): boolean {
+  return Boolean(applyLocalStepPatch(payload))
 }
 
 // 只刷新实例详情（1 个 API）
@@ -1308,19 +1210,35 @@ function isWebSocketOpen(): boolean {
   return Boolean(ws && ws.readyState === WebSocket.OPEN)
 }
 
-function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
+function optimisticPatchStep(step: StepInstance, newStatus: StepStatus): StepInstance | null {
   const now = new Date().toISOString()
-  patchLocalStep({
+  return applyLocalStepPatch({
     step_id: step.id,
     new_status: newStatus,
     end_time: ['completed', 'skipped'].includes(newStatus) ? now : undefined,
   })
+}
+
+function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
+  optimisticPatchStep(step, newStatus)
+  settleAfterStepAction()
+}
+
+function settleAfterStepAction() {
   refreshLogsDebounced()
   if (!isWebSocketOpen()) {
     const plan = getMonitorRefreshPlan('step-action-fallback')
     if (plan.steps || plan.logs) {
       scheduleStepDataRefresh(800)
     }
+  }
+}
+
+function rollbackOptimisticStep(previous: StepInstance | null) {
+  if (previous) {
+    replaceLocalStep(previous)
+  } else {
+    scheduleStepDataRefresh(0)
   }
 }
 
@@ -1495,6 +1413,7 @@ async function handleResumeTask(step: StepInstance) {
 }
 
 async function handleDirectorComplete(step: StepInstance) {
+  const previous = optimisticPatchStep(step, 'completed')
   try {
     // pending 状态下后端 CompleteStep 会校验失败,自动降级为强制完成
     if (step.status === 'pending') {
@@ -1504,18 +1423,20 @@ async function handleDirectorComplete(step: StepInstance) {
       await drillApi.completeStep(drillId.value, getStepOperationId(step), '指挥组完成任务')
       ElMessage.success('步骤已完成')
     }
-    refreshAfterStepAction(step, 'completed')
+    settleAfterStepAction()
   } catch (error: any) {
+    rollbackOptimisticStep(previous)
     ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   }
 }
 
 async function handleForceComplete(step: StepInstance) {
+  const previous = optimisticPatchStep(step, 'completed')
   try {
     await drillApi.forceCompleteStep(drillId.value, getStepOperationId(step), `指挥组强制完成步骤：${step.name}`)
     ElMessage.success(`步骤「${step.name}」已强制完成`)
-    refreshAfterStepAction(step, 'completed')
   } catch (error) {
+    rollbackOptimisticStep(previous)
     ElMessage.error('强制完成失败')
   }
 }
@@ -1972,6 +1893,23 @@ onUnmounted(() => {
       align-items: center;
       gap: 8px;
       overflow: hidden;
+    }
+
+    .step-expand-toggle,
+    .step-expand-spacer {
+      flex: 0 0 18px;
+      width: 18px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0;
+    }
+
+    .step-expand-toggle {
+      color: $text-tertiary;
+
+      &:hover {
+        color: var(--el-color-primary);
+      }
     }
 
     // 步骤名列左侧色带
