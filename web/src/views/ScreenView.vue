@@ -1,5 +1,5 @@
 <template>
-  <div class="screen-root">
+  <div ref="screenRootRef" class="screen-root">
     <!-- Background layers -->
     <div class="bg-grid" />
     <div class="bg-scan" />
@@ -166,6 +166,7 @@
               :phases="ringPhases"
               :phase-names="ringPhaseNames"
               :phase-node-statuses="ringPhaseNodeStatuses"
+              :phase-statuses="ringPhaseStatuses"
               :current-index="currentPhaseIndex"
               :progress="progressPercent"
               :center-numerator="completedCount"
@@ -245,12 +246,14 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
 import { CircleClose, FullScreen } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { StepInstance, StepInstanceLog, DrillInstance, StepStatus, DrillStatus } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import PhaseRing from '@/components/screen/PhaseRing.vue'
 
 const route = useRoute()
+const screenRootRef = ref<HTMLElement | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
@@ -540,6 +543,10 @@ const ringPhases = computed(() => {
 // 每个阶段的环节名称列表
 const ringPhaseNames = computed(() => {
   return stages.value.map(s => s.phaseNames || [])
+})
+
+const ringPhaseStatuses = computed(() => {
+  return stages.value.map(s => s.status)
 })
 
 // 每个阶段中每个环节节点的状态信息
@@ -1033,11 +1040,18 @@ function stopFallbackPolling() {
 }
 
 // 全屏
-function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen?.()
-  } else {
-    document.exitFullscreen?.()
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+      return
+    }
+
+    const target = screenRootRef.value || document.documentElement
+    await target.requestFullscreen()
+  } catch (err) {
+    console.error('toggle fullscreen failed:', err)
+    ElMessage.warning('当前浏览器或预览容器不允许进入全屏，请尝试在新窗口打开后再全屏')
   }
 }
 
@@ -1331,7 +1345,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
   .btn-icon {
     grid-column: 3;
-    position: static;
+    position: relative;
+    z-index: 2;
     background: transparent; border: 1px solid $line;
     color: $neon; width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
@@ -1737,6 +1752,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; flex-direction: column; gap: 16px;
     min-height: 0;
     flex: 1;
+    overflow-y: auto;
+    padding-right: 10px;
+    scroll-snap-type: y proximity;
   }
   .stage-card {
     position: relative;
@@ -1744,8 +1762,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     border: 1px solid rgba(106, 157, 215, 0.34);
     border-left: 5px solid rgba(160, 200, 242, 0.7);
     padding: 14px 16px;
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 calc((100% - 48px) / 4);
+    min-height: 112px;
+    scroll-snap-align: start;
     display: flex; flex-direction: column; gap: 10px;
     justify-content: center;
     transition: all 0.2s;
@@ -2332,12 +2351,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .panel-stages {
     .stages-list {
       gap: 8px;
+      padding-right: 6px;
     }
 
     .stage-card {
       padding: 6px 8px 7px;
-      flex: 1;
-      min-height: 0;
+      flex-basis: calc((100% - 24px) / 4);
+      min-height: 72px;
       gap: 5px;
     }
 

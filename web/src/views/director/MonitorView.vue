@@ -507,6 +507,7 @@ import ActionConfirm from '@/components/common/ActionConfirm.vue'
 import { drillApi } from '@/api/modules/drill'
 import { userApi } from '@/api/modules/user'
 import { useAuthStore } from '@/stores/auth'
+import { getMonitorRefreshPlan } from './monitorRefreshPolicy'
 
 const stepsTableRef = ref()
 const selectedStep = ref<StepInstance | null>(null)
@@ -1156,15 +1157,19 @@ function handleWSMessage(msg: { event_type?: string; event?: string; payload?: a
     const patched = patchLocalStep(payload)
     refreshLogsDebounced()
     if (!patched) {
-      scheduleDrillDataRefresh(250)
+      const plan = getMonitorRefreshPlan('step-patch-miss')
+      if (plan.steps || plan.logs) {
+        scheduleStepDataRefresh(250)
+      }
     }
     return
   }
 
   // 演练状态变更：刷新实例详情 + 日志
   if (event.startsWith('drill_')) {
-    scheduleInstanceDetailRefresh()
-    refreshLogs()
+    const plan = getMonitorRefreshPlan('drill-event')
+    if (plan.detail) scheduleInstanceDetailRefresh()
+    if (plan.logs) refreshLogs()
     return
   }
 
@@ -1180,6 +1185,17 @@ function scheduleDrillDataRefresh(delay = 120) {
   drillRefreshTimer = window.setTimeout(() => {
     drillRefreshTimer = null
     loadDrillData()
+  }, delay)
+}
+
+function scheduleStepDataRefresh(delay = 120) {
+  if (componentDestroyed) return
+  if (drillRefreshTimer) {
+    clearTimeout(drillRefreshTimer)
+  }
+  drillRefreshTimer = window.setTimeout(() => {
+    drillRefreshTimer = null
+    refreshStepsAndLogs()
   }, delay)
 }
 
@@ -1255,6 +1271,39 @@ async function refreshLogs() {
   } catch { /* 静默失败 */ }
 }
 
+async function refreshSteps() {
+  let stepsData = await drillApi.getSteps(drillId.value)
+  if (componentDestroyed) return
+  // 解析 attributes JSON 字符串为对象，解析 pre_step_ids 为数组
+  stepsData = stepsData.map((step: StepInstance) => ({
+    ...normalizeStepForMonitor(step),
+    attributes: parseStepAttributes(step.attributes),
+    pre_step_ids: parsePreStepIds(step.pre_step_ids),
+  }))
+  steps.value = stepsData
+}
+
+async function refreshStepsAndLogs() {
+  if (componentDestroyed) return
+  const plan = getMonitorRefreshPlan('fallback-poll')
+  try {
+    if (plan.steps) {
+      await refreshSteps()
+    }
+    if (plan.logs && !componentDestroyed) {
+      await refreshLogs()
+    }
+    if (
+      !componentDestroyed &&
+      instance.value?.status === 'running' &&
+      steps.value.length > 0 &&
+      steps.value.every(step => terminalStatusSet.has(step.status))
+    ) {
+      await refreshInstanceDetail()
+    }
+  } catch { /* 降级刷新失败不阻塞页面操作 */ }
+}
+
 function isWebSocketOpen(): boolean {
   return Boolean(ws && ws.readyState === WebSocket.OPEN)
 }
@@ -1268,7 +1317,10 @@ function refreshAfterStepAction(step: StepInstance, newStatus: StepStatus) {
   })
   refreshLogsDebounced()
   if (!isWebSocketOpen()) {
-    scheduleDrillDataRefresh(800)
+    const plan = getMonitorRefreshPlan('step-action-fallback')
+    if (plan.steps || plan.logs) {
+      scheduleStepDataRefresh(800)
+    }
   }
 }
 
@@ -1281,7 +1333,7 @@ function startFallbackPolling() {
       return
     }
     if (instance.value?.status === 'running') {
-      loadDrillData()
+      refreshStepsAndLogs()
     } else {
       stopFallbackPolling()
     }
@@ -1315,26 +1367,26 @@ async function loadDrillData() {
   }
   drillDataLoading = true
   try {
-    instance.value = await drillApi.getDetail(drillId.value)
+    const plan = getMonitorRefreshPlan('initial-load')
+    if (plan.detail) {
+      instance.value = await drillApi.getDetail(drillId.value)
+    }
     if (componentDestroyed) return
     if (!instance.value) {
       ElMessage.error('演练不存在')
       router.back()
       return
     }
-    let stepsData = await drillApi.getSteps(drillId.value)
+    if (plan.steps) {
+      await refreshSteps()
+    }
     if (componentDestroyed) return
-    // 解析 attributes JSON 字符串为对象，解析 pre_step_ids 为数组
-    stepsData = stepsData.map((step: StepInstance) => ({
-      ...normalizeStepForMonitor(step),
-      attributes: parseStepAttributes(step.attributes),
-      pre_step_ids: parsePreStepIds(step.pre_step_ids),
-    }))
-    steps.value = stepsData
 
-    const logsData = await drillApi.getLogs(drillId.value, MONITOR_LOG_LIMIT)
-    if (componentDestroyed) return
-    logs.value = logsData
+    if (plan.logs) {
+      const logsData = await drillApi.getLogs(drillId.value, MONITOR_LOG_LIMIT)
+      if (componentDestroyed) return
+      logs.value = logsData
+    }
 
     // 连接 WebSocket，演练运行中自动刷新状态
     // 仅在 WebSocket 未连接时建立连接，避免刷新数据时重连导致循环

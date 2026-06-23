@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/ws': {
-          target: env.VITE_WS_URL || 'ws://localhost:5173/ws',
+          target: env.VITE_WS_URL || 'ws://localhost:8080',
           ws: true,
           changeOrigin: true,
         },

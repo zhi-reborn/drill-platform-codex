@@ -155,7 +155,7 @@
       <g v-if="progressPath" class="progress-arc" filter="url(#glow)">
         <path
           :d="progressPath"
-          stroke="url(#grad-active)"
+          :stroke="progressArcColor"
           stroke-width="4"
           fill="none"
           stroke-linecap="round"
@@ -169,7 +169,11 @@
       v-for="(p, idx) in phasePoints"
       :key="'lbl' + idx"
       class="phase-node-label"
-      :class="['phase-node-' + idx, idx === currentIndex ? 'phase-node-active' : '', idx < currentIndex ? 'phase-node-done' : '']"
+      :class="[
+        'phase-node-' + idx,
+        isPhaseDone(idx) ? 'phase-node-done' : '',
+        idx === currentIndex && !isPhaseDone(idx) ? 'phase-node-active' : '',
+      ]"
       :style="{
         left: (p.x / (size + PAD_X * 2) * 100) + '%',
         top: (p.y / (size + PAD_Y_TOP + PAD_Y_BOTTOM) * 100) + '%',
@@ -224,8 +228,9 @@
         :key="'rl' + idx"
         class="ring-outer-label"
         :class="[
-          { 'ring-outer-label-active': ringLabels[idx].active },
+          { 'ring-outer-label-active': ringLabels[idx].active && !ringLabels[idx].isDone },
           { 'ring-outer-label-running': ringLabels[idx].isRunning },
+          { 'ring-outer-label-done': ringLabels[idx].isDone },
           { 'ring-outer-label-flipped': lp.flipped },
           'ring-outer-label-phase-' + ringLabels[idx].phaseIdx,
         ]"
@@ -236,7 +241,8 @@
         }"
       >
         <span class="ring-outer-label-content">
-          <span v-if="ringLabels[idx].isRunning" class="running-indicator">
+          <span v-if="ringLabels[idx].isDone" class="done-indicator"></span>
+          <span v-else-if="ringLabels[idx].isRunning" class="running-indicator">
             <span class="running-dot"></span>
             <span class="running-dot-ripple"></span>
             <span class="running-dot-ripple delay"></span>
@@ -267,6 +273,7 @@ const props = defineProps<{
   phases: string[]
   phaseNames: string[][]
   phaseNodeStatuses: { status: string; progress: number }[][]
+  phaseStatuses?: string[]
   currentIndex: number
   progress: number
   centerNumerator: number
@@ -293,6 +300,12 @@ const outerR = computed(() => size.value * 0.46) // 刻度
 
 // === 按阶段环节节点数量比例分配弧度 ===
 const segCount = computed(() => props.phases.length || 4)
+
+function isPhaseDone(idx: number): boolean {
+  return props.phaseStatuses?.[idx] === 'done' || props.phaseStatuses?.[idx] === 'completed'
+}
+
+const progressArcColor = computed(() => isPhaseDone(props.currentIndex) ? 'url(#grad-done)' : 'url(#grad-active)')
 
 const segAngles = computed(() => {
   const count = segCount.value
@@ -347,6 +360,7 @@ const phasePoints = computed(() => {
 // 活跃段的弧线路径（用于流光 + 粒子动画）
 const activeSegmentPath = computed(() => {
   if (props.currentIndex < 0 || props.currentIndex >= segCount.value) return ''
+  if (isPhaseDone(props.currentIndex)) return ''
   return segmentPaths.value[props.currentIndex]?.d || ''
 })
 
@@ -365,8 +379,8 @@ const segmentPaths = computed(() => {
     const large = (a2 - a1) > Math.PI ? 1 : 0
     let color = 'url(#grad-pending)'
     let opacity = 0.4
-    if (i < props.currentIndex) { color = 'url(#grad-done)'; opacity = 0.85 }
-    if (i === props.currentIndex) { color = 'url(#grad-active)'; opacity = 1 }
+    if (i < props.currentIndex || isPhaseDone(i)) { color = 'url(#grad-done)'; opacity = 0.85 }
+    if (i === props.currentIndex && !isPhaseDone(i)) { color = 'url(#grad-active)'; opacity = 1 }
     return {
       d: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`,
       color, opacity,
@@ -510,6 +524,7 @@ const ringLabels = computed(() => {
         ? (segStartDeg + segEndDeg) / 2
         : segStartDeg + step * (ni + 1)
       const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
+      const phaseDone = isPhaseDone(pi)
       labels.push({
         text: names[ni],
         active: pi === props.currentIndex,
@@ -517,8 +532,8 @@ const ringLabels = computed(() => {
         nodeIdx: ni,
         nodeCount: names.length,
         angleDeg,
-        isRunning: ns.status === 'running',
-        isDone: ns.status === 'completed' || ns.status === 'done',
+        isRunning: !phaseDone && ns.status === 'running',
+        isDone: phaseDone || ns.status === 'completed' || ns.status === 'done',
       })
     }
   }
@@ -862,6 +877,32 @@ function chineseNum(n: number): string {
 }
 .ring-outer-label-active .ring-outer-label-text {
   color: rgba(255, 255, 255, 0.98);
+}
+.ring-outer-label-done {
+  z-index: 6;
+  .ring-outer-label-content {
+    border-radius: 3px;
+    padding: 4px 8px;
+    background: linear-gradient(90deg, rgba(6, 70, 43, 0.88), rgba(6, 70, 43, 0));
+    box-shadow: 0 0 12px rgba(52, 255, 151, 0.26);
+  }
+  .ring-outer-label-text {
+    color: #b8ffd4;
+    font-weight: 800;
+    text-shadow: 0 0 7px rgba(52, 255, 151, 0.58);
+  }
+}
+.ring-outer-label-done.ring-outer-label-flipped .ring-outer-label-content {
+  background: linear-gradient(270deg, rgba(6, 70, 43, 0.88), rgba(6, 70, 43, 0));
+}
+.done-indicator {
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #34ff97;
+  box-shadow: 0 0 8px rgba(52, 255, 151, 0.82);
 }
 .ring-outer-label-running {
   z-index: 7;
