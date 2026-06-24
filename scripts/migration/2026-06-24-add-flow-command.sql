@@ -40,6 +40,22 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @sql = (
+    SELECT CASE
+        WHEN SUM(`COLUMN_NAME` = 'task_instance_id') > 0 THEN 'SELECT 1'
+        WHEN SUM(`COLUMN_NAME` = 'step_instance_id') > 0 THEN
+            'ALTER TABLE `drill_instance_step_log` CHANGE COLUMN `step_instance_id` `task_instance_id` BIGINT UNSIGNED NULL'
+        ELSE
+            'ALTER TABLE `drill_instance_step_log` ADD COLUMN `task_instance_id` BIGINT UNSIGNED NULL AFTER `drill_instance_id`'
+    END
+    FROM `INFORMATION_SCHEMA`.`COLUMNS`
+    WHERE `TABLE_SCHEMA` = DATABASE()
+      AND `TABLE_NAME` = 'drill_instance_step_log'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
         'ALTER TABLE `notification` ADD COLUMN `command_id` BIGINT UNSIGNED DEFAULT NULL AFTER `id`',
@@ -109,6 +125,26 @@ SET @sql = (
     WHERE `TABLE_SCHEMA` = DATABASE()
       AND `TABLE_NAME` = 'drill_flow_command'
       AND `INDEX_NAME` = 'idx_flow_command_drill_status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0
+            OR (
+                COUNT(*) = 3
+                AND MAX(`NON_UNIQUE`) = 0
+                AND GROUP_CONCAT(`COLUMN_NAME` ORDER BY `SEQ_IN_INDEX`) = 'command_id,action,task_instance_id'
+            ),
+        'SELECT 1',
+        'ALTER TABLE `drill_instance_step_log` DROP INDEX `uk_log_command_action_task`'
+    )
+    FROM `INFORMATION_SCHEMA`.`STATISTICS`
+    WHERE `TABLE_SCHEMA` = DATABASE()
+      AND `TABLE_NAME` = 'drill_instance_step_log'
+      AND `INDEX_NAME` = 'uk_log_command_action_task'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
