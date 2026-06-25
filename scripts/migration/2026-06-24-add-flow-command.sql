@@ -41,15 +41,69 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT CASE
-        WHEN SUM(`COLUMN_NAME` = 'task_instance_id') > 0 THEN 'SELECT 1'
-        WHEN SUM(`COLUMN_NAME` = 'step_instance_id') > 0 THEN
+        WHEN SUM(`COLUMN_NAME` = 'task_instance_id') = 0
+            AND SUM(`COLUMN_NAME` = 'step_instance_id') > 0 THEN
             'ALTER TABLE `drill_instance_step_log` CHANGE COLUMN `step_instance_id` `task_instance_id` BIGINT UNSIGNED NULL'
-        ELSE
+        WHEN SUM(`COLUMN_NAME` = 'task_instance_id') = 0 THEN
             'ALTER TABLE `drill_instance_step_log` ADD COLUMN `task_instance_id` BIGINT UNSIGNED NULL AFTER `drill_instance_id`'
+        ELSE 'SELECT 1'
     END
     FROM `INFORMATION_SCHEMA`.`COLUMNS`
     WHERE `TABLE_SCHEMA` = DATABASE()
       AND `TABLE_NAME` = 'drill_instance_step_log'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 2,
+        'UPDATE `drill_instance_step_log` SET `task_instance_id` = COALESCE(`task_instance_id`, `step_instance_id`)',
+        'SELECT 1'
+    )
+    FROM `INFORMATION_SCHEMA`.`COLUMNS`
+    WHERE `TABLE_SCHEMA` = DATABASE()
+      AND `TABLE_NAME` = 'drill_instance_step_log'
+      AND `COLUMN_NAME` IN ('task_instance_id', 'step_instance_id')
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(DISTINCT `INDEX_NAME`) = 0,
+        'SELECT 1',
+        CONCAT(
+            'ALTER TABLE `drill_instance_step_log` ',
+            GROUP_CONCAT(
+                DISTINCT CONCAT('DROP INDEX `', REPLACE(`INDEX_NAME`, '`', '``'), '`')
+                ORDER BY `INDEX_NAME`
+                SEPARATOR ', '
+            )
+        )
+    )
+    FROM `INFORMATION_SCHEMA`.`STATISTICS`
+    WHERE `TABLE_SCHEMA` = DATABASE()
+      AND `TABLE_NAME` = 'drill_instance_step_log'
+      AND `COLUMN_NAME` = 'step_instance_id'
+      AND `INDEX_NAME` <> 'PRIMARY'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'SELECT 1',
+        'ALTER TABLE `drill_instance_step_log` DROP COLUMN `step_instance_id`'
+    )
+    FROM `INFORMATION_SCHEMA`.`COLUMNS`
+    WHERE `TABLE_SCHEMA` = DATABASE()
+      AND `TABLE_NAME` = 'drill_instance_step_log'
+      AND `COLUMN_NAME` = 'step_instance_id'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
