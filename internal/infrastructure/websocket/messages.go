@@ -1,6 +1,11 @@
 package websocket
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+
+	"drill-platform/internal/infrastructure/events"
+)
 
 // 消息事件类型
 const (
@@ -42,47 +47,38 @@ const (
 	ChannelControl = "control" // 指挥通道
 )
 
-// WSMessage WebSocket 消息结构
-type WSMessage struct {
-	EventType string      `json:"event_type"`
-	DrillID   uint        `json:"drill_id,omitempty"`
-	Payload   interface{} `json:"payload,omitempty"`
-	Timestamp int64       `json:"timestamp"`
+// NewMessage creates a canonical WSMessage envelope for the given event type
+// and drill. Payload is stored in the envelope's Data field. The ID, Version,
+// and OccurredAt are populated by events.NewWSMessage.
+func NewMessage(eventType string, drillID uint, payload interface{}) events.WSMessage {
+	return newEnvelope(eventType, drillID, 0, payload)
 }
 
-// NewMessage 创建新的 WebSocket 消息
-func NewMessage(eventType string, drillID uint, payload interface{}) WSMessage {
-	return WSMessage{
-		EventType: eventType,
-		DrillID:   drillID,
-		Payload:   payload,
-		Timestamp: time.Now().Unix(),
-	}
+// NewPingMessage creates a heartbeat message.
+func NewPingMessage() events.WSMessage {
+	return newEnvelope(EventPing, 0, 0, nil)
 }
 
-// NewPingMessage 创建心跳消息
-func NewPingMessage() WSMessage {
-	return WSMessage{
-		EventType: EventPing,
-		Timestamp: time.Now().Unix(),
-	}
+// NewPongMessage creates a heartbeat response message.
+func NewPongMessage() events.WSMessage {
+	return newEnvelope(EventPong, 0, 0, nil)
 }
 
-// NewPongMessage 创建心跳响应消息
-func NewPongMessage() WSMessage {
-	return WSMessage{
-		EventType: EventPong,
-		Timestamp: time.Now().Unix(),
-	}
+// NewErrorMessage creates an error message.
+func NewErrorMessage(message string) events.WSMessage {
+	return newEnvelope(EventError, 0, 0, map[string]string{"message": message})
 }
 
-// NewErrorMessage 创建错误消息
-func NewErrorMessage(message string) WSMessage {
-	return WSMessage{
-		EventType: EventError,
-		Payload:   map[string]string{"message": message},
-		Timestamp: time.Now().Unix(),
+func newEnvelope(eventType string, drillID, userID uint, payload interface{}) events.WSMessage {
+	var data json.RawMessage
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return events.NewWSMessage(eventType, uint64(drillID), uint64(userID), nil)
+		}
+		data = encoded
 	}
+	return events.NewWSMessage(eventType, uint64(drillID), uint64(userID), data)
 }
 
 // 心跳配置

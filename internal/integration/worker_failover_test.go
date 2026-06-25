@@ -132,8 +132,8 @@ func (r *drillRecoverer) getRecoveredIDs() []uint64 {
 }
 
 // succeedingExecutor implements worker.Executor. It marks the claimed command
-// as succeeded via the repo, simulating a real executor without the full
-// flow-engine dependency graph.
+// as succeeded via the fenced repo method, simulating a real executor without
+// the full flow-engine dependency graph.
 type succeedingExecutor struct {
 	repo   *repository.FlowCommandRepo
 	mu     sync.Mutex
@@ -145,12 +145,17 @@ func newSucceedingExecutor(repo *repository.FlowCommandRepo) *succeedingExecutor
 	return &succeedingExecutor{repo: repo}
 }
 
-func (e *succeedingExecutor) Execute(ctx context.Context, cmd *entity.FlowCommand) error {
+func (e *succeedingExecutor) Execute(ctx context.Context, cmd *entity.FlowCommand, fence worker.ExecutionFence) error {
 	e.mu.Lock()
 	e.called = true
 	e.cmdID = cmd.ID
 	e.mu.Unlock()
-	return e.repo.MarkSucceeded(cmd.ID, map[string]any{"ok": true})
+	ownership := repository.CommandOwnership{
+		WorkerID: fence.WorkerID,
+		Epoch:    fence.WorkerEpoch,
+		Token:    fence.LeaseToken,
+	}
+	return e.repo.MarkSucceededFenced(ctx, cmd.ID, ownership, map[string]any{"ok": true})
 }
 
 func (e *succeedingExecutor) wasCalled() bool {
@@ -224,8 +229,8 @@ func TestTwoWorkersExactlyOneLeader(t *testing.T) {
 	leaseA := redisinfra.NewLease(store, leaseKey, "worker-a", config.LeaseTTL)
 	leaseB := redisinfra.NewLease(store, leaseKey, "worker-b", config.LeaseTTL)
 
-	wA := worker.NewWorker(config, leaseA, repo, nil, nil, "worker-a")
-	wB := worker.NewWorker(config, leaseB, repo, nil, nil, "worker-b")
+	wA := worker.NewWorker(config, leaseA, repo, nil, nil, nil, nil, "worker-a")
+	wB := worker.NewWorker(config, leaseB, repo, nil, nil, nil, nil, "worker-b")
 
 	ctxA, cancelA := context.WithCancel(context.Background())
 	ctxB, cancelB := context.WithCancel(context.Background())
@@ -270,6 +275,10 @@ func TestFailoverRecoversRunningDrill(t *testing.T) {
 	setupFlowCommandSchema(t, db)
 	prepareFlowCommands(t, db)
 	setupDrillInstanceSchema(t, db)
+	// The worker epoch table is required for fenced command mutations.
+	if err := db.AutoMigrate(&entity.WorkerEpoch{}); err != nil {
+		t.Fatalf("auto migrate worker_epoch: %v", err)
+	}
 
 	rdb := connectRedisRaw(t)
 	defer rdb.Close()
@@ -283,6 +292,7 @@ func TestFailoverRecoversRunningDrill(t *testing.T) {
 	// Seed a running drill and a pending command for it.
 	drillID := createRunningDrill(t, db, "failover-test-drill")
 	repo := repository.NewFlowCommandRepo(db)
+	epochRepo := repository.NewWorkerEpochRepo(db)
 	cmd, _, err := repo.CreateOrGet(newPendingCommand(uniqueKey("failover-cmd"), drillID))
 	if err != nil {
 		t.Fatalf("create pending command: %v", err)
@@ -300,8 +310,8 @@ func TestFailoverRecoversRunningDrill(t *testing.T) {
 	leaseA := redisinfra.NewLease(store, leaseKey, "worker-a", config.LeaseTTL)
 	leaseB := redisinfra.NewLease(store, leaseKey, "worker-b", config.LeaseTTL)
 
-	wA := worker.NewWorker(config, leaseA, repo, recovererA, executorA, "worker-a")
-	wB := worker.NewWorker(config, leaseB, repo, recovererB, executorB, "worker-b")
+	wA := worker.NewWorker(config, leaseA, repo, recovererA, executorA, epochRepo, repo, "worker-a")
+	wB := worker.NewWorker(config, leaseB, repo, recovererB, executorB, epochRepo, repo, "worker-b")
 
 	ctxA, cancelA := context.WithCancel(context.Background())
 	ctxB, cancelB := context.WithCancel(context.Background())

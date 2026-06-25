@@ -29,6 +29,7 @@ func TestCrossNodeWebSocketEventDelivery(t *testing.T) {
 	// Manager B represents backend B; it will receive events via Redis and
 	// deliver them to locally connected WebSocket clients.
 	managerB := websocket.NewManager()
+	go managerB.Run()
 
 	// Subscribe manager B's DeliverEvent handler to the Redis bus.
 	subCtx, subCancel := context.WithCancel(context.Background())
@@ -61,13 +62,7 @@ func TestCrossNodeWebSocketEventDelivery(t *testing.T) {
 	// Publish a drill event through bus A (simulating backend A executing a
 	// command and publishing the resulting WebSocket event).
 	payload := json.RawMessage(`{"type":"step.updated","status":"completed"}`)
-	event := events.Event{
-		ID:        "evt-cross-node",
-		Type:      "step.updated",
-		DrillID:   uint64(drillID),
-		Payload:   payload,
-		CreatedAt: time.Now(),
-	}
+	event := events.NewWSMessage("step.updated", uint64(drillID), 0, payload)
 
 	pubCtx, pubCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer pubCancel()
@@ -75,11 +70,14 @@ func TestCrossNodeWebSocketEventDelivery(t *testing.T) {
 		t.Fatalf("publish event through bus A: %v", err)
 	}
 
-	// Assert the client on manager B receives the event payload.
+	// Assert the client on manager B receives the canonical WSMessage.
 	select {
 	case got := <-clientB.Send:
-		if string(got) != string(payload) {
-			t.Fatalf("received payload = %s, want %s", got, payload)
+		if got.ID != event.ID || got.Type != event.Type || got.DrillID != event.DrillID {
+			t.Fatalf("received event = %+v, want %+v", got, event)
+		}
+		if string(got.Data) != string(payload) {
+			t.Fatalf("received data = %s, want %s", got.Data, payload)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("client B did not receive the cross-node event")
@@ -87,20 +85,13 @@ func TestCrossNodeWebSocketEventDelivery(t *testing.T) {
 
 	// Verify a non-matching drill does not receive the event. Publish an event
 	// for drill 99 and confirm client B (drill 42) does not get it.
-	otherPayload := json.RawMessage(`{"type":"step.updated","status":"skipped"}`)
-	otherEvent := events.Event{
-		ID:        "evt-other-drill",
-		Type:      "step.updated",
-		DrillID:   99,
-		Payload:   otherPayload,
-		CreatedAt: time.Now(),
-	}
+	otherEvent := events.NewWSMessage("step.updated", 99, 0, json.RawMessage(`{"type":"step.updated","status":"skipped"}`))
 	if err := busA.Publish(pubCtx, otherEvent); err != nil {
 		t.Fatalf("publish other-drill event: %v", err)
 	}
 	select {
 	case got := <-clientB.Send:
-		t.Fatalf("client B received an event for a non-matching drill: %s", got)
+		t.Fatalf("client B received an event for a non-matching drill: %+v", got)
 	case <-time.After(500 * time.Millisecond):
 		// Expected: no event for drill 99 arrives at the drill 42 client.
 	}

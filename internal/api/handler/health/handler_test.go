@@ -27,7 +27,7 @@ type fakeSubscriber struct {
 	healthy bool
 }
 
-func (f fakeSubscriber) Subscribe(ctx context.Context, fn func(events.Event)) error {
+func (f fakeSubscriber) Subscribe(ctx context.Context, fn func(events.WSMessage)) error {
 	return nil
 }
 
@@ -227,5 +227,164 @@ func TestReady_WorkerStatusReported(t *testing.T) {
 	_, body := doRequest(t, r, "/ready")
 	if body["worker_status"] != "leader-ready" {
 		t.Errorf("worker_status = %v, want leader-ready", body["worker_status"])
+	}
+}
+
+// TestLiveReportsProcessLivenessOnly verifies that /live never inspects
+// external dependencies — it must return 200 even when every dependency is
+// unreachable. Liveness probes must not flap because of a downstream outage.
+func TestLiveReportsProcessLivenessOnly(t *testing.T) {
+	h := NewHandler(
+		fakeChecker{err: context.DeadlineExceeded},
+		fakeChecker{err: context.DeadlineExceeded},
+		fakeSubscriber{healthy: false},
+		nil,
+		"all",
+		"node-a",
+	)
+	// Readiness flag is off and every dependency is broken; /live must still
+	// report 200 because liveness only reflects process viability.
+	r := newTestRouter(h)
+
+	w, body := doRequest(t, r, "/live")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if body["status"] != "ok" {
+		t.Errorf("status = %v, want ok", body["status"])
+	}
+	if _, hasComponents := body["components"]; hasComponents {
+		t.Errorf("live response must not include components, got %v", body["components"])
+	}
+	if _, hasReason := body["reason"]; hasReason {
+		t.Errorf("live response must not include reason, got %v", body["reason"])
+	}
+}
+
+// TestReadyReturns503WhenRedisPublisherDown verifies that an unhealthy
+// publisher (the Redis event publisher path) drives /ready to 503 even when
+// the rest of the stack is healthy.
+func TestReadyReturns503WhenRedisPublisherDown(t *testing.T) {
+	h := NewHandler(
+		fakeChecker{},
+		fakeChecker{},
+		fakeSubscriber{healthy: true},
+		nil,
+		"all",
+		"node-a",
+	)
+	h.SetPublisher(fakeChecker{err: context.DeadlineExceeded})
+	h.SetReady(true)
+	r := newTestRouter(h)
+
+	w, body := doRequest(t, r, "/ready")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", w.Code, w.Body.String())
+	}
+	if body["status"] != "unready" {
+		t.Errorf("status = %v, want unready", body["status"])
+	}
+	components, ok := body["components"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("components missing or wrong type: %v", body["components"])
+	}
+	if components["publisher"] != "fail" {
+		t.Errorf("components.publisher = %v, want fail", components["publisher"])
+	}
+}
+
+// TestReadyReturns503WhenSubscriberDown verifies that an unhealthy event
+// subscriber drives /ready to 503 and that the failure is surfaced in the
+// components map.
+func TestReadyReturns503WhenSubscriberDown(t *testing.T) {
+	h := NewHandler(
+		fakeChecker{},
+		fakeChecker{},
+		fakeSubscriber{healthy: false},
+		nil,
+		"all",
+		"node-a",
+	)
+	h.SetReady(true)
+	r := newTestRouter(h)
+
+	w, body := doRequest(t, r, "/ready")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", w.Code, w.Body.String())
+	}
+	components, ok := body["components"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("components missing or wrong type: %v", body["components"])
+	}
+	if components["subscriber"] != "fail" {
+		t.Errorf("components.subscriber = %v, want fail", components["subscriber"])
+	}
+}
+
+// TestReadyReturnsComponentStates verifies that a 503 response surfaces the
+// per-component state so operators can see which dependency is degraded
+// without scanning logs.
+func TestReadyReturnsComponentStates(t *testing.T) {
+	h := NewHandler(
+		fakeChecker{},
+		fakeChecker{err: context.DeadlineExceeded},
+		fakeSubscriber{healthy: false},
+		nil,
+		"all",
+		"node-a",
+	)
+	h.SetPublisher(fakeChecker{err: context.DeadlineExceeded})
+	h.SetReady(true)
+	r := newTestRouter(h)
+
+	w, body := doRequest(t, r, "/ready")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", w.Code, w.Body.String())
+	}
+	components, ok := body["components"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("components missing or wrong type: %v", body["components"])
+	}
+	if components["db"] != "ok" {
+		t.Errorf("components.db = %v, want ok", components["db"])
+	}
+	if components["redis"] != "fail" {
+		t.Errorf("components.redis = %v, want fail", components["redis"])
+	}
+	if components["publisher"] != "fail" {
+		t.Errorf("components.publisher = %v, want fail", components["publisher"])
+	}
+	if components["subscriber"] != "fail" {
+		t.Errorf("components.subscriber = %v, want fail", components["subscriber"])
+	}
+}
+
+// TestReadyComponentStatesOnSuccess verifies that a fully healthy /ready
+// response reports every component as ok.
+func TestReadyComponentStatesOnSuccess(t *testing.T) {
+	h := NewHandler(
+		fakeChecker{},
+		fakeChecker{},
+		fakeSubscriber{healthy: true},
+		nil,
+		"all",
+		"node-a",
+	)
+	h.SetPublisher(fakeChecker{})
+	h.SetReady(true)
+	r := newTestRouter(h)
+
+	w, body := doRequest(t, r, "/ready")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	components, ok := body["components"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("components missing or wrong type: %v", body["components"])
+	}
+	for _, name := range []string{"db", "redis", "publisher", "subscriber"} {
+		if components[name] != "ok" {
+			t.Errorf("components.%s = %v, want ok", name, components[name])
+		}
 	}
 }

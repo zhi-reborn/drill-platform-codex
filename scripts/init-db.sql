@@ -156,8 +156,11 @@ CREATE TABLE `drill_flow_command` (
     `payload` JSON NOT NULL,
     `status` VARCHAR(20) NOT NULL,
     `worker_id` VARCHAR(128) DEFAULT NULL,
+    `worker_epoch` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `lease_token` VARCHAR(128) NOT NULL DEFAULT '',
     `lease_until` DATETIME DEFAULT NULL,
     `attempts` INT NOT NULL DEFAULT 0,
+    `attempt_count` INT NOT NULL DEFAULT 0,
     `result` JSON DEFAULT NULL,
     `error_code` VARCHAR(64) DEFAULT NULL,
     `error_message` VARCHAR(500) DEFAULT NULL,
@@ -170,6 +173,18 @@ CREATE TABLE `drill_flow_command` (
     KEY `idx_flow_command_pending` (`status`, `created_at`),
     KEY `idx_flow_command_lease` (`lease_until`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='流程命令表';
+
+-- Worker epoch 单例行表：跟踪当前当选 worker 及单调递增的 epoch
+DROP TABLE IF EXISTS `drill_worker_epoch`;
+CREATE TABLE `drill_worker_epoch` (
+    `id` BIGINT UNSIGNED NOT NULL,
+    `worker_id` VARCHAR(128) NOT NULL COMMENT '当前持有 epoch 的 worker',
+    `epoch` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '单调递增 epoch，每次领导切换 +1',
+    `lease_until` DATETIME DEFAULT NULL COMMENT 'epoch 租约到期时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Worker epoch 单例行表';
 
 -- 演练操作日志表
 DROP TABLE IF EXISTS `drill_instance_step_log`;

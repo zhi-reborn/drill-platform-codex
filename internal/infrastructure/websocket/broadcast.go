@@ -2,118 +2,92 @@ package websocket
 
 import (
 	"encoding/json"
+	"log"
 
 	"drill-platform/internal/infrastructure/events"
 )
 
-func (m *Manager) BroadcastToDrill(drillID uint, msg WSMessage) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
+// DeliverEvent is the single local fanout entry point. The Redis subscriber
+// calls this with each deduped WSMessage; it enqueues a broadcast job onto
+// the hub channel so all client writes are serialized through the hub
+// goroutine (no concurrent Send writes/closures).
+func (m *Manager) DeliverEvent(msg events.WSMessage) {
+	if msg.DrillID != 0 {
+		m.enqueueBroadcast(broadcastJob{drillID: uint(msg.DrillID), msg: msg})
 	}
+	if msg.UserID != 0 {
+		m.enqueueBroadcast(broadcastJob{userID: uint(msg.UserID), msg: msg})
+	}
+}
 
-	m.BroadcastToDrillRaw(drillID, data)
+// enqueueBroadcast sends a broadcast job to the hub goroutine. If the
+// broadcast channel is full (clients backpressured) the event is dropped with
+// a log line — the next event will retry.
+func (m *Manager) enqueueBroadcast(job broadcastJob) {
+	select {
+	case m.broadcast <- job:
+	default:
+		log.Printf("broadcast channel full, dropping event type=%s id=%s", job.msg.Type, job.msg.ID)
+	}
+}
+
+// BroadcastToDrill enqueues a broadcast of msg to all clients subscribed to
+// drillID. Used by the legacy Send* helpers when no Redis publisher is wired
+// (dev/test fallback). In production, events go through Redis and arrive via
+// DeliverEvent.
+func (m *Manager) BroadcastToDrill(drillID uint, msg events.WSMessage) error {
+	m.enqueueBroadcast(broadcastJob{drillID: drillID, msg: msg})
 	return nil
 }
 
-func (m *Manager) BroadcastToDrillRaw(drillID uint, data []byte) {
-	m.Mu.RLock()
-	// 先收集需要慢速删除的客户端，避免在 RLock 下修改 map
-	var slowClients []*Client
-
-	for _, ch := range m.Channels {
-		clients := ch.GetClientsByDrill(drillID)
-		for _, c := range clients {
-			select {
-			case c.Send <- data:
-			default:
-				// 慢客户端：不关闭 Send channel（避免 WritePump panic），只标记待移除
-				slowClients = append(slowClients, c)
-			}
-		}
-	}
-	m.Mu.RUnlock()
-
-	// 释放 RLock 后，再处理慢客户端移除（需要写锁）
-	if len(slowClients) > 0 {
-		m.Mu.Lock()
-		for _, c := range slowClients {
-			if ch, ok := m.Channels[c.Type]; ok {
-				ch.RemoveClient(c)
-			}
-		}
-		m.Mu.Unlock()
-	}
-}
-
-func (m *Manager) BroadcastToUser(userID uint, msg WSMessage) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	m.BroadcastToUserRaw(userID, data)
+// BroadcastToUser enqueues a broadcast of msg to all task-channel clients for
+// userID. See BroadcastToDrill for the dev/test fallback note.
+func (m *Manager) BroadcastToUser(userID uint, msg events.WSMessage) error {
+	m.enqueueBroadcast(broadcastJob{userID: userID, msg: msg})
 	return nil
-}
-
-func (m *Manager) BroadcastToUserRaw(userID uint, data []byte) {
-	m.Mu.RLock()
-	var slowClients []*Client
-
-	if ch, ok := m.Channels[ChannelTasks]; ok {
-		clients := ch.GetClientsByUser(userID)
-		for _, c := range clients {
-			select {
-			case c.Send <- data:
-			default:
-				slowClients = append(slowClients, c)
-			}
-		}
-	}
-	m.Mu.RUnlock()
-
-	if len(slowClients) > 0 {
-		m.Mu.Lock()
-		for _, c := range slowClients {
-			if ch, ok := m.Channels[c.Type]; ok {
-				ch.RemoveClient(c)
-			}
-		}
-		m.Mu.Unlock()
-	}
-}
-
-func (m *Manager) DeliverEvent(event events.Event) {
-	if event.DrillID != 0 {
-		m.BroadcastToDrillRaw(uint(event.DrillID), event.Payload)
-	}
-	if event.UserID != 0 {
-		m.BroadcastToUserRaw(uint(event.UserID), event.Payload)
-	}
 }
 
 func (m *Manager) SendStepChange(drillID uint, payload StepChangePayload) {
 	eventType := stepStatusToEvent(payload.NewStatus)
-	msg := NewMessage(eventType, drillID, payload)
-	m.BroadcastToDrill(drillID, msg)
+	m.publishOrDeliver(eventType, drillID, 0, payload)
 }
 
 func (m *Manager) SendTimeoutWarning(drillID uint, userID uint, payload TimeoutWarningPayload) {
-	msg := NewMessage(EventTimeoutWarning, drillID, payload)
-	m.BroadcastToDrill(drillID, msg)
-	m.BroadcastToUser(userID, msg)
+	m.publishOrDeliver(EventTimeoutWarning, drillID, userID, payload)
 }
 
 func (m *Manager) SendDrillStatus(drillID uint, payload DrillStatusPayload) {
 	eventType := drillStatusToEvent(payload.NewStatus, payload.PreviousStatus)
-	msg := NewMessage(eventType, drillID, payload)
-	m.BroadcastToDrill(drillID, msg)
+	m.publishOrDeliver(eventType, drillID, 0, payload)
 }
 
 func (m *Manager) SendControlEvent(drillID uint, payload ControlPayload) {
 	eventType := controlActionToEvent(payload.Action)
-	msg := NewMessage(eventType, drillID, payload)
-	m.BroadcastToDrill(drillID, msg)
+	m.publishOrDeliver(eventType, drillID, 0, payload)
+}
+
+func (m *Manager) SendTaskUpdate(userID uint, payload TaskAssignPayload) {
+	m.publishOrDeliver(EventInfo, 0, userID, payload)
+}
+
+// publishOrDeliver is the single publication path: if a Redis publisher is
+// wired, the event goes to Redis (the subscriber will call DeliverEvent to
+// fan out locally). With no publisher (dev/test without Redis), it falls
+// back to local DeliverEvent so single-node mode still works.
+func (m *Manager) publishOrDeliver(eventType string, drillID, userID uint, payload interface{}) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("marshal ws payload type=%s: %v", eventType, err)
+		return
+	}
+	msg := events.NewWSMessage(eventType, uint64(drillID), uint64(userID), data)
+	if m.publisher != nil {
+		if err := m.publisher.Publish(m.publishCtx, msg); err != nil {
+			log.Printf("publish event type=%s: %v", eventType, err)
+		}
+		return
+	}
+	m.DeliverEvent(msg)
 }
 
 func drillStatusToEvent(newStatus, prevStatus string) string {
@@ -164,9 +138,4 @@ func controlActionToEvent(action string) string {
 	default:
 		return EventControlPause
 	}
-}
-
-func (m *Manager) SendTaskUpdate(userID uint, payload TaskAssignPayload) {
-	msg := NewMessage(EventInfo, 0, payload)
-	m.BroadcastToUser(userID, msg)
 }

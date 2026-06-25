@@ -92,6 +92,35 @@ func (s *FlowCommandService) SubmitAndWait(ctx context.Context, req SubmitComman
 	}
 }
 
+// Submit enqueues a command keyed by IdempotencyKey and returns immediately
+// without waiting for a worker to execute it. API handlers use this so request
+// threads never block on command execution; clients poll
+// GET /flow-commands/:id for the authoritative status. Duplicate submissions
+// of the same idempotency key return the original command.
+func (s *FlowCommandService) Submit(req SubmitCommandRequest) (*SubmitCommandResult, error) {
+	payloadBytes, err := json.Marshal(req.Payload)
+	if err != nil {
+		return nil, err
+	}
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
+	}
+	cmd, _, err := s.repo.CreateOrGet(&entity.FlowCommand{
+		CommandType:     req.CommandType,
+		DrillInstanceID: req.DrillInstanceID,
+		StepInstanceID:  req.StepInstanceID,
+		OperatorID:      req.OperatorID,
+		IdempotencyKey:  idempotencyKey,
+		Payload:         string(payloadBytes),
+		Status:          entity.FlowCommandPending,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SubmitCommandResult{Command: cmd, Pending: !cmd.IsTerminal()}, nil
+}
+
 func (s *FlowCommandService) GetForOperator(id, operatorID uint64) (*entity.FlowCommand, error) {
 	return s.repo.FindByIDForOperator(id, operatorID)
 }

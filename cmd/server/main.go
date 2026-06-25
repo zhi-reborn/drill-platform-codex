@@ -183,10 +183,14 @@ func main() {
 
 	// 7. Events bus (publisher + subscriber). The same RedisBus instance acts
 	// as both; the subscriber half is started in a goroutine for API roles.
+	// Wiring the bus as the WebSocket publisher routes all Send* helpers
+	// through Redis — the subscriber then calls DeliverEvent for local fanout,
+	// so no event bypasses the bus.
 	var eventBus *events.RedisBus
 	var subscriber events.Subscriber
 	if redisClient != nil {
 		eventBus = events.NewRedisBus(redisClient)
+		wsManager.SetPublisher(eventBus)
 		if cfg.IsAPI() {
 			subscriber = eventBus
 		}
@@ -198,8 +202,8 @@ func main() {
 	defer subCancel()
 	if subscriber != nil {
 		go func() {
-			if err := eventBus.Subscribe(subCtx, func(event events.Event) {
-				wsManager.DeliverEvent(event)
+			if err := eventBus.Subscribe(subCtx, func(msg events.WSMessage) {
+				wsManager.DeliverEvent(msg)
 			}); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("事件订阅退出: %v", err)
 			}
@@ -215,6 +219,7 @@ func main() {
 			flowCommandRepo := repository.NewFlowCommandRepo()
 			drillRepo := repository.NewDrillRepo()
 			stepRepo := repository.NewStepRepo()
+			epochRepo := repository.NewWorkerEpochRepo()
 
 			lease := redis.NewLease(redisClient, "drill:worker:leader", cfg.InstanceID, cfg.Worker.LeaseTTL)
 			recovery := service.NewFlowRecovery(services.DrillService, drillRepo, stepRepo, flowCommandRepo)
@@ -224,10 +229,7 @@ func main() {
 				executor = service.NewFlowCommandExecutor(
 					repository.DB,
 					flowCommandRepo,
-					services.DrillService,
-					services.TaskService,
 					eventBus,
-					lease,
 				)
 			}
 
@@ -242,6 +244,8 @@ func main() {
 				flowCommandRepo,
 				recovery,
 				executor,
+				epochRepo,
+				flowCommandRepo,
 				cfg.InstanceID,
 			)
 			services.SetWorker(flowWorker)

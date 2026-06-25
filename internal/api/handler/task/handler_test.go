@@ -1,7 +1,6 @@
 package task
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +21,7 @@ type fakeTaskCommandService struct {
 	requests []service.SubmitCommandRequest
 }
 
-func (f *fakeTaskCommandService) SubmitAndWait(_ context.Context, req service.SubmitCommandRequest) (*service.SubmitCommandResult, error) {
+func (f *fakeTaskCommandService) Submit(req service.SubmitCommandRequest) (*service.SubmitCommandResult, error) {
 	f.requests = append(f.requests, req)
 	return &service.SubmitCommandResult{Command: &entity.FlowCommand{
 		ID:              uint64(len(f.requests)),
@@ -149,11 +148,26 @@ func TestCommandReportIssueSubmitsDurableCommand(t *testing.T) {
 
 func assertTaskCommandSubmitted(t *testing.T, resp *httptest.ResponseRecorder, commands *fakeTaskCommandService, want service.SubmitCommandRequest) {
 	t.Helper()
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202 Accepted, got %d: %s", resp.Code, resp.Body.String())
 	}
 	if resp.Header().Get("Idempotency-Key") != want.IdempotencyKey {
 		t.Fatalf("expected response idempotency key %q, got %q", want.IdempotencyKey, resp.Header().Get("Idempotency-Key"))
+	}
+	// Unified async envelope: {"command_id", "status"}.
+	var body map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T (%s)", body["data"], resp.Body.String())
+	}
+	if _, ok := data["command_id"].(float64); !ok {
+		t.Fatalf("expected command_id in response data, got %s", resp.Body.String())
+	}
+	if _, ok := data["status"].(string); !ok {
+		t.Fatalf("expected status in response data, got %s", resp.Body.String())
 	}
 	if len(commands.requests) != 1 {
 		t.Fatalf("expected one submitted command, got %d", len(commands.requests))

@@ -33,7 +33,7 @@ app.mount('#app')
 import { useAuthStore } from './stores/auth'
 import { useWebSocket } from './composables/useWebSocket'
 import { useNotificationStore } from './stores/notifications'
-import type { WsMessage } from './websocket/messageTypes'
+import type { NormalizedWsMessage } from './websocket/messageTypes'
 
 const authStore = useAuthStore()
 const notifStore = useNotificationStore()
@@ -42,9 +42,9 @@ authStore.restoreSession()
 if (authStore.isAuthenticated && authStore.token) {
   const ws = useWebSocket()
   ws.init(authStore.token)
-  
+
   // Subscribe to WebSocket events and update notifications
-  ws.subscribe('*', (msg: WsMessage) => {
+  ws.subscribe('*', (msg: NormalizedWsMessage) => {
     // Map WebSocket events to notification types
     const eventToNotifType: Record<string, string> = {
       'drill_started': 'drill_started',
@@ -56,10 +56,10 @@ if (authStore.isAuthenticated && authStore.token) {
       'step_timeout': 'step_timeout',
       'task_assigned': 'task_assigned',
     }
-    
-    const notifType = eventToNotifType[msg.event_type]
-    if (notifType && msg.payload) {
-      const payload = msg.payload as Record<string, any>
+
+    const notifType = eventToNotifType[msg.type]
+    if (notifType && msg.data) {
+      const payload = msg.data as Record<string, any>
       notifStore.addNotification({
         id: Date.now(), // temporary ID
         user_id: authStore.user?.id || 0,

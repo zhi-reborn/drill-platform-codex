@@ -308,18 +308,13 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 }
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
-	recovered, err := s.recoverRunningDrillIfNeeded(id)
-	if err != nil {
-		log.Printf("[GetSteps] recover drill %d failed (continue with db steps): %v", id, err)
-	}
-	if recovered {
-		InvalidateStepCache(s.redis, id)
-	}
-
+	// Read-only path: API nodes must be stateless and never mutate engine or
+	// DB state on GET. Reconciliation, recovery, and advancement are handled
+	// by the elected Worker (FlowRecovery) and command executor, not by read
+	// handlers. See FlowRecovery.RecoverAll and FlowCommandExecutor.
 	running := s.isRunningDrill(id)
 	if !running {
 		if steps, ok := GetCachedSteps(s.redis, id); ok {
-			s.reconcilePreStepIDs(id, steps)
 			return steps, nil
 		}
 	}
@@ -328,23 +323,10 @@ func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	if running && s.advanceRunningDrillFromTerminalSteps(id, steps) {
-		InvalidateStepCache(s.redis, id)
-		steps, err = s.stepRepo.FindStepsByDrillID(id)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	if !running {
 		SetCachedSteps(s.redis, id, steps)
 	}
-
-	// 协调父步骤状态：如果所有子步骤已终态但父步骤未终态，自动完成父步骤
-	s.reconcileParentStepsFromDB(id, steps)
-
-	// 协调 pre_step_ids：如果 parallel 步骤的 pre_step_ids 包含同级步骤，重新计算
-	s.reconcilePreStepIDs(id, steps)
 
 	return steps, nil
 }

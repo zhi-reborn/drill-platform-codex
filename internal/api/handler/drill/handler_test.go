@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type fakeStepCacheRedis struct {
@@ -419,19 +422,29 @@ func TestResolveStepOperationTargetPrefersInstanceIDWhenIDsCollide(t *testing.T)
 }
 
 type fakeDrillCommandService struct {
-	requests []drillservice.SubmitCommandRequest
+	requests  []drillservice.SubmitCommandRequest
+	status    entity.FlowCommandStatus // optional; defaults to Succeeded
+	commandID uint64                   // optional; defaults to len(requests)
 }
 
-func (f *fakeDrillCommandService) SubmitAndWait(_ context.Context, req drillservice.SubmitCommandRequest) (*drillservice.SubmitCommandResult, error) {
+func (f *fakeDrillCommandService) Submit(req drillservice.SubmitCommandRequest) (*drillservice.SubmitCommandResult, error) {
 	f.requests = append(f.requests, req)
+	status := f.status
+	if status == "" {
+		status = entity.FlowCommandSucceeded
+	}
+	id := f.commandID
+	if id == 0 {
+		id = uint64(len(f.requests))
+	}
 	return &drillservice.SubmitCommandResult{Command: &entity.FlowCommand{
-		ID:              uint64(len(f.requests)),
+		ID:              id,
 		CommandType:     req.CommandType,
 		DrillInstanceID: req.DrillInstanceID,
 		StepInstanceID:  req.StepInstanceID,
 		OperatorID:      req.OperatorID,
 		IdempotencyKey:  req.IdempotencyKey,
-		Status:          entity.FlowCommandSucceeded,
+		Status:          status,
 	}}, nil
 }
 
@@ -538,11 +551,26 @@ func performDrillCommandRequest(handler gin.HandlerFunc, method, path, body, key
 
 func assertDrillCommandSubmitted(t *testing.T, resp *httptest.ResponseRecorder, commands *fakeDrillCommandService, want drillservice.SubmitCommandRequest) {
 	t.Helper()
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202 Accepted, got %d: %s", resp.Code, resp.Body.String())
 	}
 	if resp.Header().Get("Idempotency-Key") != want.IdempotencyKey {
 		t.Fatalf("expected response idempotency key %q, got %q", want.IdempotencyKey, resp.Header().Get("Idempotency-Key"))
+	}
+	// Unified async envelope: {"command_id", "status"}.
+	var body map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T (%s)", body["data"], resp.Body.String())
+	}
+	if _, ok := data["command_id"].(float64); !ok {
+		t.Fatalf("expected command_id in response data, got %s", resp.Body.String())
+	}
+	if _, ok := data["status"].(string); !ok {
+		t.Fatalf("expected status in response data, got %s", resp.Body.String())
 	}
 	if len(commands.requests) != 1 {
 		t.Fatalf("expected one submitted command, got %d", len(commands.requests))
@@ -567,4 +595,306 @@ func assertDrillCommandSubmitted(t *testing.T, resp *httptest.ResponseRecorder, 
 
 func uint64Ptr(v uint64) *uint64 {
 	return &v
+}
+
+// writeDetectingLogger captures SQL statements that perform writes
+// (INSERT/UPDATE/DELETE) so tests can assert that read paths are side-effect
+// free.
+type writeDetectingLogger struct {
+	mu     sync.Mutex
+	writes []string
+}
+
+func (l *writeDetectingLogger) LogMode(logger.LogLevel) logger.Interface { return l }
+func (l *writeDetectingLogger) Info(context.Context, string, ...interface{})  {}
+func (l *writeDetectingLogger) Warn(context.Context, string, ...interface{})  {}
+func (l *writeDetectingLogger) Error(context.Context, string, ...interface{}) {}
+func (l *writeDetectingLogger) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sql, _ := fc()
+	trimmed := strings.TrimSpace(sql)
+	upper := strings.ToUpper(trimmed)
+	if strings.HasPrefix(upper, "INSERT") ||
+		strings.HasPrefix(upper, "UPDATE") ||
+		strings.HasPrefix(upper, "DELETE") ||
+		strings.HasPrefix(upper, "CREATE") ||
+		strings.HasPrefix(upper, "DROP") ||
+		strings.HasPrefix(upper, "ALTER") {
+		l.mu.Lock()
+		l.writes = append(l.writes, trimmed)
+		l.mu.Unlock()
+	}
+}
+
+func (l *writeDetectingLogger) Writes() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, len(l.writes))
+	copy(out, l.writes)
+	return out
+}
+
+func (l *writeDetectingLogger) Reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.writes = nil
+}
+
+// setupStatelessTestDB builds an in-memory SQLite DB with the tables touched by
+// the read paths and a write-detecting logger so tests can verify no writes
+// occur during GET handlers.
+func setupStatelessTestDB(t *testing.T) (*gorm.DB, *writeDetectingLogger) {
+	t.Helper()
+	detector := &writeDetectingLogger{}
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: detector,
+	})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	schema := []string{
+		`CREATE TABLE drill_instance (
+			id INTEGER PRIMARY KEY,
+			template_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_by INTEGER NOT NULL DEFAULT 1,
+			progress_pct INTEGER NOT NULL DEFAULT 0,
+			start_time DATETIME NULL,
+			end_time DATETIME NULL
+		)`,
+		`CREATE TABLE drill_template (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			category TEXT NOT NULL DEFAULT '',
+			status INTEGER NOT NULL DEFAULT 1,
+			created_by INTEGER NOT NULL DEFAULT 1
+		)`,
+		`CREATE TABLE drill_instance_step (
+			id INTEGER PRIMARY KEY,
+			drill_instance_id INTEGER NOT NULL,
+			parent_step_id INTEGER NULL,
+			template_step_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			seq INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			step_type TEXT NOT NULL DEFAULT 'serial',
+			assignee_ids TEXT NOT NULL DEFAULT '[]',
+			actual_operator INTEGER NULL,
+			start_time DATETIME NULL,
+			end_time DATETIME NULL,
+			timeout_at DATETIME NULL,
+			remark TEXT,
+			issue_desc TEXT,
+			pre_step_ids TEXT,
+			action_params TEXT
+		)`,
+		`CREATE TABLE drill_instance_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			drill_instance_id INTEGER NOT NULL,
+			step_instance_id INTEGER NULL,
+			action TEXT,
+			operator_id INTEGER,
+			operator_name TEXT,
+			content TEXT,
+			created_at DATETIME
+		)`,
+		`CREATE TABLE drill_template_step (
+			id INTEGER PRIMARY KEY,
+			drill_template_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			seq INTEGER NOT NULL,
+			step_type TEXT NOT NULL
+		)`,
+	}
+	for _, stmt := range schema {
+		if err := db.Exec(stmt).Error; err != nil {
+			t.Fatalf("migrate: %v", err)
+		}
+	}
+	return db, detector
+}
+
+func TestGetDrillPerformsNoWrites(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, detector := setupStatelessTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_instance").Create(map[string]interface{}{
+		"id":          5,
+		"template_id": 1,
+		"name":        "演练",
+		"status":      "running",
+	}).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+
+	svc := drillservice.NewDrillService(
+		repository.NewDrillRepo(),
+		repository.NewTemplateRepo(),
+		repository.NewStepRepo(),
+		repository.NewUserRepo(),
+	)
+	handler := NewHandler(svc, nil)
+
+	router := gin.New()
+	router.GET("/drills/:id", handler.GetDetail)
+	req := httptest.NewRequest(http.MethodGet, "/drills/5", nil)
+	resp := httptest.NewRecorder()
+	detector.Reset()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if writes := detector.Writes(); len(writes) != 0 {
+		t.Fatalf("expected GET /drills/:id to perform no writes, got: %v", writes)
+	}
+}
+
+func TestGetStepsPerformsNoWrites(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, detector := setupStatelessTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_instance").Create(map[string]interface{}{
+		"id":          5,
+		"template_id": 1,
+		"name":        "演练",
+		"status":      "running",
+	}).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+	// A parent step whose children are all terminal: the legacy read path
+	// would auto-complete the parent (UPDATE + INSERT log), which violates
+	// statelessness.
+	steps := []map[string]interface{}{
+		{"id": 1, "drill_instance_id": 5, "template_step_id": 100, "name": "父步骤", "seq": 1, "status": "pending", "step_type": "serial", "assignee_ids": "[]", "pre_step_ids": "[]"},
+		{"id": 2, "drill_instance_id": 5, "parent_step_id": 1, "template_step_id": 101, "name": "子1", "seq": 2, "status": "completed", "step_type": "serial", "assignee_ids": "[]", "pre_step_ids": "[]"},
+		{"id": 3, "drill_instance_id": 5, "parent_step_id": 1, "template_step_id": 102, "name": "子2", "seq": 3, "status": "completed", "step_type": "serial", "assignee_ids": "[]", "pre_step_ids": "[]"},
+	}
+	for _, step := range steps {
+		if err := db.Table("drill_instance_step").Create(step).Error; err != nil {
+			t.Fatalf("create step: %v", err)
+		}
+	}
+
+	svc := drillservice.NewDrillService(
+		repository.NewDrillRepo(),
+		repository.NewTemplateRepo(),
+		repository.NewStepRepo(),
+		repository.NewUserRepo(),
+	)
+	handler := NewHandler(svc, nil)
+
+	router := gin.New()
+	router.GET("/drills/:id/steps", handler.GetSteps)
+	req := httptest.NewRequest(http.MethodGet, "/drills/5/steps", nil)
+	resp := httptest.NewRecorder()
+	detector.Reset()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if writes := detector.Writes(); len(writes) != 0 {
+		t.Fatalf("expected GET /drills/:id/steps to perform no writes, got: %v", writes)
+	}
+}
+
+// TestMutationReturnsAcceptedWithCommandId verifies that mutation endpoints
+// return a unified async envelope: 202 Accepted with {"command_id", "status"}.
+// The handler must not wait for command execution nor leak internal fields.
+func TestMutationReturnsAcceptedWithCommandId(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	commands := &fakeDrillCommandService{status: entity.FlowCommandPending, commandID: 123}
+	handler := NewHandlerWithCommands(nil, nil, commands)
+
+	router := gin.New()
+	router.POST("/drills/:id/start", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(42))
+		handler.Start(c)
+	})
+	req := httptest.NewRequest(http.MethodPost, "/drills/88/start", bytes.NewBufferString(`{}`))
+	req.Header.Set("Idempotency-Key", "start-key")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T (%s)", body["data"], resp.Body.String())
+	}
+	if cmdID, _ := data["command_id"].(float64); cmdID != 123 {
+		t.Fatalf("expected command_id 123, got %v", data["command_id"])
+	}
+	if status, _ := data["status"].(string); status != "pending" {
+		t.Fatalf("expected status pending, got %v", data["status"])
+	}
+	// Internal fields must not leak.
+	for _, field := range []string{"command", "pending", "idempotency_key", "payload", "worker_id"} {
+		if _, present := data[field]; present {
+			t.Fatalf("response leaked internal field %q: %s", field, resp.Body.String())
+		}
+	}
+}
+
+// TestRepeatedIdempotencyKeyReturnsSameCommand verifies that submitting the
+// same idempotency key twice returns the same command_id, so retries are
+// safely idempotent. Uses the real FlowCommandService against SQLite.
+func TestRepeatedIdempotencyKeyReturnsSameCommand(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&entity.FlowCommand{}); err != nil {
+		t.Fatalf("migrate flow command: %v", err)
+	}
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	repo := repository.NewFlowCommandRepo(db)
+	svc := drillservice.NewFlowCommandService(repo, 0) // no wait
+	handler := NewHandlerWithCommands(nil, nil, svc)
+
+	router := gin.New()
+	router.POST("/drills/:id/start", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(42))
+		handler.Start(c)
+	})
+
+	doRequest := func() (uint64, string) {
+		req := httptest.NewRequest(http.MethodPost, "/drills/88/start", bytes.NewBufferString(`{}`))
+		req.Header.Set("Idempotency-Key", "dup-key")
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body map[string]interface{}
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		data, _ := body["data"].(map[string]interface{})
+		cmdID, _ := data["command_id"].(float64)
+		status, _ := data["status"].(string)
+		return uint64(cmdID), status
+	}
+
+	first, _ := doRequest()
+	second, _ := doRequest()
+	if first == 0 || second != first {
+		t.Fatalf("expected duplicate idempotency key to return same command_id, got %d then %d", first, second)
+	}
 }

@@ -21,8 +21,11 @@ type FlowCommand struct {
 	Payload         string            `gorm:"type:json;not null;column:payload" json:"payload"`
 	Status          FlowCommandStatus `gorm:"type:varchar(20);not null;index:idx_flow_command_pending,priority:1;column:status" json:"status"`
 	WorkerID        *string           `gorm:"type:varchar(128);column:worker_id" json:"worker_id,omitempty"`
+	WorkerEpoch     uint64            `gorm:"not null;default:0;column:worker_epoch" json:"worker_epoch"`
+	LeaseToken      string            `gorm:"type:varchar(128);not null;default:'';column:lease_token" json:"lease_token"`
 	LeaseUntil      *time.Time        `gorm:"column:lease_until;index:idx_flow_command_lease,priority:2" json:"lease_until,omitempty"`
 	Attempts        int               `gorm:"not null;default:0;column:attempts" json:"attempts"`
+	AttemptCount    int               `gorm:"not null;default:0;column:attempt_count" json:"attempt_count"`
 	Result          *string           `gorm:"type:json;column:result" json:"result,omitempty"`
 	ErrorCode       *string           `gorm:"type:varchar(64);column:error_code" json:"error_code,omitempty"`
 	ErrorMessage    *string           `gorm:"type:varchar(500);column:error_message" json:"error_message,omitempty"`

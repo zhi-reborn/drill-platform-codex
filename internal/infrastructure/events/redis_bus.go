@@ -14,6 +14,11 @@ import (
 
 const EventsChannel = "drill:events"
 
+// dedupCapacity bounds how many recently seen event IDs the subscriber tracks
+// for duplicate suppression. When the table fills it is reset wholesale — a
+// simple, lock-free tradeoff that bounds memory while tolerating bursts.
+const dedupCapacity = 4096
+
 type redisPublisher interface {
 	Publish(context.Context, string, interface{}) error
 }
@@ -38,10 +43,19 @@ type RedisBus struct {
 	subscriber redisSubscriber
 	healthy    atomic.Bool
 	backoff    time.Duration
+	maxBackoff time.Duration
+
+	// dedup state — touched only by the Subscribe goroutine, so no mutex.
+	seen    map[string]struct{}
+	seenCnt int
 }
 
 func NewRedisBus(client interface{}) *RedisBus {
-	bus := &RedisBus{backoff: 100 * time.Millisecond}
+	bus := &RedisBus{
+		backoff:    100 * time.Millisecond,
+		maxBackoff: 5 * time.Second,
+		seen:       map[string]struct{}{},
+	}
 
 	switch c := client.(type) {
 	case *infraredis.Client:
@@ -66,12 +80,16 @@ func NewRedisBus(client interface{}) *RedisBus {
 	return bus
 }
 
-func (b *RedisBus) Publish(ctx context.Context, event Event) error {
+func (b *RedisBus) Publish(ctx context.Context, msg WSMessage) error {
 	if b.publisher == nil {
 		return errors.New("redis publisher is not configured")
 	}
 
-	data, err := json.Marshal(event)
+	if msg.Version == 0 {
+		msg.Version = CurrentVersion
+	}
+
+	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -79,9 +97,18 @@ func (b *RedisBus) Publish(ctx context.Context, event Event) error {
 	return b.publisher.Publish(ctx, EventsChannel, string(data))
 }
 
-func (b *RedisBus) Subscribe(ctx context.Context, handler func(Event)) error {
+func (b *RedisBus) Subscribe(ctx context.Context, handler func(WSMessage)) error {
 	if b.subscriber == nil {
 		return errors.New("redis subscriber is not configured")
+	}
+
+	backoff := b.backoff
+	if backoff <= 0 {
+		backoff = 100 * time.Millisecond
+	}
+	maxBackoff := b.maxBackoff
+	if maxBackoff <= 0 {
+		maxBackoff = 5 * time.Second
 	}
 
 	for {
@@ -94,13 +121,16 @@ func (b *RedisBus) Subscribe(ctx context.Context, handler func(Event)) error {
 		if _, err := pubsub.Receive(ctx); err != nil {
 			b.healthy.Store(false)
 			pubsub.Close()
-			if err := sleepWithContext(ctx, b.backoff); err != nil {
+			if err := sleepWithContext(ctx, backoff); err != nil {
 				return err
 			}
+			backoff = growBackoff(backoff, maxBackoff)
 			continue
 		}
 
 		b.healthy.Store(true)
+		backoff = b.backoff // reset backoff after a successful connect
+
 		ch := pubsub.Channel()
 		for {
 			select {
@@ -110,11 +140,14 @@ func (b *RedisBus) Subscribe(ctx context.Context, handler func(Event)) error {
 				return ctx.Err()
 			case msg, ok := <-ch:
 				if !ok {
+					// Subscription channel closed — mark unready immediately so
+					// /ready drains traffic while we reconnect.
 					b.healthy.Store(false)
 					pubsub.Close()
-					if err := sleepWithContext(ctx, b.backoff); err != nil {
+					if err := sleepWithContext(ctx, backoff); err != nil {
 						return err
 					}
+					backoff = growBackoff(backoff, maxBackoff)
 					goto reconnect
 				}
 				b.handleMessage(msg.Payload, handler)
@@ -129,12 +162,48 @@ func (b *RedisBus) Healthy() bool {
 	return b.healthy.Load()
 }
 
-func (b *RedisBus) handleMessage(payload string, handler func(Event)) {
-	var event Event
-	if err := json.Unmarshal([]byte(payload), &event); err != nil {
+func (b *RedisBus) handleMessage(payload string, handler func(WSMessage)) {
+	var msg WSMessage
+	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		return
 	}
-	handler(event)
+	if msg.Version != 0 && msg.Version != CurrentVersion {
+		return
+	}
+	if !b.markSeen(msg.ID) {
+		return
+	}
+	handler(msg)
+}
+
+// markSeen records the event ID and returns true if this is the first time
+// we've seen it. Duplicate IDs return false so the handler is not re-invoked.
+// When the table reaches dedupCapacity it resets, bounding memory.
+func (b *RedisBus) markSeen(id string) bool {
+	if id == "" {
+		return true
+	}
+	if b.seen == nil {
+		b.seen = map[string]struct{}{}
+	}
+	if _, exists := b.seen[id]; exists {
+		return false
+	}
+	if b.seenCnt >= dedupCapacity {
+		b.seen = map[string]struct{}{}
+		b.seenCnt = 0
+	}
+	b.seen[id] = struct{}{}
+	b.seenCnt++
+	return true
+}
+
+func growBackoff(current, max time.Duration) time.Duration {
+	next := current * 2
+	if next > max {
+		next = max
+	}
+	return next
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

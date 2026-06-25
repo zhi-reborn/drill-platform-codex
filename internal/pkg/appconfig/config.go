@@ -42,13 +42,23 @@ type DatabaseConfig struct {
 // RedisConfig describes the Redis connection. Addr is the canonical "host:port"
 // form used by environment variables; Host/Port are kept for YAML backward
 // compatibility.
+//
+// The TLS/Username/SentinelMaster/ClusterAddrs fields let production
+// deployments express Redis Cluster, Sentinel, TLS, and ACL topologies
+// without code changes. They are parsed here and consumed by the Redis
+// infrastructure layer; the platform never hardcodes environment-specific
+// hosts.
 type RedisConfig struct {
-	Addr     string `yaml:"addr"`
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Password string `yaml:"password"`
-	DB       int    `yaml:"db"`
-	PoolSize int    `yaml:"poolSize"`
+	Addr           string `yaml:"addr"`
+	Host           string `yaml:"host"`
+	Port           int    `yaml:"port"`
+	Password       string `yaml:"password"`
+	DB             int    `yaml:"db"`
+	PoolSize       int    `yaml:"poolSize"`
+	TLS            bool   `yaml:"tls"`
+	Username       string `yaml:"username"`
+	SentinelMaster string `yaml:"sentinel_master"`
+	ClusterAddrs   string `yaml:"cluster_addrs"`
 }
 
 // JWTConfig holds JWT signing parameters.
@@ -203,6 +213,20 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
+	if v := os.Getenv("REDIS_TLS"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Redis.TLS = b
+		}
+	}
+	if v := os.Getenv("REDIS_USERNAME"); v != "" {
+		cfg.Redis.Username = v
+	}
+	if v := os.Getenv("REDIS_SENTINEL_MASTER"); v != "" {
+		cfg.Redis.SentinelMaster = v
+	}
+	if v := os.Getenv("REDIS_CLUSTER_ADDRS"); v != "" {
+		cfg.Redis.ClusterAddrs = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
@@ -238,7 +262,9 @@ func applyEnvOverrides(cfg *Config) {
 // Validate enforces invariants required for safe operation:
 //   - APP_ROLE must be one of api, worker, all;
 //   - production deployments (Server.Mode != "debug") must set a JWT secret;
-//   - worker/all roles must set a non-empty InstanceID for lease ownership.
+//   - worker/all roles must set a non-empty InstanceID for lease ownership;
+//   - production deployments must not bind to localhost/loopback database or
+//     Redis endpoints — single-node dependencies defeat the HA posture.
 func (c *Config) Validate() error {
 	role := strings.ToLower(c.AppRole)
 	switch role {
@@ -255,7 +281,48 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("instance_id must not be empty for app_role %q (set INSTANCE_ID)", role)
 	}
 
+	if c.IsProduction() {
+		if isLoopbackHost(c.Database.Host) {
+			return fmt.Errorf("database host %q is a loopback address; production must use a remote HA database (set DATABASE_HOST)", c.Database.Host)
+		}
+		if isLoopbackAddr(c.RedisAddress()) {
+			return fmt.Errorf("redis address %q is a loopback address; production must use a remote HA redis (set REDIS_ADDR or REDIS_CLUSTER_ADDRS)", c.RedisAddress())
+		}
+	}
+
 	return nil
+}
+
+// IsProduction reports whether the config represents the production posture.
+// Any non-debug mode (release, test, etc.) is treated as production so the
+// stricter validation rules apply.
+func (c *Config) IsProduction() bool {
+	return strings.ToLower(c.Server.Mode) != "debug"
+}
+
+// isLoopbackHost reports whether host is a loopback identifier. Empty input
+// returns false so unset hosts are flagged by other validation rather than
+// mis-categorized as healthy.
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
+}
+
+// isLoopbackAddr reports whether addr (host:port form) routes to loopback.
+// Empty input returns false so unset addresses are flagged elsewhere.
+func isLoopbackAddr(addr string) bool {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return false
+	}
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	return isLoopbackHost(host)
 }
 
 // IsWorker reports whether the configured role runs the Worker loop.

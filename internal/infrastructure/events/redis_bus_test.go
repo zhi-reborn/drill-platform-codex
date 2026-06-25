@@ -25,15 +25,17 @@ func (f *fakeRedisClient) Publish(ctx context.Context, channel string, message i
 func TestRedisBusPublishJSONUsesEventsChannel(t *testing.T) {
 	client := &fakeRedisClient{}
 	bus := NewRedisBus(client)
-	event := Event{
-		ID:        "evt-1",
-		Type:      "step.updated",
-		DrillID:   7,
-		Payload:   json.RawMessage(`{"ok":true}`),
-		CreatedAt: time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC),
+	occurred := time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
+	msg := WSMessage{
+		ID:         "evt-1",
+		Version:    CurrentVersion,
+		Type:       "step.updated",
+		DrillID:    7,
+		OccurredAt: occurred,
+		Data:       json.RawMessage(`{"ok":true}`),
 	}
 
-	if err := bus.Publish(context.Background(), event); err != nil {
+	if err := bus.Publish(context.Background(), msg); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 	if client.channel != EventsChannel {
@@ -45,12 +47,16 @@ func TestRedisBusPublishJSONUsesEventsChannel(t *testing.T) {
 		t.Fatalf("Publish() message type = %T, want string", client.message)
 	}
 
-	var got Event
+	var got WSMessage
 	if err := json.Unmarshal([]byte(payload), &got); err != nil {
-		t.Fatalf("Publish() message is not valid event JSON: %v", err)
+		t.Fatalf("Publish() message is not valid envelope JSON: %v", err)
 	}
-	if got.ID != event.ID || got.Type != event.Type || got.DrillID != event.DrillID || string(got.Payload) != string(event.Payload) || !got.CreatedAt.Equal(event.CreatedAt) {
-		t.Fatalf("Publish() event = %+v, want %+v", got, event)
+	if got.ID != msg.ID || got.Type != msg.Type || got.DrillID != msg.DrillID ||
+		string(got.Data) != string(msg.Data) || !got.OccurredAt.Equal(msg.OccurredAt) {
+		t.Fatalf("Publish() envelope = %+v, want %+v", got, msg)
+	}
+	if got.Version != CurrentVersion {
+		t.Fatalf("Publish() version = %d, want %d", got.Version, CurrentVersion)
 	}
 }
 
@@ -58,7 +64,7 @@ func TestRedisBusHandleMessageSkipsInvalidJSON(t *testing.T) {
 	bus := NewRedisBus(&fakeRedisClient{})
 	called := false
 
-	bus.handleMessage("not-json", func(Event) {
+	bus.handleMessage("not-json", func(WSMessage) {
 		called = true
 	})
 
@@ -126,13 +132,13 @@ func TestRedisBusSubscribeReconnectsAndUpdatesHealthy(t *testing.T) {
 	first := &fakePubSubSession{ch: make(chan *goredis.Message)}
 	second := &fakePubSubSession{ch: make(chan *goredis.Message)}
 	subscriber := &fakeRedisSubscriber{sessions: []*fakePubSubSession{first, second}}
-	bus := &RedisBus{subscriber: subscriber, backoff: time.Millisecond}
+	bus := &RedisBus{subscriber: subscriber, backoff: time.Millisecond, seen: map[string]struct{}{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	done := make(chan error, 1)
 	go func() {
-		done <- bus.Subscribe(ctx, func(Event) {})
+		done <- bus.Subscribe(ctx, func(WSMessage) {})
 	}()
 
 	waitFor(t, func() bool { return bus.Healthy() })

@@ -72,6 +72,7 @@ func AutoMigrate() error {
 		&entity.DrillInstance{},
 		&entity.StepInstance{},
 		&entity.FlowCommand{},
+		&entity.WorkerEpoch{},
 		&entity.DrillInstanceLog{},
 		&entity.DrillAssignee{},
 		&entity.Notification{},

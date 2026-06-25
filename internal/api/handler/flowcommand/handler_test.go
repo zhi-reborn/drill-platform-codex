@@ -1,6 +1,7 @@
 package flowcommand
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -161,5 +162,49 @@ func TestGetAnotherUsersCommandAllowsDirector(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+// TestAnyNodeCanServeCommandStatusRead verifies that any API node can serve a
+// command-status read purely from the shared DB, with no in-memory state
+// dependency. A fresh handler instance (simulating a different node) reads a
+// command created elsewhere and returns its current status.
+func TestAnyNodeCanServeCommandStatusRead(t *testing.T) {
+	db := setupFlowCommandHandlerTestDB(t)
+	cmd := createFlowCommandForHandlerTest(t, db, entity.FlowCommand{
+		OperatorID:     7,
+		IdempotencyKey: "any-node-key",
+		Status:         entity.FlowCommandPending,
+	})
+
+	// Fresh service + handler instance = a different API node. It shares only
+	// the durable DB; no engine or in-memory cache is wired up.
+	otherNodeSvc := service.NewFlowCommandService(repository.NewFlowCommandRepo(db), 0)
+	otherNodeHandler := NewHandler(otherNodeSvc)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(7))
+		c.Set(middleware.CtxRole, "executor")
+		c.Next()
+	})
+	router.GET("/api/v1/flow-commands/:id", otherNodeHandler.Get)
+
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/flow-commands/%d", cmd.ID), nil)
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for pending command, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T", body["data"])
+	}
+	if data["status"] != "pending" {
+		t.Fatalf("expected status pending, got %v", data["status"])
 	}
 }

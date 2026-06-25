@@ -312,5 +312,192 @@ func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
 	}
 }
 
+// TestProductionRejectsLocalhostDatabase verifies that Validate refuses a
+// localhost database host when running in production (non-debug) mode.
+// Binding production traffic to a single-node localhost DB defeats the HA
+// posture the platform advertises.
+func TestProductionRejectsLocalhostDatabase(t *testing.T) {
+	cases := []string{"localhost", "127.0.0.1"}
+	for _, host := range cases {
+		t.Run(host, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.AppRole = "api"
+			cfg.InstanceID = "node-a"
+			cfg.JWT.Secret = "non-empty"
+			cfg.Server.Mode = "release"
+			cfg.Database.Host = host
+
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("Validate: expected error for localhost database host %q in production, got nil", host)
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "database") {
+				t.Fatalf("Validate error should mention database, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestProductionRejectsLocalhostRedis verifies that Validate refuses a
+// localhost Redis address when running in production (non-debug) mode.
+func TestProductionRejectsLocalhostRedis(t *testing.T) {
+	cases := []string{"localhost:6379", "127.0.0.1:6379"}
+	for _, addr := range cases {
+		t.Run(addr, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.AppRole = "api"
+			cfg.InstanceID = "node-a"
+			cfg.JWT.Secret = "non-empty"
+			cfg.Server.Mode = "release"
+			cfg.Redis.Addr = addr
+			cfg.Redis.Host = ""
+			cfg.Redis.Port = 0
+
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("Validate: expected error for localhost redis addr %q in production, got nil", addr)
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "redis") {
+				t.Fatalf("Validate error should mention redis, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestProductionAllowsRemoteDatabase verifies that the localhost rejection
+// does not fire for non-localhost hosts — guards against an over-broad rule.
+func TestProductionAllowsRemoteDatabase(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AppRole = "api"
+	cfg.InstanceID = "node-a"
+	cfg.JWT.Secret = "non-empty"
+	cfg.Server.Mode = "release"
+	cfg.Database.Host = "mysql-cluster.internal"
+	cfg.Redis.Addr = "redis-cluster.internal:6379"
+	cfg.Redis.Host = ""
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate: expected nil for remote deps in production, got: %v", err)
+	}
+}
+
+// TestDebugAllowsLocalhostDeps verifies that debug mode tolerates localhost
+// dependencies so local development is not blocked by the production guard.
+func TestDebugAllowsLocalhostDeps(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AppRole = "api"
+	cfg.InstanceID = "node-a"
+	cfg.JWT.Secret = "non-empty"
+	cfg.Server.Mode = "debug"
+	cfg.Database.Host = "localhost"
+	cfg.Redis.Addr = "127.0.0.1:6379"
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate: expected nil for localhost deps in debug, got: %v", err)
+	}
+}
+
+// TestConfigParsesRedisClusterSettings verifies that the Redis cluster,
+// sentinel, TLS, and ACL username fields round-trip through YAML and env
+// overrides. Production deployments must be able to express these topologies
+// without code changes.
+func TestConfigParsesRedisClusterSettings(t *testing.T) {
+	clearEnv(t, envKeys...)
+	yaml := `
+server:
+  mode: release
+database:
+  host: mysql.internal
+  port: 3306
+redis:
+  addr: ""
+  host: ""
+  port: 0
+  password: "cluster-pass"
+  tls: true
+  username: "drill"
+  sentinel_master: "drill-master"
+  cluster_addrs: "redis-0.internal:6379,redis-1.internal:6379"
+jwt:
+  secret: "non-empty"
+app_role: api
+instance_id: node-a
+`
+	path := writeYAML(t, yaml)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.Redis.TLS {
+		t.Errorf("Redis.TLS = false, want true")
+	}
+	if cfg.Redis.Username != "drill" {
+		t.Errorf("Redis.Username = %q, want drill", cfg.Redis.Username)
+	}
+	if cfg.Redis.SentinelMaster != "drill-master" {
+		t.Errorf("Redis.SentinelMaster = %q, want drill-master", cfg.Redis.SentinelMaster)
+	}
+	if cfg.Redis.ClusterAddrs != "redis-0.internal:6379,redis-1.internal:6379" {
+		t.Errorf("Redis.ClusterAddrs = %q, want redis-0.internal:6379,redis-1.internal:6379", cfg.Redis.ClusterAddrs)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate: expected nil for cluster config, got: %v", err)
+	}
+}
+
+// TestLoad_EnvOverridesRedisCluster verifies the Redis cluster/TLS/auth env
+// vars override YAML values, mirroring the production deployment model where
+// environment is authoritative.
+func TestLoad_EnvOverridesRedisCluster(t *testing.T) {
+	clearEnv(t, envKeys...)
+	setEnv(t, map[string]string{
+		"REDIS_TLS":             "true",
+		"REDIS_USERNAME":        "env-user",
+		"REDIS_SENTINEL_MASTER": "env-master",
+		"REDIS_CLUSTER_ADDRS":   "env-0:6379,env-1:6379",
+	})
+	path := writeYAML(t, baseYAML)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.Redis.TLS {
+		t.Errorf("Redis.TLS = false, want true")
+	}
+	if cfg.Redis.Username != "env-user" {
+		t.Errorf("Redis.Username = %q, want env-user", cfg.Redis.Username)
+	}
+	if cfg.Redis.SentinelMaster != "env-master" {
+		t.Errorf("Redis.SentinelMaster = %q, want env-master", cfg.Redis.SentinelMaster)
+	}
+	if cfg.Redis.ClusterAddrs != "env-0:6379,env-1:6379" {
+		t.Errorf("Redis.ClusterAddrs = %q, want env-0:6379,env-1:6379", cfg.Redis.ClusterAddrs)
+	}
+}
+
+// TestIsProduction reflects the convention that release mode (any non-debug
+// mode) is the production posture where the stricter validation rules apply.
+func TestIsProduction(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Server.Mode = "debug"
+	if cfg.IsProduction() {
+		t.Errorf("IsProduction() = true for debug mode, want false")
+	}
+
+	cfg.Server.Mode = "release"
+	if !cfg.IsProduction() {
+		t.Errorf("IsProduction() = false for release mode, want true")
+	}
+
+	cfg.Server.Mode = "test"
+	if !cfg.IsProduction() {
+		t.Errorf("IsProduction() = false for test mode, want true")
+	}
+}
+
 // Ensure context import is used even when no test currently needs it.
 var _ = context.Background

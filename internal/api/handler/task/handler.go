@@ -1,7 +1,6 @@
 package task
 
 import (
-	"context"
 	"strconv"
 
 	"drill-platform/internal/api/middleware"
@@ -14,7 +13,7 @@ import (
 )
 
 type CommandService interface {
-	SubmitAndWait(context.Context, service.SubmitCommandRequest) (*service.SubmitCommandResult, error)
+	Submit(service.SubmitCommandRequest) (*service.SubmitCommandResult, error)
 }
 
 type Handler struct {
@@ -141,7 +140,7 @@ func (h *Handler) submitCommand(c *gin.Context, commandType string, drillID, ste
 		response.InternalError(c, "命令服务未初始化")
 		return
 	}
-	result, err := h.commandService.SubmitAndWait(c.Request.Context(), service.SubmitCommandRequest{
+	result, err := h.commandService.Submit(service.SubmitCommandRequest{
 		CommandType:     commandType,
 		DrillInstanceID: drillID,
 		StepInstanceID:  &stepID,
@@ -150,6 +149,14 @@ func (h *Handler) submitCommand(c *gin.Context, commandType string, drillID, ste
 		Payload:         payload,
 	})
 	respondCommandResult(c, result, err)
+}
+
+// asyncCommandResponse is the unified envelope returned by every mutation
+// endpoint. The handler never waits for command execution; clients poll
+// GET /flow-commands/:id for the authoritative status.
+type asyncCommandResponse struct {
+	CommandID uint64 `json:"command_id"`
+	Status    string `json:"status"`
 }
 
 func respondCommandResult(c *gin.Context, result *service.SubmitCommandResult, err error) {
@@ -163,17 +170,8 @@ func respondCommandResult(c *gin.Context, result *service.SubmitCommandResult, e
 	}
 	cmd := result.Command
 	c.Header("Idempotency-Key", cmd.IdempotencyKey)
-	if cmd.Status == entity.FlowCommandSucceeded {
-		response.Success(c, result)
-		return
-	}
-	if cmd.Status == entity.FlowCommandFailed {
-		if cmd.ErrorMessage != nil && *cmd.ErrorMessage != "" {
-			response.BadRequest(c, *cmd.ErrorMessage)
-			return
-		}
-		response.InternalError(c, "命令执行失败")
-		return
-	}
-	response.Accepted(c, "命令处理中", result)
+	response.Accepted(c, "命令处理中", asyncCommandResponse{
+		CommandID: cmd.ID,
+		Status:    string(cmd.Status),
+	})
 }
