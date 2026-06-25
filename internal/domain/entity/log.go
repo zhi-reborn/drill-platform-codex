@@ -8,8 +8,9 @@ import "time"
 type DrillInstanceLog struct {
 	ID              uint64    `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	DrillInstanceID uint64    `gorm:"type:bigint unsigned;not null;column:drill_instance_id;index:idx_drill_instance" json:"drill_instance_id"`
-	StepInstanceID  *uint64   `gorm:"type:bigint unsigned;column:task_instance_id;index:idx_step_instance" json:"step_instance_id"`
-	Action          string    `gorm:"type:varchar(32);not null;column:action" json:"action"`
+	StepInstanceID  *uint64   `gorm:"type:bigint unsigned;column:task_instance_id;index:idx_step_instance;uniqueIndex:uk_log_command_action_step,priority:3" json:"step_instance_id"`
+	CommandID       *uint64   `gorm:"type:bigint unsigned;column:command_id;uniqueIndex:uk_log_command_action_step,priority:1" json:"command_id,omitempty"`
+	Action          string    `gorm:"type:varchar(32);not null;column:action;uniqueIndex:uk_log_command_action_step,priority:2" json:"action"`
 	OperatorID      uint64    `gorm:"type:bigint unsigned;not null;column:operator_id" json:"operator_id"`
 	OperatorName    string    `gorm:"type:varchar(64);not null;column:operator_name" json:"operator_name"`
 	Content         string    `gorm:"type:text;column:content" json:"content"`

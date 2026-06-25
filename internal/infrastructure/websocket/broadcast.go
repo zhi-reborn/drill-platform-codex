@@ -1,6 +1,10 @@
 package websocket
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"drill-platform/internal/infrastructure/events"
+)
 
 func (m *Manager) BroadcastToDrill(drillID uint, msg WSMessage) error {
 	data, err := json.Marshal(msg)
@@ -76,6 +80,15 @@ func (m *Manager) BroadcastToUserRaw(userID uint, data []byte) {
 			}
 		}
 		m.Mu.Unlock()
+	}
+}
+
+func (m *Manager) DeliverEvent(event events.Event) {
+	if event.DrillID != 0 {
+		m.BroadcastToDrillRaw(uint(event.DrillID), event.Payload)
+	}
+	if event.UserID != 0 {
+		m.BroadcastToUserRaw(uint(event.UserID), event.Payload)
 	}
 }
 

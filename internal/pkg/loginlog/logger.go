@@ -17,10 +17,15 @@ type Logger struct {
 	mu     sync.Mutex
 }
 
-// New 创建登录日志记录器，logFile 为日志文件路径
+// New creates a login log recorder. When logFile is empty the logger writes
+// only to stdout, which is the desired behaviour for container deployments
+// that aggregate logs via the container runtime. When logFile is non-empty the
+// logger writes to both the file and stdout so local development keeps seeing
+// events in the terminal.
 func New(logFile string) (*Logger, error) {
 	if logFile == "" {
-		logFile = "logs/login.log"
+		l := log.New(os.Stdout, "", 0)
+		return &Logger{logger: l}, nil
 	}
 
 	dir := filepath.Dir(logFile)

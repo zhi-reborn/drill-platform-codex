@@ -2,13 +2,36 @@ package repository
 
 import (
 	"encoding/json"
+
 	"drill-platform/internal/domain/entity"
+
+	"gorm.io/gorm"
 )
 
 type StepRepo struct{}
 
 func NewStepRepo() *StepRepo {
 	return &StepRepo{}
+}
+
+// TransitionStatus performs a conditional status update: the row is updated
+// only if its current status is in from. Returns true when the row was
+// updated, false when the status did not match (idempotent or invalid).
+func (r *StepRepo) TransitionStatus(tx *gorm.DB, id uint64, from []string, to string, updates map[string]any) (bool, error) {
+	if len(from) == 0 {
+		return false, nil
+	}
+	if updates == nil {
+		updates = map[string]any{}
+	}
+	updates["status"] = to
+	res := tx.Model(&entity.StepInstance{}).
+		Where("id = ? AND status IN ?", id, from).
+		Updates(updates)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
 }
 
 func (r *StepRepo) FindByID(id uint64) (*entity.StepInstance, error) {

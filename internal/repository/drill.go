@@ -61,6 +61,26 @@ func (r *DrillRepo) UpdateStatus(id uint64, status string) error {
 	return DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Update("status", status).Error
 }
 
+// TransitionStatus performs a conditional status update: the row is updated
+// only if its current status is in from. Returns true when the row was
+// updated, false when the status did not match (idempotent or invalid).
+func (r *DrillRepo) TransitionStatus(tx *gorm.DB, id uint64, from []string, to string, updates map[string]any) (bool, error) {
+	if len(from) == 0 {
+		return false, nil
+	}
+	if updates == nil {
+		updates = map[string]any{}
+	}
+	updates["status"] = to
+	res := tx.Model(&entity.DrillInstance{}).
+		Where("id = ? AND status IN ?", id, from).
+		Updates(updates)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
 func (r *DrillRepo) GetCurrentStepID(id uint64) (*uint64, error) {
 	var drill entity.DrillInstance
 	if err := DB.Select("current_task_id").First(&drill, id).Error; err != nil {

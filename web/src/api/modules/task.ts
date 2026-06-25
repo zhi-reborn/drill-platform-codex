@@ -1,4 +1,5 @@
-import { apiRequest } from '../request'
+import { apiRequest, mutationRequest } from '../request'
+import type { MutationResult } from '../request'
 import type { StepInstance } from '@/types/instance'
 
 export const taskApi = {
@@ -16,26 +17,29 @@ export const taskApi = {
     })
   },
 
-  start: (id: number) => {
-    return apiRequest({
+  start: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/tasks/${id}/start`,
       method: 'POST',
+      actionId: `task:${id}:start`,
     })
   },
 
-  complete: (id: number, remark: string) => {
-    return apiRequest({
+  complete: (id: number, remark: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/tasks/${id}/complete`,
       method: 'POST',
       data: { remark },
+      actionId: `task:${id}:complete`,
     })
   },
 
-  reportIssue: (id: number, issueDesc: string) => {
-    return apiRequest({
+  reportIssue: (id: number, issueDesc: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/tasks/${id}/issue`,
       method: 'POST',
       data: { issue_desc: issueDesc },
+      actionId: `task:${id}:report-issue`,
     })
   },
 

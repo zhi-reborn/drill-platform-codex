@@ -37,6 +37,10 @@ func SuccessWithMessage(c *gin.Context, message string, data interface{}) {
 	})
 }
 
+func Accepted(c *gin.Context, message string, data interface{}) {
+	c.JSON(http.StatusAccepted, Response{Code: CodeSuccess, Message: message, Data: data})
+}
+
 func SuccessPage(c *gin.Context, data interface{}, total int64, page, pageSize int) {
 	c.JSON(http.StatusOK, Response{
 		Code:    CodeSuccess,

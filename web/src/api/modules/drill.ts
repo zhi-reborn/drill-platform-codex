@@ -1,4 +1,5 @@
-import { apiRequest } from '../request'
+import { apiRequest, mutationRequest } from '../request'
+import type { MutationResult } from '../request'
 import type { DrillInstance, StepInstance } from '@/types/instance'
 
 export const drillApi = {
@@ -49,86 +50,97 @@ export const drillApi = {
     })
   },
 
-  start: (id: number) => {
-    return apiRequest<void>({
+  start: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${id}/start`,
       method: 'POST',
+      actionId: `drill:${id}:start`,
     })
   },
 
-  pause: (id: number) => {
-    return apiRequest<void>({
+  pause: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${id}/pause`,
       method: 'POST',
+      actionId: `drill:${id}:pause`,
     })
   },
 
-  resume: (id: number) => {
-    return apiRequest<void>({
+  resume: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${id}/resume`,
       method: 'POST',
+      actionId: `drill:${id}:resume`,
     })
   },
 
-  terminate: (id: number) => {
-    return apiRequest<void>({
+  terminate: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${id}/terminate`,
       method: 'POST',
+      actionId: `drill:${id}:terminate`,
     })
   },
 
-  delete: (id: number) => {
-    return apiRequest<void>({
+  delete: (id: number): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${id}`,
       method: 'DELETE',
+      actionId: `drill:${id}:delete`,
     })
   },
 
-  skipStep: (drillId: number, stepId: number, remark?: string) => {
-    return apiRequest<void>({
+  skipStep: (drillId: number, stepId: number, remark?: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/skip`,
       method: 'POST',
       data: { step_id: stepId, remark },
+      actionId: `drill:${drillId}:step:${stepId}:skip`,
     })
   },
 
-  startStep: (drillId: number, stepId: number, remark?: string) => {
-    return apiRequest<void>({
+  startStep: (drillId: number, stepId: number, remark?: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/start`,
       method: 'POST',
       data: { step_id: stepId, remark },
+      actionId: `drill:${drillId}:step:${stepId}:start`,
     })
   },
 
-  completeStep: (drillId: number, stepId: number, remark?: string) => {
-    return apiRequest<void>({
+  completeStep: (drillId: number, stepId: number, remark?: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/complete`,
       method: 'POST',
       data: { step_id: stepId, remark },
+      actionId: `drill:${drillId}:step:${stepId}:complete`,
     })
   },
 
-  forceCompleteStep: (drillId: number, stepId: number, remark?: string) => {
-    return apiRequest<void>({
+  forceCompleteStep: (drillId: number, stepId: number, remark?: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/force-complete`,
       method: 'POST',
       data: { step_id: stepId, remark },
+      actionId: `drill:${drillId}:step:${stepId}:force-complete`,
     })
   },
 
-  resumeTask: (drillId: number, stepId: number, remark?: string) => {
-    return apiRequest<void>({
+  resumeTask: (drillId: number, stepId: number, remark?: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/resume-task`,
       method: 'POST',
       data: { step_id: stepId, remark },
+      actionId: `drill:${drillId}:step:${stepId}:resume-task`,
     })
   },
 
-  assignStep: (drillId: number, stepId: number, userIds: number[]) => {
-    return apiRequest<void>({
+  assignStep: (drillId: number, stepId: number, userIds: number[]): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/assign`,
       method: 'POST',
       data: { step_id: stepId, user_ids: userIds },
+      actionId: `drill:${drillId}:step:${stepId}:assign`,
     })
   },
 
@@ -139,11 +151,12 @@ export const drillApi = {
       attributes?: Record<string, string>
       remark?: string
     }
-  ) => {
-    return apiRequest<void>({
+  ): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
       url: `/v1/drills/${drillId}/steps/info`,
       method: 'PUT',
       data: { step_id: stepId, ...payload },
+      actionId: `drill:${drillId}:step:${stepId}:update-info`,
     })
   },
 }

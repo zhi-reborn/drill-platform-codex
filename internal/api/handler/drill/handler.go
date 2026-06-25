@@ -1,6 +1,7 @@
 package drill
 
 import (
+	"context"
 	"drill-platform/internal/api/middleware"
 	"drill-platform/internal/domain/dto"
 	"drill-platform/internal/domain/entity"
@@ -9,16 +10,19 @@ import (
 	"drill-platform/internal/repository"
 	"drill-platform/internal/service"
 	"encoding/json"
-	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+type CommandService interface {
+	SubmitAndWait(context.Context, service.SubmitCommandRequest) (*service.SubmitCommandResult, error)
+}
+
 type Handler struct {
-	drillService *service.DrillService
-	userService  *service.AuthService
+	drillService   *service.DrillService
+	userService    *service.AuthService
+	commandService CommandService
 }
 
 type stepOperationTarget struct {
@@ -31,6 +35,18 @@ func NewHandler(drillService *service.DrillService, authService *service.AuthSer
 		drillService: drillService,
 		userService:  authService,
 	}
+}
+
+func NewHandlerWithCommands(drillService *service.DrillService, authService *service.AuthService, commandService CommandService) *Handler {
+	return &Handler{
+		drillService:   drillService,
+		userService:    authService,
+		commandService: commandService,
+	}
+}
+
+func (h *Handler) SetCommandService(commandService CommandService) {
+	h.commandService = commandService
 }
 
 func stepStatusText(status string) string {
@@ -186,63 +202,19 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Start(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
-	if err := h.drillService.Start(id); err != nil {
-		response.BadRequest(c, "请求参数错误")
-		return
-	}
-
-	response.SuccessWithMessage(c, "演练已启动", nil)
+	h.submitDrillLifecycleCommand(c, "start_drill")
 }
 
 func (h *Handler) Pause(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
-	if err := h.drillService.Pause(id); err != nil {
-		response.BadRequest(c, "请求参数错误")
-		return
-	}
-
-	response.SuccessWithMessage(c, "演练已暂停", nil)
+	h.submitDrillLifecycleCommand(c, "pause_drill")
 }
 
 func (h *Handler) Resume(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
-	if err := h.drillService.Resume(id); err != nil {
-		response.BadRequest(c, "请求参数错误")
-		return
-	}
-
-	response.SuccessWithMessage(c, "演练已恢复", nil)
+	h.submitDrillLifecycleCommand(c, "resume_drill")
 }
 
 func (h *Handler) Terminate(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
-	if err := h.drillService.Terminate(id); err != nil {
-		response.BadRequest(c, "请求参数错误")
-		return
-	}
-
-	response.SuccessWithMessage(c, "演练已终止", nil)
+	h.submitDrillLifecycleCommand(c, "terminate_drill")
 }
 
 func (h *Handler) GetLogs(c *gin.Context) {
@@ -290,12 +262,6 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func (h *Handler) StartStep(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
 		Remark string `json:"remark"`
@@ -304,39 +270,7 @@ func (h *Handler) StartStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-
-	if h.drillService.Engine() == nil {
-		response.InternalError(c, "流程引擎未初始化")
-		return
-	}
-
-	target, err := resolveStepOperationTarget(id, req.StepID)
-	if err != nil {
-		response.InternalError(c, "步骤实例不存在")
-		return
-	}
-
-	stepDefID := int64(target.stepDefID)
-	syncEngineStepsFromDB(h.drillService.Engine(), id)
-
-	err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID)
-	if err == flowengine.ErrInstanceNotFound {
-		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败")
-			return
-		}
-		syncEngineStepsFromDB(h.drillService.Engine(), id)
-		if err = h.drillService.Engine().ManualStartStep(int64(id), stepDefID); err != nil {
-			response.BadRequest(c, stepStartErrorMessage(err))
-			return
-		}
-	} else if err != nil {
-		response.BadRequest(c, stepStartErrorMessage(err))
-		return
-	}
-
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "步骤已开始", nil)
+	h.submitStepCommand(c, "start_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "remark": req.Remark})
 }
 
 func syncEngineStepsFromDB(engine *flowengine.Engine, drillID uint64) {
@@ -412,77 +346,23 @@ func stepStartErrorMessage(err error) string {
 // UpdateStepInfo 编辑步骤实例的可维护字段
 // 注意:数据库实际列名为 action_params(代替 attributes)/ start_time/ end_time 等
 func (h *Handler) UpdateStepInfo(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID     uint64                 `json:"step_id" binding:"required"`
-		Attributes map[string]interface{} `json:"attributes"` // 业务属性,合并到 action_params
+		Attributes map[string]interface{} `json:"attributes"`
 		Remark     string                 `json:"remark"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-
-	target, err := resolveStepOperationTarget(id, req.StepID)
-	if err != nil {
-		response.InternalError(c, "步骤实例不存在")
-		return
-	}
-
-	updates := map[string]interface{}{}
+	payload := map[string]interface{}{"step_id": req.StepID, "attributes": req.Attributes}
 	if req.Remark != "" {
-		updates["remark"] = req.Remark
+		payload["remark"] = req.Remark
 	}
-	if len(req.Attributes) > 0 {
-		// 读取现有 action_params,合并新属性(用原生 SQL 避免依赖实体字段)
-		var actionParams string
-		if err := repository.DB.Model(&entity.StepInstance{}).
-			Select("action_params").
-			Where("id = ?", target.step.ID).
-			Scan(&actionParams).Error; err != nil {
-			response.InternalError(c, "读取步骤失败: "+err.Error())
-			return
-		}
-		merged := map[string]interface{}{}
-		if actionParams != "" && actionParams != "null" {
-			_ = json.Unmarshal([]byte(actionParams), &merged)
-		}
-		for k, v := range req.Attributes {
-			if v != nil && fmt.Sprintf("%v", v) != "" {
-				merged[k] = v
-			}
-		}
-		buf, _ := json.Marshal(merged)
-		updates["action_params"] = string(buf)
-	}
-	if len(updates) == 0 {
-		response.BadRequest(c, "没有需要更新的字段")
-		return
-	}
-
-	if err := repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(updates).Error; err != nil {
-		response.InternalError(c, "保存失败: "+err.Error())
-		return
-	}
-	h.drillService.InvalidateStepCache(id)
-
-	response.SuccessWithMessage(c, "步骤信息已更新", nil)
+	h.submitStepCommand(c, "update_step_info", req.StepID, payload)
 }
 
 func (h *Handler) CompleteStep(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
 		Remark string `json:"remark"`
@@ -491,64 +371,10 @@ func (h *Handler) CompleteStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-
-	if h.drillService.Engine() == nil {
-		response.InternalError(c, "流程引擎未初始化")
-		return
-	}
-
-	target, err := resolveStepOperationTarget(id, req.StepID)
-	if err != nil {
-		response.InternalError(c, "步骤实例不存在")
-		return
-	}
-	if target.step.Status != string(flowengine.StepStatusRunning) {
-		response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
-		return
-	}
-
-	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
-	stepDefID := int64(target.stepDefID)
-	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
-		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(target.step.Status)
-		}
-	}
-
-	err = h.drillService.Engine().DirectorCompleteStep(int64(id), stepDefID, int64(middleware.GetUserID(c)))
-	if err == flowengine.ErrInstanceNotFound {
-		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败")
-			return
-		}
-		if err = h.drillService.Engine().DirectorCompleteStep(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			if err == flowengine.ErrInvalidStatus || err == flowengine.ErrStepNotActive {
-				response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
-				return
-			}
-			response.InternalError(c, "完成步骤失败："+err.Error())
-			return
-		}
-	} else if err != nil {
-		if err == flowengine.ErrInvalidStatus || err == flowengine.ErrStepNotActive {
-			response.BadRequest(c, fmt.Sprintf("步骤「%s」当前状态为%s，不能重复完成", target.step.Name, stepStatusText(target.step.Status)))
-			return
-		}
-		response.InternalError(c, "完成步骤失败："+err.Error())
-		return
-	}
-
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "步骤已完成", nil)
+	h.submitStepCommand(c, "complete_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "remark": req.Remark})
 }
 
 func (h *Handler) SkipStep(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
 		Remark string `json:"remark"`
@@ -557,66 +383,10 @@ func (h *Handler) SkipStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-
-	if h.drillService.Engine() == nil {
-		response.InternalError(c, "流程引擎未初始化")
-		return
-	}
-
-	contentSkip := req.Remark
-	if contentSkip == "" {
-		contentSkip = "指挥员手动操作跳过"
-	}
-
-	target, err := resolveStepOperationTarget(id, req.StepID)
-	if err != nil {
-		response.InternalError(c, "步骤实例不存在")
-		return
-	}
-
-	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
-	stepDefID := int64(target.stepDefID)
-	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
-		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(target.step.Status)
-		}
-	}
-
-	nowS := time.Now()
-	err = h.drillService.Engine().DirectorSkipStep(int64(id), stepDefID, int64(middleware.GetUserID(c)))
-	if err == flowengine.ErrInstanceNotFound {
-		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败")
-			return
-		}
-		if err = h.drillService.Engine().DirectorSkipStep(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, "内部错误")
-			return
-		}
-	} else if err != nil {
-		response.InternalError(c, "内部错误")
-		return
-	}
-
-	repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(map[string]interface{}{
-			"status":   "skipped",
-			"end_time": &nowS,
-			"remark":   contentSkip,
-		})
-
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "步骤已跳过", nil)
+	h.submitStepCommand(c, "skip_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "remark": req.Remark})
 }
 
 func (h *Handler) ForceCompleteStep(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
 		Remark string `json:"remark"`
@@ -625,51 +395,10 @@ func (h *Handler) ForceCompleteStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-
-	if h.drillService.Engine() == nil {
-		response.InternalError(c, "流程引擎未初始化")
-		return
-	}
-
-	target, err := resolveStepOperationTarget(id, req.StepID)
-	if err != nil {
-		response.InternalError(c, "步骤实例不存在")
-		return
-	}
-
-	// 先同步引擎内存中的步骤状态（防止引擎状态与DB不一致）
-	stepDefID := int64(target.stepDefID)
-	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
-		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(target.step.Status)
-		}
-	}
-
-	err = h.drillService.Engine().DirectorForceComplete(int64(id), stepDefID, int64(middleware.GetUserID(c)))
-	if err == flowengine.ErrInstanceNotFound {
-		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败")
-			return
-		}
-		if err = h.drillService.Engine().DirectorForceComplete(int64(id), stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			response.InternalError(c, "内部错误")
-			return
-		}
-	} else if err != nil {
-		response.InternalError(c, "内部错误")
-		return
-	}
-
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "步骤已强制完成", nil)
+	h.submitStepCommand(c, "force_complete_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "remark": req.Remark})
 }
 
 func (h *Handler) AssignStep(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
 	var req struct {
 		StepID  uint64   `json:"step_id" binding:"required"`
 		UserIDs []uint64 `json:"user_ids" binding:"required,min=1"`
@@ -678,39 +407,10 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-	var user entity.User
-	operatorName := ""
-	repository.DB.Model(&entity.User{}).Where("id = ?", middleware.GetUserID(c)).First(&user)
-	if user.ID > 0 {
-		operatorName = user.RealName
-	}
-	if bytes, err := json.Marshal(req.UserIDs); err == nil {
-		repository.DB.Model(&entity.StepInstance{}).
-			Where("drill_instance_id = ? AND template_step_id = ?", id, req.StepID).
-			Update("assignee_ids", string(bytes))
-
-		now := time.Now()
-		repository.DB.Create(&entity.DrillInstanceLog{
-			DrillInstanceID: id,
-			Action:          "assign",
-			OperatorID:      middleware.GetUserID(c),
-			OperatorName:    operatorName,
-			Content:         fmt.Sprintf("重新指派执行人: %v", req.UserIDs),
-			CreatedAt:       now,
-		})
-	}
-
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "执行人已更新", nil)
+	h.submitStepCommand(c, "assign_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "user_ids": req.UserIDs})
 }
 
 func (h *Handler) ResumeTask(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "无效的演练 ID")
-		return
-	}
-
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
 		Remark string `json:"remark"`
@@ -719,87 +419,70 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
+	h.submitStepCommand(c, "resume_task", req.StepID, map[string]interface{}{"step_id": req.StepID, "remark": req.Remark})
+}
 
-	var user entity.User
-	operatorName := ""
-	repository.DB.Model(&entity.User{}).Where("id = ?", middleware.GetUserID(c)).First(&user)
-	if user.ID > 0 {
-		operatorName = user.RealName
-	}
-
-	if h.drillService.Engine() == nil {
-		response.InternalError(c, "流程引擎未初始化")
+func (h *Handler) submitDrillLifecycleCommand(c *gin.Context, commandType string) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
 		return
 	}
+	h.submitCommand(c, commandType, id, nil, map[string]interface{}{})
+}
 
-	target, err := resolveStepOperationTarget(id, req.StepID)
+func (h *Handler) submitStepCommand(c *gin.Context, commandType string, requestedStepID uint64, payload map[string]interface{}) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练 ID")
+		return
+	}
+	target, err := resolveStepOperationTarget(id, requestedStepID)
 	if err != nil {
 		response.InternalError(c, "步骤实例不存在")
 		return
 	}
-	stepDefID := int64(target.stepDefID)
+	h.submitCommand(c, commandType, id, &target.step.ID, payload)
+}
 
-	if inst, _ := h.drillService.Engine().GetInstanceForMutate(int64(id)); inst != nil {
-		if si, ok := inst.Steps[stepDefID]; ok {
-			si.Status = flowengine.StepStatus(target.step.Status)
-		}
-	}
-
-	err = h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c)))
-	if err == flowengine.ErrInstanceNotFound {
-		if recErr := h.drillService.Recover(id); recErr != nil {
-			response.InternalError(c, "恢复演练状态失败")
-			return
-		}
-		if err = h.drillService.Engine().Intervene(int64(id), flowengine.ActionResumeTask, &stepDefID, int64(middleware.GetUserID(c))); err != nil {
-			if err == flowengine.ErrInvalidStatus {
-				response.BadRequest(c, "当前状态不支持重新派发")
-				return
-			}
-			response.InternalError(c, "内部错误")
-			return
-		}
-	} else if err != nil {
-		if err == flowengine.ErrInvalidStatus {
-			response.BadRequest(c, "当前状态不支持重新派发")
-			return
-		}
-		response.InternalError(c, "内部错误")
+func (h *Handler) submitCommand(c *gin.Context, commandType string, drillID uint64, stepID *uint64, payload map[string]interface{}) {
+	if h.commandService == nil {
+		response.InternalError(c, "命令服务未初始化")
 		return
 	}
-
-	// 持久化重新派发状态到DB
-	contentRT := req.Remark
-	if contentRT == "" {
-		contentRT = "指挥员手动重新派发任务"
-	}
-	nowRT := time.Now()
-	var timeoutAtRT *time.Time
-	if target.step.TimeoutMinutes > 0 {
-		t := nowRT.Add(time.Duration(target.step.TimeoutMinutes) * time.Minute)
-		timeoutAtRT = &t
-	}
-	repository.DB.Model(&entity.StepInstance{}).
-		Where("id = ?", target.step.ID).
-		Updates(map[string]interface{}{
-			"status":          "running",
-			"actual_operator": nil,
-			"start_time":      nowRT,
-			"end_time":        nil,
-			"timeout_at":      timeoutAtRT,
-			"remark":          "",
-			"issue_desc":      "",
-		})
-
-	repository.DB.Create(&entity.DrillInstanceLog{
-		DrillInstanceID: id,
-		Action:          "resume_task",
+	result, err := h.commandService.SubmitAndWait(c.Request.Context(), service.SubmitCommandRequest{
+		CommandType:     commandType,
+		DrillInstanceID: drillID,
+		StepInstanceID:  stepID,
 		OperatorID:      middleware.GetUserID(c),
-		OperatorName:    operatorName,
-		Content:         contentRT,
-		CreatedAt:       nowRT,
+		IdempotencyKey:  c.GetHeader("Idempotency-Key"),
+		Payload:         payload,
 	})
+	respondCommandResult(c, result, err)
+}
 
-	h.drillService.InvalidateStepCache(id)
-	response.SuccessWithMessage(c, "任务已重新派发", nil)
+func respondCommandResult(c *gin.Context, result *service.SubmitCommandResult, err error) {
+	if err != nil {
+		response.InternalError(c, "提交命令失败")
+		return
+	}
+	if result == nil || result.Command == nil {
+		response.InternalError(c, "提交命令失败")
+		return
+	}
+	cmd := result.Command
+	c.Header("Idempotency-Key", cmd.IdempotencyKey)
+	if cmd.Status == entity.FlowCommandSucceeded {
+		response.Success(c, result)
+		return
+	}
+	if cmd.Status == entity.FlowCommandFailed {
+		if cmd.ErrorMessage != nil && *cmd.ErrorMessage != "" {
+			response.BadRequest(c, *cmd.ErrorMessage)
+			return
+		}
+		response.InternalError(c, "命令执行失败")
+		return
+	}
+	response.Accepted(c, "命令处理中", result)
 }

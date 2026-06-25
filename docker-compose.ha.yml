@@ -1,0 +1,104 @@
+# 高可用多节点部署编排（用于本地 HA 模拟）
+# 生产环境的 MySQL 和 Redis 需使用各自的 HA 产品
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-drill123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-drill_platform}
+      MYSQL_USER: ${MYSQL_USER:-drill}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-drill123}
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql-ha-data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-ha-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ROLE: all
+      INSTANCE_ID: backend-a
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USER: ${MYSQL_USER:-drill}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD:-drill123}
+      DATABASE_NAME: ${MYSQL_DATABASE:-drill_platform}
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      PUBLIC_BASE_URL: http://localhost
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ROLE: all
+      INSTANCE_ID: backend-b
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USER: ${MYSQL_USER:-drill}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD:-drill123}
+      DATABASE_NAME: ${MYSQL_DATABASE:-drill_platform}
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      PUBLIC_BASE_URL: http://localhost
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "18081:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./web/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend-a
+      - backend-b
+
+volumes:
+  mysql-ha-data:
+  redis-ha-data:

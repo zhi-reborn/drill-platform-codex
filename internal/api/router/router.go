@@ -4,6 +4,8 @@ import (
 	"drill-platform/internal/api/handler/auth"
 	"drill-platform/internal/api/handler/display"
 	"drill-platform/internal/api/handler/drill"
+	"drill-platform/internal/api/handler/flowcommand"
+	"drill-platform/internal/api/handler/health"
 	"drill-platform/internal/api/handler/notification"
 	"drill-platform/internal/api/handler/report"
 	"drill-platform/internal/api/handler/task"
@@ -16,7 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSecret string, loginLogger *loginlog.Logger) *gin.Engine {
+func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSecret string, loginLogger *loginlog.Logger, healthHandler *health.Handler) *gin.Engine {
 	r := gin.Default()
 
 	r.Use(gin.Recovery())
@@ -24,11 +26,12 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 
 	authHandler := auth.NewHandler(services.AuthService, loginLogger)
 	templateHandler := template.NewHandler(services.TemplateService, services.AuthService)
-	drillHandler := drill.NewHandler(services.DrillService, services.AuthService)
-	taskHandler := task.NewHandler(services.TaskService)
+	drillHandler := drill.NewHandlerWithCommands(services.DrillService, services.AuthService, services.FlowCommandService)
+	taskHandler := task.NewHandlerWithCommands(services.TaskService, services.FlowCommandService)
 	displayHandler := display.NewHandler(services.DisplayService)
 	reportHandler := report.NewHandler(services.ReportService)
 	notificationHandler := notification.NewHandler(services.NotificationService)
+	flowCommandHandler := flowcommand.NewHandler(services.FlowCommandService)
 
 	jwtAuth := middleware.JWTAuth(middleware.JWTConfig{Secret: jwtSecret})
 
@@ -41,6 +44,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 		v1.Use(jwtAuth)
 		{
 			v1.GET("/auth/me", authHandler.GetCurrentUser)
+			v1.GET("/flow-commands/:id", flowCommandHandler.Get)
 
 			v1.GET("/users", authHandler.ListUsers)
 			v1.GET("/departments", authHandler.GetDepartments)
@@ -106,9 +110,11 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 		ws.GET("/control/:drillId", wsManager.HandleControl)
 	}
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	// /live is the cheap liveness probe; /health is a backward-compatible
+	// alias for /live. /ready pings dependencies and reports worker status.
+	r.GET("/live", healthHandler.Live)
+	r.GET("/ready", healthHandler.Ready)
+	r.GET("/health", healthHandler.Live)
 
 	return r
 }

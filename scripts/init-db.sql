@@ -144,12 +144,40 @@ CREATE TABLE `drill_instance_step` (
     CONSTRAINT `fk_step_parent_instance` FOREIGN KEY (`parent_step_id`) REFERENCES `drill_instance_step` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤实例表';
 
+-- 流程命令表
+DROP TABLE IF EXISTS `drill_flow_command`;
+CREATE TABLE `drill_flow_command` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `command_type` VARCHAR(64) NOT NULL,
+    `drill_instance_id` BIGINT UNSIGNED NOT NULL,
+    `step_instance_id` BIGINT UNSIGNED DEFAULT NULL,
+    `operator_id` BIGINT UNSIGNED NOT NULL,
+    `idempotency_key` VARCHAR(128) NOT NULL,
+    `payload` JSON NOT NULL,
+    `status` VARCHAR(20) NOT NULL,
+    `worker_id` VARCHAR(128) DEFAULT NULL,
+    `lease_until` DATETIME DEFAULT NULL,
+    `attempts` INT NOT NULL DEFAULT 0,
+    `result` JSON DEFAULT NULL,
+    `error_code` VARCHAR(64) DEFAULT NULL,
+    `error_message` VARCHAR(500) DEFAULT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `started_at` DATETIME DEFAULT NULL,
+    `finished_at` DATETIME DEFAULT NULL,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_flow_command_idempotency` (`idempotency_key`),
+    KEY `idx_flow_command_pending` (`status`, `created_at`),
+    KEY `idx_flow_command_lease` (`lease_until`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='流程命令表';
+
 -- 演练操作日志表
 DROP TABLE IF EXISTS `drill_instance_step_log`;
 CREATE TABLE `drill_instance_step_log` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_instance_id` BIGINT UNSIGNED NOT NULL,
-    `step_instance_id` BIGINT UNSIGNED DEFAULT NULL,
+    `task_instance_id` BIGINT UNSIGNED DEFAULT NULL,
+    `command_id` BIGINT UNSIGNED DEFAULT NULL,
     `action` VARCHAR(32) NOT NULL COMMENT '操作类型：complete/issue/force_complete/skip',
     `operator_id` BIGINT UNSIGNED NOT NULL COMMENT '操作人 ID',
     `operator_name` VARCHAR(64) NOT NULL COMMENT '操作人姓名',
@@ -158,7 +186,8 @@ CREATE TABLE `drill_instance_step_log` (
     PRIMARY KEY (`id`),
     KEY `idx_drill_instance` (`drill_instance_id`),
     KEY `idx_created_at` (`created_at`),
-    KEY `idx_step_instance` (`step_instance_id`)
+    KEY `idx_step_instance` (`task_instance_id`),
+    UNIQUE KEY `uk_log_command_action_step` (`command_id`, `action`, `task_instance_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练操作日志表';
 
 -- 演练人员分配表
@@ -181,6 +210,7 @@ CREATE TABLE `notification` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
     `type` VARCHAR(50) NOT NULL COMMENT '通知类型',
+    `command_id` BIGINT UNSIGNED DEFAULT NULL,
     `title` VARCHAR(200) NOT NULL COMMENT '通知标题',
     `content` TEXT COMMENT '通知内容',
     `drill_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联演练 ID',
@@ -191,7 +221,8 @@ CREATE TABLE `notification` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_user_created` (`user_id`, `created_at`),
-    KEY `idx_user_unread` (`user_id`, `is_read`)
+    KEY `idx_user_unread` (`user_id`, `is_read`),
+    UNIQUE KEY `uk_notification_command_user_type_step` (`command_id`, `user_id`, `type`, `step_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知表';
 
 -- 用户数据 (密码：admin123, bcrypt hash)

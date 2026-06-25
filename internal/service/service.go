@@ -1,9 +1,12 @@
 package service
 
 import (
+	"time"
+
 	"drill-platform/internal/infrastructure/websocket"
 	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
+	"drill-platform/internal/worker"
 )
 
 type Services struct {
@@ -14,7 +17,16 @@ type Services struct {
 	DisplayService      *DisplayService
 	ReportService       *ReportService
 	NotificationService *NotificationService
+	FlowCommandService  *FlowCommandService
+	Worker              *worker.Worker
 	wsManager           *websocket.Manager
+}
+
+// SetWorker injects the elected flow Worker. main.go (Task 10) constructs the
+// Worker with the full Redis client and instance ID, then calls this method.
+// API-only nodes leave Worker nil.
+func (s *Services) SetWorker(w *worker.Worker) {
+	s.Worker = w
 }
 
 func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Services {
@@ -23,6 +35,7 @@ func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Service
 	drillRepo := repository.NewDrillRepo()
 	stepRepo := repository.NewStepRepo()
 	notificationRepo := repository.NewNotificationRepo()
+	flowCommandRepo := repository.NewFlowCommandRepo()
 	notificationService := NewNotificationService(notificationRepo)
 
 	engine := flowengine.NewEngine()
@@ -56,6 +69,7 @@ func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Service
 		DisplayService:      NewDisplayService(drillRepo, stepRepo),
 		ReportService:       NewReportService(drillRepo, stepRepo),
 		NotificationService: notificationService,
+		FlowCommandService:  NewFlowCommandService(flowCommandRepo, 2*time.Second),
 		wsManager:           wsManager,
 	}
 

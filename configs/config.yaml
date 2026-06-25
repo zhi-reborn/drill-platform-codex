@@ -1,20 +1,25 @@
 # Drill Platform 配置文件
 
+# 应用角色与实例标识（多节点部署时通过环境变量覆盖）
+app_role: all            # api, worker, all
+instance_id: node-1      # worker/all 角色必须非空
+
 server:
   port: 8080
   mode: debug  # debug, release, test
-  
+
 database:
   driver: mysql
   host: mysql
   port: 3306
   user: drill_user
   password: drill_password123
-  database: drill_platform
+  name: drill_platform
   maxIdleConns: 10
   maxOpenConns: 100
 
 redis:
+  addr: redis:6379       # 优先使用 addr；host/port 保留向后兼容
   host: redis
   port: 6379
   password: ""
@@ -24,6 +29,9 @@ redis:
 jwt:
   secret: "your-secret-key-change-in-production"
   expire: 24  # hours
+
+# 公共访问基础 URL（用于 CAS 回调等）
+public_base_url: "http://127.0.0.1:8080"
 
 auth:
   mode: cas_ldap  # local, cas_ldap
@@ -58,6 +66,17 @@ ldap:
   groupNameAttribute: "cn"
   timeoutSeconds: 60
 
+# Worker 领导选举与命令处理参数
+worker:
+  lease_ttl: 15s
+  renew_interval: 5s
+
+# 流程命令等待超时
+command_wait_timeout: 30s
+
+# 登录日志文件路径；为空时仅输出到 stdout
+login_log_file: "logs/login.log"
+
 oss:
   provider: local  # local, aliyun, qiniu
   endpoint: ""
@@ -78,5 +97,6 @@ cors:
     - "Content-Type"
     - "Authorization"
 
+# 兼容旧字段（login_log_file 的别名，优先使用顶层 login_log_file）
 log:
   loginLogFile: "logs/login.log"  # 登录日志文件路径

@@ -2,12 +2,14 @@ package drill
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"drill-platform/internal/api/middleware"
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
@@ -228,7 +230,7 @@ func TestSyncEngineStepsFromDBAllowsStartAfterDBPredecessorCompleted(t *testing.
 	}
 }
 
-func TestUpdateStepInfoInvalidatesStepCache(t *testing.T) {
+func TestUpdateStepInfoSubmitsCommandWithoutInvalidatingStepCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := setupStepTargetTestDB(t)
 	origDB := repository.DB
@@ -261,29 +263,35 @@ func TestUpdateStepInfoInvalidatesStepCache(t *testing.T) {
 		JSONAttributes:  `{"operator":"旧操作人"}`,
 	}})
 
-	svc := drillservice.NewDrillService(
-		repository.NewDrillRepo(),
-		repository.NewTemplateRepo(),
-		repository.NewStepRepo(),
-		repository.NewUserRepo(),
-	)
-	svc.SetRedis(redis)
-	handler := NewHandler(svc, nil)
+	commands := &fakeDrillCommandService{}
+	handler := NewHandlerWithCommands(nil, nil, commands)
 
 	router := gin.New()
-	router.PUT("/drills/:id/steps/info", handler.UpdateStepInfo)
+	router.PUT("/drills/:id/steps/info", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(42))
+		handler.UpdateStepInfo(c)
+	})
 	body := bytes.NewBufferString(`{"step_id":252,"attributes":{"operator":"新操作人"}}`)
 	req := httptest.NewRequest(http.MethodPut, "/drills/2/steps/info", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "update-info-key")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
-	}
-	if _, ok := drillservice.GetCachedSteps(redis, 2); ok {
-		t.Fatalf("expected step cache to be invalidated")
+	assertDrillCommandSubmitted(t, resp, commands, drillservice.SubmitCommandRequest{
+		CommandType:     "update_step_info",
+		DrillInstanceID: 2,
+		StepInstanceID:  uint64Ptr(12),
+		OperatorID:      42,
+		IdempotencyKey:  "update-info-key",
+		Payload: map[string]interface{}{
+			"step_id":    float64(252),
+			"attributes": map[string]interface{}{"operator": "新操作人"},
+		},
+	})
+	if _, ok := drillservice.GetCachedSteps(redis, 2); !ok {
+		t.Fatalf("expected handler to leave step cache untouched until command execution")
 	}
 }
 
@@ -408,4 +416,155 @@ func TestResolveStepOperationTargetPrefersInstanceIDWhenIDsCollide(t *testing.T)
 	if target.step.ID != 99 || target.stepDefID != 100 {
 		t.Fatalf("expected instance step 99/template step 100, got step=%d def=%d", target.step.ID, target.stepDefID)
 	}
+}
+
+type fakeDrillCommandService struct {
+	requests []drillservice.SubmitCommandRequest
+}
+
+func (f *fakeDrillCommandService) SubmitAndWait(_ context.Context, req drillservice.SubmitCommandRequest) (*drillservice.SubmitCommandResult, error) {
+	f.requests = append(f.requests, req)
+	return &drillservice.SubmitCommandResult{Command: &entity.FlowCommand{
+		ID:              uint64(len(f.requests)),
+		CommandType:     req.CommandType,
+		DrillInstanceID: req.DrillInstanceID,
+		StepInstanceID:  req.StepInstanceID,
+		OperatorID:      req.OperatorID,
+		IdempotencyKey:  req.IdempotencyKey,
+		Status:          entity.FlowCommandSucceeded,
+	}}, nil
+}
+
+func TestCommandDrillLifecycleSubmitsDurableCommands(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name        string
+		commandType string
+		handler     func(*Handler) gin.HandlerFunc
+	}{
+		{name: "start", commandType: "start_drill", handler: func(h *Handler) gin.HandlerFunc { return h.Start }},
+		{name: "pause", commandType: "pause_drill", handler: func(h *Handler) gin.HandlerFunc { return h.Pause }},
+		{name: "resume", commandType: "resume_drill", handler: func(h *Handler) gin.HandlerFunc { return h.Resume }},
+		{name: "terminate", commandType: "terminate_drill", handler: func(h *Handler) gin.HandlerFunc { return h.Terminate }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commands := &fakeDrillCommandService{}
+			handler := NewHandlerWithCommands(nil, nil, commands)
+
+			resp := performDrillCommandRequest(tt.handler(handler), http.MethodPost, "/drills/88/action", `{}`, "drill-"+tt.name+"-key")
+
+			assertDrillCommandSubmitted(t, resp, commands, drillservice.SubmitCommandRequest{
+				CommandType:     tt.commandType,
+				DrillInstanceID: 88,
+				OperatorID:      42,
+				IdempotencyKey:  "drill-" + tt.name + "-key",
+				Payload:         map[string]interface{}{},
+			})
+		})
+	}
+}
+
+func TestCommandDrillStepMutationsSubmitDurableCommands(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_instance_step").Create(map[string]interface{}{
+		"id":                601,
+		"drill_instance_id": 88,
+		"template_step_id":  7001,
+		"name":              "指挥步骤",
+		"seq":               1,
+		"status":            "running",
+		"assignee_ids":      "[]",
+		"action_params":     `{}`,
+	}).Error; err != nil {
+		t.Fatalf("create instance step: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		commandType string
+		handler     func(*Handler) gin.HandlerFunc
+		body        string
+		payload     map[string]interface{}
+	}{
+		{name: "start", commandType: "start_step", handler: func(h *Handler) gin.HandlerFunc { return h.StartStep }, body: `{"step_id":601,"remark":"start it"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "start it"}},
+		{name: "complete", commandType: "complete_step", handler: func(h *Handler) gin.HandlerFunc { return h.CompleteStep }, body: `{"step_id":601,"remark":"done"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "done"}},
+		{name: "skip", commandType: "skip_step", handler: func(h *Handler) gin.HandlerFunc { return h.SkipStep }, body: `{"step_id":601,"remark":"skip it"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "skip it"}},
+		{name: "force_complete", commandType: "force_complete_step", handler: func(h *Handler) gin.HandlerFunc { return h.ForceCompleteStep }, body: `{"step_id":601,"remark":"force"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "force"}},
+		{name: "resume_task", commandType: "resume_task", handler: func(h *Handler) gin.HandlerFunc { return h.ResumeTask }, body: `{"step_id":601,"remark":"retry"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "retry"}},
+		{name: "assign", commandType: "assign_step", handler: func(h *Handler) gin.HandlerFunc { return h.AssignStep }, body: `{"step_id":601,"user_ids":[11,12]}`, payload: map[string]interface{}{"step_id": float64(601), "user_ids": []interface{}{float64(11), float64(12)}}},
+		{name: "update_info", commandType: "update_step_info", handler: func(h *Handler) gin.HandlerFunc { return h.UpdateStepInfo }, body: `{"step_id":601,"attributes":{"operator":"new"},"remark":"updated"}`, payload: map[string]interface{}{"step_id": float64(601), "attributes": map[string]interface{}{"operator": "new"}, "remark": "updated"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commands := &fakeDrillCommandService{}
+			handler := NewHandlerWithCommands(nil, nil, commands)
+
+			resp := performDrillCommandRequest(tt.handler(handler), http.MethodPost, "/drills/88/action", tt.body, "drill-step-"+tt.name+"-key")
+
+			assertDrillCommandSubmitted(t, resp, commands, drillservice.SubmitCommandRequest{
+				CommandType:     tt.commandType,
+				DrillInstanceID: 88,
+				StepInstanceID:  uint64Ptr(601),
+				OperatorID:      42,
+				IdempotencyKey:  "drill-step-" + tt.name + "-key",
+				Payload:         tt.payload,
+			})
+		})
+	}
+}
+
+func performDrillCommandRequest(handler gin.HandlerFunc, method, path, body, key string) *httptest.ResponseRecorder {
+	router := gin.New()
+	router.Handle(method, "/drills/:id/action", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(42))
+		handler(c)
+	})
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", key)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
+}
+
+func assertDrillCommandSubmitted(t *testing.T, resp *httptest.ResponseRecorder, commands *fakeDrillCommandService, want drillservice.SubmitCommandRequest) {
+	t.Helper()
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if resp.Header().Get("Idempotency-Key") != want.IdempotencyKey {
+		t.Fatalf("expected response idempotency key %q, got %q", want.IdempotencyKey, resp.Header().Get("Idempotency-Key"))
+	}
+	if len(commands.requests) != 1 {
+		t.Fatalf("expected one submitted command, got %d", len(commands.requests))
+	}
+	got := commands.requests[0]
+	if got.CommandType != want.CommandType || got.DrillInstanceID != want.DrillInstanceID || got.OperatorID != want.OperatorID || got.IdempotencyKey != want.IdempotencyKey {
+		t.Fatalf("unexpected command request: %#v", got)
+	}
+	if want.StepInstanceID == nil {
+		if got.StepInstanceID != nil {
+			t.Fatalf("expected nil step instance id, got %v", *got.StepInstanceID)
+		}
+	} else if got.StepInstanceID == nil || *got.StepInstanceID != *want.StepInstanceID {
+		t.Fatalf("expected step instance id %v, got %v", want.StepInstanceID, got.StepInstanceID)
+	}
+	gotPayload, _ := json.Marshal(got.Payload)
+	wantPayload, _ := json.Marshal(want.Payload)
+	if string(gotPayload) != string(wantPayload) {
+		t.Fatalf("expected payload %s, got %s", wantPayload, gotPayload)
+	}
+}
+
+func uint64Ptr(v uint64) *uint64 {
+	return &v
 }
