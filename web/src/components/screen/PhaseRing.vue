@@ -26,7 +26,7 @@
       </div>
 
       <!-- 数据汇聚点 - 阶段整体进度 -->
-      <div class="progress-hub" :class="{ 'is-done': phasePercent >= 100 }">
+      <div class="progress-hub" :class="{ 'is-done': progress >= 100 }">
         <!-- 数据汇流粒子 -->
         <div class="flow-particles">
           <div class="flow-particle flow-particle-1"></div>
@@ -43,7 +43,7 @@
           <div class="hub-ring hub-ring-3"></div>
         </div>
         <div class="hub-core">
-          <span class="hub-num">{{ phasePercent }}</span>
+          <span class="hub-num">{{ progress }}</span>
           <span class="hub-unit">%</span>
         </div>
       </div>
@@ -395,16 +395,6 @@ const isCurrentPhaseDone = computed(() => {
 
 const phaseCompletedCount = computed(() => {
   return currentNodes.value.filter((_, idx) => isDone(currentStatuses.value[idx])).length
-})
-
-// 阶段整体进度 - 所有环节的平均进度
-const phasePercent = computed(() => {
-  const statuses = currentStatuses.value
-  if (statuses.length === 0) return 0
-  
-  // 计算所有环节的平均进度
-  const totalProgress = statuses.reduce((sum, s) => sum + (s?.progress || 0), 0)
-  return Math.min(100, Math.round(totalProgress / statuses.length))
 })
 
 // 当前运行环节的进度（用于其他逻辑）

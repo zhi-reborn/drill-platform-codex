@@ -16,5 +16,7 @@ func (s *DisplayService) GetDrillData(drillID uint64) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 用步骤实时状态重算完成率，与大屏 ScreenView 的 progressPercent 同源
+	drill.ProgressPct = ComputeProgressPct(drill.Steps)
 	return drill, nil
 }

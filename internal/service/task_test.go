@@ -137,6 +137,7 @@ func TestGetMyTasksReturnsOnlyUserAssignedTasks(t *testing.T) {
 		insertTaskTestStep(t, db, entity.StepInstance{ID: 7, DrillInstanceID: 10, StepTemplateID: 107, Name: "操作人属性匹配", Seq: 7, Status: "completed", AssigneeIDs: "[9]", DefaultAssigneeRole: "executor", ExecutorTeam: "技术部", JSONAttributes: `{"operator":"执行员"}`})
 		insertTaskTestStep(t, db, entity.StepInstance{ID: 8, DrillInstanceID: 10, StepTemplateID: 108, Name: "操作人属性不匹配", Seq: 8, Status: "running", AssigneeIDs: "[]", DefaultAssigneeRole: "executor", JSONAttributes: `{"operator":"李四"}`})
 		insertTaskTestStep(t, db, entity.StepInstance{ID: 9, DrillInstanceID: 10, StepTemplateID: 109, Name: "实际操作人匹配", Seq: 9, Status: "completed", AssigneeIDs: "[9]", DefaultAssigneeRole: "executor", ExecutorTeam: "技术部", ActualOperator: uint64Ptr(7), JSONAttributes: `{"operator":"李四"}`})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 10, DrillInstanceID: 10, StepTemplateID: 110, Name: "混合属性匹配", Seq: 10, Status: "running", AssigneeIDs: "[]", DefaultAssigneeRole: "executor", JSONAttributes: `{"operator":"执行员","generated":true}`})
 
 		svc := NewTaskService(repository.NewStepRepo())
 		svc.SetUserRepo(repository.NewUserRepo())
@@ -145,23 +146,23 @@ func TestGetMyTasksReturnsOnlyUserAssignedTasks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetMyTasks: %v", err)
 		}
-		if len(tasks) != 2 {
-			t.Fatalf("expected 2 operator-owned tasks, got %d: %#v", len(tasks), tasks)
+		if len(tasks) != 4 {
+			t.Fatalf("expected 4 user-owned tasks, got %d: %#v", len(tasks), tasks)
 		}
 		got := map[uint64]bool{}
 		for _, task := range tasks {
 			got[task.ID] = true
 		}
-		if !got[7] || !got[9] {
-			t.Fatalf("expected operator and actual-operator tasks, got %#v", got)
+		if !got[1] || !got[7] || !got[9] || !got[10] {
+			t.Fatalf("expected explicit, operator, mixed-attribute, and actual-operator tasks, got %#v", got)
 		}
-		if got[1] || got[2] || got[3] || got[4] || got[5] || got[6] || got[8] {
+		if got[2] || got[3] || got[4] || got[5] || got[6] || got[8] {
 			t.Fatalf("tasks not owned by current operator must not be returned: %#v", got)
 		}
 	})
 }
 
-func TestCompleteStepRejectsExplicitAssigneeOnlyTask(t *testing.T) {
+func TestCompleteStepAllowsExplicitAssigneeTask(t *testing.T) {
 	withTaskTestDB(t, func(db *gorm.DB) {
 		insertTaskTestUser(t, db, entity.User{ID: 7, Username: "executor", RealName: "执行员", Role: "executor", Department: "研发部"})
 		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
@@ -170,8 +171,8 @@ func TestCompleteStepRejectsExplicitAssigneeOnlyTask(t *testing.T) {
 		svc := NewTaskService(repository.NewStepRepo())
 		svc.SetUserRepo(repository.NewUserRepo())
 
-		if err := svc.CompleteStep(1, 7, "done"); err == nil {
-			t.Fatalf("expected explicit-assignee-only task to be rejected")
+		if err := svc.CompleteStep(1, 7, "done"); err != nil {
+			t.Fatalf("expected explicit-assignee task to be completed: %v", err)
 		}
 	})
 }

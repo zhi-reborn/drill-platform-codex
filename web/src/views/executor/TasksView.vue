@@ -119,20 +119,46 @@
     <!-- 页面 2: 选中演练的任务列表 -->
     <div v-else class="tasks-detail-page">
       <div class="page-header">
-        <div class="breadcrumb" @click="backToDrillList">
-          <el-icon><ArrowLeft /></el-icon>
-          <span>返回演练列表</span>
+        <div class="header-main">
+          <div class="title-block">
+            <div class="breadcrumb" @click="backToDrillList">
+              <el-icon><ArrowLeft /></el-icon>
+              <span>返回演练列表</span>
+            </div>
+            <h2 class="page-title">{{ currentDrill?.name || '任务列表' }}</h2>
+          </div>
+          <div class="header-actions">
+            <el-button type="success" @click="viewScreen(selectedDrillId)">
+              <el-icon><Monitor /></el-icon>
+              大屏
+            </el-button>
+            <el-button type="warning" @click="viewScreen2(selectedDrillId)">
+              <el-icon><DataBoard /></el-icon>
+              大屏2
+            </el-button>
+          </div>
         </div>
-        <h2 class="page-title">{{ currentDrill?.name || '任务列表' }}</h2>
-        <div class="header-actions">
-          <el-button type="success" @click="viewScreen(selectedDrillId)">
-            <el-icon><Monitor /></el-icon>
-            大屏
-          </el-button>
-          <el-button type="warning" @click="viewScreen2(selectedDrillId)">
-            <el-icon><DataBoard /></el-icon>
-            大屏2
-          </el-button>
+        <div class="task-overview">
+          <div class="overview-item">
+            <span class="overview-label">任务总数</span>
+            <strong>{{ selectedTaskStats.total }}</strong>
+          </div>
+          <div class="overview-item">
+            <span class="overview-label">待执行</span>
+            <strong class="pending">{{ selectedTaskStats.pending }}</strong>
+          </div>
+          <div class="overview-item">
+            <span class="overview-label">执行中</span>
+            <strong class="running">{{ selectedTaskStats.running }}</strong>
+          </div>
+          <div class="overview-item">
+            <span class="overview-label">已完成</span>
+            <strong class="completed">{{ selectedTaskStats.completed }}</strong>
+          </div>
+          <div class="overview-item">
+            <span class="overview-label">阶段</span>
+            <strong>{{ groupedTasks.length }}</strong>
+          </div>
         </div>
         <div class="filter-group">
           <el-radio-group v-model="filterStatus" size="default" @change="handleFilterChange">
@@ -223,6 +249,16 @@
                   </div>
                   <div class="flow-card-footer" @click.stop>
                     <el-button
+                      v-if="task.status === 'running' && !isParentTask(task)"
+                      type="primary"
+                      plain
+                      size="small"
+                      @click="goToTaskDetail(task.id)"
+                    >
+                      <el-icon><Document /></el-icon>
+                      详情
+                    </el-button>
+                    <el-button
                       v-if="task.status === 'pending' && !canStartTask(task)"
                       type="info"
                       size="small"
@@ -242,7 +278,8 @@
                       v-else-if="task.status === 'running' && !isParentTask(task)"
                       type="success"
                       size="small"
-                      @click="goToTaskDetail(task.id)"
+                      :loading="isCompletingTask(task.id)"
+                      @click="completeTaskInline(task)"
                     >
                       <el-icon><CircleCheck /></el-icon>
                       完成
@@ -297,7 +334,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck, DataBoard } from '@element-plus/icons-vue'
+import { Clock, Monitor, ArrowLeft, ArrowRight, CircleCheck, DataBoard, Document } from '@element-plus/icons-vue'
 import type { StepAttributes } from '@/types/template'
 import type { StepInstance, StepStatus } from '@/types/instance'
 import type { DrillInstance } from '@/types'
@@ -311,6 +348,7 @@ const router = useRouter()
 const route = useRoute()
 
 const loading = ref(false)
+const completingTaskIds = ref<Set<number>>(new Set())
 const tasks = ref<StepInstance[]>([])
 const drillFlowSteps = ref<StepInstance[]>([])
 const instances = ref<DrillInstance[]>([])
@@ -418,6 +456,19 @@ const filteredTasks = computed(() => {
     result = result.filter((t: StepInstance) => t.status === filterStatus.value)
   }
   return sortTasksByFlowOrder(result, drillFlowSteps.value)
+})
+
+const selectedTaskStats = computed(() => {
+  const selectedTasks = selectedDrillId.value
+    ? tasks.value.filter((t: StepInstance) => t.drill_instance_id === selectedDrillId.value)
+    : tasks.value
+
+  return {
+    total: selectedTasks.length,
+    pending: selectedTasks.filter((t: StepInstance) => t.status === 'pending').length,
+    running: selectedTasks.filter((t: StepInstance) => t.status === 'running').length,
+    completed: selectedTasks.filter((t: StepInstance) => ['completed', 'skipped'].includes(t.status)).length,
+  }
 })
 
 const groupedTasks = computed(() => {
@@ -733,6 +784,26 @@ function goToTaskDetail(taskId: number) {
   })
 }
 
+function isCompletingTask(taskId: number): boolean {
+  return completingTaskIds.value.has(taskId)
+}
+
+async function completeTaskInline(task: StepInstance) {
+  if (isCompletingTask(task.id)) return
+  completingTaskIds.value = new Set([...completingTaskIds.value, task.id])
+  try {
+    await taskApi.complete(task.id, '')
+    ElMessage.success('任务已完成')
+    await loadTasks({ silent: true, lightweight: true })
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
+  } finally {
+    const next = new Set(completingTaskIds.value)
+    next.delete(task.id)
+    completingTaskIds.value = next
+  }
+}
+
 // 查看大屏
 function viewScreen(drillId: number) {
   router.push(`/screen/${drillId}`)
@@ -1025,6 +1096,169 @@ onBeforeUnmount(() => {
   }
 }
 
+.tasks-detail-page {
+  min-height: calc(100vh - $header-height - 64px);
+  padding: $spacing-xl;
+  background:
+    linear-gradient(135deg, rgba(24, 144, 255, 0.12) 0%, rgba(82, 196, 26, 0.06) 42%, rgba(250, 173, 20, 0.08) 100%),
+    repeating-linear-gradient(90deg, rgba(24, 144, 255, 0.08) 0 1px, transparent 1px 64px),
+    $bg-primary;
+  border: 1px solid rgba(24, 144, 255, 0.14);
+  border-radius: $radius-md;
+
+  .page-header {
+    display: block;
+    position: relative;
+    padding: $spacing-xl;
+    margin-bottom: $spacing-xl;
+    overflow: hidden;
+    background:
+      linear-gradient(120deg, rgba(12, 35, 66, 0.94), rgba(18, 59, 93, 0.92) 58%, rgba(26, 76, 75, 0.9)),
+      #10233d;
+    border: 1px solid rgba(80, 180, 255, 0.28);
+    border-radius: $radius-md;
+    box-shadow: 0 10px 24px rgba(16, 42, 78, 0.12);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(80, 180, 255, 0.18) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(80, 180, 255, 0.12) 1px, transparent 1px);
+      background-size: 56px 56px;
+      opacity: 0.28;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      right: 24px;
+      bottom: 18px;
+      width: 180px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(82, 196, 26, 0.7), transparent);
+    }
+
+    .header-main,
+    .task-overview,
+    .filter-group {
+      position: relative;
+      z-index: 1;
+    }
+
+    .header-main {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: $spacing-base;
+      margin-bottom: $spacing-lg;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .breadcrumb {
+      width: fit-content;
+      color: rgba(218, 235, 255, 0.78);
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(121, 192, 255, 0.22);
+
+      &:hover {
+        background: rgba(24, 144, 255, 0.18);
+        color: #fff;
+      }
+    }
+
+    .page-title {
+      margin-top: $spacing-sm;
+      color: #fff;
+      font-size: $font-size-2xl;
+      letter-spacing: 0;
+      line-height: 1.25;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: $spacing-sm;
+      margin-left: 0;
+      flex-shrink: 0;
+
+      :deep(.el-button) {
+        min-width: 88px;
+        border: 0;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+      }
+    }
+
+    .task-overview {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(96px, 1fr));
+      gap: $spacing-sm;
+      margin-bottom: $spacing-base;
+    }
+
+    .overview-item {
+      min-width: 0;
+      padding: $spacing-sm $spacing-md;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(145, 205, 255, 0.2);
+      border-radius: $radius-base;
+
+      .overview-label {
+        display: block;
+        margin-bottom: 3px;
+        color: rgba(218, 235, 255, 0.66);
+        font-size: $font-size-xs;
+      }
+
+      strong {
+        color: #f7fbff;
+        font-size: $font-size-lg;
+        line-height: 1.2;
+
+        &.pending {
+          color: #ffd66b;
+        }
+
+        &.running {
+          color: #69c0ff;
+        }
+
+        &.completed {
+          color: #8be36b;
+        }
+      }
+    }
+
+    .filter-group {
+      width: 100%;
+      margin-top: 0;
+
+      :deep(.el-radio-button__inner) {
+        min-width: 78px;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(145, 205, 255, 0.2);
+        color: rgba(235, 246, 255, 0.82);
+        box-shadow: none;
+
+        &:hover {
+          color: #fff;
+          border-color: rgba(105, 192, 255, 0.55);
+        }
+      }
+
+      :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+        background: #1890ff;
+        border-color: #1890ff;
+        color: #fff;
+      }
+    }
+  }
+}
+
 .page-content {
   @include page-content;
 
@@ -1162,6 +1396,11 @@ onBeforeUnmount(() => {
 
 .tasks-container {
   min-height: 400px;
+  padding: $spacing-xl;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(24, 144, 255, 0.12);
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
 }
 
 .flow-list {
@@ -1174,9 +1413,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  padding: $spacing-md 0 $spacing-sm;
-  border-bottom: 1px solid $border-color-light;
+  padding: $spacing-base $spacing-md $spacing-sm;
+  border-bottom: 1px solid rgba(24, 144, 255, 0.14);
   margin-bottom: $spacing-sm;
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.08), transparent);
+  border-radius: $radius-base $radius-base 0 0;
 
   &.is-first {
     padding-top: 0;
@@ -1190,7 +1431,9 @@ onBeforeUnmount(() => {
     justify-content: center;
     border-radius: 50%;
     flex-shrink: 0;
-    color: $text-tertiary;
+    color: $color-accent;
+    background: rgba(24, 144, 255, 0.1);
+    border: 1px solid rgba(24, 144, 255, 0.22);
 
     svg {
       filter: none;
@@ -1213,8 +1456,9 @@ onBeforeUnmount(() => {
 
   .phase-stats {
     font-size: $font-size-xs;
-    color: $text-tertiary;
-    background: $bg-tertiary;
+    color: $color-accent;
+    background: rgba(24, 144, 255, 0.09);
+    border: 1px solid rgba(24, 144, 255, 0.14);
     padding: 2px 8px;
     border-radius: 10px;
   }
@@ -1278,7 +1522,7 @@ onBeforeUnmount(() => {
 
 .flow-item {
   display: flex;
-  gap: $spacing-base;
+  gap: $spacing-md;
   min-height: 0;
 
   .flow-rail {
@@ -1310,13 +1554,13 @@ onBeforeUnmount(() => {
       }
 
       &.completed {
-        background: $color-success-bg;
+        background: #eefbe9;
         border-color: $color-success;
         color: $color-success;
       }
 
       &.running {
-        background: $color-accent-bg;
+        background: #e9f5ff;
         border-color: $color-accent;
         color: $color-accent;
         animation: dot-pulse 2s ease-in-out infinite;
@@ -1345,7 +1589,7 @@ onBeforeUnmount(() => {
       width: 2px;
       flex: 1;
       min-height: 8px;
-      background: $border-color-light;
+      background: linear-gradient(180deg, rgba(24, 144, 255, 0.22), rgba(24, 144, 255, 0.04));
     }
   }
 
@@ -1359,16 +1603,33 @@ onBeforeUnmount(() => {
   }
 
   .flow-card {
-    background: $bg-secondary;
-    border: 1px solid $border-color-light;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.92)),
+      $bg-secondary;
+    border: 1px solid rgba(24, 144, 255, 0.13);
     border-radius: $radius-md;
     padding: $spacing-md $spacing-base;
     transition: all 0.2s;
-    border-left: 3px solid $border-color;
+    border-left: 4px solid $border-color;
     cursor: pointer;
+    box-shadow: 0 1px 0 rgba(24, 144, 255, 0.04);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 120px;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(110deg, transparent 0%, rgba(24, 144, 255, 0.06) 48%, transparent 49%);
+    }
 
     &:hover {
-      box-shadow: $shadow-md;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(24, 74, 126, 0.1);
       border-color: $color-accent-border;
     }
 
@@ -1382,7 +1643,7 @@ onBeforeUnmount(() => {
 
     &.status-completed {
       border-left-color: $color-success;
-      opacity: 0.75;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(244, 252, 240, 0.86));
     }
 
     .flow-card-header {
@@ -1446,9 +1707,65 @@ onBeforeUnmount(() => {
     .flow-card-footer {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
       gap: $spacing-xs;
       padding-top: $spacing-sm;
       border-top: 1px solid $border-color-light;
+    }
+  }
+}
+
+@media (max-width: 900px) {
+  .tasks-detail-page {
+    padding: $spacing-md;
+
+    .page-header {
+      padding: $spacing-base;
+
+      .header-main {
+        flex-direction: column;
+      }
+
+      .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .task-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  }
+
+  .tasks-container {
+    padding: $spacing-base;
+  }
+}
+
+@media (max-width: 640px) {
+  .flow-item {
+    gap: $spacing-sm;
+
+    .flow-rail {
+      width: 24px;
+
+      .flow-dot {
+        width: 24px;
+        height: 24px;
+      }
+    }
+
+    .flow-card {
+      padding: $spacing-md;
+
+      .flow-card-header {
+        align-items: flex-start;
+
+        .flow-step-name {
+          white-space: normal;
+        }
+      }
     }
   }
 }

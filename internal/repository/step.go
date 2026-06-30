@@ -20,6 +20,24 @@ func (r *StepRepo) FindByID(id uint64) (*entity.StepInstance, error) {
 	return &step, nil
 }
 
+// FindStepsByDrillIDs 批量获取多个演练的步骤（轻量查询，仅用于进度计算等聚合场景）。
+// 返回 drill_instance_id -> steps 的映射。
+func (r *StepRepo) FindStepsByDrillIDs(drillIDs []uint64) (map[uint64][]entity.StepInstance, error) {
+	result := make(map[uint64][]entity.StepInstance)
+	if len(drillIDs) == 0 {
+		return result, nil
+	}
+	var steps []entity.StepInstance
+	err := DB.Where("drill_instance_id IN ?", drillIDs).Order("drill_instance_id, seq ASC").Find(&steps).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range steps {
+		result[steps[i].DrillInstanceID] = append(result[steps[i].DrillInstanceID], steps[i])
+	}
+	return result, nil
+}
+
 func (r *StepRepo) FindStepsByDrillID(drillID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
 	err := DB.Where("drill_instance_id = ?", drillID).Order("seq ASC").Find(&steps).Error

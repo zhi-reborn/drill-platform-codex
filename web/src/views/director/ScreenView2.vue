@@ -236,11 +236,14 @@ const statusLabel = computed(() => {
   return DRILL_STATUS_LABELS[instance.value.status as DrillStatus] || instance.value.status
 })
 
-// 实时进度：优先从 steps 计算，WebSocket 增量更新时自动同步
+// 实时进度：基于叶子步骤计算全局完成率（与 ScreenView 统一口径）
 const liveProgressPct = computed(() => {
   if (!steps.value.length) return instance.value?.progress_pct ?? 0
-  const done = steps.value.filter(s => s.status === 'completed' || s.status === 'skipped').length
-  return Math.round((done / steps.value.length) * 100)
+  const leafSteps = steps.value.filter(isLeafStep)
+  const list = leafSteps.length > 0 ? leafSteps : steps.value
+  const done = list.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
+  const total = list.length
+  return total === 0 ? 0 : Math.round((done / total) * 100)
 })
 
 const currentSystemTime = computed(() => {

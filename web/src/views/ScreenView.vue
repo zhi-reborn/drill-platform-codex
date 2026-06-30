@@ -33,7 +33,7 @@
       <header class="screen-header">
         <div class="header-deco header-deco-left" />
         <div class="header-title-block">
-          <h1 class="drill-title">应急处置指挥中心</h1>
+          <h1 class="drill-title">应急指挥中心</h1>
         </div>
         <div class="header-meta">
           <span class="meta-value">{{ currentDrill.name || '未命名演练' }}</span>
@@ -1617,7 +1617,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .progress-ring-text {
     position: absolute;
     font-family: $font-mono;
-    font-size: clamp(13px, 1.15em, 19px);
+    font-size: clamp(16px, 1.4em, 24px);
     font-weight: 800;
     color: #fff;
     line-height: 1;

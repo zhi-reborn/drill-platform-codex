@@ -678,6 +678,11 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
+	target, err := resolveStepOperationTarget(id, req.StepID)
+	if err != nil {
+		response.NotFound(c, "步骤不存在")
+		return
+	}
 	var user entity.User
 	operatorName := ""
 	repository.DB.Model(&entity.User{}).Where("id = ?", middleware.GetUserID(c)).First(&user)
@@ -685,9 +690,12 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		operatorName = user.RealName
 	}
 	if bytes, err := json.Marshal(req.UserIDs); err == nil {
-		repository.DB.Model(&entity.StepInstance{}).
-			Where("drill_instance_id = ? AND template_step_id = ?", id, req.StepID).
-			Update("assignee_ids", string(bytes))
+		if err := repository.DB.Model(&entity.StepInstance{}).
+			Where("id = ?", target.step.ID).
+			Update("assignee_ids", string(bytes)).Error; err != nil {
+			response.InternalError(c, "更新执行人失败")
+			return
+		}
 
 		now := time.Now()
 		repository.DB.Create(&entity.DrillInstanceLog{

@@ -287,6 +287,65 @@ func TestUpdateStepInfoInvalidatesStepCache(t *testing.T) {
 	}
 }
 
+func TestAssignStepByInstanceStepIDUpdatesAssignees(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_instance").Create(map[string]interface{}{
+		"id":          2,
+		"template_id": 3,
+		"name":        "分配演练",
+		"status":      "running",
+	}).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+	if err := db.Table("drill_instance_step").Create(map[string]interface{}{
+		"id":                12,
+		"drill_instance_id": 2,
+		"template_step_id":  252,
+		"name":              "操作1",
+		"seq":               1,
+		"status":            "running",
+		"assignee_ids":      "[]",
+	}).Error; err != nil {
+		t.Fatalf("create instance step: %v", err)
+	}
+
+	svc := drillservice.NewDrillService(
+		repository.NewDrillRepo(),
+		repository.NewTemplateRepo(),
+		repository.NewStepRepo(),
+		repository.NewUserRepo(),
+	)
+	handler := NewHandler(svc, nil)
+
+	router := gin.New()
+	router.POST("/drills/:id/steps/assign", func(c *gin.Context) {
+		c.Set("user_id_int", uint64(1))
+		handler.AssignStep(c)
+	})
+	body := bytes.NewBufferString(`{"step_id":12,"user_ids":[7]}`)
+	req := httptest.NewRequest(http.MethodPost, "/drills/2/steps/assign", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var assigneeIDs string
+	if err := db.Table("drill_instance_step").Select("assignee_ids").Where("id = ?", 12).Scan(&assigneeIDs).Error; err != nil {
+		t.Fatalf("query assignee_ids: %v", err)
+	}
+	if assigneeIDs != "[7]" {
+		t.Fatalf("expected assignee_ids to be updated by instance step id, got %q", assigneeIDs)
+	}
+}
+
 func TestResolveStepOperationTargetBackfillsMissingTemplateID(t *testing.T) {
 	db := setupStepTargetTestDB(t)
 	origDB := repository.DB

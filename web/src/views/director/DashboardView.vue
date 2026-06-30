@@ -131,7 +131,9 @@ const stepsMap = ref<Map<number, StepInstance[]>>(new Map())
 const recentActivities = ref<any[]>([])
 
 const activeDrills = computed(() => {
-  return instances.value.filter(i => i.status === 'running' || i.status === 'paused')
+  return instances.value
+    .filter(i => i.status === 'running' || i.status === 'paused')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 })
 
 function getCurrentStepName(drillId: number): string {
