@@ -165,7 +165,6 @@
           stroke-width="10"
           stroke-linecap="round"
           stroke-linejoin="round"
-          filter="url(#relay-glow)"
         />
         <path
           v-if="activePath"
@@ -175,10 +174,9 @@
           stroke-width="10"
           stroke-linecap="round"
           stroke-linejoin="round"
-          filter="url(#relay-glow)"
         />
 
-        <g font-family="PingFang SC, Microsoft YaHei, sans-serif" text-anchor="middle">
+        <g font-family="Microsoft YaHei, PingFang SC, sans-serif" text-anchor="middle">
           <g
             v-for="node in visibleNodes"
             :key="node.index"
@@ -271,7 +269,7 @@
               stroke-linecap="round"
               class="finish-tether"
             />
-            <circle r="34" fill="rgba(255, 180, 74, .11)" stroke="rgba(255, 214, 130, .45)" stroke-width="2" filter="url(#milestone-glow)" class="finish-disc" />
+            <circle r="34" fill="rgba(255, 180, 74, .11)" stroke="rgba(255, 214, 130, .45)" stroke-width="2" class="finish-disc" />
             <circle r="24" fill="none" stroke="rgba(45, 228, 255, .42)" stroke-width="1.5" stroke-dasharray="12 8" class="finish-orbit" />
             <path class="finish-crown-shadow" d="M-27 -5 L-20 15 H20 L27 -5 L14 1 L7 -15 L0 -3 L-7 -15 L-14 1 Z" />
             <path
@@ -616,7 +614,7 @@ function shorten(name: string): string {
   align-items: stretch;
   justify-content: flex-start;
   min-height: 0;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 }
 
 .phase-ring::before {
@@ -754,7 +752,7 @@ function shorten(name: string): string {
 }
 
 .head-stats .stats-num {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   font-size: clamp(18px, 1.6em, 26px);
   font-weight: 900;
   color: #eaf8ff;
@@ -778,7 +776,7 @@ function shorten(name: string): string {
 }
 
 .head-stats .stats-sep {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   font-size: clamp(16px, 1.4em, 22px);
   color: rgba(45, 228, 255, 0.55);
   font-weight: 600;
@@ -789,14 +787,17 @@ function shorten(name: string): string {
 // 数据汇聚点 - 阶段进度
 .progress-hub {
   position: absolute;
-  top: 36px;
+  top: 38px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  width: 118px;
+  height: 118px;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .hub-glow {
@@ -804,9 +805,12 @@ function shorten(name: string): string {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 180px;
-  height: 180px;
-  background: radial-gradient(circle, rgba(45, 228, 255, 0.28) 0%, rgba(255, 180, 74, 0.18) 40%, transparent 70%);
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(45, 228, 255, 0.26) 0%, rgba(45, 228, 255, 0.12) 34%, transparent 66%),
+    radial-gradient(circle, rgba(255, 180, 74, 0.14) 0%, transparent 52%);
   animation: hub-glow-pulse 3s ease-in-out infinite;
   z-index: 0;
 }
@@ -816,8 +820,8 @@ function shorten(name: string): string {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 100px;
-  height: 100px;
+  width: 114px;
+  height: 114px;
   z-index: 1;
 }
 
@@ -825,24 +829,30 @@ function shorten(name: string): string {
   position: absolute;
   inset: 0;
   border-radius: 50%;
+  box-sizing: border-box;
   animation: hub-ring-orbit 6s linear infinite;
 }
 
 .hub-ring-1 {
-  border: 1.5px dashed rgba(45, 228, 255, 0.45);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
+    conic-gradient(from -28deg, transparent 0 22deg, rgba(45, 228, 255, 0.8) 22deg 118deg, transparent 118deg 164deg, rgba(255, 180, 74, 0.64) 164deg 214deg, transparent 214deg 360deg) border-box;
   animation-delay: 0s;
+  opacity: 0.92;
 }
 
 .hub-ring-2 {
-  inset: 12px;
-  border: 1.2px dashed rgba(255, 180, 74, 0.35);
+  inset: 8px;
+  border: 1px dashed rgba(115, 220, 255, 0.34);
   animation-delay: -2s;
   animation-direction: reverse;
 }
 
 .hub-ring-3 {
-  inset: 24px;
-  border: 1px solid rgba(45, 228, 255, 0.22);
+  inset: 17px;
+  border: 1px solid rgba(45, 228, 255, 0.24);
+  box-shadow: inset 0 0 18px rgba(45, 228, 255, 0.1);
   animation-delay: -4s;
 }
 
@@ -852,39 +862,72 @@ function shorten(name: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 96px;
-  height: 96px;
+  width: 88px;
+  height: 88px;
   background:
-    radial-gradient(circle at center, rgba(18, 92, 210, 0.28) 0%, transparent 75%),
-    linear-gradient(135deg, rgba(12, 38, 66, 0.86) 0%, rgba(8, 24, 56, 0.72) 100%);
-  border: 2px solid rgba(45, 228, 255, 0.48);
+    radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.18), transparent 44%),
+    radial-gradient(circle at center, rgba(18, 92, 210, 0.3) 0%, transparent 72%),
+    linear-gradient(145deg, rgba(8, 30, 60, 0.96), rgba(5, 15, 38, 0.86));
+  border: 1px solid rgba(45, 228, 255, 0.52);
   border-radius: 50%;
   box-shadow:
-    0 0 32px rgba(45, 228, 255, 0.35),
-    0 0 48px rgba(255, 180, 74, 0.28),
-    inset 0 0 24px rgba(45, 228, 255, 0.16);
+    0 0 26px rgba(45, 228, 255, 0.28),
+    0 0 44px rgba(255, 180, 74, 0.16),
+    inset 0 0 18px rgba(45, 228, 255, 0.15),
+    inset 0 -12px 22px rgba(2, 8, 24, 0.5);
+  overflow: hidden;
+}
+
+.hub-core::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(211, 245, 255, 0.12);
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(45, 228, 255, 0.12) 49% 51%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(45, 228, 255, 0.1) 49% 51%, transparent 52%);
+  opacity: 0.76;
+}
+
+.hub-core::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 34%);
+  opacity: 0.48;
 }
 
 .hub-num {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: clamp(28px, 2.8em, 48px);
+  position: relative;
+  z-index: 1;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: 36px;
   font-weight: 900;
   color: #2de4ff;
+  line-height: 1;
   text-shadow:
-    0 0 20px rgba(45, 228, 255, 0.85),
-    0 0 40px rgba(45, 228, 255, 0.55);
+    0 0 14px rgba(45, 228, 255, 0.82),
+    0 0 28px rgba(45, 228, 255, 0.42);
   font-variant-numeric: tabular-nums;
-  min-width: 2.5ch;
-  text-align: center;
-  animation: hub-num-glow 2.4s ease-in-out infinite;
+  letter-spacing: 0;
+  min-width: 2.65ch;
+  text-align: right;
+  animation: hub-num-glow 2.8s ease-in-out infinite;
 }
 
 .hub-unit {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: clamp(14px, 1.4em, 24px);
-  font-weight: 700;
-  color: rgba(45, 228, 255, 0.75);
-  margin-left: 1px;
+  position: relative;
+  z-index: 1;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  align-self: center;
+  margin-left: 2px;
+  padding-top: 10px;
+  font-size: 15px;
+  font-weight: 900;
+  color: rgba(142, 237, 255, 0.84);
+  line-height: 1;
 }
 
 // 数据汇流粒子 - 溪流汇入大海的效果
@@ -969,15 +1012,18 @@ function shorten(name: string): string {
 
 .progress-hub.is-done {
   .hub-glow {
-    background: radial-gradient(circle, rgba(73, 255, 166, 0.35) 0%, rgba(45, 228, 255, 0.18) 40%, transparent 70%);
+    background:
+      radial-gradient(circle, rgba(73, 255, 166, 0.28) 0%, rgba(73, 255, 166, 0.12) 34%, transparent 66%),
+      radial-gradient(circle, rgba(45, 228, 255, 0.16) 0%, transparent 54%);
   }
   
   .hub-core {
     border-color: rgba(73, 255, 166, 0.55);
     box-shadow:
-      0 0 32px rgba(73, 255, 166, 0.45),
-      0 0 48px rgba(45, 228, 255, 0.25),
-      inset 0 0 24px rgba(73, 255, 166, 0.18);
+      0 0 26px rgba(73, 255, 166, 0.34),
+      0 0 42px rgba(45, 228, 255, 0.18),
+      inset 0 0 20px rgba(73, 255, 166, 0.18),
+      inset 0 -12px 22px rgba(2, 8, 24, 0.5);
   }
   
   .hub-num {
@@ -989,7 +1035,9 @@ function shorten(name: string): string {
   }
   
   .hub-ring-1 {
-    border-color: rgba(73, 255, 166, 0.45);
+    background:
+      linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
+      conic-gradient(from -28deg, transparent 0 18deg, rgba(73, 255, 166, 0.82) 18deg 130deg, transparent 130deg 176deg, rgba(45, 228, 255, 0.58) 176deg 232deg, transparent 232deg 360deg) border-box;
   }
   
   .hub-ring-2 {
@@ -1008,8 +1056,8 @@ function shorten(name: string): string {
 }
 
 @keyframes hub-num-glow {
-  0%, 100% { text-shadow: 0 0 20px rgba(45, 228, 255, 0.85), 0 0 40px rgba(45, 228, 255, 0.55); }
-  50% { text-shadow: 0 0 28px rgba(45, 228, 255, 0.95), 0 0 56px rgba(45, 228, 255, 0.65); }
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; }
 }
 
 .runway-progress {
@@ -1052,7 +1100,7 @@ function shorten(name: string): string {
 
 .progress-num {
   color: #ffe0a4;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   font-size: clamp(14px, 1.2em, 20px);
   font-weight: 900;
   letter-spacing: 1px;
@@ -1065,7 +1113,7 @@ function shorten(name: string): string {
 
 .progress-unit {
   color: rgba(255, 224, 162, 0.9);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   font-size: clamp(14px, 1.2em, 20px);
   font-weight: 900;
 }
@@ -1139,7 +1187,7 @@ function shorten(name: string): string {
 }
 
 .status-text {
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 }
 
 .foot-phase-name {
@@ -1161,7 +1209,7 @@ function shorten(name: string): string {
   font-weight: 800;
   letter-spacing: 1px;
   white-space: nowrap;
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 
   &::after {
     content: '';
@@ -1213,7 +1261,6 @@ function shorten(name: string): string {
 .lane-dash {
   opacity: 0.58;
   stroke: rgba(211, 245, 255, 0.54);
-  filter: drop-shadow(0 0 4px rgba(45, 228, 255, 0.3));
 }
 
 .runway-svg-turn-pip {
@@ -1222,7 +1269,6 @@ function shorten(name: string): string {
   transform-box: fill-box;
   transform-origin: center;
   animation: runway-svg-turn-pip 2.4s ease-in-out infinite;
-  filter: drop-shadow(0 0 4px rgba(45, 228, 255, 0.48));
 }
 
 .runway-svg-turn-pip-left {
@@ -1234,7 +1280,6 @@ function shorten(name: string): string {
   stroke: #ffdd9a;
   stroke-width: 3;
   animation: baton-move 1.05s ease-in-out infinite;
-  filter: drop-shadow(0 0 12px rgba(255, 180, 74, 0.95));
 }
 
 .baton-arrow {
@@ -1254,7 +1299,6 @@ function shorten(name: string): string {
 .node-core-completed {
   fill: #073c31;
   stroke: #55ffb0;
-  filter: drop-shadow(0 0 8px rgba(85, 255, 176, 0.56));
 }
 
 .node-core-pending {
@@ -1265,14 +1309,15 @@ function shorten(name: string): string {
 .node-core-issue {
   fill: #4a1721;
   stroke: #ff666a;
-  filter: drop-shadow(0 0 8px rgba(255, 92, 96, 0.55));
 }
 
 .node-label {
   font-size: 31px;
   font-weight: 900;
   letter-spacing: 0;
-  filter: drop-shadow(0 1px 2px rgba(2, 10, 24, 0.55));
+  paint-order: stroke fill;
+  stroke: rgba(2, 10, 24, 0.62);
+  stroke-width: 3px;
 }
 
 .finish-node {
@@ -1282,7 +1327,9 @@ function shorten(name: string): string {
     font-size: 31px;
     font-weight: 900;
     letter-spacing: 0;
-    filter: drop-shadow(0 1px 2px rgba(2, 10, 24, 0.55));
+    paint-order: stroke fill;
+    stroke: rgba(2, 10, 24, 0.62);
+    stroke-width: 3px;
   }
 }
 
@@ -1306,12 +1353,11 @@ function shorten(name: string): string {
 }
 
 .finish-tether {
-  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.8));
   animation: finish-tether-pulse 1.6s ease-in-out infinite;
 }
 
 .finish-disc {
-  filter: drop-shadow(0 0 12px rgba(255, 180, 74, 0.55));
+  stroke-width: 2.4px;
 }
 
 .finish-crown-shadow {
@@ -1325,7 +1371,6 @@ function shorten(name: string): string {
   stroke-width: 2.1;
   stroke-linejoin: round;
   paint-order: stroke fill;
-  filter: url(#crown-glow);
 }
 
 .finish-crown-ridge {
@@ -1341,7 +1386,6 @@ function shorten(name: string): string {
   fill: url(#crown-gem);
   stroke: rgba(255, 255, 255, 0.82);
   stroke-width: 0.8;
-  filter: drop-shadow(0 0 4px rgba(255, 235, 151, 0.65));
 }
 
 .finish-crown-gem-main {
@@ -1395,7 +1439,6 @@ function shorten(name: string): string {
 @keyframes finish-beacon {
   50% {
     opacity: 0.88;
-    filter: drop-shadow(0 0 12px rgba(255, 213, 129, 0.52));
   }
 }
 

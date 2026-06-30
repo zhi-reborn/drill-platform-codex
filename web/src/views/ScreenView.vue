@@ -7,7 +7,7 @@
 
     <!-- 漂浮微光粒子 -->
     <div class="bg-particles">
-      <div v-for="i in 8" :key="'bp' + i" class="bg-particle" :class="'bp-' + i" />
+      <div v-for="i in 4" :key="'bp' + i" class="bg-particle" :class="'bp-' + i" />
     </div>
 
     <!-- Loading state -->
@@ -1119,9 +1119,9 @@ $text: #d6e8ff;
 $text-dim: #a9c7ec;
 $text-mute: #7f9fc7;
 
-$font-display: 'Orbitron', 'Rajdhani', 'Microsoft YaHei', sans-serif;
-$font-mono: 'Share Tech Mono', 'Consolas', monospace;
-$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+$font-display: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', Arial, sans-serif;
+$font-mono: Consolas, Menlo, Monaco, 'Courier New', monospace;
+$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
 
 .screen-root {
   position: relative;
@@ -1195,11 +1195,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   );
   pointer-events: none;
   z-index: 0;
-  animation: scan 8s linear infinite;
-}
-@keyframes scan {
-  from { background-position-y: 0; }
-  to { background-position-y: 100px; }
+  opacity: 0.72;
 }
 .bg-vignette {
   position: absolute;
@@ -1225,17 +1221,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   height: 4px;
   border-radius: 50%;
   background: rgba(0, 212, 255, 0.6);
-  box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
-  will-change: transform, opacity;
+  box-shadow: 0 0 5px rgba(0, 212, 255, 0.36);
 }
 .bp-1 { left: 8%; top: 15%; animation: float-particle 12s ease-in-out infinite; }
 .bp-2 { left: 22%; top: 70%; animation: float-particle 15s ease-in-out infinite 2s; width: 3px; height: 3px; }
-.bp-3 { left: 45%; top: 25%; animation: float-particle 18s ease-in-out infinite 4s; background: rgba(255, 180, 74, 0.5); box-shadow: 0 0 8px rgba(255, 180, 74, 0.3); }
+.bp-3 { left: 45%; top: 25%; animation: float-particle 18s ease-in-out infinite 4s; background: rgba(255, 180, 74, 0.5); box-shadow: 0 0 5px rgba(255, 180, 74, 0.26); }
 .bp-4 { left: 65%; top: 80%; animation: float-particle 14s ease-in-out infinite 1s; width: 3px; height: 3px; }
-.bp-5 { left: 80%; top: 35%; animation: float-particle 16s ease-in-out infinite 3s; }
-.bp-6 { left: 35%; top: 55%; animation: float-particle 20s ease-in-out infinite 5s; width: 2px; height: 2px; background: rgba(0, 255, 156, 0.4); box-shadow: 0 0 6px rgba(0, 255, 156, 0.3); }
-.bp-7 { left: 90%; top: 60%; animation: float-particle 13s ease-in-out infinite 6s; width: 3px; height: 3px; }
-.bp-8 { left: 55%; top: 10%; animation: float-particle 17s ease-in-out infinite 7s; background: rgba(255, 180, 74, 0.4); box-shadow: 0 0 6px rgba(255, 180, 74, 0.2); width: 2px; height: 2px; }
 @keyframes float-particle {
   0%, 100% { transform: translate(0, 0); opacity: 0.6; }
   25% { transform: translate(15px, -20px); opacity: 1; }
@@ -1386,8 +1377,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     width: 100%; height: 2px;
     background: linear-gradient(90deg, transparent, $neon, transparent);
     transform: scaleX(0);
-    animation: header-pulse 3s ease-in-out infinite;
-    will-change: transform;
+    animation: header-pulse 4.8s ease-in-out infinite;
   }
 }
 @keyframes deco-flicker {
@@ -1675,7 +1665,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex; flex-direction: column;
   background: $bg-card;
   border: 0;
-  backdrop-filter: blur(2px);
   overflow: hidden;
 }
 .panel-header {
@@ -1733,8 +1722,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     width: 60%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
-    animation: panel-scan 4s ease-in-out infinite;
-    will-change: transform;
+    animation: panel-scan 7s ease-in-out infinite;
     pointer-events: none;
   }
 }
@@ -1843,6 +1831,18 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
         transform: translateY(-50%);
         z-index: 2;
       }
+    }
+    &.stage-current.stage-done {
+      border-color: rgba(52, 255, 151, 0.5);
+      border-left-color: #34ff97;
+      border-right-color: rgba(125, 255, 198, 0.7);
+      background:
+        linear-gradient(90deg, rgba(9, 68, 46, 0.96), rgba(7, 36, 38, 0.84)),
+        radial-gradient(circle at 100% 50%, rgba(45, 228, 255, 0.16), transparent 34%);
+      box-shadow:
+        0 0 20px rgba(52, 255, 151, 0.22),
+        16px 0 24px rgba(45, 228, 255, 0.1),
+        inset 0 0 20px rgba(52, 255, 151, 0.12);
     }
     &.stage-issue { border-left-color: $danger; }
   }
