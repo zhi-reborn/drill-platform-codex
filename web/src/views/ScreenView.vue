@@ -1832,7 +1832,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       background: linear-gradient(90deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
       border-color: #ff9a2f;
       border-left-color: #ff7a00;
-      box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
+      box-shadow: inset 0 0 18px rgba(255, 122, 0, 0.12);
     }
     &.stage-current {
       transform: translateX(10px);
@@ -1841,7 +1841,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
         linear-gradient(90deg, rgba(86, 43, 8, 0.96), rgba(12, 38, 66, 0.84)),
         radial-gradient(circle at 100% 50%, rgba(45, 228, 255, 0.22), transparent 34%);
       box-shadow:
-        0 0 24px rgba(255, 122, 0, 0.34),
         16px 0 28px rgba(45, 228, 255, 0.12),
         inset 0 0 22px rgba(255, 122, 0, 0.13);
 

@@ -650,11 +650,6 @@ function shorten(name: string): string {
   z-index: 5;
 }
 
-.phase-stage-0 { --runway-glow-x: 12%; --runway-glow-y: 24%; }
-.phase-stage-1 { --runway-glow-x: 12%; --runway-glow-y: 34%; }
-.phase-stage-2 { --runway-glow-x: 12%; --runway-glow-y: 66%; }
-.phase-stage-3 { --runway-glow-x: 12%; --runway-glow-y: 76%; }
-
 .relay-runway {
   position: relative;
   width: calc(100% - 8px);
@@ -666,10 +661,9 @@ function shorten(name: string): string {
   background:
     linear-gradient(90deg, rgba(45, 228, 255, 0.06) 1px, transparent 1px),
     linear-gradient(180deg, rgba(45, 228, 255, 0.04) 1px, transparent 1px),
-    radial-gradient(ellipse at var(--runway-glow-x, 50%) var(--runway-glow-y, 46%), rgba(255, 180, 74, 0.14), transparent 30%),
     radial-gradient(ellipse at 55% 54%, rgba(0, 212, 255, 0.2), transparent 56%),
     linear-gradient(180deg, rgba(4, 24, 56, 0.78), rgba(2, 10, 28, 0.9));
-  background-size: 44px 100%, 100% 34px, auto, auto, auto;
+  background-size: 44px 100%, 100% 34px, auto, auto;
   box-shadow:
     inset 0 0 36px rgba(0, 212, 255, 0.12),
     inset 0 -46px 90px rgba(0, 10, 26, 0.72),
@@ -691,7 +685,7 @@ function shorten(name: string): string {
   position: absolute;
   inset: -24% -34%;
   background:
-    conic-gradient(from 92deg at 50% 50%, transparent, rgba(45, 228, 255, 0.12), transparent 34%, rgba(255, 180, 74, 0.1), transparent 62%);
+    conic-gradient(from 92deg at 50% 50%, transparent, rgba(45, 228, 255, 0.12), transparent 34%, rgba(45, 228, 255, 0.08), transparent 62%);
   opacity: 0.28;
   pointer-events: none;
 }
@@ -800,8 +794,7 @@ function shorten(name: string): string {
   height: 170px;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(45, 228, 255, 0.26) 0%, rgba(45, 228, 255, 0.12) 34%, transparent 66%),
-    radial-gradient(circle, rgba(255, 180, 74, 0.14) 0%, transparent 52%);
+    radial-gradient(circle, rgba(45, 228, 255, 0.26) 0%, rgba(45, 228, 255, 0.12) 34%, transparent 66%);
   animation: hub-glow-pulse 3s ease-in-out infinite;
   z-index: 0;
 }
@@ -828,7 +821,7 @@ function shorten(name: string): string {
   border: 1px solid transparent;
   background:
     linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
-    conic-gradient(from -28deg, transparent 0 22deg, rgba(45, 228, 255, 0.8) 22deg 118deg, transparent 118deg 164deg, rgba(255, 180, 74, 0.64) 164deg 214deg, transparent 214deg 360deg) border-box;
+    conic-gradient(from -28deg, transparent 0 22deg, rgba(45, 228, 255, 0.8) 22deg 118deg, transparent 118deg 164deg, rgba(45, 228, 255, 0.42) 164deg 214deg, transparent 214deg 360deg) border-box;
   animation-delay: 0s;
   opacity: 0.92;
 }
@@ -865,7 +858,6 @@ function shorten(name: string): string {
   border-radius: 50%;
   box-shadow:
     0 0 26px rgba(45, 228, 255, 0.28),
-    0 0 44px rgba(255, 180, 74, 0.16),
     inset 0 0 18px rgba(45, 228, 255, 0.15),
     inset 0 -12px 22px rgba(2, 8, 24, 0.5);
   overflow: hidden;
@@ -1060,7 +1052,6 @@ function shorten(name: string): string {
   border-radius: 10px;
   background: linear-gradient(135deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
   box-shadow:
-    0 0 18px rgba(255, 122, 0, 0.32),
     inset 0 0 20px rgba(255, 122, 0, 0.12);
   pointer-events: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
