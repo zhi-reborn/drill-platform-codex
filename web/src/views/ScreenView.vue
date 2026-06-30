@@ -28,7 +28,7 @@
     </div>
 
     <!-- Main content -->
-    <div v-else-if="currentDrill" class="screen-content">
+    <div v-else-if="currentDrill" class="screen-content" :class="{ 'screen-content-fallback-fullscreen': fallbackFullscreen }">
       <!-- ========== HEADER ========== -->
       <header class="screen-header">
         <div class="header-deco header-deco-left" />
@@ -38,7 +38,7 @@
         <div class="header-meta">
           <span class="meta-value">{{ currentDrill.name || '未命名演练' }}</span>
         </div>
-        <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
+        <button class="btn-icon" :class="{ active: isFullscreenLike }" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
         </button>
         <div class="header-deco header-deco-right" />
@@ -127,7 +127,7 @@
               v-for="(stage, idx) in stages"
               :key="idx"
               class="stage-card"
-              :class="['stage-' + stage.status]"
+              :class="['stage-' + stage.status, { 'stage-current': idx === currentPhaseIndex }]"
             >
               <div class="stage-card-top">
                 <div class="stage-name-block">
@@ -161,7 +161,7 @@
 
         <!-- CENTER: Phase ring -->
         <section class="panel panel-center">
-          <div class="center-stage">
+          <div class="center-stage" :class="`center-stage-${currentPhaseIndex}`">
             <PhaseRing
               :phases="ringPhases"
               :phase-names="ringPhaseNames"
@@ -254,6 +254,9 @@ import PhaseRing from '@/components/screen/PhaseRing.vue'
 
 const route = useRoute()
 const screenRootRef = ref<HTMLElement | null>(null)
+const fallbackFullscreen = ref(false)
+const isNativeFullscreen = ref(false)
+const isFullscreenLike = computed(() => isNativeFullscreen.value || fallbackFullscreen.value)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
@@ -570,17 +573,8 @@ const ringPhaseNodeStatuses = computed(() => {
       let progress = 0
       if (isDone) {
         progress = 100
-      } else if (isRunning) {
-        // 计算运行中步骤的进度
-        const runningLeaves = leaves.filter(s => s.status === 'running')
-        const avgProgress = runningLeaves.reduce((sum, s) => {
-          if (!s.start_time) return sum + 0
-          const elapsedSec = Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
-          const limitSec = (s.timeout_minutes || 120) * 60
-          return sum + Math.min(99, Math.round((elapsedSec / limitSec) * 100))
-        }, 0) / Math.max(1, runningLeaves.length)
-        progress = Math.round((finishedLeaves / totalLeaves) * 100 + (avgProgress / totalLeaves))
-      } else if (finishedLeaves > 0) {
+      } else if (totalLeaves > 0) {
+        // 只计算已完成任务的进度比例（不包含运行中任务的时间进度估算）
         progress = Math.round((finishedLeaves / totalLeaves) * 100)
       }
 
@@ -594,9 +588,8 @@ const ringSize = computed(() => {
   // 基于视口高度动态计算，确保不溢出
   // 可用高度 ≈ 100vh - header(58) - kpi(108) - footer(16) - gaps(12*3) - padding(20)
   const availableH = viewportHeight.value - 58 - 108 - 16 - 36 - 20
-  // PhaseRing 实际高度 = ringSize + PAD_Y_TOP + PAD_Y_BOTTOM
-  // PAD_Y_TOP=102, PAD_Y_BOTTOM=118 → 总 padding=220
-  const maxRingFromH = availableH - 220
+  // PhaseRing 实际高度约为 ringSize * 0.78，预留标题和边框空间
+  const maxRingFromH = availableH - 190
   // 基于宽度限制
   const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 440 : 620
   return Math.min(maxRingFromW, Math.max(280, maxRingFromH))
@@ -1041,17 +1034,30 @@ function stopFallbackPolling() {
 
 // 全屏
 async function toggleFullscreen() {
-  try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen()
-      return
-    }
+  if (document.fullscreenElement || fallbackFullscreen.value) {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    fallbackFullscreen.value = false
+    return
+  }
 
-    const target = screenRootRef.value || document.documentElement
+  const target = screenRootRef.value || document.documentElement
+  try {
     await target.requestFullscreen()
   } catch (err) {
-    console.error('toggle fullscreen failed:', err)
-    ElMessage.warning('当前浏览器或预览容器不允许进入全屏，请尝试在新窗口打开后再全屏')
+    console.warn('native fullscreen failed, fallback to page fullscreen:', err)
+    fallbackFullscreen.value = true
+    ElMessage.info('当前预览容器不允许浏览器全屏，已切换为页面内全屏')
+  }
+}
+
+function handleFullscreenChange() {
+  isNativeFullscreen.value = Boolean(document.fullscreenElement)
+  if (document.fullscreenElement) fallbackFullscreen.value = false
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && fallbackFullscreen.value) {
+    fallbackFullscreen.value = false
   }
 }
 
@@ -1059,6 +1065,8 @@ onMounted(() => {
   componentDestroyed = false
   loadData()
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
   nextTick(() => {
     measureWarnList()
     if (warnListRef.value && typeof ResizeObserver !== 'undefined') {
@@ -1071,6 +1079,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   componentDestroyed = true
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   warnListResizeObserver?.disconnect()
   warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
@@ -1271,6 +1281,16 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   gap: 8px;
 }
 
+.screen-content-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(0, 96, 205, 0.18), transparent 34%),
+    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.08), transparent 18%),
+    linear-gradient(180deg, #061229 0%, #020815 100%);
+}
+
 // ===== HEADER =====
 .screen-header {
   position: relative;
@@ -1352,7 +1372,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; border-radius: 2px;
     transition: all 0.2s;
-    &:hover { border-color: $neon; box-shadow: 0 0 10px $neon-soft; }
+    &:hover,
+    &.active { border-color: $neon; box-shadow: 0 0 10px $neon-soft; background: rgba(0, 212, 255, 0.1); }
   }
   .header-deco {
     position: absolute; top: 0; width: 8px; height: 100%;
@@ -1585,7 +1606,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .progress-ring-text {
     position: absolute;
     font-family: $font-mono;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 800;
     color: #fff;
     line-height: 1;
@@ -1753,7 +1774,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     min-height: 0;
     flex: 1;
     overflow-y: auto;
-    padding-right: 10px;
+    padding-right: 34px;
     scroll-snap-type: y proximity;
   }
   .stage-card {
@@ -1780,6 +1801,48 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       border-color: #ff9a2f;
       border-left-color: #ff7a00;
       box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
+    }
+    &.stage-current {
+      transform: translateX(10px);
+      border-right: 1px solid rgba(255, 224, 162, 0.7);
+      background:
+        linear-gradient(90deg, rgba(86, 43, 8, 0.96), rgba(12, 38, 66, 0.84)),
+        radial-gradient(circle at 100% 50%, rgba(45, 228, 255, 0.22), transparent 34%);
+      box-shadow:
+        0 0 24px rgba(255, 122, 0, 0.34),
+        16px 0 28px rgba(45, 228, 255, 0.12),
+        inset 0 0 22px rgba(255, 122, 0, 0.13);
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -19px;
+        width: 48px;
+        height: 8px;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, rgba(45, 228, 255, 0.18), rgba(125, 255, 198, 0.88) 55%, rgba(125, 255, 198, 0.96)) 0 50% / 100% 2px no-repeat;
+        box-shadow: 0 0 12px rgba(45, 228, 255, 0.58), 0 0 18px rgba(125, 255, 198, 0.18);
+        transform: translateY(-50%);
+        z-index: 1;
+      }
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -23px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 50%, #7dffc6 0 3px, rgba(45, 228, 255, 0.86) 3.2px 4px, transparent 4.2px);
+        clip-path: inset(0 50% 0 0);
+        box-shadow: 0 0 10px rgba(125, 255, 198, 0.72), 0 0 18px rgba(45, 228, 255, 0.42);
+        transform: translateY(-50%);
+        z-index: 2;
+      }
     }
     &.stage-issue { border-left-color: $danger; }
   }
@@ -1846,6 +1909,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Center phase ring =====
 .panel-center {
   background:
+    linear-gradient(90deg, rgba(255, 180, 74, 0.1), transparent 20%),
+    radial-gradient(circle at 8% 50%, rgba(255, 180, 74, 0.16), transparent 18%),
     radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
     radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
   position: relative;
@@ -1860,17 +1925,33 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 .center-stage {
   flex: 1;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: stretch; justify-content: flex-start;
   position: relative;
+  min-height: 0;
+  padding-left: 0;
   &::before, &::after {
     content: '';
-    position: absolute; left: 50%;
-    transform: translateX(-50%);
-    width: 86%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(87, 152, 255, 0.44), transparent);
+    position: absolute;
+    inset: 10px 14px;
+    pointer-events: none;
+    border: 1px solid rgba(0, 212, 255, 0.08);
+    background:
+      linear-gradient(rgba(0, 212, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.045) 1px, transparent 1px);
+    background-size: 44px 44px;
   }
-  &::before { top: 18%; }
-  &::after { bottom: 18%; }
+  &.center-stage-0::after,
+  &.center-stage-1::after {
+    inset: 0;
+    border: 0;
+    background: radial-gradient(circle at 10% 28%, rgba(255, 180, 74, 0.18), transparent 24%), radial-gradient(circle at 50% 52%, rgba(0, 212, 255, 0.12), transparent 54%);
+  }
+  &.center-stage-2::after,
+  &.center-stage-3::after {
+    inset: 0;
+    border: 0;
+    background: radial-gradient(circle at 10% 72%, rgba(255, 180, 74, 0.18), transparent 24%), radial-gradient(circle at 50% 52%, rgba(0, 212, 255, 0.12), transparent 54%);
+  }
 }
 
 
@@ -2152,9 +2233,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .progress-ring-text {
-      font-size: 11px;
+      font-size: 12px;
       small {
-        font-size: 7px;
+        font-size: 8px;
       }
     }
 
@@ -2305,7 +2386,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       height: 40px;
     }
     .progress-ring-text {
-      font-size: 11px;
+      font-size: 12px;
       small {
         font-size: 8px;
       }
