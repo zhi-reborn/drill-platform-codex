@@ -157,9 +157,9 @@
             rx="2"
           />
         </g>
-        <polyline
-          v-if="donePolyline"
-          :points="donePolyline"
+        <path
+          v-if="donePath"
+          :d="donePath"
           fill="none"
           stroke="url(#lane-done)"
           stroke-width="10"
@@ -167,9 +167,9 @@
           stroke-linejoin="round"
           filter="url(#relay-glow)"
         />
-        <polyline
-          v-if="activePolyline"
-          :points="activePolyline"
+        <path
+          v-if="activePath"
+          :d="activePath"
           fill="none"
           stroke="url(#lane-active)"
           stroke-width="10"
@@ -351,9 +351,8 @@ const currentPhaseLabel = computed(() => {
 })
 
 const laneY = computed(() => {
-  const startYs = [72, 138, 362, 428]
-  const startY = startYs[safeCurrentIndex.value] ?? 86
-  const endY = phaseDirectionDown.value ? 428 : 72
+  const startY = 72
+  const endY = 428
   const rowCount = Math.max(1, Math.ceil(Math.max(currentNodes.value.length, 1) / LANE_CAPACITY))
   if (rowCount === 1) return [startY]
   return Array.from({ length: rowCount }, (_, row) => (
@@ -488,17 +487,17 @@ const visibleNodes = computed(() => {
   })
 })
 
-const donePolyline = computed(() => {
-  const points = trackPoints.value.filter((_, idx) => isDone(currentStatuses.value[idx]))
-  return points.length > 1 ? toPointList(points) : ''
+const donePath = computed(() => {
+  const indexes = currentStatuses.value
+    .map((status, idx) => (isDone(status) ? idx : -1))
+    .filter(idx => idx >= 0)
+  return indexes.length > 1 ? trackPathThroughIndexes(indexes) : ''
 })
 
-const activePolyline = computed(() => {
+const activePath = computed(() => {
   const activeIdx = activeNodeIndex.value
   if (activeIdx <= 0) return ''
-  const prev = trackPoints.value[activeIdx - 1]
-  const cur = trackPoints.value[activeIdx]
-  return toPointList([prev, cur])
+  return trackPathThroughIndexes([activeIdx - 1, activeIdx])
 })
 
 const finishPoint = computed(() => {
@@ -539,9 +538,53 @@ function lanePoint(index: number, count: number, startX: number, endX: number, y
   const direction = Math.sign(endX - startX) || 1
   const laneStart = startX + direction * LANE_NODE_PADDING
   const laneEnd = endX - direction * LANE_NODE_PADDING
-  const ratio = count >= 3 ? index / (count - 1) : (index + 1) / (count + 1)
+  const ratio = count > 1 ? index / (count - 1) : 0.5
   const x = laneStart + (laneEnd - laneStart) * ratio
   return { x, y }
+}
+
+function trackPathThroughIndexes(indexes: number[]): string {
+  const first = trackPoints.value[indexes[0]]
+  if (!first) return ''
+
+  let d = `M ${first.x} ${first.y}`
+  for (let i = 1; i < indexes.length; i += 1) {
+    d += trackPathSegment(indexes[i - 1], indexes[i])
+  }
+  return d
+}
+
+function trackPathSegment(fromIndex: number, toIndex: number): string {
+  if (toIndex <= fromIndex) {
+    const to = trackPoints.value[toIndex]
+    return to ? ` L ${to.x} ${to.y}` : ''
+  }
+
+  let d = ''
+  for (let index = fromIndex; index < toIndex; index += 1) {
+    d += adjacentTrackPathSegment(index, index + 1)
+  }
+  return d
+}
+
+function adjacentTrackPathSegment(fromIndex: number, toIndex: number): string {
+  const from = trackPoints.value[fromIndex]
+  const to = trackPoints.value[toIndex]
+  if (!from || !to) return ''
+
+  const fromLane = locateLaneNode(fromIndex)
+  const toLane = locateLaneNode(toIndex)
+  if (fromLane.row === toLane.row) {
+    return ` L ${to.x} ${to.y}`
+  }
+
+  const lanes = laneY.value
+  const prevY = lanes[fromLane.row]
+  const y = lanes[toLane.row]
+  const midY = Math.round((prevY + y) / 2)
+  const turnX = fromLane.row % 2 === 0 ? TURN_RIGHT : TURN_LEFT
+  const laneEndX = fromLane.row % 2 === 0 ? LANE_RIGHT : LANE_LEFT
+  return ` L ${laneEndX} ${prevY} Q ${turnX} ${prevY} ${turnX} ${midY} Q ${turnX} ${y} ${laneEndX} ${y} L ${to.x} ${to.y}`
 }
 
 function shouldLabelAbove(_index: number, _point: TrackPoint): boolean {
@@ -563,9 +606,6 @@ function shorten(name: string): string {
   return name.length > 5 ? `${name.slice(0, 5)}…` : name
 }
 
-function toPointList(points: TrackPoint[]): string {
-  return points.map(p => `${p.x},${p.y}`).join(' ')
-}
 </script>
 
 <style lang="scss" scoped>
@@ -1354,8 +1394,8 @@ function toPointList(points: TrackPoint[]): string {
 
 @keyframes finish-beacon {
   50% {
-    opacity: 0.62;
-    transform: scale(1.06);
+    opacity: 0.88;
+    filter: drop-shadow(0 0 12px rgba(255, 213, 129, 0.52));
   }
 }
 
