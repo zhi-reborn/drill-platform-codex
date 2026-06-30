@@ -166,7 +166,7 @@
         </section>
 
         <!-- CENTER: Phase ring -->
-        <section class="panel panel-center">
+        <section ref="centerPanelRef" class="panel panel-center">
           <div class="center-stage" :class="`center-stage-${displayPhaseIndex}`">
             <PhaseRing
               :phases="ringPhases"
@@ -267,6 +267,9 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
 const viewportHeight = ref(window.innerHeight)
+const centerPanelRef = ref<HTMLElement | null>(null)
+const centerPanelWidth = ref(0)
+let centerPanelResizeObserver: ResizeObserver | null = null
 
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
@@ -611,10 +614,16 @@ const ringSize = computed(() => {
   const availableH = viewportHeight.value - 58 - 108 - 16 - 36 - 20
   // PhaseRing 实际高度约为 ringSize * 0.78，预留标题和边框空间
   const maxRingFromH = availableH - 190
-  // 基于宽度限制
-  const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 440 : 620
-  return Math.min(maxRingFromW, Math.max(280, maxRingFromH))
+  // 基于中间面板宽度限制，避免非全屏时按整屏宽度估算导致内容偏左裁切
+  const panelWidth = centerPanelWidth.value || viewportWidth.value
+  const maxRingFromW = Math.max(280, Math.floor((panelWidth - 4) / 1.72))
+  return Math.min(700, maxRingFromW, Math.max(280, maxRingFromH))
 })
+
+function measureCenterPanel() {
+  if (!centerPanelRef.value) return
+  centerPanelWidth.value = centerPanelRef.value.clientWidth
+}
 
 // === 告警 ===
 // 从步骤的"进行中"或异常中推算
@@ -1089,6 +1098,11 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   nextTick(() => {
+    measureCenterPanel()
+    if (centerPanelRef.value && typeof ResizeObserver !== 'undefined') {
+      centerPanelResizeObserver = new ResizeObserver(measureCenterPanel)
+      centerPanelResizeObserver.observe(centerPanelRef.value)
+    }
     measureWarnList()
     if (warnListRef.value && typeof ResizeObserver !== 'undefined') {
       warnListResizeObserver = new ResizeObserver(measureWarnList)
@@ -1102,6 +1116,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  centerPanelResizeObserver?.disconnect()
+  centerPanelResizeObserver = null
   warnListResizeObserver?.disconnect()
   warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
@@ -1113,6 +1129,7 @@ onBeforeUnmount(() => {
 function handleResize() {
   viewportWidth.value = window.innerWidth
   viewportHeight.value = window.innerHeight
+  measureCenterPanel()
   measureWarnList()
 }
 
@@ -1674,8 +1691,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 // ===== MAIN GRID =====
 .screen-main {
   display: grid;
-  grid-template-columns: minmax(270px, 18vw) minmax(560px, 1fr) minmax(340px, 26vw);
-  gap: 18px;
+  grid-template-columns: minmax(220px, 17vw) minmax(0, 1.18fr) minmax(280px, 24vw);
+  gap: 16px;
   flex: 1;
   min-height: 0;
   padding: 0;
@@ -1936,10 +1953,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 // ===== Center phase ring =====
 .panel-center {
   background:
-    linear-gradient(90deg, rgba(255, 180, 74, 0.1), transparent 20%),
-    radial-gradient(circle at 8% 50%, rgba(255, 180, 74, 0.16), transparent 18%),
-    radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
-    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
+    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 74%);
   position: relative;
   overflow: hidden;
   &::before, &::after {
@@ -1952,10 +1966,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 }
 .center-stage {
   flex: 1;
-  display: flex; align-items: stretch; justify-content: flex-start;
+  display: flex; align-items: stretch; justify-content: center;
   position: relative;
   min-height: 0;
   padding-left: 0;
+  padding-inline: 0;
   &::before, &::after {
     content: '';
     position: absolute;
@@ -1969,15 +1984,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
   &.center-stage-0::after,
   &.center-stage-1::after {
-    inset: 0;
-    border: 0;
-    background: radial-gradient(circle at 10% 28%, rgba(255, 180, 74, 0.18), transparent 24%), radial-gradient(circle at 50% 52%, rgba(0, 212, 255, 0.12), transparent 54%);
+    display: none;
   }
   &.center-stage-2::after,
   &.center-stage-3::after {
-    inset: 0;
-    border: 0;
-    background: radial-gradient(circle at 10% 72%, rgba(255, 180, 74, 0.18), transparent 24%), radial-gradient(circle at 50% 52%, rgba(0, 212, 255, 0.12), transparent 54%);
+    display: none;
   }
 }
 

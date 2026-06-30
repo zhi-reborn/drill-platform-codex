@@ -602,7 +602,8 @@ function shorten(name: string): string {
   z-index: 1;
   display: flex;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: center;
+  max-width: 100%;
   min-height: 0;
   font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 }
