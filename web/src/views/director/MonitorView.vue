@@ -1882,21 +1882,35 @@ onUnmounted(() => {
       color: var(--el-color-primary);
     }
 
-    // 步骤名列布局
+    // ===== 步骤名列布局 - 树形结构 =====
+    .name-col {
+      // 树形引导线配色（定义在 td 上，竖线与横肘共享，便于 hover 联动）
+      --tree-line: rgba(96, 128, 156, 0.22);
+      --tree-line-strong: rgba(24, 144, 255, 0.45);
+    }
     .name-col .cell {
       display: flex;
       align-items: center;
+      width: 100%;
+      // 移除该列默认左内边距，让缩进通道与引导线坐标系对齐
+      padding-left: 0;
     }
 
     .step-name-cell {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 8px;
       overflow: hidden;
+      box-sizing: border-box;
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .step-expand-toggle,
     .step-expand-spacer {
+      position: relative;
+      z-index: 1;
       flex: 0 0 18px;
       width: 18px;
       min-width: 18px;
@@ -1912,24 +1926,67 @@ onUnmounted(() => {
       }
     }
 
-    // 步骤名列左侧色带
-    .step-depth-0 .name-col {
-      border-left: 3px solid var(--el-color-primary);
+    .depth-badge,
+    .step-name-text {
+      position: relative;
+      z-index: 1;
     }
+
+    // 按层级递进缩进 - 每级 22px
+    .step-depth-0 .name-col .step-name-cell { padding-left: 10px; }
+    .step-depth-1 .name-col .step-name-cell { padding-left: 22px; }
+    .step-depth-2 .name-col .step-name-cell { padding-left: 44px; }
+    .step-depth-3 .name-col .step-name-cell { padding-left: 66px; }
+
+    // 树形竖向引导线 - 每个祖先层级一条竖线，画在 td 上保证跨行连续
     .step-depth-1 .name-col {
-      border-left: 3px solid var(--el-color-success);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px);
     }
     .step-depth-2 .name-col {
-      border-left: 3px solid var(--el-color-warning);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px),
+        linear-gradient(90deg, transparent 32px, var(--tree-line) 32px 33px, transparent 33px);
     }
     .step-depth-3 .name-col {
-      border-left: 3px solid var(--el-color-info-light-5);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px),
+        linear-gradient(90deg, transparent 32px, var(--tree-line) 32px 33px, transparent 33px),
+        linear-gradient(90deg, transparent 54px, var(--tree-line) 54px 55px, transparent 55px);
     }
+
+    // 树形横向连接肘 - 从最近一条竖线拐向节点内容
+    .step-name-cell::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      height: 1px;
+      background: var(--tree-line);
+      pointer-events: none;
+      display: none; // 默认隐藏，仅缩进层级显示
+    }
+    .step-depth-1 .name-col .step-name-cell::after,
+    .step-depth-2 .name-col .step-name-cell::after,
+    .step-depth-3 .name-col .step-name-cell::after { display: block; }
+    .step-depth-1 .name-col .step-name-cell::after { left: 11px; width: 11px; }
+    .step-depth-2 .name-col .step-name-cell::after { left: 33px; width: 11px; }
+    .step-depth-3 .name-col .step-name-cell::after { left: 55px; width: 11px; }
+
+    // 步骤名列左侧色带（保留层级配色）
+    .step-depth-0 .name-col { border-left: 3px solid var(--el-color-primary); }
+    .step-depth-1 .name-col { border-left: 3px solid var(--el-color-success); }
+    .step-depth-2 .name-col { border-left: 3px solid var(--el-color-warning); }
+    .step-depth-3 .name-col { border-left: 3px solid var(--el-color-info-light-5); }
 
     // 行背景色按深度微弱区分
     .step-depth-0 td { background: rgba(24, 144, 255, 0.04); }
     .step-depth-1 td { background: rgba(82, 196, 26, 0.03); }
     .step-depth-2 td { background: rgba(250, 173, 20, 0.02); }
+
+    // hover 时引导线高亮，强化树形感知
+    .el-table__body tr:hover > .name-col {
+      --tree-line: var(--tree-line-strong);
+    }
   }
 
   .parent-status-text {

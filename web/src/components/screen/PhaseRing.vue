@@ -860,10 +860,12 @@ function shorten(name: string): string {
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
   width: 88px;
   height: 88px;
+  padding-top: 22px;
+  padding-bottom: 18px;
   background:
     radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.18), transparent 44%),
     radial-gradient(circle at center, rgba(18, 92, 210, 0.3) 0%, transparent 72%),
@@ -912,8 +914,6 @@ function shorten(name: string): string {
     0 0 28px rgba(45, 228, 255, 0.42);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
-  min-width: 2.65ch;
-  text-align: right;
   animation: hub-num-glow 2.8s ease-in-out infinite;
 }
 
@@ -921,10 +921,9 @@ function shorten(name: string): string {
   position: relative;
   z-index: 1;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
-  align-self: center;
-  margin-left: 2px;
-  padding-top: 10px;
-  font-size: 15px;
+  align-self: baseline;
+  margin-left: 1px;
+  font-size: 18px;
   font-weight: 900;
   color: rgba(142, 237, 255, 0.84);
   line-height: 1;

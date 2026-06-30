@@ -1617,12 +1617,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .progress-ring-text {
     position: absolute;
     font-family: $font-mono;
-    font-size: 16px;
+    font-size: clamp(13px, 1.15em, 19px);
     font-weight: 800;
     color: #fff;
     line-height: 1;
     small {
-      font-size: 10px;
+      font-size: 0.65em;
       font-weight: 600;
       opacity: 0.75;
     }
@@ -2260,9 +2260,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
 
     .progress-ring-text {
-      font-size: 12px;
+      font-size: 0.82em;
       small {
-        font-size: 8px;
+        font-size: 0.65em;
       }
     }
 
@@ -2413,9 +2413,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       height: 40px;
     }
     .progress-ring-text {
-      font-size: 12px;
+      font-size: 0.72em;
       small {
-        font-size: 8px;
+        font-size: 0.65em;
       }
     }
     .node-count-row {
