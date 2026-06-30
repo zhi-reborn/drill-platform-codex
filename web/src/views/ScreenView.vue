@@ -127,7 +127,13 @@
               v-for="(stage, idx) in stages"
               :key="idx"
               class="stage-card"
-              :class="['stage-' + stage.status, { 'stage-current': idx === currentPhaseIndex }]"
+              :class="['stage-' + stage.status, { 'stage-current': idx === displayPhaseIndex }]"
+              role="tab"
+              :aria-selected="idx === displayPhaseIndex"
+              tabindex="0"
+              @click="selectPhase(idx)"
+              @keydown.enter.prevent="selectPhase(idx)"
+              @keydown.space.prevent="selectPhase(idx)"
             >
               <div class="stage-card-top">
                 <div class="stage-name-block">
@@ -161,17 +167,17 @@
 
         <!-- CENTER: Phase ring -->
         <section class="panel panel-center">
-          <div class="center-stage" :class="`center-stage-${currentPhaseIndex}`">
+          <div class="center-stage" :class="`center-stage-${displayPhaseIndex}`">
             <PhaseRing
               :phases="ringPhases"
               :phase-names="ringPhaseNames"
               :phase-node-statuses="ringPhaseNodeStatuses"
               :phase-statuses="ringPhaseStatuses"
-              :current-index="currentPhaseIndex"
+              :current-index="displayPhaseIndex"
               :progress="progressPercent"
               :center-numerator="completedCount"
               :center-denominator="totalCount"
-              :center-hint="`阶段${chineseNum(currentPhaseIndex + 1)} · ${currentPhaseName}`"
+              :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
               :size="ringSize"
             />
           </div>
@@ -530,13 +536,28 @@ const currentPhaseIndex = computed(() => {
   return 0
 })
 
+const selectedPhaseIndex = ref<number | null>(null)
+const displayPhaseIndex = computed(() => {
+  const count = stages.value.length
+  if (count === 0) return 0
+  const selected = selectedPhaseIndex.value
+  if (selected == null) return currentPhaseIndex.value
+  return Math.max(0, Math.min(selected, count - 1))
+})
+
 const currentPhaseName = computed(() => stages.value[currentPhaseIndex.value]?.name || '演练启动')
+const displayPhaseName = computed(() => stages.value[displayPhaseIndex.value]?.name || '演练启动')
 
 const currentPhaseProgress = computed(() => {
   const s = stages.value[currentPhaseIndex.value]
   if (!s) return { num: 0, den: 0 }
   return { num: s.completedSteps, den: s.totalSteps }
 })
+
+function selectPhase(index: number) {
+  if (index < 0 || index >= stages.value.length) return
+  selectedPhaseIndex.value = index
+}
 
 // 阶段环需要的相位名称 + 各阶段环节名称
 const ringPhases = computed(() => {
@@ -1777,6 +1798,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     display: flex; flex-direction: column; gap: 10px;
     justify-content: center;
     transition: all 0.2s;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid rgba(45, 228, 255, 0.78);
+      outline-offset: 2px;
+    }
 
     &.stage-done {
       background: linear-gradient(90deg, rgba(9, 58, 42, 0.94), rgba(7, 31, 35, 0.78));
