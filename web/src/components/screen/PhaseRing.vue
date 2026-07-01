@@ -290,7 +290,7 @@
       <div class="runway-foot">
         <div class="foot-status">
           <span class="status-dot"></span>
-          <span class="status-text">实时同步</span>
+          <span class="status-text">{{ instanceName || '未命名演练' }}</span>
         </div>
         <div class="foot-phase-name">
           <span class="phase-name-tag">当前阶段</span>
@@ -326,12 +326,13 @@ const props = defineProps<{
   centerNumerator: number
   centerDenominator: number
   centerHint: string
+  instanceName?: string
   size?: number
 }>()
 
 const size = computed(() => props.size ?? 520)
 const containerSize = computed(() => ({
-  width: Math.max(720, Math.round(size.value * 1.72)),
+  width: Math.max(480, Math.round(size.value * 1.72)),
   height: '100%',
 }))
 
@@ -1168,6 +1169,10 @@ function shorten(name: string): string {
 }
 
 .status-text {
+  max-width: min(320px, 38vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 }
 

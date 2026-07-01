@@ -36,7 +36,6 @@
           <h1 class="drill-title">应急指挥中心</h1>
         </div>
         <div class="header-meta">
-          <span class="meta-value">{{ currentDrill.name || '未命名演练' }}</span>
         </div>
         <button class="btn-icon" :class="{ active: isFullscreenLike }" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
@@ -178,6 +177,7 @@
               :center-numerator="completedCount"
               :center-denominator="totalCount"
               :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
+              :instance-name="currentDrill.name"
               :size="ringSize"
             />
           </div>
@@ -1324,43 +1324,90 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 .screen-header {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, max-content) auto;
   align-items: center;
-  column-gap: 16px;
-  height: 58px;
+  column-gap: 14px;
+  height: 64px;
   background:
-    linear-gradient(90deg, rgba(37, 130, 255, 0.26), rgba(13, 37, 74, 0.1) 44%, rgba(20, 50, 96, 0.35));
+    radial-gradient(ellipse at 50% 0%, rgba(51, 150, 255, 0.28), transparent 34%),
+    linear-gradient(90deg, rgba(16, 64, 136, 0.42), rgba(6, 23, 52, 0.18) 32%, rgba(6, 23, 52, 0.18) 68%, rgba(16, 64, 136, 0.42));
   border: 0;
-  padding: 0 32px 0 24px;
-  box-shadow: inset 0 -1px 0 rgba(111, 178, 255, 0.35);
+  padding: 0 34px 0 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(115, 191, 255, 0.36),
+    inset 0 -1px 0 rgba(44, 144, 255, 0.52),
+    0 8px 28px rgba(0, 56, 120, 0.18);
 
   &::before, &::after {
     content: '';
     position: absolute;
-    top: 50%;
-    width: 50px; height: 1px;
-    background: linear-gradient(90deg, transparent, $neon);
+    top: 12px;
+    width: calc(50% - 292px);
+    min-width: 110px;
+    height: 16px;
+    border-top: 2px solid rgba(36, 148, 255, 0.72);
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    background:
+      linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
   }
-  &::before { left: 0; }
-  &::after { right: 0; transform: rotate(180deg); }
+  &::before {
+    left: 30px;
+    clip-path: polygon(0 0, calc(100% - 92px) 0, calc(100% - 74px) 100%, 100% 100%, 100% 100%, 0 100%);
+  }
+  &::after {
+    right: 30px;
+    transform: scaleX(-1);
+    clip-path: polygon(0 0, calc(100% - 92px) 0, calc(100% - 74px) 100%, 100% 100%, 100% 100%, 0 100%);
+  }
 
   .header-title-block {
-    grid-column: 1;
-    text-align: left;
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 1;
+    width: min(560px, 46%);
+    height: 56px;
+    transform: translateX(-50%);
+    justify-content: center;
+    text-align: center;
     display: flex;
     align-items: center;
-    gap: 18px;
-    margin-top: -2px;
+    gap: 0;
+    margin-top: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, transparent 0, rgba(19, 98, 210, 0.22) 12%, rgba(0, 132, 255, 0.38) 50%, rgba(19, 98, 210, 0.22) 88%, transparent 100%);
+    clip-path: polygon(12% 0, 88% 0, 96% 48%, 88% 100%, 12% 100%, 4% 48%);
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 6px 42px auto;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, rgba(30, 168, 255, 0.9), transparent);
+      box-shadow: 0 0 16px rgba(0, 140, 255, 0.88);
+    }
+
+    &::after {
+      top: auto;
+      bottom: 0;
+      inset-inline: 88px;
+      height: 2px;
+      opacity: 0.78;
+    }
+
     .drill-title {
       font-family: $font-cn;
-      font-size: clamp(20px, 2.6em, 44px);
+      font-size: 32px;
       font-weight: 900;
-      letter-spacing: 4px;
+      letter-spacing: 6px;
       margin: 0;
       color: #ffffff;
       text-shadow:
         0 0 10px rgba(0, 153, 255, 0.95),
-        0 0 24px rgba(0, 153, 255, 0.6);
+        0 0 24px rgba(0, 153, 255, 0.72),
+        0 2px 0 rgba(8, 35, 78, 0.8);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1380,6 +1427,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .header-meta {
     grid-column: 2;
     justify-self: end;
+    position: relative;
+    z-index: 2;
     display: flex; align-items: center; gap: 10px;
     font-family: $font-mono;
     .meta-label { color: $text-dim; font-size: 0.88em; letter-spacing: 2px; font-weight: 700; }
@@ -1696,6 +1745,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   flex: 1;
   min-height: 0;
   padding: 0;
+}
+
+.screen-root:fullscreen .screen-main,
+.screen-content-fallback-fullscreen .screen-main {
+  grid-template-columns: minmax(220px, 17vw) minmax(0, 1.18fr) minmax(280px, 24vw);
+  gap: 16px;
 }
 
 .panel {
