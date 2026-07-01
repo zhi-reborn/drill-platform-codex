@@ -31,7 +31,30 @@
     <div v-else-if="currentDrill" class="screen-content" :class="{ 'screen-content-fallback-fullscreen': fallbackFullscreen }">
       <!-- ========== HEADER ========== -->
       <header class="screen-header">
-        <div class="header-deco header-deco-left" />
+        <svg class="header-frame" viewBox="0 0 1200 74" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#148cff" stop-opacity="0" />
+              <stop offset="12%" stop-color="#11bfff" stop-opacity="0.72" />
+              <stop offset="34%" stop-color="#13d8ff" stop-opacity="1" />
+              <stop offset="50%" stop-color="#75eaff" stop-opacity="0.92" />
+              <stop offset="66%" stop-color="#13d8ff" stop-opacity="1" />
+              <stop offset="88%" stop-color="#11bfff" stop-opacity="0.72" />
+              <stop offset="100%" stop-color="#148cff" stop-opacity="0" />
+            </linearGradient>
+            <filter id="header-line-glow" x="-8%" y="-130%" width="116%" height="360%">
+              <feGaussianBlur stdDeviation="3.4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <path class="header-frame-line header-frame-line-shadow" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
+          <path class="header-frame-line" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
+          <path class="header-frame-line header-frame-line-inner" d="M312 35 L356 66 H844 L888 35" />
+          <path class="header-frame-cap" d="M392 66 H808" />
+        </svg>
         <div class="header-title-block">
           <h1 class="drill-title">应急指挥中心</h1>
         </div>
@@ -40,7 +63,6 @@
         <button class="btn-icon" :class="{ active: isFullscreenLike }" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
         </button>
-        <div class="header-deco header-deco-right" />
         <div class="header-pulse-line" />
       </header>
 
@@ -1323,95 +1345,137 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 // ===== HEADER =====
 .screen-header {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(130px, max-content) auto;
+  display: flex;
   align-items: center;
-  column-gap: 14px;
-  height: 64px;
+  justify-content: center;
+  height: 74px;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(51, 150, 255, 0.28), transparent 34%),
-    linear-gradient(90deg, rgba(16, 64, 136, 0.42), rgba(6, 23, 52, 0.18) 32%, rgba(6, 23, 52, 0.18) 68%, rgba(16, 64, 136, 0.42));
+    radial-gradient(ellipse at 50% 12%, rgba(37, 132, 255, 0.34), transparent 32%),
+    linear-gradient(180deg, rgba(21, 66, 127, 0.34), rgba(6, 24, 57, 0.12) 68%, rgba(0, 212, 255, 0.04)),
+    linear-gradient(90deg, rgba(13, 58, 124, 0.28), rgba(4, 18, 44, 0.08) 36%, rgba(4, 18, 44, 0.08) 64%, rgba(13, 58, 124, 0.28));
   border: 0;
-  padding: 0 34px 0 24px;
+  padding: 0 64px;
   box-shadow:
     inset 0 1px 0 rgba(115, 191, 255, 0.36),
-    inset 0 -1px 0 rgba(44, 144, 255, 0.52),
+    inset 0 -1px 0 rgba(44, 144, 255, 0.38),
     0 8px 28px rgba(0, 56, 120, 0.18);
+  overflow: hidden;
 
-  &::before, &::after {
+  &::before {
     content: '';
     position: absolute;
-    top: 12px;
-    width: calc(50% - 292px);
-    min-width: 110px;
-    height: 16px;
-    border-top: 2px solid rgba(36, 148, 255, 0.72);
-    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    inset: 2px 0 auto;
+    height: 54px;
     background:
-      linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+      radial-gradient(ellipse at 50% 18%, rgba(0, 136, 255, 0.3), transparent 38%),
+      linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.08) 24%, rgba(45, 130, 255, 0.18) 50%, rgba(0, 212, 255, 0.08) 76%, transparent);
+    pointer-events: none;
   }
-  &::before {
-    left: 30px;
-    clip-path: polygon(0 0, calc(100% - 92px) 0, calc(100% - 74px) 100%, 100% 100%, 100% 100%, 0 100%);
-  }
+
   &::after {
+    content: '';
+    position: absolute;
+    left: 30px;
     right: 30px;
-    transform: scaleX(-1);
-    clip-path: polygon(0 0, calc(100% - 92px) 0, calc(100% - 74px) 100%, 100% 100%, 100% 100%, 0 100%);
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.18) 16%, rgba(78, 166, 255, 0.5) 50%, rgba(0, 212, 255, 0.18) 84%, transparent);
+    pointer-events: none;
+  }
+
+  .header-frame {
+    position: absolute;
+    inset: 0 24px;
+    z-index: 1;
+    width: calc(100% - 48px);
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .header-frame-line,
+  .header-frame-cap {
+    fill: none;
+    stroke: url(#header-line-grad);
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+  }
+
+  .header-frame-line {
+    stroke-width: 3;
+  }
+
+  .header-frame-line-shadow {
+    stroke-width: 10;
+    opacity: 0.16;
+  }
+
+  .header-frame-line-inner {
+    stroke-width: 2;
+    opacity: 0.72;
+  }
+
+  .header-frame-cap {
+    stroke-width: 2;
+    opacity: 0.8;
   }
 
   .header-title-block {
     position: absolute;
     left: 50%;
     top: 0;
-    z-index: 1;
-    width: min(560px, 46%);
-    height: 56px;
+    z-index: 2;
+    width: min(430px, 42vw);
+    min-width: 300px;
+    height: 52px;
     transform: translateX(-50%);
     justify-content: center;
     text-align: center;
     display: flex;
     align-items: center;
-    gap: 0;
-    margin-top: 0;
-    pointer-events: none;
+    pointer-events: auto;
     background:
-      linear-gradient(90deg, transparent 0, rgba(19, 98, 210, 0.22) 12%, rgba(0, 132, 255, 0.38) 50%, rgba(19, 98, 210, 0.22) 88%, transparent 100%);
-    clip-path: polygon(12% 0, 88% 0, 96% 48%, 88% 100%, 12% 100%, 4% 48%);
+      radial-gradient(ellipse at 50% 58%, rgba(0, 218, 255, 0.16), transparent 66%),
+      linear-gradient(90deg, transparent, rgba(0, 192, 255, 0.12) 22%, rgba(83, 215, 255, 0.22) 50%, rgba(0, 192, 255, 0.12) 78%, transparent);
+    border-top: 0;
+    border-bottom: 1px solid rgba(0, 214, 255, 0.36);
+    box-shadow:
+      0 0 28px rgba(0, 128, 255, 0.16),
+      inset 0 0 22px rgba(0, 114, 255, 0.12);
 
-    &::before,
     &::after {
       content: '';
       position: absolute;
-      inset: 6px 42px auto;
-      height: 3px;
-      background: linear-gradient(90deg, transparent, rgba(30, 168, 255, 0.9), transparent);
-      box-shadow: 0 0 16px rgba(0, 140, 255, 0.88);
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
     }
 
     &::after {
-      top: auto;
-      bottom: 0;
-      inset-inline: 88px;
+      bottom: -1px;
+      width: 44%;
       height: 2px;
-      opacity: 0.78;
+      background: linear-gradient(90deg, transparent, rgba(33, 229, 255, 0.42), rgba(117, 234, 255, 0.82), rgba(33, 229, 255, 0.42), transparent);
+      box-shadow:
+        0 0 10px rgba(0, 213, 255, 0.5),
+        0 0 14px rgba(29, 210, 255, 0.38);
     }
 
     .drill-title {
       font-family: $font-cn;
-      font-size: 32px;
+      font-size: clamp(38px, 3vw, 42px);
       font-weight: 900;
-      letter-spacing: 6px;
+      letter-spacing: 5px;
       margin: 0;
+      padding-left: 6px;
       color: #ffffff;
-      text-shadow:
-        0 0 10px rgba(0, 153, 255, 0.95),
-        0 0 24px rgba(0, 153, 255, 0.72),
-        0 2px 0 rgba(8, 35, 78, 0.8);
+      text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       line-height: 1;
+      pointer-events: auto;
     }
     .drill-title-en {
       display: block;
@@ -1425,8 +1489,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
   }
   .header-meta {
-    grid-column: 2;
-    justify-self: end;
+    margin-left: auto;
     position: relative;
     z-index: 2;
     display: flex; align-items: center; gap: 10px;
@@ -1442,8 +1505,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
   }
   .btn-icon {
-    grid-column: 3;
-    position: relative;
+    position: absolute;
+    right: 34px;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 2;
     background: transparent; border: 1px solid $line;
     color: $neon; width: 34px; height: 34px;
@@ -1452,11 +1517,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     transition: all 0.2s;
     &:hover,
     &.active { border-color: $neon; box-shadow: 0 0 10px $neon-soft; background: rgba(0, 212, 255, 0.1); }
-  }
-  .header-deco {
-    position: absolute; top: 0; width: 8px; height: 100%;
-    &-left { left: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite; }
-    &-right { right: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite 1.5s; }
   }
   .header-pulse-line {
     position: absolute;
@@ -2360,15 +2420,24 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 
   .screen-header {
-    height: 44px;
+    height: 50px;
     padding: 0 12px;
 
+    .header-frame {
+      inset: 0 14px;
+      width: calc(100% - 28px);
+    }
+
     .header-title-block {
-      gap: 8px;
+      top: 3px;
+      width: min(320px, 56vw);
+      min-width: 220px;
+      height: 36px;
 
       .drill-title {
-        font-size: 18px;
+        font-size: 24px;
         letter-spacing: 2px;
+        padding-left: 2px;
       }
 
       .drill-title-en {
@@ -2393,6 +2462,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
 
     .btn-icon {
+      right: 18px;
       width: 26px; height: 26px;
     }
   }
@@ -2620,7 +2690,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .bg-particle { animation: none !important; opacity: 0.3; }
   .panel-scan-line { animation: none !important; display: none; }
   .header-pulse-line { animation: none !important; display: none; }
-  .header-deco-left, .header-deco-right { animation: none !important; }
   .kpi-card::before, .kpi-card::after { animation: none !important; }
   .status-dot { animation: none !important; }
   .rt-dot { animation: none !important; }

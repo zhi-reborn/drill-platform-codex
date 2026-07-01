@@ -199,9 +199,6 @@
         <el-form-item label="姓名" prop="real_name">
           <el-input v-model="editForm.real_name" placeholder="请输入真实姓名" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="editForm.email" placeholder="请输入邮箱" />
-        </el-form-item>
         <el-form-item label="角色" prop="role">
           <el-select v-model="editForm.role" placeholder="请选择角色" style="width: 100%">
             <el-option label="系统管理员" value="admin" />
@@ -319,7 +316,6 @@ const columns: TableColumn[] = [
 const createForm = ref({
   username: '',
   name: '',
-  email: '',
   role: 'executor',
   phone: '',
   department: '',
@@ -356,10 +352,6 @@ const editFormRules: FormRules = {
   real_name: [
     { required: true, message: '请输入姓名', trigger: 'blur' },
     { min: 2, message: '姓名至少 2 个字符', trigger: 'blur' },
-  ],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
@@ -469,7 +461,6 @@ function resetForm() {
   createForm.value = {
     username: '',
     name: '',
-    email: '',
     role: 'executor',
     phone: '',
     department: '',
@@ -500,7 +491,6 @@ async function handleUpdateUser() {
 
     await userApi.update(editingUserId.value, {
       real_name: editForm.value.real_name,
-      email: editForm.value.email,
       role: editForm.value.role as Role,
       phone: editForm.value.phone || undefined,
       department: editForm.value.department || undefined,
@@ -525,7 +515,6 @@ function resetEditForm() {
   editForm.value = {
     username: '',
     real_name: '',
-    email: '',
     role: '',
     phone: '',
     department: '',
