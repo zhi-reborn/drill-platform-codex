@@ -192,6 +192,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ScreenView.vue'),
     meta: { title: '监控大屏', requiresAuth: false, layout: 'blank' },
   },
+  {
+    path: '/screen3/:id(\\d+)',
+    name: 'Screen3',
+    component: () => import('@/views/ScreenView3.vue'),
+    meta: { title: '监控大屏3', requiresAuth: false, layout: 'blank' },
+  },
   // 重定向旧版 /screen/all 到首页
   {
     path: '/screen/all',

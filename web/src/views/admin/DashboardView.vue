@@ -107,6 +107,10 @@
                   <el-icon><DataBoard /></el-icon>
                   大屏2
                 </el-button>
+                <el-button type="warning" size="small" @click.stop="viewScreen3(drill.id)">
+                  <el-icon><DataBoard /></el-icon>
+                  大屏3
+                </el-button>
               </div>
             </el-card>
           </el-col>
@@ -242,6 +246,10 @@ function viewScreen(drillId: number) {
 
 function viewScreen2(drillId: number) {
   router.push(`/admin/screen/${drillId}`)
+}
+
+function viewScreen3(drillId: number) {
+  router.push(`/screen3/${drillId}`)
 }
 
 async function loadDashboard() {
