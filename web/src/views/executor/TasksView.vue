@@ -70,15 +70,19 @@
                   </div>
                 </div>
                 <div class="drill-actions">
-                  <el-button type="success" size="small" @click.stop="viewScreen(drill.id)">
+                  <el-button class="drill-action-button" type="success" size="small" @click.stop="viewScreen(drill.id)">
                     <el-icon><Monitor /></el-icon>
                     大屏
                   </el-button>
-                  <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                  <el-button class="drill-action-button" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
                     <el-icon><DataBoard /></el-icon>
                     大屏2
                   </el-button>
-                  <el-button type="primary" size="small" @click.stop.prevent="goToDrillTasks(drill.id)">
+                  <el-button class="drill-action-button drill-action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏3
+                  </el-button>
+                  <el-button class="drill-action-button" type="primary" size="small" @click.stop.prevent="goToDrillTasks(drill.id)">
                     <el-icon><ArrowRight /></el-icon>
                     查看任务
                   </el-button>
@@ -135,6 +139,10 @@
             <el-button type="warning" @click="viewScreen2(selectedDrillId)">
               <el-icon><DataBoard /></el-icon>
               大屏2
+            </el-button>
+            <el-button class="screen3-entry" type="primary" @click="viewScreen3(selectedDrillId)">
+              <el-icon><DataBoard /></el-icon>
+              大屏3
             </el-button>
           </div>
         </div>
@@ -814,6 +822,11 @@ function viewScreen2(drillId: number | null) {
   if (drillId) router.push(`/executor/screen/${drillId}`)
 }
 
+// 查看大屏3
+function viewScreen3(drillId: number | null) {
+  if (drillId) router.push(`/screen3/${drillId}`)
+}
+
 // 加载数据
 async function loadTasks(options: { silent?: boolean; lightweight?: boolean } = {}): Promise<void> {
   if (!options.silent) loading.value = true
@@ -1065,7 +1078,21 @@ onBeforeUnmount(() => {
   }
 
   .header-actions {
+    display: flex;
+    gap: $spacing-sm;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     margin-left: auto;
+
+    :deep(.el-button + .el-button) {
+      margin-left: 0;
+    }
+
+    .screen3-entry {
+      border-color: rgba(64, 169, 255, 0.64);
+      background: linear-gradient(135deg, $color-accent, $color-accent-light);
+      box-shadow: 0 8px 18px rgba(24, 144, 255, 0.22);
+    }
   }
 
   .filter-group {
@@ -1185,11 +1212,21 @@ onBeforeUnmount(() => {
       gap: $spacing-sm;
       margin-left: 0;
       flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
 
       :deep(.el-button) {
         min-width: 88px;
         border: 0;
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+      }
+
+      :deep(.el-button + .el-button) {
+        margin-left: 0;
+      }
+
+      .screen3-entry {
+        background: linear-gradient(135deg, $color-accent, $color-accent-light);
       }
     }
 
@@ -1362,8 +1399,31 @@ onBeforeUnmount(() => {
 
       .drill-actions {
         display: flex;
-        gap: $spacing-xs;
+        gap: 8px;
         justify-content: flex-end;
+        flex-wrap: wrap;
+
+        :deep(.el-button + .el-button) {
+          margin-left: 0;
+        }
+
+        .drill-action-button {
+          min-width: 76px;
+          border-radius: 6px;
+          font-weight: $font-weight-medium;
+        }
+
+        .drill-action-screen3 {
+          border-color: rgba(64, 169, 255, 0.58);
+          background: rgba(24, 144, 255, 0.12);
+          color: $color-accent;
+
+          &:hover,
+          &:focus {
+            border-color: rgba(64, 169, 255, 0.86);
+            background: rgba(24, 144, 255, 0.2);
+          }
+        }
       }
     }
 

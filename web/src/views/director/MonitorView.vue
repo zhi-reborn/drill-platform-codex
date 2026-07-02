@@ -18,6 +18,10 @@
               <el-icon><DataBoard /></el-icon>
               大屏2
             </el-button>
+            <el-button class="screen-entry-button screen-entry-cyber" @click="viewScreen3">
+              <el-icon><DataBoard /></el-icon>
+              大屏3
+            </el-button>
             <ActionConfirm
               v-if="canStart"
               title="开始演练"
@@ -631,6 +635,11 @@ function viewScreen() {
 function viewScreen2() {
   if (!isValidDrill.value) return
   router.push(`/director/screen/${drillId.value}`)
+}
+
+function viewScreen3() {
+  if (!isValidDrill.value) return
+  router.push(`/screen3/${drillId.value}`)
 }
 
 const sortedSteps = computed(() => {

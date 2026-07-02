@@ -53,21 +53,27 @@
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="viewMonitor(row)">
-              详情
-            </el-button>
-            <el-button text type="success" size="small" @click="viewScreen(row)">
-              大屏
-            </el-button>
-            <el-button text type="warning" size="small" @click="viewScreen2(row)">
-              <el-icon><DataBoard /></el-icon>
-              大屏2
-            </el-button>
-            <el-button text type="danger" size="small" @click="handleDelete(row)">
-              删除
-            </el-button>
+            <div class="row-actions">
+              <el-button class="row-action" text type="primary" size="small" @click="viewMonitor(row)">
+                详情
+              </el-button>
+              <el-button class="row-action" text type="success" size="small" @click="viewScreen(row)">
+                大屏
+              </el-button>
+              <el-button class="row-action" text type="warning" size="small" @click="viewScreen2(row)">
+                <el-icon><DataBoard /></el-icon>
+                大屏2
+              </el-button>
+              <el-button class="row-action row-action-screen3" text type="primary" size="small" @click="viewScreen3(row)">
+                <el-icon><DataBoard /></el-icon>
+                大屏3
+              </el-button>
+              <el-button class="row-action" text type="danger" size="small" @click="handleDelete(row)">
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -187,6 +193,10 @@ function viewScreen2(row: DrillInstance) {
   router.push(`/director/screen/${row.id}`)
 }
 
+function viewScreen3(row: DrillInstance) {
+  router.push(`/screen3/${row.id}`)
+}
+
 function handleDelete(row: DrillInstance) {
   deleteTarget.value = row
   deleteVisible.value = true
@@ -247,6 +257,33 @@ onMounted(() => {
       display: flex;
       justify-content: flex-end;
       margin-top: $spacing-base;
+    }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      white-space: nowrap;
+
+      :deep(.el-button + .el-button) {
+        margin-left: 0;
+      }
+
+      .row-action {
+        height: 28px;
+        padding: 0 2px;
+        font-weight: $font-weight-medium;
+      }
+
+      .row-action-screen3 {
+        color: $color-accent;
+
+        &:hover,
+        &:focus {
+          color: $color-accent-light;
+        }
+      }
     }
   }
 }

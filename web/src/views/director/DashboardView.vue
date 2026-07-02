@@ -62,16 +62,20 @@
                 <span class="value">{{ getCurrentStepName(drill.id) }}</span>
               </div>
               <div class="drill-actions">
-                <el-button type="primary" size="small" @click="viewDrill(drill.id)">
+                <el-button class="drill-action-button action-detail" type="primary" size="small" @click="viewDrill(drill.id)">
                   详情
                 </el-button>
-                <el-button type="success" size="small" @click="viewScreen(drill.id)">
+                <el-button class="drill-action-button action-screen" type="success" size="small" @click="viewScreen(drill.id)">
                   <el-icon><Monitor /></el-icon>
                   大屏
                 </el-button>
-                <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                <el-button class="drill-action-button action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
                   <el-icon><DataBoard /></el-icon>
                   大屏2
+                </el-button>
+                <el-button class="drill-action-button action-screen3" type="warning" size="small" @click.stop="viewScreen3(drill.id)">
+                  <el-icon><DataBoard /></el-icon>
+                  大屏3
                 </el-button>
               </div>
             </el-card>
@@ -258,6 +262,10 @@ function viewScreen2(drillId: number) {
   router.push(`/director/screen/${drillId}`)
 }
 
+function viewScreen3(drillId: number) {
+  router.push(`/screen3/${drillId}`)
+}
+
 onMounted(() => {
   loadDashboard()
 })
@@ -350,7 +358,38 @@ onMounted(() => {
         }
 
         .drill-actions {
-          text-align: right;
+          display: flex;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          :deep(.el-button + .el-button) {
+            margin-left: 0;
+          }
+
+          .drill-action-button {
+            min-width: 64px;
+            border-radius: 6px;
+            font-weight: $font-weight-medium;
+          }
+
+          .action-screen,
+          .action-screen2,
+          .action-screen3 {
+            padding-inline: 10px;
+          }
+
+          .action-screen3 {
+            border-color: rgba(64, 158, 255, 0.45);
+            background: rgba(64, 158, 255, 0.08);
+            color: $color-accent;
+
+            &:hover,
+            &:focus {
+              border-color: rgba(64, 158, 255, 0.72);
+              background: rgba(64, 158, 255, 0.16);
+            }
+          }
         }
       }
 
