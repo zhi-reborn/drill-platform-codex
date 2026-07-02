@@ -266,6 +266,48 @@
 
       <!-- Footer decorations -->
       <footer class="screen-footer" />
+
+      <!-- 任务完成弹窗 -->
+      <Transition name="cyber-modal">
+        <div v-if="completionModal.visible" class="completion-overlay" @click="dismissCompletionModal">
+          <div class="completion-seal" @click.stop>
+            <span class="seal-corner tl" />
+            <span class="seal-corner tr" />
+            <span class="seal-corner bl" />
+            <span class="seal-corner br" />
+            <div class="seal-scan" />
+            <div class="seal-grid" />
+
+            <div class="seal-sigil">
+              <span class="sigil-ring sigil-ring-1" />
+              <span class="sigil-ring sigil-ring-2" />
+              <span class="sigil-ring sigil-ring-3" />
+              <svg class="sigil-hex" viewBox="0 0 100 100" aria-hidden="true">
+                <polygon points="50,6 90,29 90,71 50,94 10,71 10,29" />
+              </svg>
+              <svg class="sigil-check" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M13 25 L20 32 L35 15" />
+              </svg>
+            </div>
+
+            <div class="seal-body">
+              <div class="seal-title">任务完成</div>
+              <div class="seal-step">{{ completionModal.stepName }}</div>
+              <div v-if="completionModal.phaseName" class="seal-path">
+                <span class="path-phase">{{ completionModal.phaseName }}</span>
+                <template v-if="completionModal.directParent && completionModal.directParent !== '--'">
+                  <span class="path-sep">›</span>
+                  <span class="path-task">{{ completionModal.directParent }}</span>
+                </template>
+              </div>
+            </div>
+
+            <div class="seal-progress">
+              <div :key="completionModal.key" class="seal-progress-fill" />
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -319,6 +361,16 @@ const recentLogs = ref<StepInstanceLog[]>([])
 const warnListRef = ref<HTMLElement | null>(null)
 const alertCardRefs = ref<HTMLElement[]>([])
 const moreTipRef = ref<HTMLElement | null>(null)
+
+// 任务完成弹窗
+const completionModal = ref({
+  visible: false,
+  key: 0,
+  stepName: '',
+  phaseName: '',
+  directParent: '',
+  timer: null as ReturnType<typeof setTimeout> | null,
+})
 
 // === 树形步骤辅助 ===
 // 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
@@ -398,6 +450,32 @@ function findDirectParent(stepId: number): string {
   if (!step?.parent_step_id) return '--'
   const parent = stepMap.get(step.parent_step_id)
   return parent?.name || '--'
+}
+
+// 任务完成弹窗：展示步骤名称、阶段路径，3.5s 后自动关闭
+function showCompletionModal(stepId: number) {
+  const step = drillSteps.value.find(s => s.id === stepId)
+  if (!step) return
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+  }
+  completionModal.value.key += 1
+  completionModal.value.stepName = step.name
+  completionModal.value.phaseName = findParentPhase(stepId)
+  completionModal.value.directParent = findDirectParent(stepId)
+  completionModal.value.visible = true
+  completionModal.value.timer = setTimeout(() => {
+    completionModal.value.visible = false
+    completionModal.value.timer = null
+  }, 3500)
+}
+
+function dismissCompletionModal() {
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+    completionModal.value.timer = null
+  }
+  completionModal.value.visible = false
 }
 
 // === KPI 计算 ===
@@ -1006,6 +1084,11 @@ function applyStepEvent(eventType: string, payload: any) {
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
 
+  // 任务完成弹窗（step_complete 为归一化后的事件名）
+  if (eventType === 'step_complete') {
+    showCompletionModal(stepId)
+  }
+
   // 重新计算 KPI
   recomputeKpis()
 }
@@ -1144,6 +1227,10 @@ onBeforeUnmount(() => {
   warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
   if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+    completionModal.value.timer = null
+  }
   stopFallbackPolling()
   if (ws) { ws.close(); ws = null }
 })
@@ -2785,5 +2872,330 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
+  .sigil-ring { animation: none !important; }
+  .seal-scan { animation: none !important; display: none; }
+  .sigil-check path { animation: none !important; stroke-dashoffset: 0 !important; }
+  .sigil-hex polygon { animation: none !important; }
+}
+
+// ===== 任务完成弹窗 =====
+.completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 80, 60, 0.12), transparent 52%),
+    rgba(2, 6, 16, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+.completion-seal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-width: 340px;
+  max-width: 480px;
+  padding: 36px 52px 30px;
+  border: 1px solid rgba(0, 255, 156, 0.42);
+  border-radius: 4px;
+  background:
+    linear-gradient(135deg, rgba(0, 40, 28, 0.72), rgba(4, 14, 34, 0.92)),
+    radial-gradient(circle at 50% 0%, rgba(0, 255, 156, 0.1), transparent 60%);
+  box-shadow:
+    0 0 0 1px rgba(0, 212, 255, 0.12),
+    0 0 36px rgba(0, 255, 156, 0.18),
+    0 0 72px rgba(0, 212, 255, 0.1),
+    inset 0 0 32px rgba(0, 255, 156, 0.06);
+  cursor: default;
+  overflow: hidden;
+}
+
+// 四角 HUD 框
+.seal-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid $neon;
+  pointer-events: none;
+  opacity: 0;
+  animation: corner-snap 0.4s 0.15s ease-out forwards;
+
+  &.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  &.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+  &.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+  &.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+}
+
+@keyframes corner-snap {
+  from { opacity: 0; transform: scale(1.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+// 扫描线
+.seal-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 156, 0.7), transparent);
+  box-shadow: 0 0 12px rgba(0, 255, 156, 0.5);
+  animation: seal-scan-sweep 2.2s 0.3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes seal-scan-sweep {
+  0% { top: 0; opacity: 0; }
+  8% { opacity: 1; }
+  50% { top: calc(100% - 3px); opacity: 0.4; }
+  58% { opacity: 0; }
+  100% { top: 0; opacity: 0; }
+}
+
+// 网格纹理
+.seal-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 156, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 156, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
+  pointer-events: none;
+}
+
+// 成功徽记：六边形盾牌 + 雷达环 + 自绘对勾
+.seal-sigil {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+}
+
+.sigil-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  border: 1.5px solid rgba(0, 255, 156, 0.55);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  opacity: 0;
+  animation: sigil-ring-expand 2s ease-out infinite;
+}
+
+.sigil-ring-1 { animation-delay: 0s; }
+.sigil-ring-2 { animation-delay: 0.66s; }
+.sigil-ring-3 { animation-delay: 1.32s; }
+
+@keyframes sigil-ring-expand {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.9; border-color: rgba(0, 255, 156, 0.7); }
+  100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; border-color: rgba(0, 212, 255, 0.1); }
+}
+
+.sigil-hex {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 0 14px rgba(0, 255, 156, 0.4));
+  z-index: 2;
+
+  polygon {
+    fill: rgba(0, 255, 156, 0.1);
+    stroke: rgba(0, 255, 156, 0.65);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    animation: sigil-hex-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes sigil-hex-glow {
+  0%, 100% { stroke: rgba(0, 255, 156, 0.55); fill: rgba(0, 255, 156, 0.08); }
+  50% { stroke: rgba(0, 255, 156, 0.85); fill: rgba(0, 255, 156, 0.16); }
+}
+
+.sigil-check {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  z-index: 3;
+
+  path {
+    fill: none;
+    stroke: $ok;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 42;
+    stroke-dashoffset: 42;
+    animation: sigil-check-draw 0.55s 0.25s ease-out forwards;
+    filter: drop-shadow(0 0 6px rgba(0, 255, 156, 0.8));
+  }
+}
+
+@keyframes sigil-check-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+// 文本区
+.seal-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.seal-title {
+  font-family: $font-cn;
+  font-size: clamp(20px, 1.6em, 26px);
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: #ffffff;
+  text-shadow:
+    0 0 12px rgba(0, 255, 156, 0.7),
+    0 0 24px rgba(0, 212, 255, 0.3);
+  padding-left: 6px;
+}
+
+.seal-step {
+  font-family: $font-cn;
+  font-size: clamp(16px, 1.25em, 21px);
+  font-weight: 800;
+  color: #2cf8d8;
+  text-shadow: 0 0 10px rgba(44, 248, 216, 0.5);
+  text-align: center;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seal-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-family: $font-mono;
+  font-size: clamp(11px, 0.9em, 14px);
+  color: rgba(160, 205, 245, 0.7);
+
+  .path-phase {
+    color: rgba(0, 212, 255, 0.85);
+    font-weight: 700;
+  }
+  .path-sep {
+    color: rgba(120, 160, 200, 0.5);
+  }
+  .path-task {
+    color: rgba(200, 220, 245, 0.7);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// 自动关闭进度条
+.seal-progress {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(0, 255, 156, 0.1);
+  overflow: hidden;
+}
+
+.seal-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, $ok, $neon);
+  box-shadow: 0 0 8px rgba(0, 255, 156, 0.6);
+  animation: seal-progress-drain 3.5s linear forwards;
+}
+
+@keyframes seal-progress-drain {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+// Vue Transition: overlay 淡入淡出 + seal 弹性缩放
+.cyber-modal-enter-active {
+  transition: opacity 0.35s ease-out;
+
+  .completion-seal {
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease-out;
+    transition-delay: 0.05s;
+  }
+}
+
+.cyber-modal-leave-active {
+  transition: opacity 0.25s ease-in;
+
+  .completion-seal {
+    transition: transform 0.25s ease-in, opacity 0.25s ease-in;
+  }
+}
+
+.cyber-modal-enter-from {
+  opacity: 0;
+
+  .completion-seal {
+    opacity: 0;
+    transform: scale(0.82) translateY(12px);
+  }
+}
+
+.cyber-modal-leave-to {
+  opacity: 0;
+
+  .completion-seal {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@media (max-width: 540px) {
+  .completion-seal {
+    min-width: unset;
+    width: calc(100vw - 48px);
+    max-width: unset;
+    padding: 28px 28px 24px;
+    gap: 14px;
+  }
+
+  .seal-sigil {
+    width: 72px;
+    height: 72px;
+  }
+
+  .sigil-hex {
+    width: 54px;
+    height: 54px;
+  }
+
+  .sigil-check {
+    width: 32px;
+    height: 32px;
+  }
+
+  .seal-step {
+    max-width: 100%;
+  }
 }
 </style>
