@@ -195,9 +195,9 @@
               :phase-node-statuses="ringPhaseNodeStatuses"
               :phase-statuses="ringPhaseStatuses"
               :current-index="displayPhaseIndex"
-              :progress="progressPercent"
-              :center-numerator="completedCount"
-              :center-denominator="totalCount"
+              :progress="displayPhaseProgress"
+              :center-numerator="displayPhaseStepNum"
+              :center-denominator="displayPhaseStepDen"
               :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
               :instance-name="currentDrill.name"
               :size="ringSize"
@@ -658,6 +658,16 @@ const currentPhaseProgress = computed(() => {
   if (!s) return { num: 0, den: 0 }
   return { num: s.completedSteps, den: s.totalSteps }
 })
+
+// 当前展示阶段的步骤进度（与左侧阶段卡片"步骤"口径一致，用于中心环 hub）
+// 注意：与全局 progressPercent 区分——此处仅统计当前展示阶段的叶子步骤
+const displayPhaseProgress = computed(() => {
+  const s = stages.value[displayPhaseIndex.value]
+  if (!s || s.totalSteps === 0) return 0
+  return Math.round((s.completedSteps / s.totalSteps) * 100)
+})
+const displayPhaseStepNum = computed(() => stages.value[displayPhaseIndex.value]?.completedSteps ?? 0)
+const displayPhaseStepDen = computed(() => stages.value[displayPhaseIndex.value]?.totalSteps ?? 0)
 
 function selectPhase(index: number) {
   if (index < 0 || index >= stages.value.length) return
@@ -2248,10 +2258,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       background: linear-gradient(90deg, $neon, rgba(0, 212, 255, 0.15));
     }
 
-    // 运行中卡片微光
+    // 运行中卡片微光（边框色与左侧 stage-running 阶段卡片统一为同一橙色系）
     &.alert-warn {
-      border-color: rgba(255, 182, 72, 0.34);
-      box-shadow: inset 0 0 22px rgba(255, 140, 40, 0.08);
+      border-color: #ff9a2f;
+      box-shadow: inset 0 0 22px rgba(255, 122, 0, 0.12);
     }
     &.alert-danger {
       border-color: rgba(255, 77, 106, 0.42);

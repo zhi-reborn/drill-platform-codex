@@ -900,10 +900,10 @@ function shorten(name: string): string {
   justify-content: center;
   width: 88px;
   height: 88px;
-  padding-top: 22px;
-  padding-bottom: 18px;
+  padding-top: 24px;
+  padding-bottom: 16px;
   background:
-    radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.18), transparent 44%),
+    radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.2), transparent 46%),
     radial-gradient(circle at center, rgba(18, 92, 210, 0.3) 0%, transparent 72%),
     linear-gradient(145deg, rgba(8, 30, 60, 0.96), rgba(5, 15, 38, 0.86));
   border: 1px solid rgba(45, 228, 255, 0.52);
@@ -940,7 +940,7 @@ function shorten(name: string): string {
   position: relative;
   z-index: 1;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
-  font-size: 36px;
+  font-size: 38px;
   font-weight: 900;
   color: #2de4ff;
   line-height: 1;
@@ -957,8 +957,8 @@ function shorten(name: string): string {
   z-index: 1;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   align-self: baseline;
-  margin-left: 1px;
-  font-size: 18px;
+  margin-left: 2px;
+  font-size: 19px;
   font-weight: 900;
   color: rgba(142, 237, 255, 0.84);
   line-height: 1;
@@ -1067,7 +1067,7 @@ function shorten(name: string): string {
       0 0 40px rgba(73, 255, 166, 0.55);
     animation: none;
   }
-  
+
   .hub-ring-1 {
     background:
       linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
@@ -1360,8 +1360,8 @@ function shorten(name: string): string {
   .hub-core {
     width: 72px;
     height: 72px;
-    padding-top: 18px;
-    padding-bottom: 14px;
+    padding-top: 19px;
+    padding-bottom: 13px;
   }
 
   .hub-num {
