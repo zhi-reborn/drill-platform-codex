@@ -298,6 +298,62 @@ func TestUpdateStepInfoSubmitsCommandWithoutInvalidatingStepCache(t *testing.T) 
 	}
 }
 
+func TestAssignStepByInstanceStepIDSubmitsAssignCommand(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupStepTargetTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	if err := db.Table("drill_instance").Create(map[string]interface{}{
+		"id":          2,
+		"template_id": 3,
+		"name":        "分配演练",
+		"status":      "running",
+	}).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+	if err := db.Table("drill_instance_step").Create(map[string]interface{}{
+		"id":                12,
+		"drill_instance_id": 2,
+		"template_step_id":  252,
+		"name":              "操作1",
+		"seq":               1,
+		"status":            "running",
+		"assignee_ids":      "[]",
+	}).Error; err != nil {
+		t.Fatalf("create instance step: %v", err)
+	}
+
+	commands := &fakeDrillCommandService{}
+	handler := NewHandlerWithCommands(nil, nil, commands)
+
+	router := gin.New()
+	router.POST("/drills/:id/steps/assign", func(c *gin.Context) {
+		c.Set(middleware.CtxUserIDInt, uint64(42))
+		handler.AssignStep(c)
+	})
+	body := bytes.NewBufferString(`{"step_id":12,"user_ids":[7]}`)
+	req := httptest.NewRequest(http.MethodPost, "/drills/2/steps/assign", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "assign-instance-key")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	assertDrillCommandSubmitted(t, resp, commands, drillservice.SubmitCommandRequest{
+		CommandType:     "assign_step",
+		DrillInstanceID: 2,
+		StepInstanceID:  uint64Ptr(12),
+		OperatorID:      42,
+		IdempotencyKey:  "assign-instance-key",
+		Payload: map[string]interface{}{
+			"step_id":      float64(12),
+			"assignee_ids": []interface{}{float64(7)},
+		},
+	})
+}
+
 func TestResolveStepOperationTargetBackfillsMissingTemplateID(t *testing.T) {
 	db := setupStepTargetTestDB(t)
 	origDB := repository.DB
@@ -512,7 +568,7 @@ func TestCommandDrillStepMutationsSubmitDurableCommands(t *testing.T) {
 		{name: "skip", commandType: "skip_step", handler: func(h *Handler) gin.HandlerFunc { return h.SkipStep }, body: `{"step_id":601,"remark":"skip it"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "skip it"}},
 		{name: "force_complete", commandType: "force_complete_step", handler: func(h *Handler) gin.HandlerFunc { return h.ForceCompleteStep }, body: `{"step_id":601,"remark":"force"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "force"}},
 		{name: "resume_task", commandType: "resume_task", handler: func(h *Handler) gin.HandlerFunc { return h.ResumeTask }, body: `{"step_id":601,"remark":"retry"}`, payload: map[string]interface{}{"step_id": float64(601), "remark": "retry"}},
-		{name: "assign", commandType: "assign_step", handler: func(h *Handler) gin.HandlerFunc { return h.AssignStep }, body: `{"step_id":601,"user_ids":[11,12]}`, payload: map[string]interface{}{"step_id": float64(601), "user_ids": []interface{}{float64(11), float64(12)}}},
+		{name: "assign", commandType: "assign_step", handler: func(h *Handler) gin.HandlerFunc { return h.AssignStep }, body: `{"step_id":601,"user_ids":[11,12]}`, payload: map[string]interface{}{"step_id": float64(601), "assignee_ids": []interface{}{float64(11), float64(12)}}},
 		{name: "update_info", commandType: "update_step_info", handler: func(h *Handler) gin.HandlerFunc { return h.UpdateStepInfo }, body: `{"step_id":601,"attributes":{"operator":"new"},"remark":"updated"}`, payload: map[string]interface{}{"step_id": float64(601), "attributes": map[string]interface{}{"operator": "new"}, "remark": "updated"}},
 	}
 
@@ -605,7 +661,7 @@ type writeDetectingLogger struct {
 	writes []string
 }
 
-func (l *writeDetectingLogger) LogMode(logger.LogLevel) logger.Interface { return l }
+func (l *writeDetectingLogger) LogMode(logger.LogLevel) logger.Interface      { return l }
 func (l *writeDetectingLogger) Info(context.Context, string, ...interface{})  {}
 func (l *writeDetectingLogger) Warn(context.Context, string, ...interface{})  {}
 func (l *writeDetectingLogger) Error(context.Context, string, ...interface{}) {}

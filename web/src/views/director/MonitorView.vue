@@ -3,66 +3,87 @@
     <div v-if="instance" class="page-main">
       <!-- 顶部：演练信息 + 控制 -->
       <el-card class="header-card">
+        <div class="header-grid" />
         <div class="header-content">
-          <div class="header-left">
+          <div class="title-row">
             <h2 class="drill-name">{{ instance.name }}</h2>
             <DrillStatusBadge :status="instance.status" type="drill" class="status-badge" />
           </div>
-          <div class="header-right">
-            <div class="progress-wrap">
-              <span class="progress-label">进度 {{ progressPercentage }}%</span>
-              <el-progress
-                :percentage="progressPercentage"
-                :stroke-width="8"
-                :status="instance.status === 'completed' ? 'success' : undefined"
-              />
+          <div class="control-buttons">
+            <el-button class="screen-entry-button screen-entry-primary" @click="viewScreen">
+              <el-icon><DataBoard /></el-icon>
+              大屏
+            </el-button>
+            <el-button class="screen-entry-button screen-entry-cyber" @click="viewScreen2">
+              <el-icon><DataBoard /></el-icon>
+              大屏2
+            </el-button>
+            <ActionConfirm
+              v-if="canStart"
+              title="开始演练"
+              message="确定要开始当前演练吗？"
+              type="success"
+              @confirm="handleStart"
+            >
+              <el-icon><VideoPlay /></el-icon>
+              开始
+            </ActionConfirm>
+            <ActionConfirm
+              v-if="canPause"
+              title="暂停演练"
+              message="确定要暂停当前演练吗？"
+              type="warning"
+              @confirm="handlePause"
+            >
+              <el-icon><VideoPause /></el-icon>
+              暂停
+            </ActionConfirm>
+            <ActionConfirm
+              v-if="canResume"
+              title="继续演练"
+              message="确定要继续执行演练吗？"
+              type="primary"
+              @confirm="handleResume"
+            >
+              <el-icon><VideoPlay /></el-icon>
+              继续
+            </ActionConfirm>
+            <ActionConfirm
+              v-if="canTerminate"
+              title="终止演练"
+              message="确定要终止当前演练吗？此操作不可恢复！"
+              danger
+              @confirm="handleTerminate"
+            >
+              <el-icon><VideoCamera /></el-icon>
+              终止
+            </ActionConfirm>
+            <el-button v-if="isFinished" @click="router.back()">
+              <el-icon><Back /></el-icon>
+              返回
+            </el-button>
+          </div>
+          <div class="metric-strip">
+            <div class="metric-item">
+              <span class="metric-label">当前步骤</span>
+              <strong>{{ runningSteps.length }}</strong>
             </div>
-            <div class="control-buttons">
-              <ActionConfirm
-                v-if="canStart"
-                title="开始演练"
-                message="确定要开始当前演练吗？"
-                type="success"
-                @confirm="handleStart"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                开始
-              </ActionConfirm>
-              <ActionConfirm
-                v-if="canPause"
-                title="暂停演练"
-                message="确定要暂停当前演练吗？"
-                type="warning"
-                @confirm="handlePause"
-              >
-                <el-icon><VideoPause /></el-icon>
-                暂停
-              </ActionConfirm>
-              <ActionConfirm
-                v-if="canResume"
-                title="继续演练"
-                message="确定要继续执行演练吗？"
-                type="primary"
-                @confirm="handleResume"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                继续
-              </ActionConfirm>
-              <ActionConfirm
-                v-if="canTerminate"
-                title="终止演练"
-                message="确定要终止当前演练吗？此操作不可恢复！"
-                danger
-                @confirm="handleTerminate"
-              >
-                <el-icon><VideoCamera /></el-icon>
-                终止
-              </ActionConfirm>
-              <el-button v-if="isFinished" @click="router.back()">
-                <el-icon><Back /></el-icon>
-                返回
-              </el-button>
+            <div class="metric-item">
+              <span class="metric-label">异常</span>
+              <strong>{{ issueSteps.length }}</strong>
             </div>
+            <div class="metric-item">
+              <span class="metric-label">完成步骤</span>
+              <strong>{{ completedSteps }}/{{ totalSteps }}</strong>
+            </div>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-label">进度</div>
+            <el-progress
+              :percentage="progressPercentage"
+              :stroke-width="10"
+              :status="instance.status === 'completed' ? 'success' : undefined"
+            />
           </div>
         </div>
       </el-card>
@@ -138,32 +159,34 @@
             class="step-card"
             shadow="hover"
           >
+            <div class="step-card-accent" />
             <div class="step-info">
               <div class="step-name">
                 <span class="step-seq">#{{ step.seq }}</span>
                 {{ step.name }}
               </div>
-              <el-descriptions :column="1" size="small" class="step-meta">
-                <el-descriptions-item label="执行角色">
+              <div class="step-meta">
+                <div class="step-meta-item">
+                  <span>执行角色</span>
                   <el-tag size="small" :type="step.default_assignee_role === 'director' ? 'warning' : 'primary'">
                     {{ step.default_assignee_role === 'director' ? '指挥组' : '执行组' }}
                   </el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item v-if="getStepOperator(step)" label="操作人">
-                  {{ getStepOperator(step) }}
-                </el-descriptions-item>
-              </el-descriptions>
+                </div>
+                <div v-if="getStepOperator(step)" class="step-meta-item">
+                  <span>操作人</span>
+                  <strong>{{ getStepOperator(step) }}</strong>
+                </div>
+              </div>
             </div>
             <div class="step-actions">
               <el-button
-                v-if="step.default_assignee_role === 'director' && !isParentStep(step)"
+                v-if="!isParentStep(step)"
                 type="success"
-                size="small"
                 :disabled="instance?.status === 'paused'"
                 @click="handleDirectorComplete(step)"
               >
                 <el-icon><CircleCheckFilled /></el-icon>
-                完成任务
+                完成
               </el-button>
               <ActionConfirm
                 v-if="!isParentStep(step)"
@@ -519,7 +542,7 @@ import { ref, shallowRef, reactive, computed, watch, onMounted, onUnmounted } fr
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
-import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled, ArrowDown, ArrowRight, DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance, StepStatus } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -599,6 +622,16 @@ const drillId = computed(() => {
 })
 
 const isValidDrill = computed(() => drillId.value > 0)
+
+function viewScreen() {
+  if (!isValidDrill.value) return
+  router.push(`/screen/${drillId.value}`)
+}
+
+function viewScreen2() {
+  if (!isValidDrill.value) return
+  router.push(`/director/screen/${drillId.value}`)
+}
 
 const sortedSteps = computed(() => {
   return [...steps.value].sort((a, b) => a.seq - b.seq)
@@ -833,12 +866,22 @@ function stepRowClassName({ row }: { row: any }): string {
   return `step-depth-${Math.min(depth, 3)}`
 }
 
+// 完成率口径：仅统计叶子步骤，终态含 completed/skipped/timeout/issue。
+// 与 ScreenView.vue 的 leafSteps + progressPercent 完全一致，保证同演练同值。
+const PROGRESS_TERMINAL_STATUSES = new Set<StepStatus>(['completed', 'skipped', 'timeout', 'issue'])
+const leafStepsForProgress = computed(() => {
+  const all = sortedSteps.value
+  if (all.length === 0) return []
+  const leaves = all.filter(s => !parentIdSet.value.has(s.id))
+  return leaves.length > 0 ? leaves : all
+})
+
 const completedSteps = computed(() => {
-  return sortedSteps.value.filter(s => terminalStatusSet.has(s.status)).length
+  return leafStepsForProgress.value.filter(s => PROGRESS_TERMINAL_STATUSES.has(s.status)).length
 })
 
 const totalSteps = computed(() => {
-  return steps.value.length || 1
+  return leafStepsForProgress.value.length || 1
 })
 
 const progressPercentage = computed(() => {
@@ -846,7 +889,8 @@ const progressPercentage = computed(() => {
 })
 
 const runningSteps = computed(() => {
-  return sortedSteps.value.filter(s => s.status === 'running')
+  // 只显示叶子节点(非父步骤)的运行中步骤
+  return sortedSteps.value.filter(s => s.status === 'running' && !parentIdSet.value.has(s.id))
 })
 
 const issueSteps = computed(() => {
@@ -1545,66 +1589,232 @@ onUnmounted(() => {
 
 .page-container {
   @include page-container;
+  position: relative;
+  padding: 18px 20px 28px;
+  background:
+    linear-gradient(90deg, rgba(24, 144, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(24, 144, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(135deg, #f9fcff 0%, #eef5fc 48%, #f8fafc 100%);
+  background-size: 28px 28px, 28px 28px, auto;
 
   .page-main {
     @include page-content;
+    max-width: 1280px;
+    margin: 0 auto;
   }
 
   .header-card {
     @include card-compact;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
     margin-bottom: $spacing-base;
+    border-radius: $radius-md;
+    border: 1px solid rgba(24, 144, 255, 0.18);
+    background:
+      linear-gradient(135deg, rgba(9, 22, 42, 0.97), rgba(19, 42, 69, 0.95) 56%, rgba(13, 76, 112, 0.92)),
+      $bg-secondary;
+    box-shadow: 0 12px 28px rgba(15, 36, 61, 0.14);
+
+    .header-grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.28;
+      background:
+        linear-gradient(90deg, rgba(84, 194, 255, 0.16) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(84, 194, 255, 0.16) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #20d6ff, #1e88ff 45%, #4ddc86);
+    }
 
     :deep(.el-card__body) {
-      padding: $spacing-base;
+      position: relative;
+      z-index: 1;
+      padding: 20px 22px;
     }
 
     .header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: $spacing-base;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+      grid-template-rows: auto auto;
+      grid-template-areas:
+        "title-row control-buttons"
+        "metric-strip progress-wrap";
+      align-items: start;
+      gap: $spacing-md;
 
-      .header-left {
+      .title-row {
+        grid-area: title-row;
         display: flex;
         align-items: center;
-        gap: $spacing-sm;
+        gap: $spacing-md;
+        flex-wrap: wrap;
+      }
 
-        .drill-name {
-          font-size: $font-size-xl;
-          font-weight: $font-weight-bold;
-          color: $text-primary;
-          margin: 0;
+      .drill-name {
+        font-size: 24px;
+        font-weight: $font-weight-bold;
+        color: #f8fbff;
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      .control-buttons {
+        grid-area: control-buttons;
+        display: flex;
+        gap: $spacing-xs;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+
+        :deep(.el-button) {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          border-radius: $radius-base;
+          box-shadow: 0 8px 18px rgba(3, 12, 27, 0.14);
+        }
+
+        :deep(.el-button + .el-button) {
+          margin-left: 0;
+        }
+
+        .screen-entry-button {
+          color: #eaf8ff;
+          border-color: rgba(110, 211, 255, 0.5);
+          background: rgba(30, 136, 255, 0.18);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: rgba(69, 224, 255, 0.88);
+            background: rgba(30, 136, 255, 0.3);
+          }
+        }
+
+        .screen-entry-cyber {
+          border-color: rgba(77, 220, 134, 0.48);
+          background: rgba(77, 220, 134, 0.14);
+
+          &:hover,
+          &:focus {
+            border-color: rgba(77, 220, 134, 0.86);
+            background: rgba(77, 220, 134, 0.24);
+          }
         }
       }
 
-      .header-right {
+      .metric-strip {
+        grid-area: metric-strip;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(96px, 1fr));
+        gap: $spacing-sm;
+        height: 100%;
+      }
+
+      .metric-item {
+        position: relative;
+        overflow: hidden;
+        height: 100%;
+        min-height: 64px;
+        padding: 10px 12px;
+        border: 1px solid rgba(121, 195, 255, 0.2);
+        border-radius: $radius-md;
+        background: rgba(255, 255, 255, 0.07);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
-        gap: $spacing-sm;
+        align-items: flex-start;
+        justify-content: center;
 
-        .progress-wrap {
-          min-width: 240px;
-
-          .progress-label {
-            display: block;
-            font-size: $font-size-xs;
-            color: $text-secondary;
-            margin-bottom: 4px;
-          }
+        &::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 12px;
+          bottom: 12px;
+          width: 3px;
+          border-radius: 2px;
+          background: linear-gradient(180deg, #45e0ff, #1e88ff);
         }
 
-        .control-buttons {
-          display: flex;
-          gap: $spacing-xs;
-          flex-wrap: wrap;
+        .metric-label {
+          display: block;
+          color: rgba(210, 229, 246, 0.72);
+          font-size: 13px;
+          margin-bottom: 6px;
+          font-weight: $font-weight-medium;
+          letter-spacing: 0.3px;
+        }
 
-          :deep(.el-button) {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-          }
+        strong {
+          color: #ffffff;
+          font-size: 22px;
+          line-height: 1;
+          font-family: $font-family-mono;
+          font-weight: $font-weight-bold;
+          letter-spacing: 0.5px;
+        }
+      }
+
+      .progress-wrap {
+        grid-area: progress-wrap;
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        min-height: 64px;
+        padding: 10px 12px;
+        border: 1px solid rgba(121, 195, 255, 0.2);
+        border-radius: $radius-md;
+        background: rgba(255, 255, 255, 0.07);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: center;
+
+        .progress-label {
+          font-size: 13px;
+          color: rgba(210, 229, 246, 0.72);
+          margin-bottom: 8px;
+          font-weight: $font-weight-medium;
+          letter-spacing: 0.3px;
+        }
+
+        :deep(.el-progress) {
+          flex: 1;
+          display: flex;
+          align-items: center;
+        }
+
+        :deep(.el-progress-bar) {
+          flex: 1;
+        }
+
+        :deep(.el-progress-bar__outer) {
+          background-color: rgba(216, 235, 255, 0.16);
+          border-radius: 6px;
+        }
+
+        :deep(.el-progress-bar__inner) {
+          border-radius: 6px;
+          background: linear-gradient(90deg, #1e88ff, #29d3ff);
+        }
+
+        :deep(.el-progress__text) {
+          color: rgba(240, 248, 255, 0.9);
+          font-weight: $font-weight-semibold;
+          margin-left: 12px;
         }
       }
     }
@@ -1663,16 +1873,35 @@ onUnmounted(() => {
 
   .running-card {
     @include card-compact;
+    padding: 0;
+    overflow: hidden;
     margin-bottom: $spacing-base;
+    border: 1px solid rgba(24, 144, 255, 0.12);
+    border-radius: $radius-md;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 26px rgba(29, 45, 68, 0.07);
+
+    :deep(.el-card__header) {
+      padding: 16px 22px;
+      border-bottom: 1px solid rgba(24, 144, 255, 0.1);
+      background:
+        linear-gradient(90deg, rgba(24, 144, 255, 0.06), transparent 54%),
+        #ffffff;
+    }
+
+    :deep(.el-card__body) {
+      padding: 22px;
+    }
 
     .running-header {
       display: flex;
       align-items: center;
-      gap: $spacing-xs;
+      gap: $spacing-sm;
 
       .running-icon {
         color: #67c23a;
         font-size: $font-size-base;
+        filter: drop-shadow(0 0 6px rgba(103, 194, 58, 0.32));
       }
 
       .running-title {
@@ -1689,55 +1918,227 @@ onUnmounted(() => {
     }
 
     .step-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(24, 144, 255, 0.12);
+      border-radius: $radius-md;
+      background:
+        linear-gradient(135deg, rgba(248, 252, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%);
+      box-shadow:
+        0 10px 24px rgba(15, 43, 72, 0.08),
+        0 2px 8px rgba(24, 144, 255, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+      &:hover {
+        transform: translateY(-4px);
+        border-color: rgba(24, 144, 255, 0.24);
+        box-shadow:
+          0 16px 32px rgba(15, 43, 72, 0.12),
+          0 4px 12px rgba(24, 144, 255, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.95);
+      }
+
       :deep(.el-card__body) {
-        padding: $spacing-sm;
+        padding: $spacing-base $spacing-lg;
+      }
+
+      .step-card-accent {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #1e88ff, #29d3ff, #4ddc86);
+        box-shadow: 0 2px 8px rgba(30, 136, 255, 0.32);
+        animation: shimmer 2s ease-in-out infinite;
       }
 
       .step-info {
-        margin-bottom: $spacing-sm;
+        margin-bottom: $spacing-lg;
+        padding-top: 8px;
 
         .step-name {
-          font-size: $font-size-base;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 16px;
           font-weight: $font-weight-semibold;
           color: $text-primary;
-          margin-bottom: $spacing-xs;
+          margin-bottom: $spacing-md;
+          line-height: 1.5;
 
           .step-seq {
-            color: $color-accent;
-            margin-right: $spacing-xs;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+            height: 26px;
+            padding: 0 10px;
+            border-radius: 8px;
+            color: #0f65c7;
+            background:
+              linear-gradient(135deg, rgba(24, 144, 255, 0.12), rgba(30, 136, 255, 0.08));
+            font-family: $font-family-mono;
+            font-size: 13px;
+            font-weight: $font-weight-medium;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(24, 144, 255, 0.16);
           }
         }
 
         .step-meta {
-          :deep(.el-descriptions__label) {
-            font-size: $font-size-xs;
-            color: $text-tertiary;
-          }
+          display: flex;
+          align-items: center;
+          gap: $spacing-md;
+          flex-wrap: wrap;
 
-          :deep(.el-descriptions__content) {
+          .step-meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 32px;
+            padding: 6px 12px;
+            border-radius: $radius-base;
+            background:
+              linear-gradient(135deg, rgba(241, 245, 250, 0.8), rgba(246, 250, 255, 0.6));
             font-size: $font-size-xs;
             color: $text-secondary;
-          }
+            border: 1px solid rgba(24, 144, 255, 0.08);
+            box-shadow: 0 1px 3px rgba(24, 144, 255, 0.06);
 
+            > span:first-child {
+              color: $text-tertiary;
+              font-weight: $font-weight-medium;
+            }
+
+            :deep(.el-tag) {
+              border-radius: 6px;
+              font-weight: $font-weight-medium;
+              letter-spacing: 0.3px;
+            }
+
+            strong {
+              color: $text-primary;
+              font-weight: $font-weight-semibold;
+            }
+          }
         }
       }
 
       .step-actions {
-        display: flex;
-        gap: $spacing-xs;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        grid-template-rows: 1fr; // 强制所有按钮在同一高度行
+        align-items: stretch; // 强制所有grid子项拉伸到相同高度
+        justify-items: stretch; // 强制所有grid子项拉伸到相同宽度
+        gap: 12px;
+        padding-top: 8px;
+        width: 100%;
 
-        :deep(.el-button) {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          flex: 1;
+        // 覆盖所有Element Plus按钮类型和尺寸组合
+        :deep(.el-button),
+        :deep(.el-button.el-button--small),
+        :deep(.el-button.el-button--default),
+        :deep(.el-button.el-button--large),
+        :deep(.el-button.el-button--success),
+        :deep(.el-button.el-button--primary),
+        :deep(.el-button.el-button--warning),
+        :deep(.el-button.el-button--danger),
+        :deep(.el-button.el-button--info),
+        :deep(button.el-button) {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          width: 100% !important;
+          min-width: 120px !important;
+          height: 40px !important;
+          min-height: 40px !important;
+          max-height: 40px !important;
+          line-height: 1 !important;
+          padding: 0 20px !important;
+          border-radius: $radius-md !important;
+          border-width: 1px !important;
+          border-style: solid !important;
+          box-sizing: border-box !important;
+          font-size: 14px !important;
+          font-weight: $font-weight-semibold !important;
+          letter-spacing: 0.5px !important;
+          box-shadow:
+            0 4px 12px rgba(24, 144, 255, 0.15),
+            0 2px 4px rgba(24, 144, 255, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          position: relative;
+          overflow: hidden;
+          margin: 0 !important;
+
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s ease;
+          }
+
+          &:hover::before {
+            left: 100%;
+          }
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow:
+              0 8px 20px rgba(24, 144, 255, 0.25),
+              0 4px 8px rgba(24, 144, 255, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+          }
+
+          &:active {
+            transform: translateY(-1px);
+            box-shadow:
+              0 4px 12px rgba(24, 144, 255, 0.2),
+              0 2px 4px rgba(24, 144, 255, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+          }
+
+          span {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+
+          .el-icon {
+            font-size: 16px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
         }
 
         .parent-hint {
+          grid-column: 1 / -1;
           font-size: $font-size-xs;
           color: $text-tertiary;
           font-style: italic;
+          padding: 8px 0;
+          text-align: center;
         }
+      }
+    }
+
+    @keyframes shimmer {
+      0%, 100% {
+        opacity: 1;
+        filter: brightness(1);
+      }
+      50% {
+        opacity: 0.85;
+        filter: brightness(1.1);
       }
     }
   }
@@ -1745,7 +2146,25 @@ onUnmounted(() => {
   .steps-card,
   .logs-card {
     @include card-compact;
+    padding: 0;
+    overflow: hidden;
     margin-bottom: $spacing-base;
+    border: 1px solid rgba(24, 144, 255, 0.1);
+    border-radius: $radius-md;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 10px 26px rgba(29, 45, 68, 0.07);
+
+    :deep(.el-card__header) {
+      padding: 15px 22px;
+      border-bottom: 1px solid rgba(24, 144, 255, 0.1);
+      background:
+        linear-gradient(90deg, rgba(24, 144, 255, 0.05), transparent 50%),
+        #ffffff;
+    }
+
+    :deep(.el-card__body) {
+      padding: 18px 22px 22px;
+    }
 
     .card-title {
       font-size: $font-size-base;
@@ -1756,10 +2175,14 @@ onUnmounted(() => {
     :deep(.el-table) {
       background: $bg-secondary;
       color: $text-primary;
+      border-radius: $radius-base;
+      overflow: hidden;
+      border: 1px solid rgba(24, 144, 255, 0.08);
 
       .el-table__header th {
-        background: $bg-tertiary;
+        background: #f6faff;
         color: $text-secondary;
+        font-weight: $font-weight-semibold;
       }
 
       .el-table__row td {
@@ -1783,7 +2206,8 @@ onUnmounted(() => {
     .steps-card-title-area {
       display: flex;
       align-items: center;
-      gap: $spacing-lg;
+      gap: $spacing-base;
+      flex-wrap: wrap;
     }
 
     .depth-legend {
@@ -1796,7 +2220,7 @@ onUnmounted(() => {
       align-items: center;
       font-size: 11px;
       padding: 2px 8px;
-      border-radius: 3px;
+      border-radius: 999px;
       color: #fff;
       font-weight: $font-weight-medium;
     }
@@ -1882,21 +2306,35 @@ onUnmounted(() => {
       color: var(--el-color-primary);
     }
 
-    // 步骤名列布局
+    // ===== 步骤名列布局 - 树形结构 =====
+    .name-col {
+      // 树形引导线配色（定义在 td 上，竖线与横肘共享，便于 hover 联动）
+      --tree-line: rgba(96, 128, 156, 0.22);
+      --tree-line-strong: rgba(24, 144, 255, 0.45);
+    }
     .name-col .cell {
       display: flex;
       align-items: center;
+      width: 100%;
+      // 移除该列默认左内边距，让缩进通道与引导线坐标系对齐
+      padding-left: 0;
     }
 
     .step-name-cell {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 8px;
       overflow: hidden;
+      box-sizing: border-box;
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .step-expand-toggle,
     .step-expand-spacer {
+      position: relative;
+      z-index: 1;
       flex: 0 0 18px;
       width: 18px;
       min-width: 18px;
@@ -1912,24 +2350,67 @@ onUnmounted(() => {
       }
     }
 
-    // 步骤名列左侧色带
-    .step-depth-0 .name-col {
-      border-left: 3px solid var(--el-color-primary);
+    .depth-badge,
+    .step-name-text {
+      position: relative;
+      z-index: 1;
     }
+
+    // 按层级递进缩进 - 每级 22px
+    .step-depth-0 .name-col .step-name-cell { padding-left: 10px; }
+    .step-depth-1 .name-col .step-name-cell { padding-left: 22px; }
+    .step-depth-2 .name-col .step-name-cell { padding-left: 44px; }
+    .step-depth-3 .name-col .step-name-cell { padding-left: 66px; }
+
+    // 树形竖向引导线 - 每个祖先层级一条竖线，画在 td 上保证跨行连续
     .step-depth-1 .name-col {
-      border-left: 3px solid var(--el-color-success);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px);
     }
     .step-depth-2 .name-col {
-      border-left: 3px solid var(--el-color-warning);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px),
+        linear-gradient(90deg, transparent 32px, var(--tree-line) 32px 33px, transparent 33px);
     }
     .step-depth-3 .name-col {
-      border-left: 3px solid var(--el-color-info-light-5);
+      background-image:
+        linear-gradient(90deg, transparent 10px, var(--tree-line) 10px 11px, transparent 11px),
+        linear-gradient(90deg, transparent 32px, var(--tree-line) 32px 33px, transparent 33px),
+        linear-gradient(90deg, transparent 54px, var(--tree-line) 54px 55px, transparent 55px);
     }
+
+    // 树形横向连接肘 - 从最近一条竖线拐向节点内容
+    .step-name-cell::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      height: 1px;
+      background: var(--tree-line);
+      pointer-events: none;
+      display: none; // 默认隐藏，仅缩进层级显示
+    }
+    .step-depth-1 .name-col .step-name-cell::after,
+    .step-depth-2 .name-col .step-name-cell::after,
+    .step-depth-3 .name-col .step-name-cell::after { display: block; }
+    .step-depth-1 .name-col .step-name-cell::after { left: 11px; width: 11px; }
+    .step-depth-2 .name-col .step-name-cell::after { left: 33px; width: 11px; }
+    .step-depth-3 .name-col .step-name-cell::after { left: 55px; width: 11px; }
+
+    // 步骤名列左侧色带（保留层级配色）
+    .step-depth-0 .name-col { border-left: 3px solid var(--el-color-primary); }
+    .step-depth-1 .name-col { border-left: 3px solid var(--el-color-success); }
+    .step-depth-2 .name-col { border-left: 3px solid var(--el-color-warning); }
+    .step-depth-3 .name-col { border-left: 3px solid var(--el-color-info-light-5); }
 
     // 行背景色按深度微弱区分
     .step-depth-0 td { background: rgba(24, 144, 255, 0.04); }
     .step-depth-1 td { background: rgba(82, 196, 26, 0.03); }
     .step-depth-2 td { background: rgba(250, 173, 20, 0.02); }
+
+    // hover 时引导线高亮，强化树形感知
+    .el-table__body tr:hover > .name-col {
+      --tree-line: var(--tree-line-strong);
+    }
   }
 
   .parent-status-text {
@@ -1970,4 +2451,63 @@ onUnmounted(() => {
       padding: $spacing-base;
     }
   }
+
+@media (max-width: 920px) {
+  .page-container {
+    padding: $spacing-base;
+
+    .header-card {
+      .header-content {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "title-row"
+          "control-buttons"
+          "metric-strip"
+          "progress-wrap";
+
+        .control-buttons {
+          justify-content: flex-start;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .page-container {
+    padding: $spacing-sm;
+
+    .header-card {
+      .header-content {
+        .drill-name {
+          font-size: $font-size-xl;
+        }
+
+        .metric-strip {
+          grid-template-columns: 1fr;
+        }
+      }
+    }
+
+    .running-card {
+      .running-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .step-card {
+        .step-actions {
+          grid-template-columns: 1fr;
+          gap: 10px;
+
+          :deep(.el-button) {
+            width: 100%;
+            min-width: 100%;
+            height: 44px;
+            font-size: 15px;
+          }
+        }
+      }
+    }
+  }
+}
 </style>

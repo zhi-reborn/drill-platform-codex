@@ -406,7 +406,7 @@ func (h *Handler) AssignStep(c *gin.Context) {
 		response.BadRequest(c, "参数错误："+err.Error())
 		return
 	}
-	h.submitStepCommand(c, "assign_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "user_ids": req.UserIDs})
+	h.submitStepCommand(c, "assign_step", req.StepID, map[string]interface{}{"step_id": req.StepID, "assignee_ids": req.UserIDs})
 }
 
 func (h *Handler) ResumeTask(c *gin.Context) {

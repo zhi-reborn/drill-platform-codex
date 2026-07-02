@@ -1,1041 +1,1731 @@
 <template>
-  <div class="phase-ring" :style="{ width: containerSize.width + 'px', height: containerSize.height + 'px' }">
-    <div class="ring-inner" :style="{ width: (size + PAD_X * 2) + 'px', height: (size + PAD_Y_TOP + PAD_Y_BOTTOM) + 'px' }">
-    <svg :viewBox="`0 0 ${size + PAD_X * 2} ${size + PAD_Y_TOP + PAD_Y_BOTTOM}`" :width="size + PAD_X * 2" :height="size + PAD_Y_TOP + PAD_Y_BOTTOM" class="ring-svg">
-      <defs>
-        <linearGradient id="grad-active" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#fff4cf" />
-          <stop offset="44%" stop-color="#ffb44a" />
-          <stop offset="100%" stop-color="#ff6900" />
-        </linearGradient>
-        <linearGradient id="grad-done" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#b8ffd4" />
-          <stop offset="45%" stop-color="#34ff97" />
-          <stop offset="100%" stop-color="#00b86b" />
-        </linearGradient>
-        <linearGradient id="grad-pending" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#1a3a6a" />
-          <stop offset="100%" stop-color="#0a1f3a" />
-        </linearGradient>
-        <radialGradient id="center-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="rgba(0, 212, 255, 0.25)" />
-          <stop offset="60%" stop-color="rgba(0, 80, 160, 0.12)" />
-          <stop offset="100%" stop-color="rgba(0, 30, 80, 0)" />
-        </radialGradient>
-        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="glow-strong" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="6" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <!-- 雷达扫描渐变（35° 扇形，从前缘亮到后缘透明） -->
-        <linearGradient id="radar-sweep-grad" gradientUnits="userSpaceOnUse"
-          :x1="cx + outerR * 1.05 * Math.cos(Math.PI / 2 - Math.PI / 7)"
-          :y1="cy - outerR * 1.05 * Math.sin(Math.PI / 2 - Math.PI / 7)"
-          :x2="cx + outerR * 1.05 * Math.cos(Math.PI / 2)"
-          :y2="cy - outerR * 1.05 * Math.sin(Math.PI / 2)">
-          <stop offset="0%" stop-color="#00d4ff" stop-opacity="0.38" />
-          <stop offset="40%" stop-color="#00d4ff" stop-opacity="0.15" />
-          <stop offset="100%" stop-color="#00d4ff" stop-opacity="0" />
-        </linearGradient>
-      </defs>
+  <div
+    ref="phaseRingRef"
+    class="phase-ring"
+    :class="[
+      phaseDirectionDown ? 'phase-dir-down' : 'phase-dir-up',
+      `phase-stage-${safeCurrentIndex}`,
+      { 'phase-ring-compact': isCompact },
+    ]"
+    :style="{
+      width: containerSize.width + 'px',
+      height: containerSize.height + 'px',
+      '--connector-y': connectorY,
+    }"
+  >
+    <div class="relay-runway">
+      <div class="runway-head">
+        <div class="runway-title">当前阶段所属环节</div>
+        <div class="head-stats">
+          <div class="stats-block stats-done">
+            <span class="stats-num">{{ phaseCompletedCount }}</span>
+            <span class="stats-label">已完成</span>
+          </div>
+          <span class="stats-sep">/</span>
+          <div class="stats-block">
+            <span class="stats-num">{{ currentNodes.length }}</span>
+            <span class="stats-label">环节</span>
+          </div>
+        </div>
+      </div>
 
-      <!-- 中心光晕 -->
-      <circle :cx="cx" :cy="cy" :r="innerR" fill="url(#center-glow)" />
+      <!-- 数据汇聚点 - 阶段整体进度 -->
+      <div class="progress-hub" :class="{ 'is-done': progress >= 100 }">
+        <!-- 数据汇流粒子 -->
+        <div class="flow-particles">
+          <div class="flow-particle flow-particle-1"></div>
+          <div class="flow-particle flow-particle-2"></div>
+          <div class="flow-particle flow-particle-3"></div>
+          <div class="flow-particle flow-particle-4"></div>
+          <div class="flow-particle flow-particle-5"></div>
+          <div class="flow-particle flow-particle-6"></div>
+        </div>
+        <div class="hub-glow"></div>
+        <div class="hub-rings">
+          <div class="hub-ring hub-ring-1"></div>
+          <div class="hub-ring hub-ring-2"></div>
+          <div class="hub-ring hub-ring-3"></div>
+        </div>
+        <div class="hub-core">
+          <span class="hub-num">{{ progress }}</span>
+          <span class="hub-unit">%</span>
+        </div>
+      </div>
 
-      <!-- 同心装饰环 -->
-      <g class="concentric-rings" opacity="0.18">
-        <circle :cx="cx" :cy="cy" :r="innerR * 1.4" fill="none" stroke="#00d4ff" stroke-width="0.5" stroke-dasharray="3 6" />
-        <circle :cx="cx" :cy="cy" :r="(innerR + segR) / 2" fill="none" stroke="#00d4ff" stroke-width="0.5" />
-        <circle :cx="cx" :cy="cy" :r="segR" fill="none" stroke="#00d4ff" stroke-width="0.5" stroke-dasharray="2 4" />
-        <circle :cx="cx" :cy="cy" :r="outerR * 0.92" fill="none" stroke="#00d4ff" stroke-width="0.3" stroke-dasharray="1 5" />
-      </g>
+      <svg ref="runwaySvgRef" class="runway-svg" viewBox="0 0 1040 500" preserveAspectRatio="xMidYMid meet" aria-label="当前阶段接力能量跑道">
+        <defs>
+          <linearGradient id="lane-base" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#123050" />
+            <stop offset=".5" stop-color="#23618d" />
+            <stop offset="1" stop-color="#123050" />
+          </linearGradient>
+          <linearGradient id="lane-aura" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#23f0ff" stop-opacity=".12" />
+            <stop offset=".5" stop-color="#6bd6ff" stop-opacity=".32" />
+            <stop offset="1" stop-color="#ffbd62" stop-opacity=".22" />
+          </linearGradient>
+          <linearGradient id="lane-done" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#09b86d" />
+            <stop offset="1" stop-color="#73ffc0" />
+          </linearGradient>
+          <linearGradient id="lane-active" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#ff8426" />
+            <stop offset="1" stop-color="#ffe0a2" />
+          </linearGradient>
+          <linearGradient id="crown-gold" x1="0" y1="-20" x2="0" y2="14" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#fff5bd" />
+            <stop offset=".28" stop-color="#ffd36f" />
+            <stop offset=".58" stop-color="#b86b16" />
+            <stop offset="1" stop-color="#f2b64d" />
+          </linearGradient>
+          <linearGradient id="crown-ridge" x1="-26" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#7a3f0b" />
+            <stop offset=".2" stop-color="#fff0a8" />
+            <stop offset=".5" stop-color="#d8861f" />
+            <stop offset=".8" stop-color="#fff0a8" />
+            <stop offset="1" stop-color="#7a3f0b" />
+          </linearGradient>
+          <radialGradient id="crown-gem" cx="50%" cy="35%" r="65%">
+            <stop offset="0" stop-color="#ffffff" />
+            <stop offset=".34" stop-color="#7ff6ff" />
+            <stop offset="1" stop-color="#0b77a4" />
+          </radialGradient>
+          <filter id="crown-glow" x="-60%" y="-70%" width="220%" height="240%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="relay-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="milestone-glow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <linearGradient id="baton-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#6b2a08" />
+            <stop offset=".18" stop-color="#b85316" />
+            <stop offset=".5" stop-color="#ff8426" />
+            <stop offset=".82" stop-color="#b85316" />
+            <stop offset="1" stop-color="#6b2a08" />
+          </linearGradient>
+          <linearGradient id="baton-core" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="rgba(255, 224, 162, 0)" />
+            <stop offset=".5" stop-color="rgba(255, 245, 214, 0.85)" />
+            <stop offset="1" stop-color="rgba(255, 224, 162, 0)" />
+          </linearGradient>
+        </defs>
 
-      <!-- 径向网格线（12 条，每 30°） -->
-      <g class="radial-grid" opacity="0.10">
-        <line v-for="i in 12" :key="'rl' + i"
-          :x1="cx + innerR * Math.cos(((i - 1) / 12) * Math.PI * 2)"
-          :y1="cy + innerR * Math.sin(((i - 1) / 12) * Math.PI * 2)"
-          :x2="cx + outerR * 0.96 * Math.cos(((i - 1) / 12) * Math.PI * 2)"
-          :y2="cy + outerR * 0.96 * Math.sin(((i - 1) / 12) * Math.PI * 2)"
-          stroke="#00d4ff" stroke-width="0.5" />
-      </g>
-
-      <!-- 外圈装饰刻度（240 条短线） -->
-      <g class="ticks">
-        <line
-          v-for="i in 120"
-          :key="'tk' + i"
-          :x1="cx + (outerR + 4) * Math.cos(((i - 1) / 120) * Math.PI * 2)"
-          :y1="cy + (outerR + 4) * Math.sin(((i - 1) / 120) * Math.PI * 2)"
-          :x2="cx + (outerR + (i % 5 === 0 ? 12 : 8)) * Math.cos(((i - 1) / 120) * Math.PI * 2)"
-          :y2="cy + (outerR + (i % 5 === 0 ? 12 : 8)) * Math.sin(((i - 1) / 120) * Math.PI * 2)"
-          :stroke="i % 15 === 0 ? 'rgba(0, 212, 255, 0.5)' : 'rgba(0, 212, 255, 0.18)'"
-          :stroke-width="i % 15 === 0 ? 1.5 : 0.8"
-        />
-      </g>
-
-      <!-- 阶段分段环（4 段弧） -->
-      <g class="phase-segments" filter="url(#glow)">
         <path
-          v-for="(seg, idx) in segmentPaths"
-          :key="'seg' + idx"
-          :d="seg.d"
-          :stroke="seg.color"
-          :stroke-width="12"
+          :d="trackPath"
           fill="none"
-          :stroke-linecap="'butt'"
-          :opacity="seg.opacity"
-        />
-      </g>
-
-      <!-- 环节节点进度弧（外圈小弧形，长度反映进度） -->
-      <g class="node-progress-arcs">
-        <path
-          v-for="(arc, idx) in nodeProgressArcs"
-          :key="'npa' + idx"
-          :d="arc.d"
-          :stroke="arc.color"
-          :stroke-width="5"
-          fill="none"
-          stroke-linecap="butt"
-          :opacity="arc.opacity"
-          :class="{ 'arc-running': arc.isRunning }"
-        />
-      </g>
-
-      <!-- 活跃段流光动画层 -->
-      <g v-if="activeSegmentPath" class="flow-light-group">
-        <path
-          :d="activeSegmentPath"
-          stroke="#ffb44a"
-          stroke-width="14"
-          fill="none"
-          stroke-linecap="butt"
-          class="flow-light-streak"
-        />
-      </g>
-
-      <!-- 活跃段粒子（沿弧线运动） -->
-      <g v-if="activeSegmentPath" class="flow-particles">
-        <circle r="3.5" fill="#fff4cf" opacity="0.9" class="flow-particle flow-particle-1">
-          <animateMotion :dur="activeSegDur" repeatCount="indefinite" :path="activeSegmentPath" />
-        </circle>
-        <circle r="2.5" fill="#ff9a2f" opacity="0.7" class="flow-particle flow-particle-2">
-          <animateMotion :dur="activeSegDur" begin="0.4s" repeatCount="indefinite" :path="activeSegmentPath" />
-        </circle>
-        <circle r="2" fill="#ffe0a0" opacity="0.6" class="flow-particle flow-particle-3">
-          <animateMotion :dur="activeSegDur" begin="0.8s" repeatCount="indefinite" :path="activeSegmentPath" />
-        </circle>
-      </g>
-
-      <!-- 雷达扫描光束 -->
-      <g class="radar-sweep">
-        <path
-          :d="`M ${cx} ${cy} L ${cx} ${cy - outerR * 1.02} A ${outerR * 1.02} ${outerR * 1.02} 0 0 1 ${cx + outerR * 1.02 * Math.sin(Math.PI / 7)} ${cy - outerR * 1.02 * Math.cos(Math.PI / 7)} Z`"
-          fill="url(#radar-sweep-grad)"
-        />
-        <line
-          :x1="cx" :y1="cy"
-          :x2="cx" :y2="cy - outerR * 1.02"
-          stroke="#00d4ff" stroke-width="1.8" opacity="0.7"
-        />
-      </g>
-
-      <!-- 当前阶段进度弧（在分段环外侧） -->
-      <g v-if="progressPath" class="progress-arc" filter="url(#glow)">
-        <path
-          :d="progressPath"
-          :stroke="progressArcColor"
-          stroke-width="4"
-          fill="none"
+          stroke="url(#lane-aura)"
+          stroke-width="60"
           stroke-linecap="round"
+          stroke-linejoin="round"
+          class="lane-aura"
         />
-      </g>
+        <path
+          :d="trackPath"
+          fill="none"
+          stroke="rgba(8, 23, 45, .96)"
+          stroke-width="46"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          :d="trackPath"
+          fill="none"
+          stroke="url(#lane-base)"
+          stroke-width="24"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          opacity=".82"
+        />
+        <path
+          :d="trackPath"
+          fill="none"
+          stroke="rgba(226, 247, 255, .28)"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-dasharray="22 28"
+          class="lane-dash"
+        />
+        <g class="runway-svg-turn-pips" aria-hidden="true">
+          <rect
+            v-for="pip in turnPips"
+            :key="pip.key"
+            class="runway-svg-turn-pip"
+            :class="`runway-svg-turn-pip-${pip.side}`"
+            :x="pip.x - 9"
+            :y="pip.y - 2"
+            width="18"
+            height="4"
+            rx="2"
+          />
+        </g>
+        <path
+          v-if="donePath"
+          :d="donePath"
+          fill="none"
+          stroke="url(#lane-done)"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          v-if="activePath"
+          :d="activePath"
+          fill="none"
+          stroke="url(#lane-active)"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
 
-    </svg>
+        <g font-family="Microsoft YaHei, PingFang SC, sans-serif" text-anchor="middle">
+          <g
+            v-for="node in visibleNodes"
+            :key="node.index"
+            :transform="`translate(${node.x} ${node.y})`"
+            :class="['runway-node', `runway-node-${node.visualStatus}`]"
+          >
+            <circle
+              v-if="node.visualStatus === 'running'"
+              r="30"
+              fill="none"
+              stroke="#ffbd62"
+              stroke-width="3"
+              class="node-pulse-ring"
+            />
+            <circle
+              v-else-if="node.visualStatus === 'completed'"
+              r="25"
+              fill="rgba(73, 255, 166, .12)"
+              stroke="rgba(73, 255, 166, .35)"
+              stroke-width="1.5"
+            />
+            <circle
+              v-else-if="node.visualStatus === 'issue'"
+              r="25"
+              fill="rgba(255, 85, 85, .11)"
+              stroke="rgba(255, 85, 85, .38)"
+              stroke-width="1.5"
+            />
+            <g
+              v-if="node.visualStatus === 'running'"
+              class="baton-group"
+              :class="`flow-${node.flowDir}`"
+            >
+              <!-- 能量尾迹：位于 baton 后方（与流向相反），逐渐衰减，强化方向感 -->
+              <circle
+                v-for="(t, i) in node.trail"
+                :key="'trail-' + i"
+                class="baton-trail-dot"
+                :class="`baton-trail-${i + 1}`"
+                :cx="t.cx"
+                cy="0"
+                :r="t.r"
+              />
+              <rect x="-40" y="-18" width="80" height="36" rx="18" class="baton" />
+              <rect x="-32" y="-9" width="64" height="18" rx="9" class="baton-core" />
+              <!-- 箭头随跑道流向：偶数行向右，奇数行向左 -->
+              <path
+                :d="node.flowDir === 'left' ? 'M20 0 H-16 M-4 -10 L-18 0 L-4 10' : 'M-20 0 H16 M4 -10 L18 0 L4 10'"
+                class="baton-arrow"
+              />
+            </g>
+            <circle
+              v-else
+              r="19"
+              :class="['node-core', `node-core-${node.visualStatus}`]"
+            />
+            <path
+              v-if="node.visualStatus === 'completed'"
+              d="M-8 0 l6 6 12-14"
+              fill="none"
+              stroke="#baffdd"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <text
+              class="node-label"
+              :y="node.labelAbove ? -32 : 44"
+              :fill="node.labelColor"
+            >
+              {{ node.shortName }}
+            </text>
+          </g>
 
-    <!-- 4 个阶段节点（外侧 4 角，圆形，HTML 定位） -->
-    <div
-      v-for="(p, idx) in phasePoints"
-      :key="'lbl' + idx"
-      class="phase-node-label"
-      :class="[
-        'phase-node-' + idx,
-        isPhaseDone(idx) ? 'phase-node-done' : '',
-        idx === currentIndex && !isPhaseDone(idx) ? 'phase-node-active' : '',
-      ]"
-      :style="{
-        left: (p.x / (size + PAD_X * 2) * 100) + '%',
-        top: (p.y / (size + PAD_Y_TOP + PAD_Y_BOTTOM) * 100) + '%',
-      }"
-    >
-      <span class="phase-node-text">阶段{{ chineseNum(idx + 1) }}</span>
-    </div>
+          <g :transform="`translate(${finishPoint.x} ${finishPoint.y}) scale(${finishScale})`" class="finish-node" :class="{ 'finish-node-done': isCurrentPhaseDone }">
+            <circle r="34" fill="none" stroke="rgba(255, 214, 130, .34)" stroke-width="2" class="finish-beacon-ring finish-beacon-ring-a" />
+            <circle r="27" fill="none" stroke="rgba(45, 228, 255, .28)" stroke-width="1.6" class="finish-beacon-ring finish-beacon-ring-b" />
+            <g class="finish-sparks">
+              <line x1="0" y1="-35" x2="0" y2="-42" />
+              <line x1="28" y1="-28" x2="34" y2="-34" />
+              <line x1="38" y1="0" x2="46" y2="0" />
+              <line x1="28" y1="28" x2="34" y2="34" />
+              <line x1="-28" y1="28" x2="-34" y2="34" />
+              <line x1="-38" y1="0" x2="-46" y2="0" />
+              <line x1="-28" y1="-28" x2="-34" y2="-34" />
+            </g>
+            <line
+              x1="0"
+              y1="-38"
+              x2="0"
+              y2="-29"
+              stroke="rgba(255, 213, 129, .72)"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              class="finish-tether"
+            />
+            <circle r="34" fill="rgba(255, 180, 74, .11)" stroke="rgba(255, 214, 130, .45)" stroke-width="2" class="finish-disc" />
+            <circle r="24" fill="none" stroke="rgba(45, 228, 255, .42)" stroke-width="1.5" stroke-dasharray="12 8" class="finish-orbit" />
+            <path class="finish-crown-shadow" d="M-27 -5 L-20 15 H20 L27 -5 L14 1 L7 -15 L0 -3 L-7 -15 L-14 1 Z" />
+            <path
+              class="finish-crown"
+              d="M-27 -5 L-20 15 H20 L27 -5 L14 1 L7 -15 L0 -3 L-7 -15 L-14 1 Z"
+            />
+            <path class="finish-crown-ridge" d="M-19 14 H19 M-14 1 L-20 15 M0 -3 V15 M14 1 L20 15" />
+            <ellipse class="finish-crown-gem finish-crown-gem-main" cx="0" cy="-3" rx="3.5" ry="4.4" />
+            <circle class="finish-crown-gem" cx="-7" cy="-15" r="3" />
+            <circle class="finish-crown-gem" cx="7" cy="-15" r="3" />
+            <circle class="finish-crown-gem" cx="-27" cy="-5" r="2.8" />
+            <circle class="finish-crown-gem" cx="27" cy="-5" r="2.8" />
+            <g class="finish-milestone">
+              <path class="finish-milestone-lead" d="M37 0 H48" />
+              <circle class="finish-milestone-dot" cx="48" cy="0" r="2" />
+              <text
+                class="finish-milestone-text"
+                x="54"
+                y="0"
+                text-anchor="start"
+                dominant-baseline="central"
+              >{{ isCurrentPhaseDone ? '完成' : '里程碑' }}</text>
+            </g>
+          </g>
+        </g>
+      </svg>
 
-    <!-- 环节标签（环形外侧，围绕各阶段弧段分布） -->
-    <svg :viewBox="`0 0 ${size + PAD_X * 2} ${size + PAD_Y_TOP + PAD_Y_BOTTOM}`" :width="size + PAD_X * 2" :height="size + PAD_Y_TOP + PAD_Y_BOTTOM" class="ring-svg ring-svg-overlay">
-      <line
-        v-for="(lp, idx) in ringLabelLines"
-        :key="'rll' + idx"
-        :x1="lp.x1" :y1="lp.y1"
-        :x2="lp.x2" :y2="lp.y2"
-        :stroke="ringLabels[idx].isRunning ? 'rgba(255, 180, 74, 0.58)' : (ringLabels[idx].isDone ? 'rgba(52, 255, 151, 0.48)' : 'rgba(0, 212, 255, 0.2)')"
-        :stroke-width="ringLabels[idx].isRunning || ringLabels[idx].isDone ? 1.5 : 1"
-        :class="{ 'label-line-running': ringLabels[idx].isRunning }"
-      />
-      <!-- 环节节点圆点 -->
-      <circle
-        v-for="(lp, idx) in ringLabelLines"
-        :key="'rlc' + idx"
-        :cx="lp.x2" :cy="lp.y2"
-        :r="ringLabels[idx].isRunning ? 4 : (ringLabels[idx].isDone ? 3.4 : 2.5)"
-        :fill="ringLabels[idx].isRunning ? '#ffb44a' : (ringLabels[idx].isDone ? '#34ff97' : '#00d4ff')"
-        :opacity="ringLabels[idx].isRunning ? 0.95 : (ringLabels[idx].isDone ? 0.9 : 0.5)"
-        :class="{ 'label-node-running': ringLabels[idx].isRunning }"
-        :filter="ringLabels[idx].isRunning || ringLabels[idx].isDone ? 'url(#glow-strong)' : ''"
-      />
-      <!-- 运行中环节节点波纹效果 -->
-      <g v-for="(rp, idx) in runningRipples" :key="'rp' + idx" :transform="`translate(${rp.cx}, ${rp.cy})`">
-        <circle r="4" fill="none" stroke="#ffb44a" stroke-width="2" class="ripple ripple-1" />
-        <circle r="4" fill="none" stroke="rgba(255, 180, 74, 0.6)" stroke-width="1.5" class="ripple ripple-2" />
-        <circle r="4" fill="none" stroke="rgba(255, 180, 74, 0.3)" stroke-width="1" class="ripple ripple-3" />
-      </g>
-      <!-- 运行中节点光晕环 -->
-      <circle
-        v-for="(rp, idx) in runningRipples"
-        :key="'rh' + idx"
-        :cx="rp.cx" :cy="rp.cy"
-        r="8"
-        fill="none"
-        stroke="rgba(255, 180, 74, 0.25)"
-        stroke-width="1"
-        class="running-halo"
-      />
-    </svg>
-
-      <div
-        v-for="(lp, idx) in ringLabelPositions"
-        :key="'rl' + idx"
-        class="ring-outer-label"
-        :class="[
-          { 'ring-outer-label-active': ringLabels[idx].active && !ringLabels[idx].isDone },
-          { 'ring-outer-label-running': ringLabels[idx].isRunning },
-          { 'ring-outer-label-done': ringLabels[idx].isDone },
-          { 'ring-outer-label-flipped': lp.flipped },
-          'ring-outer-label-phase-' + ringLabels[idx].phaseIdx,
-        ]"
-        :style="{
-          left: lp.leftPct + '%',
-          top: lp.topPct + '%',
-          '--label-rotate': lp.rotate + 'deg',
-        }"
-      >
-        <span class="ring-outer-label-content">
-          <span v-if="ringLabels[idx].isDone" class="done-indicator"></span>
-          <span v-else-if="ringLabels[idx].isRunning" class="running-indicator">
-            <span class="running-dot"></span>
-            <span class="running-dot-ripple"></span>
-            <span class="running-dot-ripple delay"></span>
-          </span>
-          <span class="ring-outer-label-text">{{ ringLabels[idx].text }}</span>
-        </span>
+      <div class="runway-foot">
+        <div class="foot-status">
+          <span class="status-dot"></span>
+          <span class="status-text">{{ instanceName || '未命名演练' }}</span>
+        </div>
+        <div class="foot-phase-name">
+          <span class="phase-name-tag">当前阶段</span>
+          <span class="phase-name-text">{{ currentPhaseLabel }}</span>
+        </div>
       </div>
 
-    <!-- 中心数字 -->
-    <div class="center-content">
-      <div class="center-caption">演练总进度</div>
-      <div class="center-pct">{{ progress }}<span class="pct-unit">%</span></div>
-      <div class="center-value">
-        <span class="num-num">{{ centerNumerator }}</span>
-        <span class="num-sep">/</span>
-        <span class="num-den">{{ centerDenominator }}</span>
-      </div>
-      <div class="center-hint">{{ centerHint }}</div>
-    </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+
+type NodeStatus = { status: string; progress: number }
+type TrackPoint = { x: number; y: number }
+
+const LANE_CAPACITY = 4
+const LANE_LEFT = 118
+const LANE_RIGHT = 900
+const LANE_NODE_PADDING = 56
+const TURN_LEFT = 46
+const TURN_RIGHT = 998
+const DASH_VISUAL_OFFSET_Y = -3
 
 const props = defineProps<{
   phases: string[]
   phaseNames: string[][]
-  phaseNodeStatuses: { status: string; progress: number }[][]
+  phaseNodeStatuses: NodeStatus[][]
   phaseStatuses?: string[]
   currentIndex: number
   progress: number
   centerNumerator: number
   centerDenominator: number
   centerHint: string
+  instanceName?: string
   size?: number
+  fullscreen?: boolean
 }>()
 
 const size = computed(() => props.size ?? 520)
-const PAD_X = 118  // 左右预留空间（容纳错层标签）
-const PAD_Y_TOP = 102  // 顶部预留（容纳外层倾斜标签）
-const PAD_Y_BOTTOM = 118  // 底部预留（容纳外层倾斜标签）
+const isCompact = computed(() => size.value < 460)
 const containerSize = computed(() => ({
-  width: size.value + PAD_X * 2,
-  height: size.value + PAD_Y_TOP + PAD_Y_BOTTOM,
+  width: Math.max(480, Math.round(size.value * 1.72)),
+  height: '100%',
 }))
-const cx = computed(() => size.value / 2 + PAD_X)
-const cy = computed(() => size.value / 2 + PAD_Y_TOP)
 
-// 半径定义
-const innerR = computed(() => size.value * 0.18)
-const segR = computed(() => size.value * 0.36)   // 分段环
-const outerR = computed(() => size.value * 0.46) // 刻度
+const currentNodes = computed(() => props.phaseNames?.[props.currentIndex] || [])
+const currentStatuses = computed(() => props.phaseNodeStatuses?.[props.currentIndex] || [])
+const safeCurrentIndex = computed(() => Math.max(0, Math.min(props.currentIndex, 3)))
+const phaseDirectionDown = computed(() => safeCurrentIndex.value < 2)
+const phaseRingRef = ref<HTMLElement | null>(null)
+const runwaySvgRef = ref<SVGSVGElement | null>(null)
+const connectorY = ref('62px')
+let connectorResizeObserver: ResizeObserver | null = null
 
-// === 按阶段环节节点数量比例分配弧度 ===
-const segCount = computed(() => props.phases.length || 4)
+const currentPhaseLabel = computed(() => {
+  return props.phases?.[safeCurrentIndex.value] || props.centerHint || '当前阶段'
+})
 
-function isPhaseDone(idx: number): boolean {
-  return props.phaseStatuses?.[idx] === 'done' || props.phaseStatuses?.[idx] === 'completed'
+const laneY = computed(() => {
+  const startY = 72
+  const endY = 428
+  const rowCount = Math.max(1, Math.ceil(Math.max(currentNodes.value.length, 1) / LANE_CAPACITY))
+  if (rowCount === 1) return [startY]
+  return Array.from({ length: rowCount }, (_, row) => (
+    Math.round(startY + ((endY - startY) * row) / (rowCount - 1))
+  ))
+})
+
+function updateConnectorY() {
+  const svg = runwaySvgRef.value
+  const phaseRing = phaseRingRef.value
+  if (!svg || !phaseRing) return
+
+  const scale = Math.min(svg.clientWidth / 1040, svg.clientHeight / 500)
+  if (!Number.isFinite(scale) || scale <= 0) return
+
+  const svgTop = svg.getBoundingClientRect().top - phaseRing.getBoundingClientRect().top
+  const yOffset = (svg.clientHeight - 500 * scale) / 2
+  const y = svgTop + yOffset + laneY.value[0] * scale + DASH_VISUAL_OFFSET_Y
+  connectorY.value = `${Math.round(y * 10) / 10}px`
 }
 
-const progressArcColor = computed(() => isPhaseDone(props.currentIndex) ? 'url(#grad-done)' : 'url(#grad-active)')
-
-const segAngles = computed(() => {
-  const count = segCount.value
-  const MIN_SEG_RAD = 0.5  // 每段最小弧度（约28.6°），确保阶段至少可见
-  const TOTAL_GAP = 0.06 * count
-  const AVAILABLE_RAD = Math.PI * 2 - TOTAL_GAP
-
-  const counts = props.phases.map((_, i) => Math.max(props.phaseNames?.[i]?.length || 1, 1))
-  const totalWeight = counts.reduce((a, b) => a + b, 0)
-  // 先按比例分配
-  let angles = counts.map(c => (c / totalWeight) * AVAILABLE_RAD)
-  // 确保每段至少 MIN_SEG_RAD：从大段中扣除差额
-  const deficit = angles.filter(a => a < MIN_SEG_RAD).reduce((acc, a) => acc + (MIN_SEG_RAD - a), 0)
-  const bigTotal = angles.filter(a => a >= MIN_SEG_RAD).reduce((acc, a) => acc + a, 0)
-  angles = angles.map(a => {
-    if (a < MIN_SEG_RAD) return MIN_SEG_RAD
-    return a - deficit * (a / bigTotal)
-  })
-  // 安全兜底
-  angles = angles.map(a => Math.max(a, MIN_SEG_RAD))
-  return angles
-})
-
-// 每段弧的起止角度（弧度），与 segmentPaths 对齐
-const segRanges = computed(() => {
-  const startOffset = -Math.PI / 2 + Math.PI / 4 - segAngles.value[0] / 2
-  const gap = 0.06
-  const ranges: { a1: number; a2: number; mid: number }[] = []
-  let cursor = startOffset
-  for (let i = 0; i < segCount.value; i++) {
-    const realA1 = cursor + gap / 2
-    const realA2 = cursor + gap / 2 + segAngles.value[i]
-    ranges.push({ a1: realA1, a2: realA2, mid: (realA1 + realA2) / 2 })
-    cursor = realA2 + gap / 2
+onMounted(() => {
+  nextTick(updateConnectorY)
+  if (runwaySvgRef.value && 'ResizeObserver' in window) {
+    connectorResizeObserver = new ResizeObserver(updateConnectorY)
+    connectorResizeObserver.observe(runwaySvgRef.value)
   }
-  return ranges
 })
 
-// 4 个相位点的位置（弧段端点，与环上的节点圆点重合）
-const phasePoints = computed(() => {
-  const items = []
-  const r = outerR.value
-  for (let i = 0; i < segCount.value; i++) {
-    const angle = segRanges.value[i].mid
-    const x = cx.value + r * Math.cos(angle)
-    const y = cy.value + r * Math.sin(angle)
-    items.push({ x, y, angle })
+onBeforeUnmount(() => {
+  connectorResizeObserver?.disconnect()
+  connectorResizeObserver = null
+})
+
+watch(laneY, () => nextTick(updateConnectorY), { flush: 'post' })
+
+const isCurrentPhaseDone = computed(() => {
+  const status = props.phaseStatuses?.[props.currentIndex]
+  if (status === 'done' || status === 'completed') return true
+  return currentNodes.value.length > 0 && currentNodes.value.every((_, idx) => isDone(currentStatuses.value[idx]))
+})
+
+const phaseCompletedCount = computed(() => {
+  return currentNodes.value.filter((_, idx) => isDone(currentStatuses.value[idx])).length
+})
+
+// 当前运行环节的进度（用于其他逻辑）
+const completionPercent = computed(() => {
+  const statuses = currentStatuses.value
+  if (statuses.length === 0) return 0
+
+  // 找到当前正在运行的环节节点
+  const runningNode = statuses.find(s => s?.status === 'running')
+  if (runningNode) {
+    // 显示当前运行环节的进度
+    return Math.min(100, runningNode.progress || 0)
   }
-  return items
+
+  // 没有运行中的环节时显示 0
+  return 0
 })
 
-// 活跃段的弧线路径（用于流光 + 粒子动画）
-const activeSegmentPath = computed(() => {
-  if (props.currentIndex < 0 || props.currentIndex >= segCount.value) return ''
-  if (isPhaseDone(props.currentIndex)) return ''
-  return segmentPaths.value[props.currentIndex]?.d || ''
+const activeNodeIndex = computed(() => {
+  const running = currentStatuses.value.findIndex(s => s?.status === 'running')
+  if (running >= 0) return running
+  const firstPending = currentStatuses.value.findIndex(s => !isDone(s))
+  if (firstPending >= 0) return firstPending
+  return Math.max(0, currentNodes.value.length - 1)
 })
 
-// 活跃段粒子运动周期
-const activeSegDur = computed(() => '2.4s')
+const trackPoints = computed<TrackPoint[]>(() => {
+  const count = Math.max(currentNodes.value.length, 1)
+  return Array.from({ length: count }, (_, i) => pointAt(i))
+})
 
-// 4 段弧路径（按比例分配弧度）
-const segmentPaths = computed(() => {
-  const r = segR.value
-  return Array.from({ length: segCount.value }).map((_, i) => {
-    const { a1, a2 } = segRanges.value[i]
-    const x1 = cx.value + r * Math.cos(a1)
-    const y1 = cy.value + r * Math.sin(a1)
-    const x2 = cx.value + r * Math.cos(a2)
-    const y2 = cy.value + r * Math.sin(a2)
-    const large = (a2 - a1) > Math.PI ? 1 : 0
-    let color = 'url(#grad-pending)'
-    let opacity = 0.4
-    if (i < props.currentIndex || isPhaseDone(i)) { color = 'url(#grad-done)'; opacity = 0.85 }
-    if (i === props.currentIndex && !isPhaseDone(i)) { color = 'url(#grad-active)'; opacity = 1 }
+const laneNodeCounts = computed(() => {
+  const count = Math.max(currentNodes.value.length, 1)
+  const rowCount = Math.max(1, Math.ceil(count / LANE_CAPACITY))
+  const baseCount = Math.floor(count / rowCount)
+  const extraCount = count % rowCount
+  return Array.from({ length: rowCount }, (_, row) => baseCount + (row < extraCount ? 1 : 0))
+})
+
+const trackPath = computed(() => {
+  const lanes = laneY.value
+  let d = `M ${LANE_LEFT} ${lanes[0]} H ${LANE_RIGHT}`
+  for (let row = 1; row < lanes.length; row += 1) {
+    const prevY = lanes[row - 1]
+    const y = lanes[row]
+    const midY = Math.round((prevY + y) / 2)
+    if (row % 2 === 1) {
+      d += ` Q ${TURN_RIGHT} ${prevY} ${TURN_RIGHT} ${midY} Q ${TURN_RIGHT} ${y} ${LANE_RIGHT} ${y} H ${LANE_LEFT}`
+    } else {
+      d += ` Q ${TURN_LEFT} ${prevY} ${TURN_LEFT} ${midY} Q ${TURN_LEFT} ${y} ${LANE_LEFT} ${y} H ${LANE_RIGHT}`
+    }
+  }
+  return d
+})
+
+const turnPips = computed(() => {
+  return laneY.value.slice(1).map((y, index) => ({
+    key: `turn-${index}`,
+    x: index % 2 === 0 ? TURN_RIGHT : TURN_LEFT,
+    y: Math.round((laneY.value[index] + y) / 2),
+    side: index % 2 === 0 ? 'right' : 'left',
+  }))
+})
+
+const visibleNodes = computed(() => {
+  return currentNodes.value.map((name, index) => {
+    const status = currentStatuses.value[index]
+    const visualStatus = visualStatusOf(status, index)
+    const p = trackPoints.value[index]
+    const { row } = locateLaneNode(index)
+    // 跑道流向：偶数行（0,2…）由左向右，奇数行（1,3…）由右向左
+    const flowDir = row % 2 === 1 ? 'left' : 'right'
+    const trailSign = flowDir === 'left' ? 1 : -1
     return {
-      d: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`,
-      color, opacity,
+      ...p,
+      index,
+      shortName: shorten(name),
+      visualStatus,
+      labelAbove: shouldLabelAbove(index, p),
+      labelColor: '#f2f8ff',
+      flowDir,
+      // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
+      trail: [
+        { cx: trailSign * 50, r: 3.4 },
+        { cx: trailSign * 60, r: 2.5 },
+        { cx: trailSign * 68, r: 1.7 },
+      ],
     }
   })
 })
 
-// 当前阶段进度弧
-const progressPath = computed(() => {
-  const r = segR.value + 16
-  if (props.currentIndex < 0 || props.currentIndex >= segCount.value) return ''
-  const { a1 } = segRanges.value[props.currentIndex]
-  const span = (props.progress / 100) * segAngles.value[props.currentIndex]
-  const a2 = a1 + span
-  if (props.progress <= 0) return ''
-  const x1 = cx.value + r * Math.cos(a1)
-  const y1 = cy.value + r * Math.sin(a1)
-  const x2 = cx.value + r * Math.cos(a2)
-  const y2 = cy.value + r * Math.sin(a2)
-  const large = (a2 - a1) > Math.PI ? 1 : 0
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
+const donePath = computed(() => {
+  const indexes = currentStatuses.value
+    .map((status, idx) => (isDone(status) ? idx : -1))
+    .filter(idx => idx >= 0)
+  return indexes.length > 1 ? trackPathThroughIndexes(indexes) : ''
 })
 
-// 环节节点进度弧：每个环节节点在环外侧有独立的小弧形，长度反映进度
-const nodeProgressArcs = computed(() => {
-  const r = outerR.value + 18 // 在刻度环外侧
+const activePath = computed(() => {
+  const activeIdx = activeNodeIndex.value
+  if (activeIdx <= 0) return ''
+  return trackPathThroughIndexes([activeIdx - 1, activeIdx])
+})
 
-  const arcs: {
-    d: string
-    color: string
-    opacity: number
-    status: string
-    isRunning: boolean
-    isDone: boolean
-  }[] = []
-
-  for (let pi = 0; pi < segCount.value; pi++) {
-    const nodeStatuses = props.phaseNodeStatuses?.[pi] || []
-    const names = props.phaseNames?.[pi] || []
-    if (names.length === 0) continue
-
-    // 该阶段弧段的角度范围
-    const { a1: segStart, a2: segEnd } = segRanges.value[pi]
-    const segAngle = segEnd - segStart
-
-    // 每个环节节点在弧段内均分空间
-    const nodeAngle = segAngle / names.length
-    const nodeGap = 0.03 // 环节节点间的小间隙
-
-    for (let ni = 0; ni < names.length; ni++) {
-      const nodeStart = segStart + ni * nodeAngle + nodeGap / 2
-      const nodeEnd = segStart + (ni + 1) * nodeAngle - nodeGap / 2
-      const nodeSpan = nodeEnd - nodeStart
-
-      const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
-      const progress = ns.progress / 100
-      const isRunning = ns.status === 'running'
-      const isDone = ns.status === 'completed' || ns.status === 'done'
-      const isIssue = ns.status === 'issue' || ns.status === 'timeout'
-
-      // 背景弧（完整弧段，暗色）
-      const bx1 = cx.value + r * Math.cos(nodeStart)
-      const by1 = cy.value + r * Math.sin(nodeStart)
-      const bx2 = cx.value + r * Math.cos(nodeEnd)
-      const by2 = cy.value + r * Math.sin(nodeEnd)
-      const bLarge = nodeSpan > Math.PI ? 1 : 0
-      const bgPath = `M ${bx1} ${by1} A ${r} ${r} 0 ${bLarge} 1 ${bx2} ${by2}`
-
-      // 进度弧（按进度比例截取）
-      const progressEnd = nodeStart + nodeSpan * progress
-      let fgPath = ''
-      if (progress > 0) {
-        const fx1 = bx1
-        const fy1 = by1
-        const fx2 = cx.value + r * Math.cos(progressEnd)
-        const fy2 = cy.value + r * Math.sin(progressEnd)
-        const fSpan = progressEnd - nodeStart
-        const fLarge = fSpan > Math.PI ? 1 : 0
-        fgPath = `M ${fx1} ${fy1} A ${r} ${r} 0 ${fLarge} 1 ${fx2} ${fy2}`
-      }
-
-      // 颜色
-      let fgColor = '#1a3a6a'
-      let fgOpacity = 0.3
-      if (isDone) { fgColor = '#34ff97'; fgOpacity = 0.9 }
-      else if (isRunning) { fgColor = '#ff9a2f'; fgOpacity = 1 }
-      else if (isIssue) { fgColor = '#ff4444'; fgOpacity = 0.9 }
-      else if (progress > 0) { fgColor = '#0088bb'; fgOpacity = 0.6 }
-
-      arcs.push({
-        d: bgPath,
-        color: 'rgba(26, 58, 106, 0.25)',
-        opacity: 1,
-        status: ns.status,
-        isRunning: false,
-        isDone: false,
-      })
-
-      if (fgPath) {
-        arcs.push({
-          d: fgPath,
-          color: fgColor,
-          opacity: fgOpacity,
-          status: ns.status,
-          isRunning,
-          isDone,
-        })
-      }
+const finishPoint = computed(() => {
+  const lastPoint = trackPoints.value[trackPoints.value.length - 1] || { x: LANE_RIGHT, y: laneY.value[laneY.value.length - 1] }
+  // 非全屏下皇冠上移贴近跑道终点；全屏保持原间距不受影响
+  if (isCompact.value) {
+    return {
+      x: lastPoint.x,
+      y: lastPoint.y + 108,
     }
   }
-
-  return arcs
+  return {
+    x: lastPoint.x,
+    y: lastPoint.y + (props.fullscreen ? 82 : 58),
+  }
 })
 
-// 外圈环节标签：从各阶段的 phaseNames 实时获取，围绕对应阶段的弧段分布
-const ringLabels = computed(() => {
-  const labels: {
-    text: string
-    active: boolean
-    phaseIdx: number
-    nodeIdx: number
-    nodeCount: number
-    angleDeg: number
-    isRunning: boolean
-    isDone: boolean
-  }[] = []
-
-  for (let pi = 0; pi < segCount.value; pi++) {
-    const names = props.phaseNames?.[pi] || []
-    const nodeStatuses = props.phaseNodeStatuses?.[pi] || []
-    if (names.length === 0) continue
-    // 该阶段的弧段角度范围
-    const { a1: segStartRad, a2: segEndRad } = segRanges.value[pi]
-    const segStartDeg = segStartRad * 180 / Math.PI
-    const segEndDeg = segEndRad * 180 / Math.PI
-
-    // 在弧段内均匀分布标签
-    const step = names.length > 1 ? (segEndDeg - segStartDeg) / (names.length + 1) : 0
-    for (let ni = 0; ni < names.length; ni++) {
-      const angleDeg = names.length === 1
-        ? (segStartDeg + segEndDeg) / 2
-        : segStartDeg + step * (ni + 1)
-      const ns = nodeStatuses[ni] || { status: 'pending', progress: 0 }
-      const phaseDone = isPhaseDone(pi)
-      labels.push({
-        text: names[ni],
-        active: pi === props.currentIndex,
-        phaseIdx: pi,
-        nodeIdx: ni,
-        nodeCount: names.length,
-        angleDeg,
-        isRunning: !phaseDone && ns.status === 'running',
-        isDone: phaseDone || ns.status === 'completed' || ns.status === 'done',
-      })
-    }
-  }
-  return labels
+// 非全屏下皇冠与底部胶囊易挤占重叠，等比缩小一点；全屏保持原比例
+const finishScale = computed(() => {
+  if (isCompact.value) return 1
+  return props.fullscreen ? 1 : 0.8
 })
 
-function labelRadius(label: { nodeIdx: number; nodeCount: number }): number {
-  if (label.nodeCount >= 8) {
-    return outerR.value + (label.nodeIdx % 2 === 0 ? 20 : 46)
-  }
-  if (label.nodeCount >= 5) {
-    return outerR.value + (label.nodeIdx % 2 === 0 ? 24 : 38)
-  }
-  return outerR.value + 30
+function pointAt(index: number): TrackPoint {
+  const { row, laneIndex, laneCount } = locateLaneNode(index)
+  const y = laneY.value[row] ?? laneY.value[laneY.value.length - 1]
+  const reversed = row % 2 === 1
+  return lanePoint(
+    laneIndex,
+    laneCount,
+    reversed ? LANE_RIGHT : LANE_LEFT,
+    reversed ? LANE_LEFT : LANE_RIGHT,
+    y,
+  )
 }
 
-const ringLabelPositions = computed(() => {
-  const totalW = size.value + PAD_X * 2
-  const totalH = size.value + PAD_Y_TOP + PAD_Y_BOTTOM
-  return ringLabels.value.map((lbl) => {
-    const a = lbl.angleDeg * Math.PI / 180
-    const cosA = Math.cos(a)
-    const sinA = Math.sin(a)
-    // 多环节阶段采用内外两条标签车道，字体不缩小也能减少局部拥挤。
-    const r = labelRadius(lbl)
-    const px = cx.value + r * cosA
-    const py = cy.value + r * sinA
-    const flipped = cosA < -0.08
-    // 顶部区域标签倾斜优化：避免文字垂直朝上被遮挡
-    let rotate = flipped ? lbl.angleDeg + 180 : lbl.angleDeg
-    const TOP_MIN = -135
-    const TOP_MAX = -45
-    if (!flipped && lbl.angleDeg > TOP_MIN && lbl.angleDeg < TOP_MAX) {
-      // 顶部右侧：限制旋转角不超过 -50°（向右倾斜）
-      rotate = Math.max(rotate, -50)
+function locateLaneNode(index: number): { row: number; laneIndex: number; laneCount: number } {
+  let offset = index
+  for (let row = 0; row < laneNodeCounts.value.length; row += 1) {
+    const laneCount = laneNodeCounts.value[row]
+    if (offset < laneCount) {
+      return { row, laneIndex: offset, laneCount }
     }
-    if (flipped) {
-      const flippedAngle = lbl.angleDeg + 180
-      if (flippedAngle > 135 && flippedAngle < 225) {
-        // 顶部左侧：限制旋转角不超过 230°（向左倾斜）
-        rotate = Math.min(rotate, 230)
-      }
-    }
-    return {
-      leftPct: (px / totalW) * 100,
-      topPct: (py / totalH) * 100,
-      rotate,
-      flipped,
-    }
-  })
-})
-
-// 连接线：从标签到环外缘
-const ringLabelLines = computed(() => {
-  return ringLabels.value.map((lbl) => {
-    const a = lbl.angleDeg * Math.PI / 180
-    const rLabel = labelRadius(lbl) - 2
-    const rRing = outerR.value + 8   // 环端（稍超出刻度）
-    return {
-      x1: cx.value + rLabel * Math.cos(a),
-      y1: cy.value + rLabel * Math.sin(a),
-      x2: cx.value + rRing * Math.cos(a),
-      y2: cy.value + rRing * Math.sin(a),
-    }
-  })
-})
-
-// 运行中环节节点的位置信息（用于波纹动画）
-const runningRipples = computed(() => {
-  return ringLabels.value
-    .map((lbl) => {
-      if (!lbl.isRunning) return null
-      const a = lbl.angleDeg * Math.PI / 180
-      const rRing = outerR.value + 8
-      return {
-        cx: cx.value + rRing * Math.cos(a),
-        cy: cy.value + rRing * Math.sin(a),
-      }
-    })
-    .filter(Boolean) as { cx: number; cy: number }[]
-})
-
-function chineseNum(n: number): string {
-  return ['一', '二', '三', '四', '五', '六'][n - 1] || String(n)
+    offset -= laneCount
+  }
+  const row = laneNodeCounts.value.length - 1
+  return { row, laneIndex: Math.max(0, laneNodeCounts.value[row] - 1), laneCount: laneNodeCounts.value[row] }
 }
+
+function lanePoint(index: number, count: number, startX: number, endX: number, y: number): TrackPoint {
+  const direction = Math.sign(endX - startX) || 1
+  const laneStart = startX + direction * LANE_NODE_PADDING
+  const laneEnd = endX - direction * LANE_NODE_PADDING
+  const ratio = count > 1 ? index / (count - 1) : 0.5
+  const x = laneStart + (laneEnd - laneStart) * ratio
+  return { x, y }
+}
+
+function trackPathThroughIndexes(indexes: number[]): string {
+  const first = trackPoints.value[indexes[0]]
+  if (!first) return ''
+
+  let d = `M ${first.x} ${first.y}`
+  for (let i = 1; i < indexes.length; i += 1) {
+    d += trackPathSegment(indexes[i - 1], indexes[i])
+  }
+  return d
+}
+
+function trackPathSegment(fromIndex: number, toIndex: number): string {
+  if (toIndex <= fromIndex) {
+    const to = trackPoints.value[toIndex]
+    return to ? ` L ${to.x} ${to.y}` : ''
+  }
+
+  let d = ''
+  for (let index = fromIndex; index < toIndex; index += 1) {
+    d += adjacentTrackPathSegment(index, index + 1)
+  }
+  return d
+}
+
+function adjacentTrackPathSegment(fromIndex: number, toIndex: number): string {
+  const from = trackPoints.value[fromIndex]
+  const to = trackPoints.value[toIndex]
+  if (!from || !to) return ''
+
+  const fromLane = locateLaneNode(fromIndex)
+  const toLane = locateLaneNode(toIndex)
+  if (fromLane.row === toLane.row) {
+    return ` L ${to.x} ${to.y}`
+  }
+
+  const lanes = laneY.value
+  const prevY = lanes[fromLane.row]
+  const y = lanes[toLane.row]
+  const midY = Math.round((prevY + y) / 2)
+  const turnX = fromLane.row % 2 === 0 ? TURN_RIGHT : TURN_LEFT
+  const laneEndX = fromLane.row % 2 === 0 ? LANE_RIGHT : LANE_LEFT
+  return ` L ${laneEndX} ${prevY} Q ${turnX} ${prevY} ${turnX} ${midY} Q ${turnX} ${y} ${laneEndX} ${y} L ${to.x} ${to.y}`
+}
+
+function shouldLabelAbove(_index: number, _point: TrackPoint): boolean {
+  return true
+}
+
+function visualStatusOf(status: NodeStatus | undefined, index: number): 'completed' | 'running' | 'issue' | 'pending' {
+  if (isDone(status)) return 'completed'
+  if (status?.status === 'issue' || status?.status === 'timeout') return 'issue'
+  if (status?.status === 'running' || index === activeNodeIndex.value) return 'running'
+  return 'pending'
+}
+
+function isDone(status: NodeStatus | undefined): boolean {
+  return status?.status === 'completed' || status?.status === 'done'
+}
+
+function shorten(name: string): string {
+  return name.length > 5 ? `${name.slice(0, 5)}…` : name
+}
+
 </script>
 
 <style lang="scss" scoped>
 .phase-ring {
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-}
-.ring-inner {
   position: relative;
-  flex-shrink: 0;
-}
-.ring-svg {
-  position: absolute; top: 0; left: 0;
-  pointer-events: none;
-}
-.pulse-node {
-  animation: node-pulse 1.6s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-@keyframes node-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; filter: drop-shadow(0 0 8px #ff7a00); }
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 0;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
 }
 
-// 活跃段流光动画
-.flow-light-streak {
-  stroke-dasharray: 30 200;
-  stroke-dashoffset: 0;
-  animation: flow-streak 2.4s linear infinite;
-  will-change: stroke-dashoffset;
-}
-@keyframes flow-streak {
-  from { stroke-dashoffset: 230; }
-  to { stroke-dashoffset: 0; }
-}
-
-// 环节节点进度弧 - 运行中动画
-.arc-running {
-  animation: arc-pulse 1.5s ease-in-out infinite;
-  filter: drop-shadow(0 0 4px rgba(255, 154, 47, 0.6));
-}
-@keyframes arc-pulse {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(255, 154, 47, 0.6)); }
-  50% { opacity: 0.7; filter: drop-shadow(0 0 8px rgba(255, 154, 47, 0.9)); }
-}
-
-// 活跃段粒子光晕
-.flow-particle {
-  filter: drop-shadow(0 0 4px rgba(255, 180, 74, 0.8));
-}
-.flow-particle-1 {
-  animation: particle-glow 1.2s ease-in-out infinite;
-}
-.flow-particle-2 {
-  animation: particle-glow 1.2s ease-in-out infinite 0.3s;
-}
-.flow-particle-3 {
-  animation: particle-glow 1.2s ease-in-out infinite 0.6s;
-}
-@keyframes particle-glow {
-  0%, 100% { opacity: 0.9; }
-  50% { opacity: 0.4; }
-}
-
-// 雷达扫描旋转（由浏览器合成器线程处理，无需 GPU 硬件）
-.radar-sweep {
-  transform-origin: center;
-  transform-box: view-box;
-  animation: radar-rotate 10s linear infinite;
-  will-change: transform;
-}
-@keyframes radar-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-// 同心环微脉冲
-.concentric-rings {
-  animation: ring-pulse 6s ease-in-out infinite;
-}
-@keyframes ring-pulse {
-  0%, 100% { opacity: 0.18; }
-  50% { opacity: 0.09; }
-}
-
-// 无障碍：减少动画
-@media (prefers-reduced-motion: reduce) {
-  .radar-sweep { animation: none; opacity: 0.3; }
-  .concentric-rings { animation: none; }
-  .flow-light-streak { animation: none; stroke-dasharray: none; }
-  .flow-particle { display: none; }
-  .pulse-node { animation: none; }
-  .arc-running { animation: none; }
-  .label-node-running { animation: none; }
-  .label-line-running { animation: none; }
-  .ripple-1, .ripple-2, .ripple-3 { animation: none; display: none; }
-  .running-halo { animation: none; }
-  .running-dot { animation: none; }
-  .running-dot-ripple { animation: none; display: none; }
-  .ring-outer-label-running .ring-outer-label-content { animation: none; }
-  .ring-outer-label-running .ring-outer-label-dot { animation: none; }
-  .ring-outer-label-running .dot-core,
-  .ring-outer-label-running .dot-orbit,
-  .ring-outer-label-running .ring-outer-label-text::after,
-  .ring-outer-label-running .running-tag,
-  .ring-outer-label-running .running-tag-dot { animation: none !important; }
-  .ring-outer-label-running .dot-ripple { display: none !important; }
-}
-
-// 阶段圆形节点
-.phase-node-label {
+.phase-ring::before {
+  content: '';
   position: absolute;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 5;
-  width: 58px;
-  height: 58px;
+  left: -4px;
+  top: var(--connector-y, 62px);
+  width: 48px;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 4px 50%, #7dffc6 0 3px, rgba(45, 228, 255, 0.86) 3.2px 4px, transparent 4.2px),
+    linear-gradient(
+      90deg,
+      rgba(45, 228, 255, 0.18),
+      rgba(45, 228, 255, 0.68) 19%,
+      rgba(125, 255, 198, 0.94) 50%,
+      rgba(45, 228, 255, 0.68) 81%,
+      rgba(45, 228, 255, 0.08)
+    ) 0 50% / 100% 2px no-repeat;
+  box-shadow:
+    0 0 8px rgba(45, 228, 255, 0.58),
+    0 0 16px rgba(125, 255, 198, 0.2);
+  z-index: 4;
+}
+
+.phase-ring::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: var(--connector-y, 62px);
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%);
   border-radius: 50%;
+  background: #7dffc6;
+  border: 1px solid rgba(45, 228, 255, 0.86);
+  box-shadow:
+    0 0 10px rgba(125, 255, 198, 0.72),
+    0 0 18px rgba(45, 228, 255, 0.42);
+  z-index: 5;
+}
+
+.relay-runway {
+  position: relative;
+  width: calc(100% - 8px);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(45, 228, 255, 0.32);
+  border-radius: 18px;
+  background:
+    linear-gradient(90deg, rgba(45, 228, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(45, 228, 255, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse at 55% 54%, rgba(0, 212, 255, 0.2), transparent 56%),
+    linear-gradient(180deg, rgba(4, 24, 56, 0.78), rgba(2, 10, 28, 0.9));
+  background-size: 44px 100%, 100% 34px, auto, auto;
+  box-shadow:
+    inset 0 0 36px rgba(0, 212, 255, 0.12),
+    inset 0 -46px 90px rgba(0, 10, 26, 0.72),
+    0 18px 46px rgba(0, 0, 0, 0.18);
+}
+
+.relay-runway::after {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  border: 1px solid rgba(45, 228, 255, 0.12);
+  border-radius: 14px;
+  clip-path: polygon(0 0, 18% 0, 18% 2px, 82% 2px, 82% 0, 100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+.relay-runway::before {
+  content: '';
+  position: absolute;
+  inset: -24% -34%;
+  background:
+    conic-gradient(from 92deg at 50% 50%, transparent, rgba(45, 228, 255, 0.12), transparent 34%, rgba(45, 228, 255, 0.08), transparent 62%);
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.runway-head {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 40px;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 56px;
+  pointer-events: none;
+}
+
+.runway-title {
+  padding: 5px 12px 6px;
+  color: #ffffff;
+  font-size: clamp(16px, 1.6em, 28px);
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-left: 3px solid #2de4ff;
+  background: linear-gradient(90deg, rgba(45, 228, 255, 0.16), rgba(45, 228, 255, 0.02));
+  box-shadow: 0 0 18px rgba(45, 228, 255, 0.08);
+  text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
+}
+
+// 右上角统计信息
+.head-stats {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 5px 14px;
+  border: 1px solid rgba(45, 228, 255, 0.26);
+  border-radius: 14px;
+  background: rgba(8, 24, 56, 0.52);
+  box-shadow: 0 0 14px rgba(45, 228, 255, 0.14);
+}
+
+.head-stats .stats-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.head-stats .stats-num {
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: clamp(18px, 1.6em, 26px);
+  font-weight: 900;
+  color: #eaf8ff;
+  text-shadow: 0 0 12px rgba(45, 228, 255, 0.48);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.head-stats .stats-done .stats-num {
+  color: #7dffc6;
+  text-shadow: 0 0 14px rgba(73, 255, 166, 0.55);
+}
+
+.head-stats .stats-label {
+  font-size: clamp(11px, 0.9em, 15px);
+  color: rgba(211, 239, 255, 0.78);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.head-stats .stats-sep {
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: clamp(16px, 1.4em, 22px);
+  color: rgba(45, 228, 255, 0.55);
+  font-weight: 600;
+  align-self: center;
+  margin: 0 2px;
+}
+
+// 数据汇聚点 - 阶段进度
+.progress-hub {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(5, 22, 56, 0.94);
-  border: 2px solid rgba(0, 212, 255, 0.72);
-  box-shadow: 0 0 16px rgba(0, 212, 255, 0.32);
-  transition: all 0.3s ease;
-}
-.phase-node-text {
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-size: 13px;
-  font-weight: 900;
-  color: #d5ecff;
-  letter-spacing: 1px;
-  white-space: nowrap;
-}
-.phase-node-done {
-  border-color: rgba(52, 255, 151, 0.72);
-  background: rgba(6, 46, 32, 0.85);
-  box-shadow: 0 0 16px rgba(52, 255, 151, 0.32), inset 0 0 8px rgba(52, 255, 151, 0.12);
-  .phase-node-text { color: #b8ffd4; text-shadow: 0 0 8px rgba(52, 255, 151, 0.5); }
-}
-.phase-node-active {
-  border-color: #ff9a2f;
-  background: rgba(80, 38, 8, 0.88);
-  box-shadow: 0 0 22px rgba(255, 122, 0, 0.45), inset 0 0 10px rgba(255, 122, 0, 0.12);
-  animation: phase-node-pulse 2s ease-in-out infinite;
-  .phase-node-text { color: #ffd699; }
-}
-@keyframes phase-node-pulse {
-  0%, 100% { box-shadow: 0 0 22px rgba(255, 122, 0, 0.45), inset 0 0 10px rgba(255, 122, 0, 0.12); }
-  50% { box-shadow: 0 0 30px rgba(255, 122, 0, 0.65), inset 0 0 14px rgba(255, 122, 0, 0.18); }
+  width: 118px;
+  height: 118px;
+  pointer-events: none;
+  isolation: isolate;
 }
 
-.ring-svg-overlay {
+.hub-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(45, 228, 255, 0.26) 0%, rgba(45, 228, 255, 0.12) 34%, transparent 66%);
+  animation: hub-glow-pulse 3s ease-in-out infinite;
+  z-index: 0;
+}
+
+.hub-rings {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 114px;
+  height: 114px;
+  z-index: 1;
+}
+
+.hub-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: hub-ring-orbit 6s linear infinite;
+}
+
+.hub-ring-1 {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
+    conic-gradient(from -28deg, transparent 0 22deg, rgba(45, 228, 255, 0.8) 22deg 118deg, transparent 118deg 164deg, rgba(45, 228, 255, 0.42) 164deg 214deg, transparent 214deg 360deg) border-box;
+  animation-delay: 0s;
+  opacity: 0.92;
+}
+
+.hub-ring-2 {
+  inset: 8px;
+  border: 1px dashed rgba(115, 220, 255, 0.34);
+  animation-delay: -2s;
+  animation-direction: reverse;
+}
+
+.hub-ring-3 {
+  inset: 17px;
+  border: 1px solid rgba(45, 228, 255, 0.24);
+  box-shadow: inset 0 0 18px rgba(45, 228, 255, 0.1);
+  animation-delay: -4s;
+}
+
+.hub-core {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  padding-top: 24px;
+  padding-bottom: 16px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.2), transparent 46%),
+    radial-gradient(circle at center, rgba(18, 92, 210, 0.3) 0%, transparent 72%),
+    linear-gradient(145deg, rgba(8, 30, 60, 0.96), rgba(5, 15, 38, 0.86));
+  border: 1px solid rgba(45, 228, 255, 0.52);
+  border-radius: 50%;
+  box-shadow:
+    0 0 26px rgba(45, 228, 255, 0.28),
+    inset 0 0 18px rgba(45, 228, 255, 0.15),
+    inset 0 -12px 22px rgba(2, 8, 24, 0.5);
+  overflow: hidden;
+}
+
+.hub-core::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(211, 245, 255, 0.12);
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(45, 228, 255, 0.12) 49% 51%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(45, 228, 255, 0.1) 49% 51%, transparent 52%);
+  opacity: 0.76;
+}
+
+.hub-core::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 34%);
+  opacity: 0.48;
+}
+
+.hub-num {
+  position: relative;
+  z-index: 1;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: 38px;
+  font-weight: 900;
+  color: #2de4ff;
+  line-height: 1;
+  text-shadow:
+    0 0 14px rgba(45, 228, 255, 0.82),
+    0 0 28px rgba(45, 228, 255, 0.42);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  animation: hub-num-glow 2.8s ease-in-out infinite;
+}
+
+.hub-unit {
+  position: relative;
+  z-index: 1;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  align-self: baseline;
+  margin-left: 2px;
+  font-size: 19px;
+  font-weight: 900;
+  color: rgba(142, 237, 255, 0.84);
+  line-height: 1;
+}
+
+// 数据汇流粒子 - 溪流汇入大海的效果
+.flow-particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   z-index: 1;
   pointer-events: none;
 }
 
-// 径向环节标签：文字方向接近圆环半径，避免顶部/底部横向堆叠
-.label-node-running {
-  animation: label-node-pulse 1.4s ease-in-out infinite;
-  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.85));
-}
-@keyframes label-node-pulse {
-  0%, 100% { opacity: 0.95; }
-  50% { opacity: 0.55; }
-}
-
-// 运行中连接线动画
-.label-line-running {
-  animation: line-flow 1.2s ease-in-out infinite;
-}
-@keyframes line-flow {
-  0%, 100% { opacity: 0.6; stroke-dashoffset: 0; }
-  50% { opacity: 1; stroke-dashoffset: 4; }
+.flow-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45, 228, 255, 0.92) 0%, rgba(45, 228, 255, 0.42) 50%, transparent 100%);
+  box-shadow: 0 0 8px rgba(45, 228, 255, 0.65);
+  animation: flow-to-hub 3.5s ease-in-out infinite;
 }
 
-// SVG 波纹扩散动画
-.ripple {
-  transform-origin: center;
-  transform-box: fill-box;
-  fill: none;
+.flow-particle-1 {
+  top: 15%;
+  left: 22%;
+  animation-delay: 0s;
 }
-.ripple-1 {
-  animation: ripple-expand 2s ease-out infinite;
+
+.flow-particle-2 {
+  top: 25%;
+  right: 18%;
+  animation-delay: -0.6s;
 }
-.ripple-2 {
-  animation: ripple-expand 2s ease-out infinite 0.5s;
+
+.flow-particle-3 {
+  top: 38%;
+  left: 12%;
+  animation-delay: -1.2s;
 }
-.ripple-3 {
-  animation: ripple-expand 2s ease-out infinite 1s;
+
+.flow-particle-4 {
+  top: 42%;
+  right: 14%;
+  animation-delay: -1.8s;
 }
-@keyframes ripple-expand {
+
+.flow-particle-5 {
+  bottom: 28%;
+  left: 18%;
+  animation-delay: -2.4s;
+}
+
+.flow-particle-6 {
+  bottom: 22%;
+  right: 22%;
+  animation-delay: -3s;
+}
+
+@keyframes flow-to-hub {
   0% {
-    r: 4;
-    opacity: 0.9;
-    stroke-width: 2.5;
+    opacity: 0.15;
+    transform: scale(0.6);
   }
-  60% {
-    opacity: 0.3;
+  25% {
+    opacity: 0.85;
+    transform: scale(1.1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) translate(20%, 15%);
+  }
+  75% {
+    opacity: 0.9;
+    transform: scale(1) translate(40%, 30%);
   }
   100% {
-    r: 22;
     opacity: 0;
-    stroke-width: 0.5;
+    transform: scale(0.3) translate(50%, 50%);
   }
 }
 
-// 运行中节点呼吸光晕
-.running-halo {
-  animation: halo-breathe 1.8s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-@keyframes halo-breathe {
-  0%, 100% { r: 8; opacity: 0.35; stroke-width: 1.5; }
-  50% { r: 12; opacity: 0.1; stroke-width: 0.5; }
-}
-.ring-outer-label {
-  position: absolute;
-  z-index: 4;
-  width: 0;
-  height: 0;
-  transform: translate(-50%, -50%) rotate(var(--label-rotate, 0deg));
-  transform-origin: center;
-  pointer-events: none;
-}
-.ring-outer-label-content {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  max-width: 138px;
-  padding: 3px 7px;
-  background: linear-gradient(90deg, rgba(4, 18, 48, 0.9), rgba(4, 18, 48, 0.18));
-}
-.ring-outer-label-flipped .ring-outer-label-content {
-  left: auto;
-  right: 8px;
-  background: linear-gradient(270deg, rgba(4, 18, 48, 0.9), rgba(4, 18, 48, 0.18));
-}
-.ring-outer-label-text {
-  display: block;
-  max-width: 126px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(219, 240, 255, 0.88);
-  font-size: 13px;
-  line-height: 1.18;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  text-shadow: 0 0 8px rgba(2, 14, 36, 0.95);
-}
-.ring-outer-label-active .ring-outer-label-text {
-  color: rgba(255, 255, 255, 0.98);
-}
-.ring-outer-label-done {
-  z-index: 6;
-  .ring-outer-label-content {
-    border-radius: 3px;
-    padding: 4px 8px;
-    background: linear-gradient(90deg, rgba(6, 70, 43, 0.88), rgba(6, 70, 43, 0));
-    box-shadow: 0 0 12px rgba(52, 255, 151, 0.26);
+.progress-hub.is-done {
+  .hub-glow {
+    background:
+      radial-gradient(circle, rgba(73, 255, 166, 0.28) 0%, rgba(73, 255, 166, 0.12) 34%, transparent 66%),
+      radial-gradient(circle, rgba(45, 228, 255, 0.16) 0%, transparent 54%);
   }
-  .ring-outer-label-text {
-    color: #b8ffd4;
-    font-weight: 800;
-    text-shadow: 0 0 7px rgba(52, 255, 151, 0.58);
+  
+  .hub-core {
+    border-color: rgba(73, 255, 166, 0.55);
+    box-shadow:
+      0 0 26px rgba(73, 255, 166, 0.34),
+      0 0 42px rgba(45, 228, 255, 0.18),
+      inset 0 0 20px rgba(73, 255, 166, 0.18),
+      inset 0 -12px 22px rgba(2, 8, 24, 0.5);
   }
-}
-.ring-outer-label-done.ring-outer-label-flipped .ring-outer-label-content {
-  background: linear-gradient(270deg, rgba(6, 70, 43, 0.88), rgba(6, 70, 43, 0));
-}
-.done-indicator {
-  width: 7px;
-  height: 7px;
-  margin-right: 4px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #34ff97;
-  box-shadow: 0 0 8px rgba(52, 255, 151, 0.82);
-}
-.ring-outer-label-running {
-  z-index: 7;
-  .ring-outer-label-content {
-    background: linear-gradient(90deg, rgba(84, 42, 8, 0.88), rgba(84, 42, 8, 0));
-    border-radius: 3px;
-    padding: 4px 8px;
-    box-shadow: 0 0 12px rgba(255, 154, 47, 0.35);
-    animation: label-bg-pulse 1.8s ease-in-out infinite;
+  
+  .hub-num {
+    color: #7dffc6;
+    text-shadow:
+      0 0 20px rgba(73, 255, 166, 0.85),
+      0 0 40px rgba(73, 255, 166, 0.55);
+    animation: none;
   }
-  .ring-outer-label-text {
-    color: #ffe2b5;
-    font-weight: 700;
-    text-shadow: 0 0 6px rgba(255, 154, 47, 0.6);
+
+  .hub-ring-1 {
+    background:
+      linear-gradient(rgba(3, 18, 42, 0.86), rgba(3, 18, 42, 0.86)) padding-box,
+      conic-gradient(from -28deg, transparent 0 18deg, rgba(73, 255, 166, 0.82) 18deg 130deg, transparent 130deg 176deg, rgba(45, 228, 255, 0.58) 176deg 232deg, transparent 232deg 360deg) border-box;
   }
-}
-@keyframes label-bg-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(255, 154, 47, 0.35); background: linear-gradient(90deg, rgba(84, 42, 8, 0.88), rgba(84, 42, 8, 0)); }
-  50% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.55); background: linear-gradient(90deg, rgba(100, 48, 8, 0.95), rgba(84, 42, 8, 0)); }
-}
-.ring-outer-label-running.ring-outer-label-flipped .ring-outer-label-content {
-  background: linear-gradient(270deg, rgba(84, 42, 8, 0.88), rgba(84, 42, 8, 0));
-  animation: label-bg-pulse-flipped 1.8s ease-in-out infinite;
-}
-@keyframes label-bg-pulse-flipped {
-  0%, 100% { box-shadow: 0 0 12px rgba(255, 154, 47, 0.35); background: linear-gradient(270deg, rgba(84, 42, 8, 0.88), rgba(84, 42, 8, 0)); }
-  50% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.55); background: linear-gradient(270deg, rgba(100, 48, 8, 0.95), rgba(84, 42, 8, 0)); }
+  
+  .hub-ring-2 {
+    border-color: rgba(73, 255, 166, 0.35);
+  }
 }
 
-// 运行指示器（标签前的圆点 + 波纹）
-.running-indicator {
+@keyframes hub-glow-pulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+@keyframes hub-ring-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hub-num-glow {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; }
+}
+
+.runway-progress {
   position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 8px;
-  height: 8px;
-  margin-right: 4px;
-  flex-shrink: 0;
+  gap: 12px;
+  padding: 8px 16px;
+  border: 1px solid #ff9a2f;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
+  box-shadow:
+    inset 0 0 20px rgba(255, 122, 0, 0.12);
+  pointer-events: none;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-.running-dot {
+
+.runway-progress.is-done {
+  border-color: rgba(73, 255, 166, 0.46);
+  box-shadow:
+    inset 0 0 18px rgba(73, 255, 166, 0.14),
+    0 0 22px rgba(73, 255, 166, 0.18);
+}
+
+.progress-label {
+  color: rgba(255, 224, 162, 0.86);
+  font-size: clamp(14px, 1.2em, 20px);
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+
+.progress-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  line-height: 1;
+}
+
+.progress-num {
+  color: #ffe0a4;
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: clamp(14px, 1.2em, 20px);
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-shadow: 0 0 14px rgba(255, 180, 74, 0.6);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+  animation: progress-pulse 2.4s ease-in-out infinite;
+}
+
+.progress-unit {
+  color: rgba(255, 224, 162, 0.9);
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-size: clamp(14px, 1.2em, 20px);
+  font-weight: 900;
+}
+
+.runway-progress.is-done .progress-num {
+  color: #7dffc6;
+  text-shadow: 0 0 14px rgba(73, 255, 166, 0.62);
+  animation: none;
+}
+
+.progress-bar {
+  position: relative;
+  display: block;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(8, 23, 45, 0.72);
+  overflow: hidden;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.6);
+}
+
+.progress-bar-fill {
   position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2de4ff, #ffbd62);
+  box-shadow: 0 0 8px rgba(255, 180, 74, 0.7), 0 0 12px rgba(45, 228, 255, 0.5);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.runway-progress.is-done .progress-bar-fill {
+  background: linear-gradient(90deg, #2de4ff, #73ffc0);
+  box-shadow: 0 0 8px rgba(73, 255, 166, 0.7), 0 0 12px rgba(45, 228, 255, 0.5);
+}
+
+// 跑道底部 - 信息栏
+.runway-foot {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.foot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  color: rgba(211, 239, 255, 0.92);
+  font-size: clamp(13px, 1.1em, 18px);
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 1px solid rgba(45, 228, 255, 0.32);
+  border-radius: 12px;
+  background: rgba(8, 24, 56, 0.58);
+  box-shadow: 0 0 12px rgba(45, 228, 255, 0.12);
+}
+
+.status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ffb44a;
-  box-shadow: 0 0 6px rgba(255, 154, 47, 0.9);
-  animation: dot-core-pulse 1.4s ease-in-out infinite;
-}
-@keyframes dot-core-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(0.7); opacity: 0.7; }
-}
-.running-dot-ripple {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 180, 74, 0.7);
-  animation: dot-ripple-expand 2s ease-out infinite;
-}
-.running-dot-ripple.delay {
-  animation-delay: 0.7s;
-}
-@keyframes dot-ripple-expand {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(3.5); opacity: 0; }
+  background: #2de4ff;
+  box-shadow: 0 0 8px rgba(45, 228, 255, 0.85);
+  animation: status-pulse 1.8s ease-in-out infinite;
 }
 
-// 中心内容
-.center-content {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(62%, 300px);
-  min-width: 0;
-  text-align: center;
-  z-index: 3;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-}
-.center-caption {
-  font-size: 17px;
-  color: #d9edff;
-  letter-spacing: 4px;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-weight: 800;
-  text-shadow: 0 0 12px rgba(0, 120, 255, 0.5);
-  position: relative;
-  padding-bottom: 8px;
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 48px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.5), transparent);
-  }
-}
-.center-value {
-  display: flex; align-items: center; gap: 4px;
-  font-family: 'Share Tech Mono', monospace;
-  color: #00d4ff;
-  text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
-  .num-num { font-size: 22px; }
-  .num-sep { font-size: 19px; opacity: 0.72; }
-  .num-den { font-size: 19px; opacity: 0.85; }
-}
-.center-pct {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 92px;
-  font-weight: 900;
-  line-height: 1;
-  color: #ffffff;
-  text-shadow:
-    0 4px 0 rgba(255, 122, 0, 0.9),
-    0 0 18px rgba(255, 122, 0, 0.7),
-    0 0 42px rgba(38, 118, 255, 0.5);
-  .pct-unit { font-size: 40px; opacity: 0.98; margin-left: 2px; }
-}
-.center-hint {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
+.status-text {
+  max-width: min(320px, 38vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+}
+
+.foot-phase-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(45, 228, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(8, 24, 56, 0.58);
+  box-shadow:
+    0 0 12px rgba(45, 228, 255, 0.1),
+    inset 0 0 16px rgba(45, 228, 255, 0.04);
+}
+
+.phase-name-tag {
+  font-size: clamp(13px, 1.1em, 18px);
+  color: rgba(211, 239, 255, 0.92);
   font-weight: 800;
-  color: #e6f7ff;
-  letter-spacing: 1.2px;
-  text-shadow: 0 0 10px rgba(0, 212, 255, 0.42);
-  margin-top: 2px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+
+  &::after {
+    content: '';
+    display: inline-block;
+    width: 1px;
+    height: 12px;
+    margin-left: 8px;
+    background: linear-gradient(180deg, transparent, rgba(45, 228, 255, 0.5), transparent);
+    vertical-align: middle;
+  }
+}
+
+.phase-name-text {
+  font-size: clamp(13px, 1.1em, 18px);
+  color: #ff9a2f;
+  font-weight: 800;
+  letter-spacing: 1px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  text-shadow: 0 0 10px rgba(255, 154, 47, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12em;
+}
+
+/* 里程碑标签：皇冠右侧 HUD 引出线 + 鎏金文字 */
+.finish-milestone {
+  opacity: 0.95;
+}
+
+.finish-milestone-lead {
+  fill: none;
+  stroke: rgba(255, 211, 111, 0.5);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.finish-milestone-dot {
+  fill: #ffd36f;
+  filter: drop-shadow(0 0 3px rgba(255, 180, 74, 0.8));
+}
+
+.finish-milestone-text {
+  fill: #ffd36f;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.55));
+}
+
+.finish-node-done .finish-milestone-text {
+  fill: #ffe1a5;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 12px rgba(45, 228, 255, 1); }
+}
+
+@keyframes progress-pulse {
+  0%, 100% { text-shadow: 0 0 10px rgba(255, 180, 74, 0.45); }
+  50% { text-shadow: 0 0 18px rgba(255, 180, 74, 0.78), 0 0 24px rgba(255, 180, 74, 0.32); }
+}
+
+.runway-svg {
+  position: absolute;
+  inset: 128px 6px 70px;
+  width: calc(100% - 18px);
+  height: calc(100% - 198px);
+  overflow: visible;
+  z-index: 1;
+}
+
+.phase-ring-compact {
+  .runway-head {
+    top: 10px;
+    left: 14px;
+    right: 28px;
+    height: 46px;
+  }
+
+  .runway-title {
+    font-size: clamp(14px, 1.35em, 22px);
+    padding: 4px 10px 5px;
+  }
+
+  .head-stats {
+    min-height: 44px;
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .progress-hub {
+    top: 28px;
+    width: 94px;
+    height: 94px;
+  }
+
+  .hub-glow {
+    width: 132px;
+    height: 132px;
+  }
+
+  .hub-rings {
+    width: 92px;
+    height: 92px;
+  }
+
+  .hub-core {
+    width: 72px;
+    height: 72px;
+    padding-top: 19px;
+    padding-bottom: 13px;
+  }
+
+  .hub-num {
+    font-size: 30px;
+  }
+
+  .hub-unit {
+    font-size: 15px;
+  }
+
+  .runway-svg {
+    inset: 104px 6px 58px;
+    height: calc(100% - 162px);
+  }
+
+  .node-label {
+    font-size: 26px;
+    stroke-width: 2.4px;
+  }
+
+  .finish-node {
+    opacity: 0.9;
+    transform: scale(0.58);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .finish-beacon-ring,
+  .finish-sparks {
+    display: none;
+  }
+
+  .finish-tether {
+    display: none;
+  }
+
+  .runway-foot {
+    left: 18px;
+    right: 18px;
+    bottom: 10px;
+  }
+
+  .foot-status,
+  .foot-phase-name {
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9px;
+  }
+
+  .phase-name-tag,
+  .phase-name-text,
+  .foot-status {
+    font-size: clamp(12px, 1em, 15px);
+  }
+}
+
+@media (max-height: 820px) {
+  .runway-foot {
+    left: 18px;
+    right: 18px;
+    bottom: 10px;
+    // 始终保持 space-between：实例名在左、当前阶段胶囊在右，与宽屏一致
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .foot-status,
+  .foot-phase-name {
+    min-width: 0;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9px;
+  }
+
+  .phase-name-tag,
+  .phase-name-text,
+  .foot-status {
+    font-size: clamp(12px, 1em, 15px);
+  }
+
+  .status-text {
+    max-width: 16em;
+  }
+
+  .phase-name-text {
+    max-width: 14em;
+  }
+}
+
+.lane-aura {
+  opacity: 0.72;
+}
+
+.lane-dash {
+  opacity: 0.58;
+  stroke: rgba(211, 245, 255, 0.54);
+}
+
+.runway-svg-turn-pip {
+  fill: rgba(211, 245, 255, 0.72);
+  opacity: 0.18;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: runway-svg-turn-pip 2.4s ease-in-out infinite;
+}
+
+.runway-svg-turn-pip-left {
+  animation-delay: -1.2s;
+}
+
+.baton-trail-dot {
+  fill: #ffbd62;
+  filter: drop-shadow(0 0 4px rgba(255, 189, 98, 0.65));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: trail-breathe 1.4s ease-in-out infinite;
+}
+
+.baton-trail-1 { opacity: 0.74; animation-delay: 0s; }
+.baton-trail-2 { opacity: 0.44; animation-delay: -0.45s; }
+.baton-trail-3 { opacity: 0.2; animation-delay: -0.9s; }
+
+.baton {
+  fill: url(#baton-fill);
+  stroke: #ffdd9a;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 7px rgba(255, 132, 38, 0.72));
+}
+
+.baton-core {
+  fill: url(#baton-core);
+}
+
+.baton-arrow {
+  fill: none;
+  stroke: #fff5d6;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(255, 245, 214, 0.8));
+}
+
+// 跑道流向驱动 baton 摆动方向：向右行进时右摆，向左行进时左摆
+.baton-group.flow-right .baton,
+.baton-group.flow-right .baton-core,
+.baton-group.flow-right .baton-arrow {
+  animation: baton-run-right 1.05s ease-in-out infinite;
+}
+
+.baton-group.flow-left .baton,
+.baton-group.flow-left .baton-core,
+.baton-group.flow-left .baton-arrow {
+  animation: baton-run-left 1.05s ease-in-out infinite;
+}
+
+.node-pulse-ring {
+  animation: node-ring 1.28s ease-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.node-core {
+  stroke-width: 3;
+}
+
+.node-core-completed {
+  fill: #073c31;
+  stroke: #55ffb0;
+}
+
+.node-core-pending {
+  fill: #102845;
+  stroke: #567fa7;
+}
+
+.node-core-issue {
+  fill: #4a1721;
+  stroke: #ff666a;
+}
+
+.node-label {
+  font-size: 31px;
+  font-weight: 900;
+  letter-spacing: 0;
+  paint-order: stroke fill;
+  stroke: rgba(2, 10, 24, 0.62);
+  stroke-width: 3px;
+}
+
+.finish-node {
+  opacity: 0.82;
+}
+
+.finish-beacon-ring {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: finish-beacon-ring 2.2s ease-out infinite;
+}
+
+.finish-beacon-ring-b {
+  animation-delay: -1.1s;
+}
+
+.finish-sparks {
+  stroke: rgba(255, 224, 162, 0.82);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  animation: finish-sparks-flash 1.8s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.finish-tether {
+  animation: finish-tether-pulse 1.6s ease-in-out infinite;
+}
+
+.finish-disc {
+  stroke-width: 2.4px;
+}
+
+.finish-crown-shadow {
+  fill: rgba(25, 12, 2, 0.62);
+  transform: translate(2px, 4px);
+}
+
+.finish-crown {
+  fill: url(#crown-gold);
+  stroke: #fff0a8;
+  stroke-width: 2.1;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+.finish-crown-ridge {
+  fill: none;
+  stroke: url(#crown-ridge);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.8;
+}
+
+.finish-crown-gem {
+  fill: url(#crown-gem);
+  stroke: rgba(255, 255, 255, 0.82);
+  stroke-width: 0.8;
+}
+
+.finish-crown-gem-main {
+  fill: #e53e2f;
+  stroke: #ffd7b0;
+}
+
+.finish-orbit {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: finish-orbit-spin 5s linear infinite;
+}
+
+.finish-orbit-outer {
+  animation: finish-orbit-pulse 2.2s ease-in-out infinite;
+}
+
+.finish-node-done {
+  opacity: 1;
+  animation: finish-beacon 1.5s ease-in-out infinite;
+}
+
+@keyframes panel-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes runway-svg-turn-pip {
+  0%, 100% {
+    opacity: 0.22;
+    transform: scaleX(0.82);
+  }
+  45% {
+    opacity: 0.72;
+    transform: scaleX(1.28);
+  }
+}
+
+@keyframes baton-run-right {
+  50% { transform: translateX(6px) scale(1.04); }
+}
+
+@keyframes baton-run-left {
+  50% { transform: translateX(-6px) scale(1.04); }
+}
+
+@keyframes trail-breathe {
+  0%, 100% { transform: scale(0.78); }
+  50% { transform: scale(1.22); }
+}
+
+@keyframes node-ring {
+  from { opacity: 0.85; transform: scale(0.65); }
+  to { opacity: 0; transform: scale(1.78); }
+}
+
+@keyframes finish-beacon {
+  50% {
+    opacity: 0.88;
+  }
+}
+
+@keyframes finish-beacon-ring {
+  from {
+    opacity: 0.82;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@keyframes finish-sparks-flash {
+  0%, 100% {
+    opacity: 0.34;
+    transform: scale(0.9);
+  }
+  48% {
+    opacity: 0.95;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes finish-tether-pulse {
+  50% { opacity: 0.52; stroke-width: 3.4; }
+}
+
+@keyframes finish-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes finish-orbit-pulse {
+  50% { opacity: 0.38; transform: scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relay-runway::before,
+  .runway-svg-turn-pip,
+  .baton,
+  .baton-arrow,
+  .baton-core,
+  .baton-trail-dot,
+  .node-pulse-ring,
+  .finish-node-done,
+  .finish-beacon-ring,
+  .finish-sparks,
+  .finish-tether,
+  .finish-orbit,
+  .finish-orbit-outer,
+  .progress-num,
+  .foot-tag-dot {
+    animation: none;
+  }
 }
 </style>

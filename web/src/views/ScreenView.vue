@@ -7,7 +7,7 @@
 
     <!-- 漂浮微光粒子 -->
     <div class="bg-particles">
-      <div v-for="i in 8" :key="'bp' + i" class="bg-particle" :class="'bp-' + i" />
+      <div v-for="i in 4" :key="'bp' + i" class="bg-particle" :class="'bp-' + i" />
     </div>
 
     <!-- Loading state -->
@@ -28,20 +28,41 @@
     </div>
 
     <!-- Main content -->
-    <div v-else-if="currentDrill" class="screen-content">
+    <div v-else-if="currentDrill" class="screen-content" :class="{ 'screen-content-fallback-fullscreen': fallbackFullscreen }">
       <!-- ========== HEADER ========== -->
       <header class="screen-header">
-        <div class="header-deco header-deco-left" />
+        <svg class="header-frame" viewBox="0 0 1200 74" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#148cff" stop-opacity="0" />
+              <stop offset="12%" stop-color="#11bfff" stop-opacity="0.72" />
+              <stop offset="34%" stop-color="#13d8ff" stop-opacity="1" />
+              <stop offset="50%" stop-color="#75eaff" stop-opacity="0.92" />
+              <stop offset="66%" stop-color="#13d8ff" stop-opacity="1" />
+              <stop offset="88%" stop-color="#11bfff" stop-opacity="0.72" />
+              <stop offset="100%" stop-color="#148cff" stop-opacity="0" />
+            </linearGradient>
+            <filter id="header-line-glow" x="-8%" y="-130%" width="116%" height="360%">
+              <feGaussianBlur stdDeviation="3.4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <path class="header-frame-line header-frame-line-shadow" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
+          <path class="header-frame-line" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
+          <path class="header-frame-line header-frame-line-inner" d="M312 35 L356 66 H844 L888 35" />
+          <path class="header-frame-cap" d="M392 66 H808" />
+        </svg>
         <div class="header-title-block">
-          <h1 class="drill-title">应急处置指挥中心</h1>
+          <h1 class="drill-title">应急指挥中心</h1>
         </div>
         <div class="header-meta">
-          <span class="meta-value">{{ currentDrill.name || '未命名演练' }}</span>
         </div>
-        <button class="btn-icon" @click="toggleFullscreen" title="全屏切换">
+        <button class="btn-icon" :class="{ active: isFullscreenLike }" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
         </button>
-        <div class="header-deco header-deco-right" />
         <div class="header-pulse-line" />
       </header>
 
@@ -127,7 +148,13 @@
               v-for="(stage, idx) in stages"
               :key="idx"
               class="stage-card"
-              :class="['stage-' + stage.status]"
+              :class="['stage-' + stage.status, { 'stage-current': idx === displayPhaseIndex }]"
+              role="tab"
+              :aria-selected="idx === displayPhaseIndex"
+              tabindex="0"
+              @click="selectPhase(idx)"
+              @keydown.enter.prevent="selectPhase(idx)"
+              @keydown.space.prevent="selectPhase(idx)"
             >
               <div class="stage-card-top">
                 <div class="stage-name-block">
@@ -160,19 +187,21 @@
         </section>
 
         <!-- CENTER: Phase ring -->
-        <section class="panel panel-center">
-          <div class="center-stage">
+        <section ref="centerPanelRef" class="panel panel-center">
+          <div class="center-stage" :class="`center-stage-${displayPhaseIndex}`">
             <PhaseRing
               :phases="ringPhases"
               :phase-names="ringPhaseNames"
               :phase-node-statuses="ringPhaseNodeStatuses"
               :phase-statuses="ringPhaseStatuses"
-              :current-index="currentPhaseIndex"
-              :progress="progressPercent"
-              :center-numerator="completedCount"
-              :center-denominator="totalCount"
-              :center-hint="`阶段${chineseNum(currentPhaseIndex + 1)} · ${currentPhaseName}`"
+              :current-index="displayPhaseIndex"
+              :progress="displayPhaseProgress"
+              :center-numerator="displayPhaseStepNum"
+              :center-denominator="displayPhaseStepDen"
+              :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
+              :instance-name="currentDrill.name"
               :size="ringSize"
+              :fullscreen="isFullscreenLike"
             />
           </div>
         </section>
@@ -237,6 +266,48 @@
 
       <!-- Footer decorations -->
       <footer class="screen-footer" />
+
+      <!-- 任务完成弹窗 -->
+      <Transition name="cyber-modal">
+        <div v-if="completionModal.visible" class="completion-overlay" @click="dismissCompletionModal">
+          <div class="completion-seal" @click.stop>
+            <span class="seal-corner tl" />
+            <span class="seal-corner tr" />
+            <span class="seal-corner bl" />
+            <span class="seal-corner br" />
+            <div class="seal-scan" />
+            <div class="seal-grid" />
+
+            <div class="seal-sigil">
+              <span class="sigil-ring sigil-ring-1" />
+              <span class="sigil-ring sigil-ring-2" />
+              <span class="sigil-ring sigil-ring-3" />
+              <svg class="sigil-hex" viewBox="0 0 100 100" aria-hidden="true">
+                <polygon points="50,6 90,29 90,71 50,94 10,71 10,29" />
+              </svg>
+              <svg class="sigil-check" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M13 25 L20 32 L35 15" />
+              </svg>
+            </div>
+
+            <div class="seal-body">
+              <div class="seal-title">任务完成</div>
+              <div class="seal-step">{{ completionModal.stepName }}</div>
+              <div v-if="completionModal.phaseName" class="seal-path">
+                <span class="path-phase">{{ completionModal.phaseName }}</span>
+                <template v-if="completionModal.directParent && completionModal.directParent !== '--'">
+                  <span class="path-sep">›</span>
+                  <span class="path-task">{{ completionModal.directParent }}</span>
+                </template>
+              </div>
+            </div>
+
+            <div class="seal-progress">
+              <div :key="completionModal.key" class="seal-progress-fill" />
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -254,10 +325,17 @@ import PhaseRing from '@/components/screen/PhaseRing.vue'
 
 const route = useRoute()
 const screenRootRef = ref<HTMLElement | null>(null)
+const fallbackFullscreen = ref(false)
+const isNativeFullscreen = ref(false)
+const isFullscreenLike = computed(() => isNativeFullscreen.value || fallbackFullscreen.value)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
 const viewportHeight = ref(window.innerHeight)
+const centerPanelRef = ref<HTMLElement | null>(null)
+const centerPanelWidth = ref(0)
+const centerPanelHeight = ref(0)
+let centerPanelResizeObserver: ResizeObserver | null = null
 
 let ws: WebSocket | null = null
 let refreshTimer: number | null = null
@@ -283,6 +361,16 @@ const recentLogs = ref<StepInstanceLog[]>([])
 const warnListRef = ref<HTMLElement | null>(null)
 const alertCardRefs = ref<HTMLElement[]>([])
 const moreTipRef = ref<HTMLElement | null>(null)
+
+// 任务完成弹窗
+const completionModal = ref({
+  visible: false,
+  key: 0,
+  stepName: '',
+  phaseName: '',
+  directParent: '',
+  timer: null as ReturnType<typeof setTimeout> | null,
+})
 
 // === 树形步骤辅助 ===
 // 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
@@ -362,6 +450,32 @@ function findDirectParent(stepId: number): string {
   if (!step?.parent_step_id) return '--'
   const parent = stepMap.get(step.parent_step_id)
   return parent?.name || '--'
+}
+
+// 任务完成弹窗：展示步骤名称、阶段路径，3.5s 后自动关闭
+function showCompletionModal(stepId: number) {
+  const step = drillSteps.value.find(s => s.id === stepId)
+  if (!step) return
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+  }
+  completionModal.value.key += 1
+  completionModal.value.stepName = step.name
+  completionModal.value.phaseName = findParentPhase(stepId)
+  completionModal.value.directParent = findDirectParent(stepId)
+  completionModal.value.visible = true
+  completionModal.value.timer = setTimeout(() => {
+    completionModal.value.visible = false
+    completionModal.value.timer = null
+  }, 3500)
+}
+
+function dismissCompletionModal() {
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+    completionModal.value.timer = null
+  }
+  completionModal.value.visible = false
 }
 
 // === KPI 计算 ===
@@ -527,13 +641,38 @@ const currentPhaseIndex = computed(() => {
   return 0
 })
 
+const selectedPhaseIndex = ref<number | null>(null)
+const displayPhaseIndex = computed(() => {
+  const count = stages.value.length
+  if (count === 0) return 0
+  const selected = selectedPhaseIndex.value
+  if (selected == null) return currentPhaseIndex.value
+  return Math.max(0, Math.min(selected, count - 1))
+})
+
 const currentPhaseName = computed(() => stages.value[currentPhaseIndex.value]?.name || '演练启动')
+const displayPhaseName = computed(() => stages.value[displayPhaseIndex.value]?.name || '演练启动')
 
 const currentPhaseProgress = computed(() => {
   const s = stages.value[currentPhaseIndex.value]
   if (!s) return { num: 0, den: 0 }
   return { num: s.completedSteps, den: s.totalSteps }
 })
+
+// 当前展示阶段的步骤进度（与左侧阶段卡片"步骤"口径一致，用于中心环 hub）
+// 注意：与全局 progressPercent 区分——此处仅统计当前展示阶段的叶子步骤
+const displayPhaseProgress = computed(() => {
+  const s = stages.value[displayPhaseIndex.value]
+  if (!s || s.totalSteps === 0) return 0
+  return Math.round((s.completedSteps / s.totalSteps) * 100)
+})
+const displayPhaseStepNum = computed(() => stages.value[displayPhaseIndex.value]?.completedSteps ?? 0)
+const displayPhaseStepDen = computed(() => stages.value[displayPhaseIndex.value]?.totalSteps ?? 0)
+
+function selectPhase(index: number) {
+  if (index < 0 || index >= stages.value.length) return
+  selectedPhaseIndex.value = index
+}
 
 // 阶段环需要的相位名称 + 各阶段环节名称
 const ringPhases = computed(() => {
@@ -570,17 +709,8 @@ const ringPhaseNodeStatuses = computed(() => {
       let progress = 0
       if (isDone) {
         progress = 100
-      } else if (isRunning) {
-        // 计算运行中步骤的进度
-        const runningLeaves = leaves.filter(s => s.status === 'running')
-        const avgProgress = runningLeaves.reduce((sum, s) => {
-          if (!s.start_time) return sum + 0
-          const elapsedSec = Math.max(1, Math.round((nowMs - new Date(s.start_time).getTime()) / 1000))
-          const limitSec = (s.timeout_minutes || 120) * 60
-          return sum + Math.min(99, Math.round((elapsedSec / limitSec) * 100))
-        }, 0) / Math.max(1, runningLeaves.length)
-        progress = Math.round((finishedLeaves / totalLeaves) * 100 + (avgProgress / totalLeaves))
-      } else if (finishedLeaves > 0) {
+      } else if (totalLeaves > 0) {
+        // 只计算已完成任务的进度比例（不包含运行中任务的时间进度估算）
         progress = Math.round((finishedLeaves / totalLeaves) * 100)
       }
 
@@ -591,16 +721,19 @@ const ringPhaseNodeStatuses = computed(() => {
 })
 
 const ringSize = computed(() => {
-  // 基于视口高度动态计算，确保不溢出
-  // 可用高度 ≈ 100vh - header(58) - kpi(108) - footer(16) - gaps(12*3) - padding(20)
-  const availableH = viewportHeight.value - 58 - 108 - 16 - 36 - 20
-  // PhaseRing 实际高度 = ringSize + PAD_Y_TOP + PAD_Y_BOTTOM
-  // PAD_Y_TOP=102, PAD_Y_BOTTOM=118 → 总 padding=220
-  const maxRingFromH = availableH - 220
-  // 基于宽度限制
-  const maxRingFromW = viewportWidth.value < 900 ? 330 : viewportWidth.value < 1200 ? 440 : 620
-  return Math.min(maxRingFromW, Math.max(280, maxRingFromH))
+  const panelHeight = centerPanelHeight.value || Math.max(260, viewportHeight.value - 204)
+  const maxRingFromH = Math.floor((panelHeight - 24) / 0.82)
+  // 基于中间面板宽度限制，避免非全屏时按整屏宽度估算导致内容偏左裁切
+  const panelWidth = centerPanelWidth.value || viewportWidth.value
+  const maxRingFromW = Math.floor((panelWidth - 4) / 1.72)
+  return Math.min(700, Math.max(230, maxRingFromW), Math.max(230, maxRingFromH))
 })
+
+function measureCenterPanel() {
+  if (!centerPanelRef.value) return
+  centerPanelWidth.value = centerPanelRef.value.clientWidth
+  centerPanelHeight.value = centerPanelRef.value.clientHeight
+}
 
 // === 告警 ===
 // 从步骤的"进行中"或异常中推算
@@ -961,6 +1094,11 @@ function applyStepEvent(eventType: string, payload: any) {
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
 
+  // 任务完成弹窗（step_complete 为归一化后的事件名）
+  if (eventType === 'step_complete') {
+    showCompletionModal(stepId)
+  }
+
   // 重新计算 KPI
   recomputeKpis()
 }
@@ -1041,17 +1179,30 @@ function stopFallbackPolling() {
 
 // 全屏
 async function toggleFullscreen() {
-  try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen()
-      return
-    }
+  if (document.fullscreenElement || fallbackFullscreen.value) {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    fallbackFullscreen.value = false
+    return
+  }
 
-    const target = screenRootRef.value || document.documentElement
+  const target = screenRootRef.value || document.documentElement
+  try {
     await target.requestFullscreen()
   } catch (err) {
-    console.error('toggle fullscreen failed:', err)
-    ElMessage.warning('当前浏览器或预览容器不允许进入全屏，请尝试在新窗口打开后再全屏')
+    console.warn('native fullscreen failed, fallback to page fullscreen:', err)
+    fallbackFullscreen.value = true
+    ElMessage.info('当前预览容器不允许浏览器全屏，已切换为页面内全屏')
+  }
+}
+
+function handleFullscreenChange() {
+  isNativeFullscreen.value = Boolean(document.fullscreenElement)
+  if (document.fullscreenElement) fallbackFullscreen.value = false
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && fallbackFullscreen.value) {
+    fallbackFullscreen.value = false
   }
 }
 
@@ -1059,7 +1210,14 @@ onMounted(() => {
   componentDestroyed = false
   loadData()
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
   nextTick(() => {
+    measureCenterPanel()
+    if (centerPanelRef.value && typeof ResizeObserver !== 'undefined') {
+      centerPanelResizeObserver = new ResizeObserver(measureCenterPanel)
+      centerPanelResizeObserver.observe(centerPanelRef.value)
+    }
     measureWarnList()
     if (warnListRef.value && typeof ResizeObserver !== 'undefined') {
       warnListResizeObserver = new ResizeObserver(measureWarnList)
@@ -1071,10 +1229,18 @@ onMounted(() => {
 onBeforeUnmount(() => {
   componentDestroyed = true
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  centerPanelResizeObserver?.disconnect()
+  centerPanelResizeObserver = null
   warnListResizeObserver?.disconnect()
   warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
   if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
+  if (completionModal.value.timer) {
+    clearTimeout(completionModal.value.timer)
+    completionModal.value.timer = null
+  }
   stopFallbackPolling()
   if (ws) { ws.close(); ws = null }
 })
@@ -1082,6 +1248,7 @@ onBeforeUnmount(() => {
 function handleResize() {
   viewportWidth.value = window.innerWidth
   viewportHeight.value = window.innerHeight
+  measureCenterPanel()
   measureWarnList()
 }
 
@@ -1109,9 +1276,9 @@ $text: #d6e8ff;
 $text-dim: #a9c7ec;
 $text-mute: #7f9fc7;
 
-$font-display: 'Orbitron', 'Rajdhani', 'Microsoft YaHei', sans-serif;
-$font-mono: 'Share Tech Mono', 'Consolas', monospace;
-$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+$font-display: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', Arial, sans-serif;
+$font-mono: Consolas, Menlo, Monaco, 'Courier New', monospace;
+$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
 
 .screen-root {
   position: relative;
@@ -1185,11 +1352,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   );
   pointer-events: none;
   z-index: 0;
-  animation: scan 8s linear infinite;
-}
-@keyframes scan {
-  from { background-position-y: 0; }
-  to { background-position-y: 100px; }
+  opacity: 0.72;
 }
 .bg-vignette {
   position: absolute;
@@ -1215,17 +1378,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   height: 4px;
   border-radius: 50%;
   background: rgba(0, 212, 255, 0.6);
-  box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
-  will-change: transform, opacity;
+  box-shadow: 0 0 5px rgba(0, 212, 255, 0.36);
 }
 .bp-1 { left: 8%; top: 15%; animation: float-particle 12s ease-in-out infinite; }
 .bp-2 { left: 22%; top: 70%; animation: float-particle 15s ease-in-out infinite 2s; width: 3px; height: 3px; }
-.bp-3 { left: 45%; top: 25%; animation: float-particle 18s ease-in-out infinite 4s; background: rgba(255, 180, 74, 0.5); box-shadow: 0 0 8px rgba(255, 180, 74, 0.3); }
+.bp-3 { left: 45%; top: 25%; animation: float-particle 18s ease-in-out infinite 4s; background: rgba(255, 180, 74, 0.5); box-shadow: 0 0 5px rgba(255, 180, 74, 0.26); }
 .bp-4 { left: 65%; top: 80%; animation: float-particle 14s ease-in-out infinite 1s; width: 3px; height: 3px; }
-.bp-5 { left: 80%; top: 35%; animation: float-particle 16s ease-in-out infinite 3s; }
-.bp-6 { left: 35%; top: 55%; animation: float-particle 20s ease-in-out infinite 5s; width: 2px; height: 2px; background: rgba(0, 255, 156, 0.4); box-shadow: 0 0 6px rgba(0, 255, 156, 0.3); }
-.bp-7 { left: 90%; top: 60%; animation: float-particle 13s ease-in-out infinite 6s; width: 3px; height: 3px; }
-.bp-8 { left: 55%; top: 10%; animation: float-particle 17s ease-in-out infinite 7s; background: rgba(255, 180, 74, 0.4); box-shadow: 0 0 6px rgba(255, 180, 74, 0.2); width: 2px; height: 2px; }
 @keyframes float-particle {
   0%, 100% { transform: translate(0, 0); opacity: 0.6; }
   25% { transform: translate(15px, -20px); opacity: 1; }
@@ -1271,51 +1429,150 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   gap: 8px;
 }
 
+.screen-content-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(0, 96, 205, 0.18), transparent 34%),
+    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.08), transparent 18%),
+    linear-gradient(180deg, #061229 0%, #020815 100%);
+}
+
 // ===== HEADER =====
 .screen-header {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
-  column-gap: 16px;
-  height: 58px;
+  justify-content: center;
+  height: 74px;
   background:
-    linear-gradient(90deg, rgba(37, 130, 255, 0.26), rgba(13, 37, 74, 0.1) 44%, rgba(20, 50, 96, 0.35));
+    radial-gradient(ellipse at 50% 12%, rgba(37, 132, 255, 0.34), transparent 32%),
+    linear-gradient(180deg, rgba(21, 66, 127, 0.34), rgba(6, 24, 57, 0.12) 68%, rgba(0, 212, 255, 0.04)),
+    linear-gradient(90deg, rgba(13, 58, 124, 0.28), rgba(4, 18, 44, 0.08) 36%, rgba(4, 18, 44, 0.08) 64%, rgba(13, 58, 124, 0.28));
   border: 0;
-  padding: 0 32px 0 24px;
-  box-shadow: inset 0 -1px 0 rgba(111, 178, 255, 0.35);
+  padding: 0 64px;
+  box-shadow:
+    inset 0 1px 0 rgba(115, 191, 255, 0.36),
+    inset 0 -1px 0 rgba(44, 144, 255, 0.38),
+    0 8px 28px rgba(0, 56, 120, 0.18);
+  overflow: hidden;
 
-  &::before, &::after {
+  &::before {
     content: '';
     position: absolute;
-    top: 50%;
-    width: 50px; height: 1px;
-    background: linear-gradient(90deg, transparent, $neon);
+    inset: 2px 0 auto;
+    height: 54px;
+    background:
+      radial-gradient(ellipse at 50% 18%, rgba(0, 136, 255, 0.3), transparent 38%),
+      linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.08) 24%, rgba(45, 130, 255, 0.18) 50%, rgba(0, 212, 255, 0.08) 76%, transparent);
+    pointer-events: none;
   }
-  &::before { left: 0; }
-  &::after { right: 0; transform: rotate(180deg); }
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 30px;
+    right: 30px;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.18) 16%, rgba(78, 166, 255, 0.5) 50%, rgba(0, 212, 255, 0.18) 84%, transparent);
+    pointer-events: none;
+  }
+
+  .header-frame {
+    position: absolute;
+    inset: 0 24px;
+    z-index: 1;
+    width: calc(100% - 48px);
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .header-frame-line,
+  .header-frame-cap {
+    fill: none;
+    stroke: url(#header-line-grad);
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+  }
+
+  .header-frame-line {
+    stroke-width: 3;
+  }
+
+  .header-frame-line-shadow {
+    stroke-width: 10;
+    opacity: 0.16;
+  }
+
+  .header-frame-line-inner {
+    stroke-width: 2;
+    opacity: 0.72;
+  }
+
+  .header-frame-cap {
+    stroke-width: 2;
+    opacity: 0.8;
+  }
 
   .header-title-block {
-    grid-column: 1;
-    text-align: left;
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 2;
+    width: min(430px, 42vw);
+    min-width: 300px;
+    height: 52px;
+    transform: translateX(-50%);
+    justify-content: center;
+    text-align: center;
     display: flex;
     align-items: center;
-    gap: 18px;
-    margin-top: -2px;
+    pointer-events: auto;
+    background:
+      radial-gradient(ellipse at 50% 58%, rgba(0, 218, 255, 0.16), transparent 66%),
+      linear-gradient(90deg, transparent, rgba(0, 192, 255, 0.12) 22%, rgba(83, 215, 255, 0.22) 50%, rgba(0, 192, 255, 0.12) 78%, transparent);
+    border-top: 0;
+    border-bottom: 1px solid rgba(0, 214, 255, 0.36);
+    box-shadow:
+      0 0 28px rgba(0, 128, 255, 0.16),
+      inset 0 0 22px rgba(0, 114, 255, 0.12);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    &::after {
+      bottom: -1px;
+      width: 44%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(33, 229, 255, 0.42), rgba(117, 234, 255, 0.82), rgba(33, 229, 255, 0.42), transparent);
+      box-shadow:
+        0 0 10px rgba(0, 213, 255, 0.5),
+        0 0 14px rgba(29, 210, 255, 0.38);
+    }
+
     .drill-title {
       font-family: $font-cn;
-      font-size: clamp(20px, 2.6em, 44px);
+      font-size: clamp(38px, 3vw, 42px);
       font-weight: 900;
-      letter-spacing: 4px;
+      letter-spacing: 5px;
       margin: 0;
+      padding-left: 6px;
       color: #ffffff;
-      text-shadow:
-        0 0 10px rgba(0, 153, 255, 0.95),
-        0 0 24px rgba(0, 153, 255, 0.6);
+      text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       line-height: 1;
+      pointer-events: auto;
     }
     .drill-title-en {
       display: block;
@@ -1329,8 +1586,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
   }
   .header-meta {
-    grid-column: 2;
-    justify-self: end;
+    margin-left: auto;
+    position: relative;
+    z-index: 2;
     display: flex; align-items: center; gap: 10px;
     font-family: $font-mono;
     .meta-label { color: $text-dim; font-size: 0.88em; letter-spacing: 2px; font-weight: 700; }
@@ -1344,20 +1602,18 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
   }
   .btn-icon {
-    grid-column: 3;
-    position: relative;
+    position: absolute;
+    right: 34px;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 2;
     background: transparent; border: 1px solid $line;
     color: $neon; width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; border-radius: 2px;
     transition: all 0.2s;
-    &:hover { border-color: $neon; box-shadow: 0 0 10px $neon-soft; }
-  }
-  .header-deco {
-    position: absolute; top: 0; width: 8px; height: 100%;
-    &-left { left: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite; }
-    &-right { right: 0; background: linear-gradient(180deg, transparent, $neon, transparent); opacity: 0.7; animation: deco-flicker 3s ease-in-out infinite 1.5s; }
+    &:hover,
+    &.active { border-color: $neon; box-shadow: 0 0 10px $neon-soft; background: rgba(0, 212, 255, 0.1); }
   }
   .header-pulse-line {
     position: absolute;
@@ -1365,8 +1621,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     width: 100%; height: 2px;
     background: linear-gradient(90deg, transparent, $neon, transparent);
     transform: scaleX(0);
-    animation: header-pulse 3s ease-in-out infinite;
-    will-change: transform;
+    animation: header-pulse 4.8s ease-in-out infinite;
   }
 }
 @keyframes deco-flicker {
@@ -1585,12 +1840,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .progress-ring-text {
     position: absolute;
     font-family: $font-mono;
-    font-size: 15px;
+    font-size: clamp(16px, 1.4em, 24px);
     font-weight: 800;
     color: #fff;
     line-height: 1;
     small {
-      font-size: 10px;
+      font-size: 0.65em;
       font-weight: 600;
       opacity: 0.75;
     }
@@ -1642,11 +1897,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== MAIN GRID =====
 .screen-main {
   display: grid;
-  grid-template-columns: minmax(270px, 18vw) minmax(560px, 1fr) minmax(340px, 26vw);
-  gap: 18px;
+  grid-template-columns: minmax(220px, 17vw) minmax(0, 1.18fr) minmax(280px, 24vw);
+  gap: 16px;
   flex: 1;
   min-height: 0;
   padding: 0;
+}
+
+.screen-root:fullscreen .screen-main,
+.screen-content-fallback-fullscreen .screen-main {
+  grid-template-columns: minmax(220px, 17vw) minmax(0, 1.18fr) minmax(280px, 24vw);
+  gap: 16px;
 }
 
 .panel {
@@ -1654,7 +1915,6 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   display: flex; flex-direction: column;
   background: $bg-card;
   border: 0;
-  backdrop-filter: blur(2px);
   overflow: hidden;
 }
 .panel-header {
@@ -1712,8 +1972,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     width: 60%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
-    animation: panel-scan 4s ease-in-out infinite;
-    will-change: transform;
+    animation: panel-scan 7s ease-in-out infinite;
     pointer-events: none;
   }
 }
@@ -1753,7 +2012,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     min-height: 0;
     flex: 1;
     overflow-y: auto;
-    padding-right: 10px;
+    padding-right: 34px;
     scroll-snap-type: y proximity;
   }
   .stage-card {
@@ -1768,6 +2027,12 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     display: flex; flex-direction: column; gap: 10px;
     justify-content: center;
     transition: all 0.2s;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid rgba(45, 228, 255, 0.78);
+      outline-offset: 2px;
+    }
 
     &.stage-done {
       background: linear-gradient(90deg, rgba(9, 58, 42, 0.94), rgba(7, 31, 35, 0.78));
@@ -1779,7 +2044,60 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       background: linear-gradient(90deg, rgba(86, 43, 8, 0.95), rgba(34, 25, 20, 0.78));
       border-color: #ff9a2f;
       border-left-color: #ff7a00;
-      box-shadow: 0 0 18px rgba(255, 122, 0, 0.32), inset 0 0 20px rgba(255, 122, 0, 0.12);
+      box-shadow: inset 0 0 18px rgba(255, 122, 0, 0.12);
+    }
+    &.stage-current {
+      transform: translateX(10px);
+      border-right: 1px solid rgba(255, 224, 162, 0.7);
+      background:
+        linear-gradient(90deg, rgba(86, 43, 8, 0.96), rgba(12, 38, 66, 0.84)),
+        radial-gradient(circle at 100% 50%, rgba(45, 228, 255, 0.22), transparent 34%);
+      box-shadow:
+        16px 0 28px rgba(45, 228, 255, 0.12),
+        inset 0 0 22px rgba(255, 122, 0, 0.13);
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -19px;
+        width: 48px;
+        height: 8px;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, rgba(45, 228, 255, 0.18), rgba(125, 255, 198, 0.88) 55%, rgba(125, 255, 198, 0.96)) 0 50% / 100% 2px no-repeat;
+        box-shadow: 0 0 12px rgba(45, 228, 255, 0.58), 0 0 18px rgba(125, 255, 198, 0.18);
+        transform: translateY(-50%);
+        z-index: 1;
+      }
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -23px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 50%, #7dffc6 0 3px, rgba(45, 228, 255, 0.86) 3.2px 4px, transparent 4.2px);
+        clip-path: inset(0 50% 0 0);
+        box-shadow: 0 0 10px rgba(125, 255, 198, 0.72), 0 0 18px rgba(45, 228, 255, 0.42);
+        transform: translateY(-50%);
+        z-index: 2;
+      }
+    }
+    &.stage-current.stage-done {
+      border-color: rgba(52, 255, 151, 0.5);
+      border-left-color: #34ff97;
+      border-right-color: rgba(125, 255, 198, 0.7);
+      background:
+        linear-gradient(90deg, rgba(9, 68, 46, 0.96), rgba(7, 36, 38, 0.84)),
+        radial-gradient(circle at 100% 50%, rgba(45, 228, 255, 0.16), transparent 34%);
+      box-shadow:
+        0 0 20px rgba(52, 255, 151, 0.22),
+        16px 0 24px rgba(45, 228, 255, 0.1),
+        inset 0 0 20px rgba(52, 255, 151, 0.12);
     }
     &.stage-issue { border-left-color: $danger; }
   }
@@ -1846,8 +2164,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 // ===== Center phase ring =====
 .panel-center {
   background:
-    radial-gradient(circle at center, rgba(18, 92, 210, 0.22), transparent 49%),
-    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 72%);
+    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 74%);
   position: relative;
   overflow: hidden;
   &::before, &::after {
@@ -1860,17 +2177,30 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 .center-stage {
   flex: 1;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: stretch; justify-content: center;
   position: relative;
+  min-height: 0;
+  padding-left: 0;
+  padding-inline: 0;
   &::before, &::after {
     content: '';
-    position: absolute; left: 50%;
-    transform: translateX(-50%);
-    width: 86%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(87, 152, 255, 0.44), transparent);
+    position: absolute;
+    inset: 10px 14px;
+    pointer-events: none;
+    border: 1px solid rgba(0, 212, 255, 0.08);
+    background:
+      linear-gradient(rgba(0, 212, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.045) 1px, transparent 1px);
+    background-size: 44px 44px;
   }
-  &::before { top: 18%; }
-  &::after { bottom: 18%; }
+  &.center-stage-0::after,
+  &.center-stage-1::after {
+    display: none;
+  }
+  &.center-stage-2::after,
+  &.center-stage-3::after {
+    display: none;
+  }
 }
 
 
@@ -1928,10 +2258,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       background: linear-gradient(90deg, $neon, rgba(0, 212, 255, 0.15));
     }
 
-    // 运行中卡片微光
+    // 运行中卡片微光（边框色与左侧 stage-running 阶段卡片统一为同一橙色系）
     &.alert-warn {
-      border-color: rgba(255, 182, 72, 0.34);
-      box-shadow: inset 0 0 22px rgba(255, 140, 40, 0.08);
+      border-color: #ff9a2f;
+      box-shadow: inset 0 0 22px rgba(255, 122, 0, 0.12);
     }
     &.alert-danger {
       border-color: rgba(255, 77, 106, 0.42);
@@ -2090,6 +2420,96 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   color: $text-mute; letter-spacing: 2px;
 }
 
+@media (max-height: 820px) {
+  .screen-root {
+    font-size: clamp(12px, 0.82vw, 15px);
+  }
+
+  .screen-content {
+    padding: 8px 12px 4px;
+    gap: 6px;
+  }
+
+  .screen-root::before {
+    inset: 6px 8px 6px;
+  }
+
+  .screen-header {
+    height: 58px;
+
+    .header-title-block {
+      height: 42px;
+
+      .drill-title {
+        font-size: clamp(28px, 2.4vw, 34px);
+        letter-spacing: 3px;
+      }
+    }
+  }
+
+  .kpi-row {
+    height: 74px;
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding-top: 8px;
+    padding-bottom: 8px;
+
+    .kpi-orb {
+      width: 28px;
+      height: 28px;
+    }
+
+    .progress-ring-wrap {
+      width: 42px;
+      height: 42px;
+    }
+  }
+
+  .screen-main {
+    gap: 10px;
+  }
+
+  .panel-header {
+    height: 38px;
+  }
+
+  .panel-body {
+    padding: 10px;
+  }
+
+  .panel-stages {
+    .stages-list {
+      gap: 10px;
+      padding-right: 16px;
+    }
+
+    .stage-card {
+      flex-basis: calc((100% - 30px) / 4);
+      min-height: 82px;
+      padding: 9px 12px;
+      gap: 7px;
+    }
+  }
+
+  .warn-list {
+    gap: clamp(6px, 0.8vh, 9px);
+
+    .alert-card {
+      min-height: 84px;
+      max-height: 112px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      gap: 5px;
+    }
+  }
+
+  .screen-footer {
+    height: 8px;
+  }
+}
+
 @media (max-width: 1080px) {
   .kpi-row {
     height: 82px;
@@ -2152,9 +2572,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .progress-ring-text {
-      font-size: 11px;
+      font-size: 0.82em;
       small {
-        font-size: 7px;
+        font-size: 0.65em;
       }
     }
 
@@ -2187,15 +2607,24 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   }
 
   .screen-header {
-    height: 44px;
+    height: 50px;
     padding: 0 12px;
 
+    .header-frame {
+      inset: 0 14px;
+      width: calc(100% - 28px);
+    }
+
     .header-title-block {
-      gap: 8px;
+      top: 3px;
+      width: min(320px, 56vw);
+      min-width: 220px;
+      height: 36px;
 
       .drill-title {
-        font-size: 18px;
+        font-size: 24px;
         letter-spacing: 2px;
+        padding-left: 2px;
       }
 
       .drill-title-en {
@@ -2220,6 +2649,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
     }
 
     .btn-icon {
+      right: 18px;
       width: 26px; height: 26px;
     }
   }
@@ -2305,9 +2735,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
       height: 40px;
     }
     .progress-ring-text {
-      font-size: 11px;
+      font-size: 0.72em;
       small {
-        font-size: 8px;
+        font-size: 0.65em;
       }
     }
     .node-count-row {
@@ -2447,11 +2877,335 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   .bg-particle { animation: none !important; opacity: 0.3; }
   .panel-scan-line { animation: none !important; display: none; }
   .header-pulse-line { animation: none !important; display: none; }
-  .header-deco-left, .header-deco-right { animation: none !important; }
   .kpi-card::before, .kpi-card::after { animation: none !important; }
   .status-dot { animation: none !important; }
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
+  .sigil-ring { animation: none !important; }
+  .seal-scan { animation: none !important; display: none; }
+  .sigil-check path { animation: none !important; stroke-dashoffset: 0 !important; }
+  .sigil-hex polygon { animation: none !important; }
+}
+
+// ===== 任务完成弹窗 =====
+.completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 80, 60, 0.12), transparent 52%),
+    rgba(2, 6, 16, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+.completion-seal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-width: 340px;
+  max-width: 480px;
+  padding: 36px 52px 30px;
+  border: 1px solid rgba(0, 255, 156, 0.42);
+  border-radius: 4px;
+  background:
+    linear-gradient(135deg, rgba(0, 40, 28, 0.72), rgba(4, 14, 34, 0.92)),
+    radial-gradient(circle at 50% 0%, rgba(0, 255, 156, 0.1), transparent 60%);
+  box-shadow:
+    0 0 0 1px rgba(0, 212, 255, 0.12),
+    0 0 36px rgba(0, 255, 156, 0.18),
+    0 0 72px rgba(0, 212, 255, 0.1),
+    inset 0 0 32px rgba(0, 255, 156, 0.06);
+  cursor: default;
+  overflow: hidden;
+}
+
+// 四角 HUD 框
+.seal-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid $neon;
+  pointer-events: none;
+  opacity: 0;
+  animation: corner-snap 0.4s 0.15s ease-out forwards;
+
+  &.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  &.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+  &.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+  &.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+}
+
+@keyframes corner-snap {
+  from { opacity: 0; transform: scale(1.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+// 扫描线
+.seal-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 156, 0.7), transparent);
+  box-shadow: 0 0 12px rgba(0, 255, 156, 0.5);
+  animation: seal-scan-sweep 2.2s 0.3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes seal-scan-sweep {
+  0% { top: 0; opacity: 0; }
+  8% { opacity: 1; }
+  50% { top: calc(100% - 3px); opacity: 0.4; }
+  58% { opacity: 0; }
+  100% { top: 0; opacity: 0; }
+}
+
+// 网格纹理
+.seal-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 156, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 156, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
+  pointer-events: none;
+}
+
+// 成功徽记：六边形盾牌 + 雷达环 + 自绘对勾
+.seal-sigil {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+}
+
+.sigil-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  border: 1.5px solid rgba(0, 255, 156, 0.55);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  opacity: 0;
+  animation: sigil-ring-expand 2s ease-out infinite;
+}
+
+.sigil-ring-1 { animation-delay: 0s; }
+.sigil-ring-2 { animation-delay: 0.66s; }
+.sigil-ring-3 { animation-delay: 1.32s; }
+
+@keyframes sigil-ring-expand {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.9; border-color: rgba(0, 255, 156, 0.7); }
+  100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; border-color: rgba(0, 212, 255, 0.1); }
+}
+
+.sigil-hex {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 0 14px rgba(0, 255, 156, 0.4));
+  z-index: 2;
+
+  polygon {
+    fill: rgba(0, 255, 156, 0.1);
+    stroke: rgba(0, 255, 156, 0.65);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    animation: sigil-hex-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes sigil-hex-glow {
+  0%, 100% { stroke: rgba(0, 255, 156, 0.55); fill: rgba(0, 255, 156, 0.08); }
+  50% { stroke: rgba(0, 255, 156, 0.85); fill: rgba(0, 255, 156, 0.16); }
+}
+
+.sigil-check {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  z-index: 3;
+
+  path {
+    fill: none;
+    stroke: $ok;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 42;
+    stroke-dashoffset: 42;
+    animation: sigil-check-draw 0.55s 0.25s ease-out forwards;
+    filter: drop-shadow(0 0 6px rgba(0, 255, 156, 0.8));
+  }
+}
+
+@keyframes sigil-check-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+// 文本区
+.seal-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.seal-title {
+  font-family: $font-cn;
+  font-size: clamp(20px, 1.6em, 26px);
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: #ffffff;
+  text-shadow:
+    0 0 12px rgba(0, 255, 156, 0.7),
+    0 0 24px rgba(0, 212, 255, 0.3);
+  padding-left: 6px;
+}
+
+.seal-step {
+  font-family: $font-cn;
+  font-size: clamp(16px, 1.25em, 21px);
+  font-weight: 800;
+  color: #2cf8d8;
+  text-shadow: 0 0 10px rgba(44, 248, 216, 0.5);
+  text-align: center;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seal-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-family: $font-mono;
+  font-size: clamp(11px, 0.9em, 14px);
+  color: rgba(160, 205, 245, 0.7);
+
+  .path-phase {
+    color: rgba(0, 212, 255, 0.85);
+    font-weight: 700;
+  }
+  .path-sep {
+    color: rgba(120, 160, 200, 0.5);
+  }
+  .path-task {
+    color: rgba(200, 220, 245, 0.7);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// 自动关闭进度条
+.seal-progress {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(0, 255, 156, 0.1);
+  overflow: hidden;
+}
+
+.seal-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, $ok, $neon);
+  box-shadow: 0 0 8px rgba(0, 255, 156, 0.6);
+  animation: seal-progress-drain 3.5s linear forwards;
+}
+
+@keyframes seal-progress-drain {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+// Vue Transition: overlay 淡入淡出 + seal 弹性缩放
+.cyber-modal-enter-active {
+  transition: opacity 0.35s ease-out;
+
+  .completion-seal {
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease-out;
+    transition-delay: 0.05s;
+  }
+}
+
+.cyber-modal-leave-active {
+  transition: opacity 0.25s ease-in;
+
+  .completion-seal {
+    transition: transform 0.25s ease-in, opacity 0.25s ease-in;
+  }
+}
+
+.cyber-modal-enter-from {
+  opacity: 0;
+
+  .completion-seal {
+    opacity: 0;
+    transform: scale(0.82) translateY(12px);
+  }
+}
+
+.cyber-modal-leave-to {
+  opacity: 0;
+
+  .completion-seal {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@media (max-width: 540px) {
+  .completion-seal {
+    min-width: unset;
+    width: calc(100vw - 48px);
+    max-width: unset;
+    padding: 28px 28px 24px;
+    gap: 14px;
+  }
+
+  .seal-sigil {
+    width: 72px;
+    height: 72px;
+  }
+
+  .sigil-hex {
+    width: 54px;
+    height: 54px;
+  }
+
+  .sigil-check {
+    width: 32px;
+    height: 32px;
+  }
+
+  .seal-step {
+    max-width: 100%;
+  }
 }
 </style>

@@ -292,7 +292,12 @@ func (s *DrillService) SetNotificationService(ns *NotificationService) {
 }
 
 func (s *DrillService) GetList(page, pageSize int, status string, keyword string) ([]entity.DrillInstance, int64, error) {
-	return s.drillRepo.List(page, pageSize, status, keyword)
+	drills, total, err := s.drillRepo.List(page, pageSize, status, keyword)
+	if err != nil {
+		return nil, 0, err
+	}
+	s.refreshProgressPct(drills)
+	return drills, total, nil
 }
 
 func (s *DrillService) GetUserByID(id uint64) (*entity.User, error) {
@@ -304,7 +309,36 @@ func (s *DrillService) GetUsersByIDs(ids []uint64) (map[uint64]*entity.User, err
 }
 
 func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
-	return s.drillRepo.FindByID(id)
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	// 用步骤实时状态重算完成率，避免 DB 中 progress_pct 落后于步骤状态
+	if steps, stepErr := s.stepRepo.FindStepsByDrillID(id); stepErr == nil {
+		drill.ProgressPct = ComputeProgressPct(steps)
+	}
+	return drill, nil
+}
+
+// refreshProgressPct 批量用步骤实时状态重算完成率，覆盖 DB 中可能滞后的 progress_pct。
+// 查询失败时静默回退到 DB 原值，不阻塞列表返回。
+func (s *DrillService) refreshProgressPct(drills []entity.DrillInstance) {
+	if len(drills) == 0 {
+		return
+	}
+	ids := make([]uint64, 0, len(drills))
+	for i := range drills {
+		ids = append(ids, drills[i].ID)
+	}
+	stepsByDrill, err := s.stepRepo.FindStepsByDrillIDs(ids)
+	if err != nil {
+		return
+	}
+	for i := range drills {
+		if steps, ok := stepsByDrill[drills[i].ID]; ok {
+			drills[i].ProgressPct = ComputeProgressPct(steps)
+		}
+	}
 }
 
 func (s *DrillService) GetSteps(id uint64) ([]entity.StepInstance, error) {

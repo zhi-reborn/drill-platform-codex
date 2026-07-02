@@ -89,7 +89,7 @@ func TestLoginWithExternalIdentityAutoCreatesAndSyncsLDAPUser(t *testing.T) {
 	if updated.RealName != "张三丰" || updated.Email != "zhangsan.new@example.com" || updated.Department != "运维部" {
 		t.Fatalf("expected LDAP profile sync, got %+v", updated)
 	}
-	if updated.Role != "viewer" {
-		t.Fatalf("expected fallback viewer role after unmatched groups, got %s", updated.Role)
+	if updated.Role != "director" {
+		t.Fatalf("expected unmatched groups to preserve existing role, got %s", updated.Role)
 	}
 }

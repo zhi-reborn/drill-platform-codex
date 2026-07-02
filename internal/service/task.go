@@ -49,9 +49,15 @@ func parseStepAttributes(attributes string) map[string]string {
 	if attributes == "" || attributes == "{}" || attributes == "null" {
 		return nil
 	}
-	values := map[string]string{}
-	if err := json.Unmarshal([]byte(attributes), &values); err != nil {
+	raw := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(attributes), &raw); err != nil {
 		return nil
+	}
+	values := map[string]string{}
+	for key, value := range raw {
+		if s, ok := value.(string); ok {
+			values[key] = s
+		}
 	}
 	return values
 }
@@ -65,8 +71,27 @@ func operatorAttributeMatches(step *entity.StepInstance, user *entity.User) (boo
 	return operator == user.RealName || operator == user.Username, true
 }
 
+func explicitAssigneeMatches(step *entity.StepInstance, user *entity.User) bool {
+	if step.AssigneeIDs == "" || step.AssigneeIDs == "[]" || step.AssigneeIDs == "null" {
+		return false
+	}
+	var ids []uint64
+	if err := json.Unmarshal([]byte(step.AssigneeIDs), &ids); err != nil {
+		return false
+	}
+	for _, id := range ids {
+		if id == user.ID {
+			return true
+		}
+	}
+	return false
+}
+
 func canExecutorOperateStep(step *entity.StepInstance, user *entity.User) bool {
 	if step.ActualOperator != nil && *step.ActualOperator == user.ID {
+		return true
+	}
+	if explicitAssigneeMatches(step, user) {
 		return true
 	}
 	if matched, hasOperator := operatorAttributeMatches(step, user); hasOperator {
