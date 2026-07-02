@@ -201,6 +201,7 @@
               :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
               :instance-name="currentDrill.name"
               :size="ringSize"
+              :fullscreen="isFullscreenLike"
             />
           </div>
         </section>
@@ -291,6 +292,7 @@ const viewportWidth = ref(window.innerWidth)
 const viewportHeight = ref(window.innerHeight)
 const centerPanelRef = ref<HTMLElement | null>(null)
 const centerPanelWidth = ref(0)
+const centerPanelHeight = ref(0)
 let centerPanelResizeObserver: ResizeObserver | null = null
 
 let ws: WebSocket | null = null
@@ -631,20 +633,18 @@ const ringPhaseNodeStatuses = computed(() => {
 })
 
 const ringSize = computed(() => {
-  // 基于视口高度动态计算，确保不溢出
-  // 可用高度 ≈ 100vh - header(58) - kpi(108) - footer(16) - gaps(12*3) - padding(20)
-  const availableH = viewportHeight.value - 58 - 108 - 16 - 36 - 20
-  // PhaseRing 实际高度约为 ringSize * 0.78，预留标题和边框空间
-  const maxRingFromH = availableH - 190
+  const panelHeight = centerPanelHeight.value || Math.max(260, viewportHeight.value - 204)
+  const maxRingFromH = Math.floor((panelHeight - 24) / 0.82)
   // 基于中间面板宽度限制，避免非全屏时按整屏宽度估算导致内容偏左裁切
   const panelWidth = centerPanelWidth.value || viewportWidth.value
-  const maxRingFromW = Math.max(280, Math.floor((panelWidth - 4) / 1.72))
-  return Math.min(700, maxRingFromW, Math.max(280, maxRingFromH))
+  const maxRingFromW = Math.floor((panelWidth - 4) / 1.72)
+  return Math.min(700, Math.max(230, maxRingFromW), Math.max(230, maxRingFromH))
 })
 
 function measureCenterPanel() {
   if (!centerPanelRef.value) return
   centerPanelWidth.value = centerPanelRef.value.clientWidth
+  centerPanelHeight.value = centerPanelRef.value.clientHeight
 }
 
 // === 告警 ===
@@ -2321,6 +2321,96 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   flex-shrink: 0;
   font-family: $font-display; font-size: 10px;
   color: $text-mute; letter-spacing: 2px;
+}
+
+@media (max-height: 820px) {
+  .screen-root {
+    font-size: clamp(12px, 0.82vw, 15px);
+  }
+
+  .screen-content {
+    padding: 8px 12px 4px;
+    gap: 6px;
+  }
+
+  .screen-root::before {
+    inset: 6px 8px 6px;
+  }
+
+  .screen-header {
+    height: 58px;
+
+    .header-title-block {
+      height: 42px;
+
+      .drill-title {
+        font-size: clamp(28px, 2.4vw, 34px);
+        letter-spacing: 3px;
+      }
+    }
+  }
+
+  .kpi-row {
+    height: 74px;
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding-top: 8px;
+    padding-bottom: 8px;
+
+    .kpi-orb {
+      width: 28px;
+      height: 28px;
+    }
+
+    .progress-ring-wrap {
+      width: 42px;
+      height: 42px;
+    }
+  }
+
+  .screen-main {
+    gap: 10px;
+  }
+
+  .panel-header {
+    height: 38px;
+  }
+
+  .panel-body {
+    padding: 10px;
+  }
+
+  .panel-stages {
+    .stages-list {
+      gap: 10px;
+      padding-right: 16px;
+    }
+
+    .stage-card {
+      flex-basis: calc((100% - 30px) / 4);
+      min-height: 82px;
+      padding: 9px 12px;
+      gap: 7px;
+    }
+  }
+
+  .warn-list {
+    gap: clamp(6px, 0.8vh, 9px);
+
+    .alert-card {
+      min-height: 84px;
+      max-height: 112px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      gap: 5px;
+    }
+  }
+
+  .screen-footer {
+    height: 8px;
+  }
 }
 
 @media (max-width: 1080px) {

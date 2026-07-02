@@ -2,7 +2,11 @@
   <div
     ref="phaseRingRef"
     class="phase-ring"
-    :class="[phaseDirectionDown ? 'phase-dir-down' : 'phase-dir-up', `phase-stage-${safeCurrentIndex}`]"
+    :class="[
+      phaseDirectionDown ? 'phase-dir-down' : 'phase-dir-up',
+      `phase-stage-${safeCurrentIndex}`,
+      { 'phase-ring-compact': isCompact },
+    ]"
     :style="{
       width: containerSize.width + 'px',
       height: containerSize.height + 'px',
@@ -247,7 +251,7 @@
             </text>
           </g>
 
-          <g :transform="`translate(${finishPoint.x} ${finishPoint.y})`" class="finish-node" :class="{ 'finish-node-done': isCurrentPhaseDone }">
+          <g :transform="`translate(${finishPoint.x} ${finishPoint.y}) scale(${finishScale})`" class="finish-node" :class="{ 'finish-node-done': isCurrentPhaseDone }">
             <circle r="34" fill="none" stroke="rgba(255, 214, 130, .34)" stroke-width="2" class="finish-beacon-ring finish-beacon-ring-a" />
             <circle r="27" fill="none" stroke="rgba(45, 228, 255, .28)" stroke-width="1.6" class="finish-beacon-ring finish-beacon-ring-b" />
             <g class="finish-sparks">
@@ -282,7 +286,17 @@
             <circle class="finish-crown-gem" cx="7" cy="-15" r="3" />
             <circle class="finish-crown-gem" cx="-27" cy="-5" r="2.8" />
             <circle class="finish-crown-gem" cx="27" cy="-5" r="2.8" />
-            <text class="finish-text" y="75">{{ isCurrentPhaseDone ? '完成' : '里程碑' }}</text>
+            <g class="finish-milestone">
+              <path class="finish-milestone-lead" d="M37 0 H48" />
+              <circle class="finish-milestone-dot" cx="48" cy="0" r="2" />
+              <text
+                class="finish-milestone-text"
+                x="54"
+                y="0"
+                text-anchor="start"
+                dominant-baseline="central"
+              >{{ isCurrentPhaseDone ? '完成' : '里程碑' }}</text>
+            </g>
           </g>
         </g>
       </svg>
@@ -328,9 +342,11 @@ const props = defineProps<{
   centerHint: string
   instanceName?: string
   size?: number
+  fullscreen?: boolean
 }>()
 
 const size = computed(() => props.size ?? 520)
+const isCompact = computed(() => size.value < 460)
 const containerSize = computed(() => ({
   width: Math.max(480, Math.round(size.value * 1.72)),
   height: '100%',
@@ -491,10 +507,18 @@ const activePath = computed(() => {
 
 const finishPoint = computed(() => {
   const lastPoint = trackPoints.value[trackPoints.value.length - 1] || { x: LANE_RIGHT, y: laneY.value[laneY.value.length - 1] }
+  // 非全屏下皇冠上移贴近跑道终点；全屏保持原间距不受影响
+  const offsetY = isCompact.value ? 104 : (props.fullscreen ? 82 : 58)
   return {
     x: lastPoint.x,
-    y: lastPoint.y + 86,
+    y: lastPoint.y + offsetY,
   }
+})
+
+// 非全屏下皇冠与底部胶囊易挤占重叠，等比缩小一点；全屏保持原比例
+const finishScale = computed(() => {
+  if (isCompact.value) return 1
+  return props.fullscreen ? 1 : 0.8
 })
 
 function pointAt(index: number): TrackPoint {
@@ -1221,6 +1245,36 @@ function shorten(name: string): string {
   max-width: 12em;
 }
 
+/* 里程碑标签：皇冠右侧 HUD 引出线 + 鎏金文字 */
+.finish-milestone {
+  opacity: 0.95;
+}
+
+.finish-milestone-lead {
+  fill: none;
+  stroke: rgba(255, 211, 111, 0.5);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.finish-milestone-dot {
+  fill: #ffd36f;
+  filter: drop-shadow(0 0 3px rgba(255, 180, 74, 0.8));
+}
+
+.finish-milestone-text {
+  fill: #ffd36f;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.55));
+}
+
+.finish-node-done .finish-milestone-text {
+  fill: #ffe1a5;
+}
+
 @keyframes status-pulse {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 12px rgba(45, 228, 255, 1); }
@@ -1238,6 +1292,135 @@ function shorten(name: string): string {
   height: calc(100% - 198px);
   overflow: visible;
   z-index: 1;
+}
+
+.phase-ring-compact {
+  .runway-head {
+    top: 10px;
+    left: 14px;
+    right: 28px;
+    height: 46px;
+  }
+
+  .runway-title {
+    font-size: clamp(14px, 1.35em, 22px);
+    padding: 4px 10px 5px;
+  }
+
+  .head-stats {
+    min-height: 44px;
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .progress-hub {
+    top: 28px;
+    width: 94px;
+    height: 94px;
+  }
+
+  .hub-glow {
+    width: 132px;
+    height: 132px;
+  }
+
+  .hub-rings {
+    width: 92px;
+    height: 92px;
+  }
+
+  .hub-core {
+    width: 72px;
+    height: 72px;
+    padding-top: 18px;
+    padding-bottom: 14px;
+  }
+
+  .hub-num {
+    font-size: 30px;
+  }
+
+  .hub-unit {
+    font-size: 15px;
+  }
+
+  .runway-svg {
+    inset: 104px 6px 58px;
+    height: calc(100% - 162px);
+  }
+
+  .node-label {
+    font-size: 26px;
+    stroke-width: 2.4px;
+  }
+
+  .finish-node {
+    opacity: 0.9;
+    transform: scale(0.58);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .finish-beacon-ring,
+  .finish-sparks {
+    display: none;
+  }
+
+  .finish-tether {
+    display: none;
+  }
+
+  .runway-foot {
+    left: 18px;
+    right: 18px;
+    bottom: 10px;
+  }
+
+  .foot-status,
+  .foot-phase-name {
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9px;
+  }
+
+  .phase-name-tag,
+  .phase-name-text,
+  .foot-status {
+    font-size: clamp(12px, 1em, 15px);
+  }
+}
+
+@media (max-height: 820px) {
+  .runway-foot {
+    left: 18px;
+    right: 18px;
+    bottom: 10px;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .foot-status,
+  .foot-phase-name {
+    min-width: 0;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9px;
+  }
+
+  .phase-name-tag,
+  .phase-name-text,
+  .foot-status {
+    font-size: clamp(12px, 1em, 15px);
+  }
+
+  .status-text {
+    max-width: 16em;
+  }
+
+  .phase-name-text {
+    max-width: 14em;
+  }
 }
 
 .lane-aura {
@@ -1308,15 +1491,6 @@ function shorten(name: string): string {
 
 .finish-node {
   opacity: 0.82;
-  .finish-text {
-    fill: #dcecff;
-    font-size: 31px;
-    font-weight: 900;
-    letter-spacing: 0;
-    paint-order: stroke fill;
-    stroke: rgba(2, 10, 24, 0.62);
-    stroke-width: 3px;
-  }
 }
 
 .finish-beacon-ring {
@@ -1392,9 +1566,6 @@ function shorten(name: string): string {
 .finish-node-done {
   opacity: 1;
   animation: finish-beacon 1.5s ease-in-out infinite;
-  .finish-text {
-    fill: #ffe1a5;
-  }
 }
 
 @keyframes panel-sweep {
