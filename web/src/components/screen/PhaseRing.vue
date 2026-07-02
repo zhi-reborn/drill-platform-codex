@@ -1423,7 +1423,8 @@ function shorten(name: string): string {
     left: 18px;
     right: 18px;
     bottom: 10px;
-    justify-content: flex-start;
+    // 始终保持 space-between：实例名在左、当前阶段胶囊在右，与宽屏一致
+    justify-content: space-between;
     gap: 12px;
   }
 
