@@ -111,6 +111,18 @@
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <linearGradient id="baton-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#6b2a08" />
+            <stop offset=".18" stop-color="#b85316" />
+            <stop offset=".5" stop-color="#ff8426" />
+            <stop offset=".82" stop-color="#b85316" />
+            <stop offset="1" stop-color="#6b2a08" />
+          </linearGradient>
+          <linearGradient id="baton-core" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="rgba(255, 224, 162, 0)" />
+            <stop offset=".5" stop-color="rgba(255, 245, 214, 0.85)" />
+            <stop offset="1" stop-color="rgba(255, 224, 162, 0)" />
+          </linearGradient>
         </defs>
 
         <path
@@ -209,15 +221,29 @@
               stroke="rgba(255, 85, 85, .38)"
               stroke-width="1.5"
             />
-            <rect
+            <g
               v-if="node.visualStatus === 'running'"
-              x="-38"
-              y="-17"
-              width="76"
-              height="34"
-              rx="17"
-              class="baton"
-            />
+              class="baton-group"
+              :class="`flow-${node.flowDir}`"
+            >
+              <!-- 能量尾迹：位于 baton 后方（与流向相反），逐渐衰减，强化方向感 -->
+              <circle
+                v-for="(t, i) in node.trail"
+                :key="'trail-' + i"
+                class="baton-trail-dot"
+                :class="`baton-trail-${i + 1}`"
+                :cx="t.cx"
+                cy="0"
+                :r="t.r"
+              />
+              <rect x="-40" y="-18" width="80" height="36" rx="18" class="baton" />
+              <rect x="-32" y="-9" width="64" height="18" rx="9" class="baton-core" />
+              <!-- 箭头随跑道流向：偶数行向右，奇数行向左 -->
+              <path
+                :d="node.flowDir === 'left' ? 'M20 0 H-16 M-4 -10 L-18 0 L-4 10' : 'M-20 0 H16 M4 -10 L18 0 L4 10'"
+                class="baton-arrow"
+              />
+            </g>
             <circle
               v-else
               r="19"
@@ -231,16 +257,6 @@
               stroke-width="3"
               stroke-linecap="round"
               stroke-linejoin="round"
-            />
-            <path
-              v-else-if="node.visualStatus === 'running'"
-              d="M-18 0 H16 M5 -9 L17 0 L5 9"
-              fill="none"
-              stroke="#fff1cb"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="baton-arrow"
             />
             <text
               class="node-label"
@@ -481,6 +497,10 @@ const visibleNodes = computed(() => {
     const status = currentStatuses.value[index]
     const visualStatus = visualStatusOf(status, index)
     const p = trackPoints.value[index]
+    const { row } = locateLaneNode(index)
+    // 跑道流向：偶数行（0,2…）由左向右，奇数行（1,3…）由右向左
+    const flowDir = row % 2 === 1 ? 'left' : 'right'
+    const trailSign = flowDir === 'left' ? 1 : -1
     return {
       ...p,
       index,
@@ -488,6 +508,13 @@ const visibleNodes = computed(() => {
       visualStatus,
       labelAbove: shouldLabelAbove(index, p),
       labelColor: '#f2f8ff',
+      flowDir,
+      // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
+      trail: [
+        { cx: trailSign * 50, r: 3.4 },
+        { cx: trailSign * 60, r: 2.5 },
+        { cx: trailSign * 68, r: 1.7 },
+      ],
     }
   })
 })
@@ -1444,15 +1471,49 @@ function shorten(name: string): string {
   animation-delay: -1.2s;
 }
 
+.baton-trail-dot {
+  fill: #ffbd62;
+  filter: drop-shadow(0 0 4px rgba(255, 189, 98, 0.65));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: trail-breathe 1.4s ease-in-out infinite;
+}
+
+.baton-trail-1 { opacity: 0.74; animation-delay: 0s; }
+.baton-trail-2 { opacity: 0.44; animation-delay: -0.45s; }
+.baton-trail-3 { opacity: 0.2; animation-delay: -0.9s; }
+
 .baton {
-  fill: #6b3514;
+  fill: url(#baton-fill);
   stroke: #ffdd9a;
-  stroke-width: 3;
-  animation: baton-move 1.05s ease-in-out infinite;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 7px rgba(255, 132, 38, 0.72));
+}
+
+.baton-core {
+  fill: url(#baton-core);
 }
 
 .baton-arrow {
-  animation: baton-move 1.05s ease-in-out infinite;
+  fill: none;
+  stroke: #fff5d6;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(255, 245, 214, 0.8));
+}
+
+// 跑道流向驱动 baton 摆动方向：向右行进时右摆，向左行进时左摆
+.baton-group.flow-right .baton,
+.baton-group.flow-right .baton-core,
+.baton-group.flow-right .baton-arrow {
+  animation: baton-run-right 1.05s ease-in-out infinite;
+}
+
+.baton-group.flow-left .baton,
+.baton-group.flow-left .baton-core,
+.baton-group.flow-left .baton-arrow {
+  animation: baton-run-left 1.05s ease-in-out infinite;
 }
 
 .node-pulse-ring {
@@ -1584,8 +1645,17 @@ function shorten(name: string): string {
   }
 }
 
-@keyframes baton-move {
-  50% { transform: translateX(8px) scale(1.04); }
+@keyframes baton-run-right {
+  50% { transform: translateX(6px) scale(1.04); }
+}
+
+@keyframes baton-run-left {
+  50% { transform: translateX(-6px) scale(1.04); }
+}
+
+@keyframes trail-breathe {
+  0%, 100% { transform: scale(0.78); }
+  50% { transform: scale(1.22); }
 }
 
 @keyframes node-ring {
@@ -1638,6 +1708,8 @@ function shorten(name: string): string {
   .runway-svg-turn-pip,
   .baton,
   .baton-arrow,
+  .baton-core,
+  .baton-trail-dot,
   .node-pulse-ring,
   .finish-node-done,
   .finish-beacon-ring,
