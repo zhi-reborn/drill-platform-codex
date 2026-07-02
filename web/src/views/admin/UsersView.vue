@@ -121,9 +121,6 @@
         <el-form-item label="姓名" prop="name">
           <el-input v-model="createForm.name" placeholder="请输入真实姓名" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="createForm.email" placeholder="请输入邮箱" />
-        </el-form-item>
         <el-form-item label="角色" prop="role">
           <el-select v-model="createForm.role" placeholder="请选择角色" style="width: 100%">
             <el-option label="系统管理员" value="admin" />
@@ -326,10 +323,6 @@ const createForm = ref({
 const formRules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
-  ],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -341,7 +334,6 @@ const formRules: FormRules = {
 const editForm = ref({
   username: '',
   real_name: '',
-  email: '',
   role: '',
   phone: '',
   department: '',
@@ -436,7 +428,6 @@ async function handleCreateUser() {
     await userApi.create({
       username: createForm.value.username,
       name: createForm.value.name,
-      email: createForm.value.email,
       role: createForm.value.role,
       phone: createForm.value.phone || undefined,
       department: createForm.value.department || undefined,
@@ -474,7 +465,6 @@ function handleEditUser(user: User) {
   editForm.value = {
     username: user.username,
     real_name: user.real_name || '',
-    email: user.email || '',
     role: user.role,
     phone: user.phone || '',
     department: user.department || '',
