@@ -250,7 +250,7 @@ import { ElMessage } from 'element-plus'
 import type { StepInstance, StepInstanceLog, DrillInstance, StepStatus, DrillStatus } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
-import PhaseRing from '@/components/screen/PhaseRing.vue'
+import PhaseRing from '@/components/screen/PhaseRing3.vue'
 
 const route = useRoute()
 const screenRootRef = ref<HTMLElement | null>(null)

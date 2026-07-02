@@ -74,6 +74,7 @@ declare module 'vue' {
     NotificationList: typeof import('./../components/notifications/NotificationList.vue')['default']
     NotificationPopover: typeof import('./../components/notifications/NotificationPopover.vue')['default']
     PhaseRing: typeof import('./../components/screen/PhaseRing.vue')['default']
+    PhaseRing3: typeof import('./../components/screen/PhaseRing3.vue')['default']
     PieChart: typeof import('./../components/charts/PieChart.vue')['default']
     RadarChart: typeof import('./../components/charts/RadarChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
