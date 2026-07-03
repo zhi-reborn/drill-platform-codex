@@ -277,11 +277,11 @@ onMounted(() => {
       }
 
       .row-action-screen3 {
-        color: $color-accent;
+        color: #722ED1;
 
         &:hover,
         &:focus {
-          color: $color-accent-light;
+          color: #9254DE;
         }
       }
     }

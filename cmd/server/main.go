@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -41,24 +39,6 @@ func (d *dbHealthChecker) Ping(ctx context.Context) error {
 		return err
 	}
 	return sqlDB.PingContext(ctx)
-}
-
-// redisHostPort resolves the Redis host and port from the combined Addr field
-// when present, falling back to the legacy Host/Port YAML fields.
-func redisHostPort(cfg *appconfig.Config) (string, int) {
-	addr := cfg.RedisAddress()
-	if addr == "" {
-		return cfg.Redis.Host, cfg.Redis.Port
-	}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return addr, cfg.Redis.Port
-	}
-	p, err := strconv.Atoi(port)
-	if err != nil {
-		return host, cfg.Redis.Port
-	}
-	return host, p
 }
 
 // toServiceCAS converts appconfig.CASConfig to service.CASConfig.
@@ -139,13 +119,17 @@ func main() {
 	// 3. Initialize Redis (optional - API can run without it).
 	var redisClient *redis.Client
 	if addr := cfg.RedisAddress(); addr != "" {
-		host, port := redisHostPort(cfg)
 		rc, err := redis.NewClient(&redis.Config{
-			Host:     host,
-			Port:     port,
-			Password: cfg.Redis.Password,
-			DB:       cfg.Redis.DB,
-			PoolSize: cfg.Redis.PoolSize,
+			Addr:           cfg.Redis.Addr,
+			Host:           cfg.Redis.Host,
+			Port:           cfg.Redis.Port,
+			Username:       cfg.Redis.Username,
+			Password:       cfg.Redis.Password,
+			DB:             cfg.Redis.DB,
+			PoolSize:       cfg.Redis.PoolSize,
+			TLS:            cfg.Redis.TLS,
+			SentinelMaster: cfg.Redis.SentinelMaster,
+			ClusterAddrs:   cfg.Redis.ClusterAddrs,
 		})
 		if err != nil {
 			log.Printf("Redis连接失败 (可忽略): %v", err)
@@ -285,6 +269,9 @@ func main() {
 		cfg.AppRole,
 		cfg.InstanceID,
 	)
+	if redisClient != nil {
+		healthHandler.SetPublisher(redisClient)
+	}
 
 	// 11. Router and HTTP server.
 	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret, loginLogger, healthHandler)

@@ -22,7 +22,9 @@ CREATE TABLE `user` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_username` (`username`),
-    KEY `idx_status` (`status`)
+    KEY `idx_status` (`status`),
+    KEY `idx_role` (`role`),
+    KEY `idx_department` (`department`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- 模板分类表
@@ -49,12 +51,14 @@ CREATE TABLE `drill_template` (
     `description` TEXT COMMENT '模板描述',
     `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0-禁用，1-启用',
     `created_by` BIGINT UNSIGNED NOT NULL COMMENT '创建人 ID',
+    `phase_order` JSON DEFAULT NULL COMMENT '阶段顺序列表',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_category` (`category`),
-    KEY `idx_status` (`status`)
+    KEY `idx_status` (`status`),
+    KEY `idx_created_by` (`created_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演练模板表';
 
 -- 步骤模板表
@@ -97,7 +101,7 @@ CREATE TABLE `drill_instance` (
     `start_time` DATETIME DEFAULT NULL COMMENT '实际开始时间',
     `end_time` DATETIME DEFAULT NULL COMMENT '实际结束时间',
     `planned_start` DATETIME DEFAULT NULL COMMENT '计划开始时间',
-    `current_step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前激活步骤 ID',
+    `current_task_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '当前激活步骤 ID',
     `progress_pct` INT NOT NULL DEFAULT 0 COMMENT '进度百分比 (0-100)',
     `created_by` BIGINT UNSIGNED NOT NULL COMMENT '创建人 ID',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +118,7 @@ CREATE TABLE `drill_instance_step` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `drill_instance_id` BIGINT UNSIGNED NOT NULL COMMENT '所属演练 ID',
     `parent_step_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '父步骤 ID，NULL 表示根节点',
-    `step_template_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID',
+    `template_step_id` BIGINT UNSIGNED NOT NULL COMMENT '来源步骤模板 ID',
     `name` VARCHAR(128) NOT NULL COMMENT '步骤名称',
     `seq` INT NOT NULL COMMENT '排序序号',
     `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '状态：pending/running/completed/timeout/skipped/issue',
@@ -135,11 +139,12 @@ CREATE TABLE `drill_instance_step` (
     `execution_mode` VARCHAR(16) DEFAULT 'serial' COMMENT '执行模式：serial/parallel',
     `estimated_duration_minutes` INT DEFAULT NULL COMMENT '预计耗时(分钟)',
     `estimated_start_offset` INT DEFAULT NULL COMMENT '预计开始时间偏移(分钟)',
-    `attributes` JSON DEFAULT NULL COMMENT '动态扩展属性',
+    `action_params` JSON DEFAULT NULL COMMENT '动态扩展属性',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_drill_step` (`drill_instance_id`, `status`),
     KEY `idx_parent_step` (`parent_step_id`),
+    KEY `idx_step_template_id` (`template_step_id`),
     CONSTRAINT `fk_step_instance_drill` FOREIGN KEY (`drill_instance_id`) REFERENCES `drill_instance` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_step_parent_instance` FOREIGN KEY (`parent_step_id`) REFERENCES `drill_instance_step` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='步骤实例表';
@@ -247,5 +252,12 @@ INSERT INTO `user` (`username`, `real_name`, `password_hash`, `role`, `departmen
 ('executor1', '李执行', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'executor', '研发部', 1),
 ('viewer1', '王观察', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'viewer', '测试部', 1),
 ('director2', '刘指挥', '$2a$10$iJN4iIelCFVrErNjcFHlWOM0DgZeR.9YOmL.LMDYIfLUrbYHkd/.S', 'director', '运维部', 1);
+
+-- 模板分类数据
+INSERT INTO `drill_template_category` (`value`, `label`, `sort_order`, `tag_type`) VALUES
+('灾备', '灾备演练', 1, 'danger'),
+('降级', '降级演练', 2, 'warning'),
+('发布', '发布演练', 3, 'primary'),
+('安全', '安全演练', 4, 'info');
 
 SET FOREIGN_KEY_CHECKS = 1;

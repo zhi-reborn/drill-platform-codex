@@ -37,6 +37,7 @@ type WorkerStatus interface {
 type Handler struct {
 	db         HealthChecker
 	redis      HealthChecker
+	publisher  HealthChecker
 	subscriber events.Subscriber
 	worker     WorkerStatus
 	role       string
@@ -60,6 +61,13 @@ func NewHandler(db, redis HealthChecker, subscriber events.Subscriber, w WorkerS
 		instanceID: instanceID,
 		ready:      ready,
 	}
+}
+
+// SetPublisher wires the event publisher readiness check. In HA deployments a
+// node must be drained if it cannot publish Redis events, even if it can still
+// answer ordinary HTTP requests.
+func (h *Handler) SetPublisher(p HealthChecker) {
+	h.publisher = p
 }
 
 // SetReady toggles the readiness flag. main calls SetReady(true) once the
@@ -86,22 +94,45 @@ func (h *Handler) Ready(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 
+	components := map[string]string{}
+	reason := ""
+
 	if h.db != nil {
 		if err := h.db.Ping(ctx); err != nil {
-			h.respondUnready(c, "database unreachable")
-			return
+			components["db"] = "fail"
+			reason = firstReason(reason, "database unreachable")
+		} else {
+			components["db"] = "ok"
 		}
 	}
 
 	if h.redis != nil {
 		if err := h.redis.Ping(ctx); err != nil {
-			h.respondUnready(c, "redis unreachable")
-			return
+			components["redis"] = "fail"
+			reason = firstReason(reason, "redis unreachable")
+		} else {
+			components["redis"] = "ok"
+		}
+	}
+
+	if h.publisher != nil {
+		if err := h.publisher.Ping(ctx); err != nil {
+			components["publisher"] = "fail"
+			reason = firstReason(reason, "publisher unreachable")
+		} else {
+			components["publisher"] = "ok"
 		}
 	}
 
 	if h.subscriber != nil && !h.subscriber.Healthy() {
-		h.respondUnready(c, "subscriber unhealthy")
+		components["subscriber"] = "fail"
+		reason = firstReason(reason, "subscriber unhealthy")
+	} else if h.subscriber != nil {
+		components["subscriber"] = "ok"
+	}
+
+	if reason != "" {
+		h.respondUnready(c, reason, components)
 		return
 	}
 
@@ -110,6 +141,7 @@ func (h *Handler) Ready(c *gin.Context) {
 		"role":          h.role,
 		"instance_id":   h.instanceID,
 		"worker_status": h.workerStatus(),
+		"components":    components,
 	})
 }
 
@@ -122,12 +154,23 @@ func (h *Handler) workerStatus() string {
 	return string(h.worker.Status())
 }
 
-func (h *Handler) respondUnready(c *gin.Context, reason string) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
+func (h *Handler) respondUnready(c *gin.Context, reason string, components ...map[string]string) {
+	body := gin.H{
 		"status":        "unready",
 		"role":          h.role,
 		"instance_id":   h.instanceID,
 		"worker_status": h.workerStatus(),
 		"reason":        reason,
-	})
+	}
+	if len(components) > 0 && len(components[0]) > 0 {
+		body["components"] = components[0]
+	}
+	c.JSON(http.StatusServiceUnavailable, body)
+}
+
+func firstReason(current, next string) string {
+	if current != "" {
+		return current
+	}
+	return next
 }

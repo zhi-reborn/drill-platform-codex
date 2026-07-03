@@ -1,95 +1,95 @@
-# 高可用多节点部署编排（用于本地 HA 模拟）
-# 生产环境的 MySQL 和 Redis 需使用各自的 HA 产品
+# =============================================================================
+# 高可用多节点部署编排
+#
+# 前提（由外部保证，本编排不部署这些）：
+#   - MySQL 高可用（MGR / RDS / ProxySQL / VIP 等），backend 通过 DATABASE_HOST 连接
+#   - Redis 集群高可用，backend 通过 REDIS_CLUSTER_ADDRS 连接（集群模式）
+#
+# 本编排部署：drill-backend 双活节点（backend-a / backend-b）+ nginx 负载均衡
+#
+# 启动前：
+#   cp .env.example .env  填写外部依赖连接信息
+#   docker compose -f docker-compose.ha.yml up -d --build
+# =============================================================================
 
 services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-drill123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-drill_platform}
-      MYSQL_USER: ${MYSQL_USER:-drill}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-drill123}
-    ports:
-      - "13306:3306"
-    volumes:
-      - mysql-ha-data:/var/lib/mysql
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "16379:6379"
-    volumes:
-      - redis-ha-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   backend-a:
     build:
       context: .
-      dockerfile: Dockerfile
-    environment:
+      # 本地联调用 Dockerfile.local（复用本地 golang:1.23-alpine 镜像，避免拉取 alpine:3.19/node:20-alpine）
+      # 生产部署改回 Dockerfile
+      dockerfile: Dockerfile.local
+    image: drill-platform-backend:ha
+    container_name: drill-backend-a
+    environment: &backend-env
       APP_ROLE: all
       INSTANCE_ID: backend-a
-      DATABASE_HOST: mysql
-      DATABASE_PORT: "3306"
-      DATABASE_USER: ${MYSQL_USER:-drill}
-      DATABASE_PASSWORD: ${MYSQL_PASSWORD:-drill123}
-      DATABASE_NAME: ${MYSQL_DATABASE:-drill_platform}
-      REDIS_ADDR: redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      PUBLIC_BASE_URL: http://localhost
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    ports:
-      - "18080:8080"
+      SERVER_MODE: release
+      DATABASE_HOST: ${DATABASE_HOST}
+      DATABASE_PORT: ${DATABASE_PORT:-3306}
+      DATABASE_USER: ${DATABASE_USER:-drill}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME:-drill_platform}
+      REDIS_CLUSTER_ADDRS: ${REDIS_CLUSTER_ADDRS}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TLS: ${REDIS_TLS:-false}
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      # 多活部署下登录日志走 stdout，由容器运行时统一收集；不落本地磁盘避免日志分散
+      LOGIN_LOG_FILE: ""
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - drill-ha-net
 
   backend-b:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # 复用 backend-a 构建的镜像，避免重复构建
+    image: drill-platform-backend:ha
+    container_name: drill-backend-b
     environment:
-      APP_ROLE: all
+      <<: *backend-env
       INSTANCE_ID: backend-b
-      DATABASE_HOST: mysql
-      DATABASE_PORT: "3306"
-      DATABASE_USER: ${MYSQL_USER:-drill}
-      DATABASE_PASSWORD: ${MYSQL_PASSWORD:-drill123}
-      DATABASE_NAME: ${MYSQL_DATABASE:-drill_platform}
-      REDIS_ADDR: redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      PUBLIC_BASE_URL: http://localhost
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    ports:
-      - "18081:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - drill-ha-net
+
+  backend-c:
+    # 复用 backend-a 构建的镜像，避免重复构建
+    image: drill-platform-backend:ha
+    container_name: drill-backend-c
+    environment:
+      <<: *backend-env
+      INSTANCE_ID: backend-c
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - drill-ha-net
 
   nginx:
     image: nginx:alpine
+    container_name: drill-nginx-ha
     ports:
       - "80:80"
     volumes:
@@ -98,7 +98,11 @@ services:
     depends_on:
       - backend-a
       - backend-b
+      - backend-c
+    restart: unless-stopped
+    networks:
+      - drill-ha-net
 
-volumes:
-  mysql-ha-data:
-  redis-ha-data:
+networks:
+  drill-ha-net:
+    driver: bridge

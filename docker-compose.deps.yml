@@ -1,0 +1,122 @@
+# =============================================================================
+# 本地联调依赖：Redis 集群（6 节点，3 主 3 从）+ MySQL
+# 仅供验证多活架构，生产环境由你保证 Redis/MySQL 高可用，不使用本文件
+#
+# 启动顺序：
+#   1. docker compose -f docker-compose.deps.yml up -d   （起依赖）
+#   2. 等 redis-cluster-init 退出码为 0、mysql healthy
+#   3. docker compose -f docker-compose.ha.yml up -d --build  （起双活 backend + nginx）
+#
+# 两个 compose 共享 drill-ha-net 网络，backend 通过服务名连接依赖
+# =============================================================================
+
+services:
+  # ---------- Redis 集群 6 节点 ----------
+  redis-node-1:
+    image: redis:7-alpine
+    container_name: redis-node-1
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7001:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  redis-node-2:
+    image: redis:7-alpine
+    container_name: redis-node-2
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7002:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  redis-node-3:
+    image: redis:7-alpine
+    container_name: redis-node-3
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7003:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  redis-node-4:
+    image: redis:7-alpine
+    container_name: redis-node-4
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7004:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  redis-node-5:
+    image: redis:7-alpine
+    container_name: redis-node-5
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7005:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  redis-node-6:
+    image: redis:7-alpine
+    container_name: redis-node-6
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports: ["7006:6379"]
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  # ---------- Redis 集群初始化（创建 3 主 3 从集群，完成后退出）----------
+  redis-cluster-init:
+    image: redis:7-alpine
+    container_name: redis-cluster-init
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+      - redis-node-6
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Redis nodes to be ready...";
+        for i in $$(seq 1 30); do
+          sleep 2;
+          if redis-cli --cluster create \
+            redis-node-1:6379 redis-node-2:6379 redis-node-3:6379 \
+            redis-node-4:6379 redis-node-5:6379 redis-node-6:6379 \
+            --cluster-replicas 1 --cluster-yes; then
+            echo "Redis cluster created successfully.";
+            exit 0;
+          fi;
+          echo "Retry $$i/30...";
+        done;
+        echo "Failed to create Redis cluster.";
+        exit 1;
+    networks: [drill-ha-net]
+    restart: "no"
+
+  # ---------- MySQL（本地联调用，非 HA）----------
+  mysql:
+    image: mysql:8.0
+    container_name: drill-mysql-local
+    environment:
+      MYSQL_ROOT_PASSWORD: drill123
+      MYSQL_DATABASE: drill_platform
+      MYSQL_USER: drill
+      MYSQL_PASSWORD: drill123
+      TZ: Asia/Shanghai
+    ports: ["3306:3306"]
+    volumes:
+      - mysql-local-data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+volumes:
+  mysql-local-data:
+    driver: local
+
+networks:
+  drill-ha-net:
+    driver: bridge

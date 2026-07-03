@@ -92,9 +92,9 @@ func clearEnv(t *testing.T, keys ...string) {
 
 // envKeys is the full set of env vars appconfig reads.
 var envKeys = []string{
-	"APP_ROLE", "INSTANCE_ID",
+	"APP_ROLE", "INSTANCE_ID", "SERVER_MODE", "SERVER_PORT",
 	"DATABASE_HOST", "DATABASE_PORT", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_NAME",
-	"REDIS_ADDR", "REDIS_PASSWORD",
+	"REDIS_ADDR", "REDIS_PASSWORD", "REDIS_TLS", "REDIS_USERNAME", "REDIS_SENTINEL_MASTER", "REDIS_CLUSTER_ADDRS",
 	"JWT_SECRET",
 	"PUBLIC_BASE_URL",
 	"CAS_PUBLIC_URL", "CAS_SERVICE_URL",
@@ -132,23 +132,23 @@ func TestLoad_ReadsYAMLDefaults(t *testing.T) {
 func TestLoad_EnvOverridesYAML(t *testing.T) {
 	clearEnv(t, envKeys...)
 	setEnv(t, map[string]string{
-		"APP_ROLE":            "worker",
-		"INSTANCE_ID":         "env-node",
-		"DATABASE_HOST":       "env-host",
-		"DATABASE_PORT":       "3307",
-		"DATABASE_USER":       "env-user",
-		"DATABASE_PASSWORD":   "env-pass",
-		"DATABASE_NAME":       "env-db",
-		"REDIS_ADDR":          "env-redis:6380",
-		"REDIS_PASSWORD":      "env-redis-pass",
-		"JWT_SECRET":          "env-secret",
-		"PUBLIC_BASE_URL":     "http://env.example.com",
-		"CAS_PUBLIC_URL":      "http://env.cas.example.com",
-		"CAS_SERVICE_URL":     "http://env.svc.example.com",
-		"WORKER_LEASE_TTL":    "30s",
+		"APP_ROLE":              "worker",
+		"INSTANCE_ID":           "env-node",
+		"DATABASE_HOST":         "env-host",
+		"DATABASE_PORT":         "3307",
+		"DATABASE_USER":         "env-user",
+		"DATABASE_PASSWORD":     "env-pass",
+		"DATABASE_NAME":         "env-db",
+		"REDIS_ADDR":            "env-redis:6380",
+		"REDIS_PASSWORD":        "env-redis-pass",
+		"JWT_SECRET":            "env-secret",
+		"PUBLIC_BASE_URL":       "http://env.example.com",
+		"CAS_PUBLIC_URL":        "http://env.cas.example.com",
+		"CAS_SERVICE_URL":       "http://env.svc.example.com",
+		"WORKER_LEASE_TTL":      "30s",
 		"WORKER_RENEW_INTERVAL": "10s",
-		"COMMAND_WAIT_TIMEOUT": "45s",
-		"LOGIN_LOG_FILE":      "logs/env.log",
+		"COMMAND_WAIT_TIMEOUT":  "45s",
+		"LOGIN_LOG_FILE":        "logs/env.log",
 	})
 	path := writeYAML(t, baseYAML)
 
@@ -207,6 +207,24 @@ func TestLoad_EnvOverridesYAML(t *testing.T) {
 	}
 	if cfg.LoginLogFile != "logs/env.log" {
 		t.Errorf("LoginLogFile = %q, want logs/env.log", cfg.LoginLogFile)
+	}
+}
+
+// TestLoad_LoginLogFileExplicitEmpty verifies that an explicitly empty
+// LOGIN_LOG_FILE overrides the YAML value. HA deployments rely on this so
+// login logs go to stdout and the container runtime can aggregate them
+// across nodes instead of fragmenting into per-node files.
+func TestLoad_LoginLogFileExplicitEmpty(t *testing.T) {
+	clearEnv(t, envKeys...)
+	t.Setenv("LOGIN_LOG_FILE", "")
+	path := writeYAML(t, baseYAML) // YAML sets login_log_file: logs/yaml.log
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LoginLogFile != "" {
+		t.Errorf("LoginLogFile = %q, want empty (stdout) when LOGIN_LOG_FILE is explicitly empty", cfg.LoginLogFile)
 	}
 }
 
@@ -286,6 +304,9 @@ func TestValidate_AcceptsValidConfig(t *testing.T) {
 	cfg.InstanceID = "node-a"
 	cfg.JWT.Secret = "secret"
 	cfg.Server.Mode = "release"
+	cfg.Database.Host = "mysql-cluster.internal"
+	cfg.Redis.Addr = "redis-cluster.internal:6379"
+	cfg.Redis.Host = ""
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate: expected nil for valid config, got: %v", err)
@@ -349,6 +370,7 @@ func TestProductionRejectsLocalhostRedis(t *testing.T) {
 			cfg.InstanceID = "node-a"
 			cfg.JWT.Secret = "non-empty"
 			cfg.Server.Mode = "release"
+			cfg.Database.Host = "mysql-cluster.internal"
 			cfg.Redis.Addr = addr
 			cfg.Redis.Host = ""
 			cfg.Redis.Port = 0
@@ -378,6 +400,20 @@ func TestProductionAllowsRemoteDatabase(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate: expected nil for remote deps in production, got: %v", err)
+	}
+}
+
+func TestProductionAllowsRemoteRedisClusterWithoutStandaloneAddr(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AppRole = "api"
+	cfg.InstanceID = "node-a"
+	cfg.JWT.Secret = "non-empty"
+	cfg.Server.Mode = "release"
+	cfg.Database.Host = "mysql-cluster.internal"
+	cfg.Redis.ClusterAddrs = "redis-a.internal:6379,redis-b.internal:6379"
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate: expected nil for remote redis cluster in production, got: %v", err)
 	}
 }
 

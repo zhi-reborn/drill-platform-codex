@@ -73,7 +73,7 @@
                   <el-icon><DataBoard /></el-icon>
                   大屏2
                 </el-button>
-                <el-button class="drill-action-button action-screen3" type="warning" size="small" @click.stop="viewScreen3(drill.id)">
+                <el-button class="drill-action-button action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
                   <el-icon><DataBoard /></el-icon>
                   大屏3
                 </el-button>
@@ -380,14 +380,16 @@ onMounted(() => {
           }
 
           .action-screen3 {
-            border-color: rgba(64, 158, 255, 0.45);
-            background: rgba(64, 158, 255, 0.08);
-            color: $color-accent;
+            border-color: rgba(114, 46, 209, 0.45);
+            background: rgba(114, 46, 209, 0.08);
+            color: #722ED1;
 
             &:hover,
             &:focus {
-              border-color: rgba(64, 158, 255, 0.72);
-              background: rgba(64, 158, 255, 0.16);
+              color: #ffffff;
+              border-color: #722ED1;
+              background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
+              box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
             }
           }
         }

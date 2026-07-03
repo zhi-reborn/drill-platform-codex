@@ -260,10 +260,17 @@
             />
             <text
               class="node-label"
-              :y="node.labelAbove ? -32 : 44"
+              :class="{ 'node-label-multiline': node.lines.length > 1 }"
+              :style="{ fontSize: node.labelFontSize + 'px' }"
+              :y="node.labelY"
               :fill="node.labelColor"
             >
-              {{ node.shortName }}
+              <tspan
+                v-for="(line, li) in node.lines"
+                :key="li"
+                x="0"
+                :dy="li === 0 ? 0 : node.labelLineHeight"
+              >{{ line }}</tspan>
             </text>
           </g>
 
@@ -341,7 +348,8 @@ type TrackPoint = { x: number; y: number }
 const LANE_CAPACITY = 4
 const LANE_LEFT = 118
 const LANE_RIGHT = 900
-const LANE_NODE_PADDING = 56
+// 节点距跑道端点的内边距：缩小后节点更舒展，相邻标签间距更大
+const LANE_NODE_PADDING = 48
 const TURN_LEFT = 46
 const TURN_RIGHT = 998
 const DASH_VISUAL_OFFSET_Y = -3
@@ -501,13 +509,26 @@ const visibleNodes = computed(() => {
     // 跑道流向：偶数行（0,2…）由左向右，奇数行（1,3…）由右向左
     const flowDir = row % 2 === 1 ? 'left' : 'right'
     const trailSign = flowDir === 'left' ? 1 : -1
+    const lines = splitName(name)
+    const isMulti = lines.length > 1
+    // 多行时字号略缩，但不低于 stage-name 的最小字号（14px CSS → SVG 单位约 18px）
+    // 字号收一点 + 节点内边距缩小，让相邻标签留出更舒展的呼吸间距
+    const labelFontSize = isMulti
+      ? (isCompact.value ? 22 : 25)
+      : (isCompact.value ? 24 : 28)
+    const labelLineHeight = isCompact.value ? 24 : 29
+    // 末行基线固定在 -32（与原单行一致），多出的行向上延伸
+    const labelY = -32 - (lines.length - 1) * labelLineHeight
     return {
       ...p,
       index,
-      shortName: shorten(name),
+      lines,
       visualStatus,
       labelAbove: shouldLabelAbove(index, p),
       labelColor: '#f2f8ff',
+      labelFontSize,
+      labelY,
+      labelLineHeight,
       flowDir,
       // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
       trail: [
@@ -647,8 +668,36 @@ function isDone(status: NodeStatus | undefined): boolean {
   return status?.status === 'completed' || status?.status === 'done'
 }
 
-function shorten(name: string): string {
-  return name.length > 5 ? `${name.slice(0, 5)}…` : name
+// 将环节名处理为最多 2 行的展示文本
+// 1) 超过 12 字时截断为前 11 字 + "…"，保持 2 行 5+7 布局与宽度安全
+// 2) 在中点附近寻找功能词（的/与/和/及）作为断点，断在词后让语义自然
+// 如 "监控告警的实时触发与确认" → ["监控告警的","实时触发与确认"]
+// 如 "监控告警的实时触发与确认及响应处置" → ["监控告警的","实时触发与确…"]
+function splitName(name: string): string[] {
+  // 2 行最多容纳 12 字（5+7），超出部分以省略号收尾
+  const MAX_LEN = 12
+  const text = name.length > MAX_LEN
+    ? name.slice(0, MAX_LEN - 1) + '…'
+    : name
+  const len = text.length
+  if (len <= 4) return [text]
+  if (len <= 8) {
+    // 首行 4 字，剩余移至第二行（如 "系统基线检查" → ["系统基线","检查"]）
+    return [text.slice(0, 4), text.slice(4)]
+  }
+  // 超长名称：拆成 2 行
+  // 在中点附近（±2）优先寻找功能词断点，让首行落在修饰语后、动作前
+  const breakers = '的与和及'
+  const mid = Math.floor(len / 2)
+  const candidates = [mid, mid - 1, mid + 1, mid - 2, mid + 2]
+    .filter(p => p >= 3 && p <= len - 3)
+  for (const pos of candidates) {
+    if (breakers.includes(text[pos - 1])) {
+      return [text.slice(0, pos), text.slice(pos)]
+    }
+  }
+  // 无功能词：从中点等分
+  return [text.slice(0, mid), text.slice(mid)]
 }
 
 </script>
@@ -1554,6 +1603,11 @@ function shorten(name: string): string {
   paint-order: stroke fill;
   stroke: rgba(2, 10, 24, 0.62);
   stroke-width: 3px;
+}
+
+// 多行标签字号略小，相应收细描边以保持清晰
+.node-label-multiline {
+  stroke-width: 2.5px;
 }
 
 .finish-node {

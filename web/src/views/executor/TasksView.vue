@@ -1089,9 +1089,9 @@ onBeforeUnmount(() => {
     }
 
     .screen3-entry {
-      border-color: rgba(64, 169, 255, 0.64);
-      background: linear-gradient(135deg, $color-accent, $color-accent-light);
-      box-shadow: 0 8px 18px rgba(24, 144, 255, 0.22);
+      border-color: rgba(114, 46, 209, 0.64);
+      background: linear-gradient(135deg, #722ED1, #9254DE);
+      box-shadow: 0 8px 18px rgba(114, 46, 209, 0.28);
     }
   }
 
@@ -1226,7 +1226,7 @@ onBeforeUnmount(() => {
       }
 
       .screen3-entry {
-        background: linear-gradient(135deg, $color-accent, $color-accent-light);
+        background: linear-gradient(135deg, #722ED1, #9254DE);
       }
     }
 
@@ -1414,14 +1414,16 @@ onBeforeUnmount(() => {
         }
 
         .drill-action-screen3 {
-          border-color: rgba(64, 169, 255, 0.58);
-          background: rgba(24, 144, 255, 0.12);
-          color: $color-accent;
+          border-color: rgba(114, 46, 209, 0.58);
+          background: rgba(114, 46, 209, 0.12);
+          color: #722ED1;
 
           &:hover,
           &:focus {
-            border-color: rgba(64, 169, 255, 0.86);
-            background: rgba(24, 144, 255, 0.2);
+            color: #ffffff;
+            border-color: rgba(114, 46, 209, 0.86);
+            background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
+            box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
           }
         }
       }

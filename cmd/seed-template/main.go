@@ -10,11 +10,17 @@ import (
 )
 
 const (
-	baseURL     = "http://localhost:8080/api/v1"
 	username    = "admin"
 	password    = "admin123"
 	defaultTime = 120
 )
+
+var baseURL = func() string {
+	if v := os.Getenv("BASE_URL"); v != "" {
+		return v
+	}
+	return "http://localhost:8080/api/v1"
+}()
 
 type loginReq struct {
 	Username string `json:"username"`

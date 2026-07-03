@@ -18,7 +18,7 @@
               <el-icon><DataBoard /></el-icon>
               大屏2
             </el-button>
-            <el-button class="screen-entry-button screen-entry-cyber" @click="viewScreen3">
+            <el-button class="screen-entry-button screen-entry-violet" @click="viewScreen3">
               <el-icon><DataBoard /></el-icon>
               大屏3
             </el-button>
@@ -72,7 +72,7 @@
               <span class="metric-label">当前步骤</span>
               <strong>{{ runningSteps.length }}</strong>
             </div>
-            <div class="metric-item">
+            <div class="metric-item" :class="{ 'metric-item-issue': issueSteps.length > 0 }">
               <span class="metric-label">异常</span>
               <strong>{{ issueSteps.length }}</strong>
             </div>
@@ -82,10 +82,14 @@
             </div>
           </div>
           <div class="progress-wrap">
-            <div class="progress-label">进度</div>
+            <div class="progress-head">
+              <span class="progress-label">进度</span>
+              <span class="progress-pct" :class="{ 'is-success': instance?.status === 'completed' }">{{ progressPercentage }}%</span>
+            </div>
             <el-progress
               :percentage="progressPercentage"
-              :stroke-width="10"
+              :stroke-width="8"
+              :show-text="false"
               :status="instance.status === 'completed' ? 'success' : undefined"
             />
           </div>
@@ -1617,51 +1621,68 @@ onUnmounted(() => {
     position: relative;
     overflow: hidden;
     padding: 0;
-    margin-bottom: $spacing-base;
-    border-radius: $radius-md;
-    border: 1px solid rgba(24, 144, 255, 0.18);
+    margin-bottom: $spacing-lg;
+    border-radius: $radius-lg;
+    border: 1px solid rgba(24, 144, 255, 0.14);
+    // 白底叠加极淡对角渐变，营造精致深度
     background:
-      linear-gradient(135deg, rgba(9, 22, 42, 0.97), rgba(19, 42, 69, 0.95) 56%, rgba(13, 76, 112, 0.92)),
-      $bg-secondary;
-    box-shadow: 0 12px 28px rgba(15, 36, 61, 0.14);
+      linear-gradient(135deg, rgba(24, 144, 255, 0.03) 0%, transparent 45%, rgba(82, 196, 26, 0.02) 100%),
+      rgba(255, 255, 255, 0.98);
+    box-shadow:
+      0 12px 32px rgba(29, 45, 68, 0.08),
+      0 2px 8px rgba(24, 144, 255, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
 
-    .header-grid {
+    // 顶部三色渐变光带（蓝→青→绿，呼应运行态与主色）
+    &::before {
+      content: '';
       position: absolute;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0.28;
-      background:
-        linear-gradient(90deg, rgba(84, 194, 255, 0.16) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(84, 194, 255, 0.16) 1px, transparent 1px);
-      background-size: 32px 32px;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg,
+        rgba(24, 144, 255, 0) 0%,
+        $color-accent 18%,
+        #55C3D3 50%,
+        $color-success 82%,
+        rgba(82, 196, 26, 0) 100%
+      );
+      opacity: 0.9;
+      z-index: 3;
     }
 
+    // 左侧状态色带 —— 视觉锚点
     &::after {
       content: '';
       position: absolute;
       left: 0;
-      right: 0;
+      top: 3px;
       bottom: 0;
-      height: 3px;
-      background: linear-gradient(90deg, #20d6ff, #1e88ff 45%, #4ddc86);
+      width: 3px;
+      background: linear-gradient(180deg, #55C3D3 0%, $color-accent 60%, rgba(24, 144, 255, 0.25) 100%);
+      z-index: 2;
     }
 
     :deep(.el-card__body) {
       position: relative;
       z-index: 1;
-      padding: 20px 22px;
+      padding: 24px 28px 22px 32px;
+      background: transparent;
     }
 
     .header-content {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+      grid-template-columns: minmax(0, 1.1fr) auto;
       grid-template-rows: auto auto;
       grid-template-areas:
-        "title-row control-buttons"
+        "title-row    control-buttons"
         "metric-strip progress-wrap";
-      align-items: start;
-      gap: $spacing-md;
+      align-items: center;
+      gap: $spacing-base 0;
+      column-gap: $spacing-lg;
 
+      // ─── 标题行 ───
       .title-row {
         grid-area: title-row;
         display: flex;
@@ -1671,139 +1692,351 @@ onUnmounted(() => {
       }
 
       .drill-name {
-        font-size: 24px;
+        position: relative;
+        font-size: 28px;
         font-weight: $font-weight-bold;
-        color: #f8fbff;
         margin: 0;
+        padding-left: 14px;
         line-height: 1.2;
+        letter-spacing: 0.5px;
+        // 深→蓝渐变文字，与冷调基底呼应
+        background: linear-gradient(135deg, #1D2129 0%, #096DD9 55%, #1890FF 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+
+        // 左侧装饰发光竖线
+        &::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 5px;
+          bottom: 5px;
+          width: 4px;
+          border-radius: 2px;
+          background: linear-gradient(180deg, #55C3D3 0%, $color-accent 100%);
+          box-shadow: 0 0 10px rgba(85, 195, 211, 0.45);
+        }
       }
 
+      // ─── 控制按钮区 ───
       .control-buttons {
         grid-area: control-buttons;
         display: flex;
-        gap: $spacing-xs;
+        gap: 8px;
         flex-wrap: wrap;
         justify-content: flex-end;
         align-items: center;
 
         :deep(.el-button) {
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          border-radius: $radius-base;
-          box-shadow: 0 8px 18px rgba(3, 12, 27, 0.14);
+          height: 34px;
+          padding: 0 14px;
+          border-radius: $radius-md;
+          font-size: 13px;
+          font-weight: $font-weight-medium;
+          letter-spacing: 0.2px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          background: #ffffff;
+
+          .el-icon {
+            font-size: 14px;
+          }
         }
 
         :deep(.el-button + .el-button) {
           margin-left: 0;
         }
 
-        .screen-entry-button {
-          color: #eaf8ff;
-          border-color: rgba(110, 211, 255, 0.5);
-          background: rgba(30, 136, 255, 0.18);
+        // 大屏按钮 - 主色调（蓝色系）
+        .screen-entry-button,
+        .screen-entry-primary {
+          color: $color-accent;
+          border: 1px solid rgba(24, 144, 255, 0.4);
+          background: rgba(24, 144, 255, 0.04);
 
           &:hover,
           &:focus {
             color: #ffffff;
-            border-color: rgba(69, 224, 255, 0.88);
-            background: rgba(30, 136, 255, 0.3);
+            border-color: $color-accent;
+            background: $color-accent;
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.25);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: $color-accent-hover;
           }
         }
 
+        // 大屏2按钮 - 科技绿
         .screen-entry-cyber {
-          border-color: rgba(77, 220, 134, 0.48);
-          background: rgba(77, 220, 134, 0.14);
+          color: $color-success;
+          border: 1px solid rgba(82, 196, 26, 0.4);
+          background: rgba(82, 196, 26, 0.04);
 
           &:hover,
           &:focus {
-            border-color: rgba(77, 220, 134, 0.86);
-            background: rgba(77, 220, 134, 0.24);
+            color: #ffffff;
+            border-color: $color-success;
+            background: $color-success;
+            box-shadow: 0 4px 12px rgba(82, 196, 26, 0.25);
+            transform: translateY(-1px);
           }
+
+          &:active {
+            transform: translateY(0);
+            background: #389e0d;
+          }
+        }
+
+        // 大屏3按钮 - 霓虹紫（与蓝/绿明确区分）
+        .screen-entry-violet {
+          color: #722ED1;
+          border: 1px solid rgba(114, 46, 209, 0.4);
+          background: linear-gradient(135deg, rgba(114, 46, 209, 0.06) 0%, rgba(146, 84, 222, 0.04) 100%);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: #722ED1;
+            background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
+            box-shadow: 0 4px 14px rgba(114, 46, 209, 0.35);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: #5318AB;
+          }
+        }
+
+        // 开始按钮 - 绿色系（修复 background:#fff 覆盖导致的白字不可见）
+        :deep(.el-button--success) {
+          color: $color-success;
+          border: 1px solid rgba(82, 196, 26, 0.4);
+          background: rgba(82, 196, 26, 0.04);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: $color-success;
+            background: $color-success;
+            box-shadow: 0 4px 12px rgba(82, 196, 26, 0.25);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: #389e0d;
+          }
+        }
+
+        // 暂停按钮 - 橙色警告系
+        :deep(.el-button--warning) {
+          color: $color-warning;
+          border: 1px solid rgba(250, 173, 20, 0.4);
+          background: rgba(250, 173, 20, 0.04);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: $color-warning;
+            background: $color-warning;
+            box-shadow: 0 4px 12px rgba(250, 173, 20, 0.25);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: #d48806;
+          }
+        }
+
+        // 终止按钮 - 红色危险系
+        :deep(.el-button--danger) {
+          color: $color-error;
+          border: 1px solid rgba(255, 77, 79, 0.4);
+          background: rgba(255, 77, 79, 0.04);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: $color-error;
+            background: $color-error;
+            box-shadow: 0 4px 12px rgba(255, 77, 79, 0.25);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: #cf1322;
+          }
+        }
+
+        // ActionConfirm 组件内的按钮样式继承
+        :deep(.action-confirm-trigger) {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 34px;
+          padding: 0 14px;
+          border-radius: $radius-md;
+          font-size: 13px;
+          font-weight: $font-weight-medium;
+          letter-spacing: 0.2px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
       }
 
+      // ─── 指标条（卡片块风格，hover 发光）───
       .metric-strip {
         grid-area: metric-strip;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(96px, 1fr));
-        gap: $spacing-sm;
-        height: 100%;
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+        padding-right: $spacing-xl;
+        position: relative;
+
+        // 与右侧进度区的分隔线
+        &::after {
+          content: '';
+          position: absolute;
+          right: 0;
+          top: 6px;
+          bottom: 6px;
+          width: 1px;
+          background: linear-gradient(180deg,
+            transparent 0%,
+            rgba(24, 144, 255, 0.2) 50%,
+            transparent 100%
+          );
+        }
       }
 
       .metric-item {
         position: relative;
-        overflow: hidden;
-        height: 100%;
-        min-height: 64px;
-        padding: 10px 12px;
-        border: 1px solid rgba(121, 195, 255, 0.2);
-        border-radius: $radius-md;
-        background: rgba(255, 255, 255, 0.07);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         justify-content: center;
+        padding: 8px 16px;
+        min-width: 104px;
+        border-radius: $radius-md;
+        background: linear-gradient(135deg, rgba(24, 144, 255, 0.035), rgba(24, 144, 255, 0.008));
+        border: 1px solid rgba(24, 144, 255, 0.07);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-        &::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 12px;
-          bottom: 12px;
-          width: 3px;
-          border-radius: 2px;
-          background: linear-gradient(180deg, #45e0ff, #1e88ff);
+        &:hover {
+          background: linear-gradient(135deg, rgba(24, 144, 255, 0.09), rgba(24, 144, 255, 0.03));
+          border-color: rgba(24, 144, 255, 0.22);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(24, 144, 255, 0.12);
+
+          .metric-label { color: $color-accent; }
+
+          strong {
+            color: $color-accent;
+            text-shadow: 0 0 18px rgba(24, 144, 255, 0.35);
+          }
         }
 
         .metric-label {
           display: block;
-          color: rgba(210, 229, 246, 0.72);
-          font-size: 13px;
+          color: $text-tertiary;
+          font-size: 10px;
           margin-bottom: 6px;
-          font-weight: $font-weight-medium;
-          letter-spacing: 0.3px;
+          font-weight: $font-weight-semibold;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          transition: color 0.25s ease;
         }
 
         strong {
-          color: #ffffff;
-          font-size: 22px;
+          color: $text-primary;
+          font-size: 26px;
           line-height: 1;
           font-family: $font-family-mono;
           font-weight: $font-weight-bold;
           letter-spacing: 0.5px;
+          transition: all 0.25s ease;
+          text-shadow: 0 1px 2px rgba(29, 45, 68, 0.08);
+        }
+
+        // 异常项 - 红色卡片块强化警示
+        &.metric-item-issue {
+          background: linear-gradient(135deg, rgba(255, 77, 79, 0.08), rgba(255, 77, 79, 0.02));
+          border-color: rgba(255, 77, 79, 0.25);
+
+          strong {
+            color: $color-error;
+            text-shadow: 0 0 14px rgba(255, 77, 79, 0.4);
+          }
+
+          .metric-label {
+            color: $color-error;
+          }
+
+          &:hover {
+            background: linear-gradient(135deg, rgba(255, 77, 79, 0.14), rgba(255, 77, 79, 0.05));
+            border-color: rgba(255, 77, 79, 0.4);
+            box-shadow: 0 6px 16px rgba(255, 77, 79, 0.18);
+
+            strong { color: $color-error; }
+            .metric-label { color: $color-error; }
+          }
         }
       }
 
+      // ─── 进度区 ───
       .progress-wrap {
         grid-area: progress-wrap;
-        width: 100%;
-        min-width: 0;
-        height: 100%;
-        min-height: 64px;
-        padding: 10px 12px;
-        border: 1px solid rgba(121, 195, 255, 0.2);
-        border-radius: $radius-md;
-        background: rgba(255, 255, 255, 0.07);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
         display: flex;
         flex-direction: column;
-        align-items: stretch;
-        justify-content: center;
+        gap: 8px;
+        min-width: 280px;
+        padding-left: $spacing-xl;
+
+        .progress-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: $spacing-md;
+        }
 
         .progress-label {
-          font-size: 13px;
-          color: rgba(210, 229, 246, 0.72);
-          margin-bottom: 8px;
-          font-weight: $font-weight-medium;
+          font-size: 10px;
+          color: $text-tertiary;
+          font-weight: $font-weight-semibold;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .progress-pct {
+          color: $color-accent;
+          font-family: $font-family-mono;
+          font-size: 20px;
+          font-weight: $font-weight-bold;
           letter-spacing: 0.3px;
+          transition: color 0.25s ease;
+          text-shadow: 0 0 12px rgba(24, 144, 255, 0.25);
+
+          &.is-success {
+            color: $color-success;
+            text-shadow: 0 0 12px rgba(82, 196, 26, 0.3);
+          }
         }
 
         :deep(.el-progress) {
           flex: 1;
           display: flex;
           align-items: center;
+          width: 100%;
         }
 
         :deep(.el-progress-bar) {
@@ -1811,19 +2044,49 @@ onUnmounted(() => {
         }
 
         :deep(.el-progress-bar__outer) {
-          background-color: rgba(216, 235, 255, 0.16);
+          background-color: rgba(24, 144, 255, 0.08);
           border-radius: 6px;
         }
 
         :deep(.el-progress-bar__inner) {
           border-radius: 6px;
-          background: linear-gradient(90deg, #1e88ff, #29d3ff);
-        }
+          background: linear-gradient(90deg,
+            $color-accent 0%,
+            #55C3D3 50%,
+            $color-success 100%
+          );
+          position: relative;
+          overflow: hidden;
+          transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 
-        :deep(.el-progress__text) {
-          color: rgba(240, 248, 255, 0.9);
-          font-weight: $font-weight-semibold;
-          margin-left: 12px;
+          // 顶部高光层
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent);
+            border-radius: 6px 6px 0 0;
+          }
+
+          // 流光动画
+          &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(90deg,
+              transparent 0%,
+              rgba(255, 255, 255, 0.5) 50%,
+              transparent 100%
+            );
+            transform: translateX(-180%);
+            animation: monitor-progress-shine 2.8s ease-in-out infinite;
+          }
         }
       }
     }
@@ -2477,6 +2740,19 @@ onUnmounted(() => {
         .control-buttons {
           justify-content: flex-start;
         }
+
+        // 竖屏下移除指标条与进度区之间的竖向分隔线
+        .metric-strip {
+          padding-right: 0;
+
+          &::after {
+            display: none;
+          }
+        }
+
+        .progress-wrap {
+          padding-left: 0;
+        }
       }
     }
   }
@@ -2487,13 +2763,33 @@ onUnmounted(() => {
     padding: $spacing-sm;
 
     .header-card {
+      :deep(.el-card__body) {
+        padding: 18px 18px;
+      }
+
       .header-content {
         .drill-name {
           font-size: $font-size-xl;
         }
 
+        // 指标条纵向堆叠为横向卡片块（标签:数值 单行）
         .metric-strip {
-          grid-template-columns: 1fr;
+          flex-direction: column;
+          align-items: stretch;
+          gap: $spacing-sm;
+
+          .metric-item {
+            padding: 8px 14px;
+            min-width: 0;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: $spacing-md;
+
+            .metric-label {
+              margin-bottom: 0;
+            }
+          }
         }
       }
     }
@@ -2517,6 +2813,18 @@ onUnmounted(() => {
         }
       }
     }
+  }
+}
+
+// 进度条流光动画
+@keyframes monitor-progress-shine {
+  0% {
+    transform: translateX(-180%);
+  }
+
+  60%,
+  100% {
+    transform: translateX(260%);
   }
 }
 </style>

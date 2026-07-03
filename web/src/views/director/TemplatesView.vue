@@ -246,7 +246,10 @@ async function loadTemplates() {
       params.category = activeCategory.value
     }
     const result = await templateApi.getList(params)
-    templates.value = result.list || []
+    const list = result.list || []
+    // 按更新时间倒序：最新更新的排最上面
+    list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    templates.value = list
   } catch (error) {
     ElMessage.error('加载模板列表失败')
     console.error('Failed to load templates:', error)

@@ -2,7 +2,9 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,27 +13,24 @@ import (
 var ctx = context.Background()
 
 type Config struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
-	PoolSize int
+	Addr           string
+	Host           string
+	Port           int
+	Username       string
+	Password       string
+	DB             int
+	PoolSize       int
+	TLS            bool
+	SentinelMaster string
+	ClusterAddrs   string
 }
 
 type Client struct {
-	rc *redis.Client
+	rc redis.UniversalClient
 }
 
 func NewClient(cfg *Config) (*Client, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Password:     cfg.Password,
-		DB:           cfg.DB,
-		PoolSize:     cfg.PoolSize,
-		DialTimeout:  60 * time.Second,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-	})
+	rdb := newUniversalClient(*cfg)
 
 	client := &Client{rc: rdb}
 	if err := client.Ping(context.Background()); err != nil {
@@ -41,11 +40,76 @@ func NewClient(cfg *Config) (*Client, error) {
 	return client, nil
 }
 
+func newUniversalClient(cfg Config) redis.UniversalClient {
+	if addrs := splitAddrs(cfg.ClusterAddrs); len(addrs) > 0 {
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:        addrs,
+			Username:     cfg.Username,
+			Password:     cfg.Password,
+			PoolSize:     cfg.PoolSize,
+			DialTimeout:  60 * time.Second,
+			ReadTimeout:  60 * time.Second,
+			WriteTimeout: 60 * time.Second,
+			TLSConfig:    redisTLSConfig(cfg.TLS),
+		})
+	}
+
+	addr := cfg.Addr
+	if addr == "" && cfg.Host != "" {
+		addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	}
+
+	if cfg.SentinelMaster != "" {
+		return redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    cfg.SentinelMaster,
+			SentinelAddrs: splitAddrs(addr),
+			Username:      cfg.Username,
+			Password:      cfg.Password,
+			DB:            cfg.DB,
+			PoolSize:      cfg.PoolSize,
+			DialTimeout:   60 * time.Second,
+			ReadTimeout:   60 * time.Second,
+			WriteTimeout:  60 * time.Second,
+			TLSConfig:     redisTLSConfig(cfg.TLS),
+		})
+	}
+
+	return redis.NewClient(&redis.Options{
+		Addr:         addr,
+		Username:     cfg.Username,
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     cfg.PoolSize,
+		DialTimeout:  60 * time.Second,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		TLSConfig:    redisTLSConfig(cfg.TLS),
+	})
+}
+
+func splitAddrs(addrs string) []string {
+	parts := strings.Split(addrs, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if addr := strings.TrimSpace(part); addr != "" {
+			out = append(out, addr)
+		}
+	}
+	return out
+}
+
+func redisTLSConfig(enabled bool) *tls.Config {
+	if !enabled {
+		return nil
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS12}
+}
+
 func (c *Client) Ping(ctx context.Context) error {
 	return c.rc.Ping(ctx).Err()
 }
 
-func (c *Client) Raw() *redis.Client {
+func (c *Client) Raw() redis.UniversalClient {
 	return c.rc
 }
 

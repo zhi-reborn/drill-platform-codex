@@ -1,0 +1,40 @@
+# =============================================================================
+# 本地联调 Dockerfile
+#
+# 复用本地已缓存的 golang:1.23-alpine 镜像，避免拉取 alpine:3.19 / node:20-alpine
+# 前端直接 COPY 本地已构建的 web/dist，跳过 node 构建阶段
+# 生产部署请用 Dockerfile（多阶段构建，运行时镜像更小）
+# =============================================================================
+
+# Stage 1: 构建后端二进制
+FROM golang:1.23-alpine AS backend-builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /drill-server ./cmd/server
+
+# Stage 2: 运行时（复用本地 golang:1.23-alpine，镜像较大但本地可构建）
+FROM golang:1.23-alpine
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=backend-builder /drill-server .
+COPY configs/config.yaml /app/configs/config.yaml
+COPY scripts/init-db.sql /app/scripts/init-db.sql
+# 前端直接用本地已构建的 dist，跳过 node 构建阶段
+COPY web/dist /app/web/dist
+
+ENV TZ=Asia/Shanghai
+
+EXPOSE 8080
+
+CMD ["./drill-server"]

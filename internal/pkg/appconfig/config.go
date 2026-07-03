@@ -188,6 +188,14 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("APP_ROLE"); v != "" {
 		cfg.AppRole = v
 	}
+	if v := os.Getenv("SERVER_MODE"); v != "" {
+		cfg.Server.Mode = v
+	}
+	if v := os.Getenv("SERVER_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.Server.Port = port
+		}
+	}
 	if v := os.Getenv("INSTANCE_ID"); v != "" {
 		cfg.InstanceID = v
 	}
@@ -255,7 +263,12 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.CommandWaitTimeout = d
 		}
 	}
-	if v := os.Getenv("LOGIN_LOG_FILE"); v != "" {
+	// LOGIN_LOG_FILE is the one env var where an explicit empty string is
+	// meaningful: in HA deployments the operator sets LOGIN_LOG_FILE="" to
+	// force stdout-only logging so the container runtime can aggregate logs
+	// across nodes. LookupEnv distinguishes "unset" (keep YAML/default) from
+	// "set to empty" (override to stdout).
+	if v, ok := os.LookupEnv("LOGIN_LOG_FILE"); ok {
 		cfg.LoginLogFile = v
 	}
 }
@@ -286,8 +299,8 @@ func (c *Config) Validate() error {
 		if isLoopbackHost(c.Database.Host) {
 			return fmt.Errorf("database host %q is a loopback address; production must use a remote HA database (set DATABASE_HOST)", c.Database.Host)
 		}
-		if isLoopbackAddr(c.RedisAddress()) {
-			return fmt.Errorf("redis address %q is a loopback address; production must use a remote HA redis (set REDIS_ADDR or REDIS_CLUSTER_ADDRS)", c.RedisAddress())
+		if redisAddr := c.RedisAddress(); isLoopbackAddr(redisAddr) {
+			return fmt.Errorf("redis address %q is a loopback address; production must use a remote HA redis (set REDIS_ADDR or REDIS_CLUSTER_ADDRS)", redisAddr)
 		}
 	}
 
@@ -338,9 +351,13 @@ func (c *Config) IsAPI() bool {
 	return role == RoleAPI || role == RoleAll
 }
 
-// RedisAddress resolves the effective Redis address, preferring the combined
-// REDIS_ADDR form and falling back to host:port from YAML.
+// RedisAddress resolves the effective Redis endpoint used for validation and
+// startup checks. Cluster seeds take precedence over the standalone default so
+// REDIS_CLUSTER_ADDRS can be the only Redis endpoint in production.
 func (c *Config) RedisAddress() string {
+	if first := firstCSV(c.Redis.ClusterAddrs); first != "" {
+		return first
+	}
 	if c.Redis.Addr != "" {
 		return c.Redis.Addr
 	}
@@ -349,6 +366,15 @@ func (c *Config) RedisAddress() string {
 			return fmt.Sprintf("%s:%d", c.Redis.Host, c.Redis.Port)
 		}
 		return c.Redis.Host
+	}
+	return ""
+}
+
+func firstCSV(value string) string {
+	for _, part := range strings.Split(value, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			return trimmed
+		}
 	}
 	return ""
 }
