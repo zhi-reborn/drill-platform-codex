@@ -327,6 +327,97 @@ func TestExecuteCompleteStepOnRunningStepChangesItOnce(t *testing.T) {
 	}
 }
 
+func TestExecuteCompleteStepAutoStartsReadySuccessor(t *testing.T) {
+	executor, db, _ := newExecutorForTest(t)
+	drillID, stepID := seedDrillAndStepForExecutorTest(t, db, "running")
+
+	successor := entity.StepInstance{
+		ID: 20, DrillInstanceID: drillID, StepTemplateID: 102, Name: "successor-step",
+		Seq: 2, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: fmt.Sprintf("[%d]", stepID),
+	}
+	if err := db.Create(&successor).Error; err != nil {
+		t.Fatalf("create successor: %v", err)
+	}
+
+	cmd := createExecutorCommand(t, db, "complete_step", drillID, &stepID, CompleteStepPayload{Remark: "done"})
+	if err := executor.Execute(context.Background(), cmd, testFence()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var updated entity.StepInstance
+	if err := db.First(&updated, successor.ID).Error; err != nil {
+		t.Fatalf("load successor: %v", err)
+	}
+	if updated.Status != "running" {
+		t.Fatalf("expected successor auto-started, got %s", updated.Status)
+	}
+	if updated.StartTime == nil {
+		t.Fatal("expected successor start_time to be set")
+	}
+}
+
+func TestExecuteCompleteStepAutoCompletesParentAndStartsNextTask(t *testing.T) {
+	executor, db, _ := newExecutorForTest(t)
+	drillID, _ := seedDrillAndStepForExecutorTest(t, db, "completed")
+
+	parentID := uint64(30)
+	parent := entity.StepInstance{
+		ID: parentID, DrillInstanceID: drillID, StepTemplateID: 130, Name: "parent-task",
+		Seq: 10, Status: "running", AssigneeIDs: "[]", StepType: "serial",
+	}
+	doneChild := entity.StepInstance{
+		ID: 31, DrillInstanceID: drillID, ParentStepID: &parentID, StepTemplateID: 131, Name: "done-child",
+		Seq: 11, Status: "completed", AssigneeIDs: "[]", StepType: "serial",
+	}
+	runningChild := entity.StepInstance{
+		ID: 32, DrillInstanceID: drillID, ParentStepID: &parentID, StepTemplateID: 132, Name: "running-child",
+		Seq: 12, Status: "running", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: "[31]",
+	}
+	nextTask := entity.StepInstance{
+		ID: 40, DrillInstanceID: drillID, StepTemplateID: 140, Name: "next-task",
+		Seq: 13, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: fmt.Sprintf("[%d]", parentID),
+	}
+	if err := db.Create(&parent).Error; err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	if err := db.Create(&doneChild).Error; err != nil {
+		t.Fatalf("create done child: %v", err)
+	}
+	if err := db.Create(&runningChild).Error; err != nil {
+		t.Fatalf("create running child: %v", err)
+	}
+	if err := db.Create(&nextTask).Error; err != nil {
+		t.Fatalf("create next task: %v", err)
+	}
+
+	cmd := createExecutorCommand(t, db, "complete_step", drillID, &runningChild.ID, CompleteStepPayload{Remark: "done"})
+	if err := executor.Execute(context.Background(), cmd, testFence()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var updatedParent entity.StepInstance
+	if err := db.First(&updatedParent, parentID).Error; err != nil {
+		t.Fatalf("load parent: %v", err)
+	}
+	if updatedParent.Status != "completed" {
+		t.Fatalf("expected parent auto-completed, got %s", updatedParent.Status)
+	}
+	if updatedParent.EndTime == nil {
+		t.Fatal("expected parent end_time to be set")
+	}
+
+	var updatedNext entity.StepInstance
+	if err := db.First(&updatedNext, nextTask.ID).Error; err != nil {
+		t.Fatalf("load next task: %v", err)
+	}
+	if updatedNext.Status != "running" {
+		t.Fatalf("expected next task auto-started, got %s", updatedNext.Status)
+	}
+}
+
 func TestExecuteReplaySameCommandReturnsSuccessWithoutDuplicateLogOrNotification(t *testing.T) {
 	executor, db, _ := newExecutorForTest(t)
 	drillID, stepID := seedDrillAndStepForExecutorTest(t, db, "running")
@@ -623,8 +714,8 @@ func TestExecuteCompleteStepUsesTransactionPath(t *testing.T) {
 // acquired before any business logic ran.
 func TestNamedLockAcquiredOnMutation(t *testing.T) {
 	type call struct {
-		drillID  uint64
-		timeout  int
+		drillID uint64
+		timeout int
 	}
 	var calls []call
 	original := acquireNamedLock

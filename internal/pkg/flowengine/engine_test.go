@@ -312,6 +312,73 @@ func TestCompleteStepAutoStartsNextTaskWithinSamePhase(t *testing.T) {
 	}
 }
 
+func TestCompleteStepAutoStartsNextStepAfterSingleParallelTask(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "single-parallel-task-flow",
+		Steps: []*StepDef{
+			{ID: 100, Name: "section", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5},
+			{ID: 110, Name: "parallel task", Seq: 2, StepType: StepTypeParallel, TimeoutMinutes: 5, ParentStepID: 100},
+			{ID: 120, Name: "next task", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 100, PreStepIDs: []int64{110}},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	if err := e.Start(inst.ID); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 110, 1, ""); err != nil {
+		t.Fatalf("CompleteStep parallel task error: %v", err)
+	}
+
+	if inst.Steps[120].Status != StepStatusRunning {
+		t.Fatalf("expected next task running, got %s", inst.Steps[120].Status)
+	}
+}
+
+func TestCompleteStepAutoStartsNextRootWithinSamePhase(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "same-phase-root-flow",
+		Steps: []*StepDef{
+			{ID: 100, Name: "section1", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, Phase: "phase-a"},
+			{ID: 110, Name: "section1 child", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 100, Phase: "phase-a"},
+			{ID: 200, Name: "section2", Seq: 3, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{100}, Phase: "phase-a"},
+			{ID: 210, Name: "section2 child", Seq: 4, StepType: StepTypeSerial, TimeoutMinutes: 5, ParentStepID: 200, PreStepIDs: []int64{100}, Phase: "phase-a"},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	if err := e.Start(inst.ID); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 110, 1, ""); err != nil {
+		t.Fatalf("CompleteStep child error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 100, 1, ""); err != nil {
+		t.Fatalf("CompleteStep section1 error: %v", err)
+	}
+
+	if inst.Steps[200].Status != StepStatusRunning {
+		t.Fatalf("expected same-phase next root running, got %s", inst.Steps[200].Status)
+	}
+	if inst.Steps[210].Status != StepStatusRunning {
+		t.Fatalf("expected same-phase next child running, got %s", inst.Steps[210].Status)
+	}
+}
+
 func TestCompleteStep_AllSteps(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()

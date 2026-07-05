@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 
 	"gorm.io/driver/sqlite"
@@ -174,6 +175,84 @@ func TestCompleteStepAllowsExplicitAssigneeTask(t *testing.T) {
 
 		if err := svc.CompleteStep(1, 7, "done"); err != nil {
 			t.Fatalf("expected explicit-assignee task to be completed: %v", err)
+		}
+	})
+}
+
+func TestCompleteStepSyncsInstancePreStepIDsBeforeAdvancingEngine(t *testing.T) {
+	withTaskTestDB(t, func(db *gorm.DB) {
+		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 1, DrillInstanceID: 10, StepTemplateID: 101, Name: "前序任务", Seq: 1, Status: "running", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[]"})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 2, DrillInstanceID: 10, StepTemplateID: 102, Name: "后续任务", Seq: 2, Status: "pending", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[1]"})
+
+		engine := flowengine.NewEngine()
+		flowDef := &flowengine.FlowDef{
+			ID:   10,
+			Name: "instance-pre-step-flow",
+			Steps: []*flowengine.StepDef{
+				{ID: 101, Name: "前序任务", Seq: 1, StepType: flowengine.StepTypeSerial},
+				{ID: 102, Name: "后续任务", Seq: 2, StepType: flowengine.StepTypeSerial},
+			},
+		}
+		inst, err := engine.CreateInstance(flowDef, nil, 1)
+		if err != nil {
+			t.Fatalf("CreateInstance: %v", err)
+		}
+		inst.Status = flowengine.FlowStatusRunning
+		inst.Steps[101].ID = 1
+		inst.Steps[101].Status = flowengine.StepStatusRunning
+		inst.Steps[102].ID = 2
+		inst.Steps[102].Status = flowengine.StepStatusPending
+		inst.CurrentStepIDs = []int64{101}
+
+		svc := NewTaskService(repository.NewStepRepo())
+		svc.SetDrillService(&DrillService{engine: engine})
+
+		if err := svc.CompleteStep(1, 7, "done"); err != nil {
+			t.Fatalf("CompleteStep: %v", err)
+		}
+
+		if got := inst.Steps[102].Status; got != flowengine.StepStatusRunning {
+			t.Fatalf("expected successor to start from instance pre_step_ids, got %s", got)
+		}
+	})
+}
+
+func TestCompleteStepSyncsInstanceStatusesBeforeAdvancingEngine(t *testing.T) {
+	withTaskTestDB(t, func(db *gorm.DB) {
+		insertTaskTestDrill(t, db, entity.DrillInstance{ID: 10, TemplateID: 1, Name: "活跃演练", Status: "running", CreatedBy: 1})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 1, DrillInstanceID: 10, StepTemplateID: 101, Name: "已完成兄弟任务", Seq: 1, Status: "completed", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[]"})
+		insertTaskTestStep(t, db, entity.StepInstance{ID: 2, DrillInstanceID: 10, StepTemplateID: 102, Name: "当前任务", Seq: 2, Status: "running", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[1]"})
+
+		engine := flowengine.NewEngine()
+		flowDef := &flowengine.FlowDef{
+			ID:   10,
+			Name: "instance-status-sync-flow",
+			Steps: []*flowengine.StepDef{
+				{ID: 101, Name: "已完成兄弟任务", Seq: 1, StepType: flowengine.StepTypeSerial},
+				{ID: 102, Name: "当前任务", Seq: 2, StepType: flowengine.StepTypeSerial, PreStepIDs: []int64{101}},
+			},
+		}
+		inst, err := engine.CreateInstance(flowDef, nil, 1)
+		if err != nil {
+			t.Fatalf("CreateInstance: %v", err)
+		}
+		inst.Status = flowengine.FlowStatusRunning
+		inst.Steps[101].ID = 1
+		inst.Steps[101].Status = flowengine.StepStatusRunning
+		inst.Steps[102].ID = 2
+		inst.Steps[102].Status = flowengine.StepStatusRunning
+		inst.CurrentStepIDs = []int64{101, 102}
+
+		svc := NewTaskService(repository.NewStepRepo())
+		svc.SetDrillService(&DrillService{engine: engine})
+
+		if err := svc.CompleteStep(2, 7, "done"); err != nil {
+			t.Fatalf("CompleteStep: %v", err)
+		}
+
+		if got := inst.Steps[101].Status; got != flowengine.StepStatusCompleted {
+			t.Fatalf("expected stale sibling status to sync from DB, got %s", got)
 		}
 	})
 }

@@ -193,6 +193,7 @@ func (s *TaskService) StartStep(stepID uint64, operatorID uint64) error {
 	}
 
 	if s.drillService != nil && s.drillService.engine != nil {
+		s.drillService.syncPreStepIDsToEngine(int64(step.DrillInstanceID))
 		err := s.drillService.engine.ManualStartStep(
 			int64(step.DrillInstanceID),
 			int64(step.StepTemplateID),
@@ -226,6 +227,7 @@ func (s *TaskService) CompleteStep(stepID uint64, operatorID uint64, remark stri
 	}
 
 	if s.drillService != nil && s.drillService.engine != nil {
+		s.drillService.syncPreStepIDsToEngine(int64(step.DrillInstanceID))
 		err := s.drillService.engine.CompleteStep(
 			int64(step.DrillInstanceID),
 			int64(step.StepTemplateID),

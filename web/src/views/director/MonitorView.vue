@@ -1091,8 +1091,10 @@ function connectWebSocket() {
   ws.onmessage = (ev: MessageEvent) => {
     if (componentDestroyed) return
     try {
-      const msg = JSON.parse(ev.data)
-      handleWSMessage(msg)
+      // 后端 WritePump 会把消息打包成 JSON 数组批量发送，需逐条处理
+      const parsed = JSON.parse(ev.data)
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      messages.forEach(msg => handleWSMessage(msg))
     } catch {
       // 解析失败时兜底全量刷新
       scheduleDrillDataRefresh()
@@ -1110,9 +1112,10 @@ function connectWebSocket() {
   }
 }
 
-function handleWSMessage(msg: { event_type?: string; event?: string; payload?: any }) {
-  const event = msg.event_type || msg.event || ''
-  const payload = msg.payload || {}
+function handleWSMessage(msg: { type?: string; event_type?: string; event?: string; data?: any; payload?: any }) {
+  // 后端 WSMessage 信封使用 type/data 字段，兼容旧格式 event_type/event/payload
+  const event = msg.type || msg.event_type || msg.event || ''
+  const payload = msg.data || msg.payload || {}
 
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return

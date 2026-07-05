@@ -65,6 +65,12 @@ func (s *DrillService) Recover(id uint64) error {
 	flowDef := s.adapter.BuildFlowDef(template)
 	flowDef.ID = int64(drill.ID)
 	assignees := s.adapter.BuildAssignees(drill.ID)
+	s.adapter.RegisterDrillContext(int64(drill.ID), drillContext{
+		ID:         drill.ID,
+		Name:       drill.Name,
+		Status:     drill.Status,
+		TemplateID: drill.TemplateID,
+	})
 
 	inst, err := s.engine.CreateInstance(flowDef, assignees, int64(drill.CreatedBy))
 	if err != nil {
@@ -109,6 +115,11 @@ func (s *DrillService) Recover(id uint64) error {
 
 	// 协调状态：自动完成所有子步骤已终态但自身未终态的父步骤
 	s.reconcileParentSteps(int64(drill.ID), steps)
+	steps, err = s.stepRepo.FindStepsByDrillID(id)
+	if err != nil {
+		return err
+	}
+	s.syncPreStepIDsToEngine(int64(drill.ID))
 
 	// 协调状态：激活所有前序步骤已完成但自身仍为 pending 的步骤
 	// 对每个已终态的步骤调用 AdvanceFlow，触发 handleStepCompletion 推进流程

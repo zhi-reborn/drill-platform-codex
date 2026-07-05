@@ -229,9 +229,10 @@
             >
               <div
                 v-for="(alert, ai) in visibleAlerts"
-                :key="ai"
+                :key="alert.stepId"
                 class="alert-card"
                 :class="'alert-' + alert.level"
+                :data-step-id="alert.stepId"
                 :ref="el => setAlertCardRef(el, ai)"
               >
                 <!-- 顶部：状态指示条 + 标题行 -->
@@ -266,49 +267,10 @@
 
       <!-- Footer decorations -->
       <footer class="screen-footer" />
-
-      <!-- 任务完成弹窗 -->
-      <Transition name="cyber-modal">
-        <div v-if="completionModal.visible" class="completion-overlay" @click="dismissCompletionModal">
-          <div class="completion-seal" @click.stop>
-            <span class="seal-corner tl" />
-            <span class="seal-corner tr" />
-            <span class="seal-corner bl" />
-            <span class="seal-corner br" />
-            <div class="seal-scan" />
-            <div class="seal-grid" />
-
-            <div class="seal-sigil">
-              <span class="sigil-ring sigil-ring-1" />
-              <span class="sigil-ring sigil-ring-2" />
-              <span class="sigil-ring sigil-ring-3" />
-              <svg class="sigil-hex" viewBox="0 0 100 100" aria-hidden="true">
-                <polygon points="50,6 90,29 90,71 50,94 10,71 10,29" />
-              </svg>
-              <svg class="sigil-check" viewBox="0 0 48 48" aria-hidden="true">
-                <path d="M13 25 L20 32 L35 15" />
-              </svg>
-            </div>
-
-            <div class="seal-body">
-              <div class="seal-title">任务完成</div>
-              <div class="seal-step">{{ completionModal.stepName }}</div>
-              <div v-if="completionModal.phaseName" class="seal-path">
-                <span class="path-phase">{{ completionModal.phaseName }}</span>
-                <template v-if="completionModal.directParent && completionModal.directParent !== '--'">
-                  <span class="path-sep">›</span>
-                  <span class="path-task">{{ completionModal.directParent }}</span>
-                </template>
-              </div>
-            </div>
-
-            <div class="seal-progress">
-              <div :key="completionModal.key" class="seal-progress-fill" />
-            </div>
-          </div>
-        </div>
-      </Transition>
     </div>
+
+    <!-- 任务完成流式动画层：飞行的任务卡片 ghost + 汇聚粒子 + 圆环吸收特效 -->
+    <div ref="flyLayerRef" class="task-fly-layer" aria-hidden="true"></div>
   </div>
 </template>
 
@@ -362,15 +324,8 @@ const warnListRef = ref<HTMLElement | null>(null)
 const alertCardRefs = ref<HTMLElement[]>([])
 const moreTipRef = ref<HTMLElement | null>(null)
 
-// 任务完成弹窗
-const completionModal = ref({
-  visible: false,
-  key: 0,
-  stepName: '',
-  phaseName: '',
-  directParent: '',
-  timer: null as ReturnType<typeof setTimeout> | null,
-})
+// 任务完成流式动画
+const flyLayerRef = ref<HTMLElement | null>(null)
 
 // === 树形步骤辅助 ===
 // 构建父子映射，支持任意深度嵌套（阶段→环节→任务→操作步骤）
@@ -452,30 +407,234 @@ function findDirectParent(stepId: number): string {
   return parent?.name || '--'
 }
 
-// 任务完成弹窗：展示步骤名称、阶段路径，3.5s 后自动关闭
-function showCompletionModal(stepId: number) {
+// 任务完成流式动画：对应任务卡片 ghost 从右侧飞向中心百分数圆环，
+// 营造"信息汇聚、流入圆环汇总"的视觉效果。
+// 调用时机：applyStepEvent 在更新 drillSteps 之后同步调用本函数，
+// 此时 Vue 尚未 patch DOM，原 alert-card 仍在原位，可精确捕获其位置。
+function playTaskFlowAnimation(stepId: number) {
   const step = drillSteps.value.find(s => s.id === stepId)
   if (!step) return
-  if (completionModal.value.timer) {
-    clearTimeout(completionModal.value.timer)
+  const screenRoot = screenRootRef.value
+  const flyLayer = flyLayerRef.value
+  if (!screenRoot || !flyLayer) return
+
+  // 圆环汇流点（hub-core）
+  const hubCore = screenRoot.querySelector<HTMLElement>('.progress-hub .hub-core')
+  if (!hubCore) return
+  const hubGlow = screenRoot.querySelector<HTMLElement>('.progress-hub .hub-glow')
+
+  const screenRect = screenRoot.getBoundingClientRect()
+  const hubRect = hubCore.getBoundingClientRect()
+  const hubCx = hubRect.left + hubRect.width / 2 - screenRect.left
+  const hubCy = hubRect.top + hubRect.height / 2 - screenRect.top
+
+  // 任务卡片元素（DOM 尚未 patch，原卡片仍在）
+  const cardEl = screenRoot.querySelector<HTMLElement>(`[data-step-id="${stepId}"]`)
+  if (!cardEl) {
+    // 卡片不在可见区域（已滚出 / 属于其他阶段 / 父级步骤无卡片）：
+    // 仅触发圆环脉冲反馈，不生成飞行 ghost，避免出现"凭空飞入"的卡片
+    pulseHub(hubCore, hubGlow)
+    return
   }
-  completionModal.value.key += 1
-  completionModal.value.stepName = step.name
-  completionModal.value.phaseName = findParentPhase(stepId)
-  completionModal.value.directParent = findDirectParent(stepId)
-  completionModal.value.visible = true
-  completionModal.value.timer = setTimeout(() => {
-    completionModal.value.visible = false
-    completionModal.value.timer = null
-  }, 3500)
+  const cardRect = cardEl.getBoundingClientRect()
+  const cardW = Math.max(160, Math.min(cardRect.width, 280))
+  const fromX = cardRect.left + cardRect.width / 2 - screenRect.left
+  const fromY = cardRect.top + cardRect.height / 2 - screenRect.top
+  // 原卡片立即淡出下沉，制造"被抽离"的错觉
+  cardEl.animate(
+    [
+      { opacity: 1, transform: 'translateY(0) scale(1)' },
+      { opacity: 0, transform: `translateY(6px) scale(${0.94})` },
+    ],
+    { duration: 320, easing: 'cubic-bezier(0.4, 0, 0.7, 0.2)', fill: 'forwards' },
+  )
+
+  // 构建 ghost 卡片
+  const ghost = document.createElement('div')
+  ghost.className = 'fly-ghost'
+  ghost.style.width = cardW + 'px'
+
+  const shell = document.createElement('div')
+  shell.className = 'fly-ghost-shell'
+
+  const bar = document.createElement('div')
+  bar.className = 'fly-ghost-bar'
+
+  const body = document.createElement('div')
+  body.className = 'fly-ghost-body'
+
+  const title = document.createElement('div')
+  title.className = 'fly-ghost-title'
+  title.textContent = step.name
+
+  const path = document.createElement('div')
+  path.className = 'fly-ghost-path'
+  const phaseName = findParentPhase(stepId)
+  path.textContent = phaseName && phaseName !== '--' ? phaseName : '任务完成'
+
+  body.appendChild(title)
+  body.appendChild(path)
+
+  const tag = document.createElement('div')
+  tag.className = 'fly-ghost-tag'
+  tag.textContent = '已完成'
+
+  shell.appendChild(bar)
+  shell.appendChild(body)
+  shell.appendChild(tag)
+  ghost.appendChild(shell)
+
+  // 飞行动画参数
+  const flightMs = 1000
+  const startScale = 0.94
+  const endScale = 0.16
+
+  // 初始位置内联设置，避免 WAAPI 首帧前的瞬闪（ghost 默认在 0,0）
+  const startTransform = `translate(${fromX}px, ${fromY}px) translate(-50%, -50%) scale(${startScale}) rotate(-3deg)`
+  ghost.style.transform = startTransform
+  ghost.style.opacity = '1'
+  flyLayer.appendChild(ghost)
+
+  // 二次贝塞尔轨迹：从卡片位置弧形飞向圆环
+  const cpX = (fromX + hubCx) / 2
+  const cpY = (fromY + hubCy) / 2 - 90
+  const bezier = (t: number) => {
+    const u = 1 - t
+    return {
+      x: u * u * fromX + 2 * u * t * cpX + t * t * hubCx,
+      y: u * u * fromY + 2 * u * t * cpY + t * t * hubCy,
+    }
+  }
+
+  const steps = 28
+  const keyframes: Keyframe[] = []
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const p = bezier(t)
+    const scale = startScale + (endScale - startScale) * t
+    // 末段渐隐：被圆环"吸收"
+    const opacity = t < 0.82 ? 1 : Math.max(0, 1 - (t - 0.82) / 0.18)
+    keyframes.push({
+      transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${scale}) rotate(${(t - 0.5) * 6}deg)`,
+      opacity,
+      offset: t,
+    })
+  }
+  const flight = ghost.animate(keyframes, {
+    duration: flightMs,
+    easing: 'cubic-bezier(0.45, 0, 0.25, 1)',
+    fill: 'forwards',
+  })
+
+  // 飞行尾迹粒子
+  let trailTimer: number | null = window.setInterval(() => {
+    const rect = ghost.getBoundingClientRect()
+    spawnTrailDot(flyLayer, rect.left + rect.width / 2 - screenRect.left, rect.top + rect.height / 2 - screenRect.top)
+  }, 42)
+
+  flight.onfinish = () => {
+    if (trailTimer !== null) {
+      clearInterval(trailTimer)
+      trailTimer = null
+    }
+    ghost.remove()
+    triggerHubAbsorption(flyLayer, hubCx, hubCy)
+    pulseHub(hubCore, hubGlow)
+  }
 }
 
-function dismissCompletionModal() {
-  if (completionModal.value.timer) {
-    clearTimeout(completionModal.value.timer)
-    completionModal.value.timer = null
+// 尾迹粒子：随 ghost 飞行路径散落的青色光点，逐渐衰减
+function spawnTrailDot(layer: HTMLElement, x: number, y: number) {
+  const dot = document.createElement('div')
+  dot.className = 'fly-trail-dot'
+  const size = 3 + Math.random() * 4
+  dot.style.width = size + 'px'
+  dot.style.height = size + 'px'
+  dot.style.left = x + 'px'
+  dot.style.top = y + 'px'
+  layer.appendChild(dot)
+  const dx = (Math.random() - 0.5) * 18
+  const dy = (Math.random() - 0.5) * 18 + 6
+  dot.animate(
+    [
+      { opacity: 0.95, transform: 'translate(-50%, -50%) scale(1)' },
+      { opacity: 0, transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.2)` },
+    ],
+    { duration: 720, easing: 'ease-out' },
+  ).onfinish = () => dot.remove()
+}
+
+// 圆环吸收特效：冲击波环 + 放射状粒子迸发
+function triggerHubAbsorption(layer: HTMLElement, x: number, y: number) {
+  // 冲击波环（双层）
+  const ring1 = document.createElement('div')
+  ring1.className = 'hub-shockwave hub-shockwave-1'
+  ring1.style.left = x + 'px'
+  ring1.style.top = y + 'px'
+  layer.appendChild(ring1)
+  ring1.animate(
+    [
+      { width: '48px', height: '48px', opacity: 0.9, borderWidth: '3px' },
+      { width: '300px', height: '300px', opacity: 0, borderWidth: '1px' },
+    ],
+    { duration: 820, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+  ).onfinish = () => ring1.remove()
+
+  const ring2 = document.createElement('div')
+  ring2.className = 'hub-shockwave hub-shockwave-2'
+  ring2.style.left = x + 'px'
+  ring2.style.top = y + 'px'
+  layer.appendChild(ring2)
+  ring2.animate(
+    [
+      { width: '32px', height: '32px', opacity: 0.75, borderWidth: '2px' },
+      { width: '200px', height: '200px', opacity: 0, borderWidth: '1px' },
+    ],
+    { duration: 640, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+  ).onfinish = () => ring2.remove()
+
+  // 放射状粒子迸发
+  const count = 16
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.25
+    const dist = 36 + Math.random() * 56
+    const p = document.createElement('div')
+    p.className = 'hub-burst-particle'
+    p.style.left = x + 'px'
+    p.style.top = y + 'px'
+    layer.appendChild(p)
+    const dx = Math.cos(angle) * dist
+    const dy = Math.sin(angle) * dist
+    p.animate(
+      [
+      { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.15)`, opacity: 0 },
+      ],
+      { duration: 560 + Math.random() * 260, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
+    ).onfinish = () => p.remove()
   }
-  completionModal.value.visible = false
+}
+
+// 圆环脉冲：hub-core 短暂放大增亮，hub-glow 扩散，模拟"吞噬信息后的一次心跳"
+function pulseHub(hubCore: HTMLElement, hubGlow: HTMLElement | null) {
+  hubCore.animate(
+    [
+      { transform: 'scale(1)', filter: 'brightness(1) saturate(1)' },
+      { transform: 'scale(1.16)', filter: 'brightness(1.7) saturate(1.3)', offset: 0.35 },
+      { transform: 'scale(1)', filter: 'brightness(1) saturate(1)' },
+    ],
+    { duration: 720, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+  )
+  if (hubGlow) {
+    hubGlow.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+        { transform: 'translate(-50%, -50%) scale(1.45)', opacity: 1, offset: 0.35 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+      ],
+      { duration: 720, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+    )
+  }
 }
 
 // === KPI 计算 ===
@@ -746,6 +905,7 @@ const activeAlerts = computed(() => {
   const _now = elapsedSeconds.value
 
   const running: Array<{
+    stepId: number
     title: string
     operator: string
     team: string
@@ -767,6 +927,7 @@ const activeAlerts = computed(() => {
         : (s as any).attributes
       const operatorName = attrs?.operator
       running.push({
+        stepId: s.id,
         title: s.name,
         operator: operatorName || '',
         team: s.executor_team || '运维部',
@@ -787,6 +948,7 @@ const activeAlerts = computed(() => {
         : (s as any).attributes
       const operatorName = attrs?.operator
       pending.push({
+        stepId: s.id,
         title: s.name,
         operator: operatorName || '',
         team: s.executor_team || '运维部',
@@ -1015,22 +1177,26 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     if (componentDestroyed) return
     try {
-      const data = JSON.parse(event.data)
-      const eventType = normalizeWsEvent(data.type || data.event_type || data.event)
-      if (!eventType) return
+      // 后端 WritePump 会把消息打包成 JSON 数组批量发送，需逐条处理
+      const parsed = JSON.parse(event.data)
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      for (const data of messages) {
+        const eventType = normalizeWsEvent(data.type || data.event_type || data.event)
+        if (!eventType) continue
 
-      const payload = data.payload || data.data || data
+        const payload = data.payload || data.data || data
 
-      // 步骤事件：增量更新 + 推入本地日志
-      if (eventType.startsWith('step_')) {
-        applyStepEvent(eventType, payload)
-      } else if (eventType.startsWith('drill_')) {
-        applyDrillEvent(eventType, payload)
-      }
+        // 步骤事件：增量更新 + 推入本地日志
+        if (eventType.startsWith('step_')) {
+          applyStepEvent(eventType, payload)
+        } else if (eventType.startsWith('drill_')) {
+          applyDrillEvent(eventType, payload)
+        }
 
-      // 合并刷新确保级联状态正确（延迟执行，让增量先生效）
-      if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
-        scheduleDataRefresh()
+        // 合并刷新确保级联状态正确（延迟执行，让增量先生效）
+        if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
+          scheduleDataRefresh()
+        }
       }
     } catch (e) { /* ignore */ }
   }
@@ -1094,9 +1260,12 @@ function applyStepEvent(eventType: string, payload: any) {
   }
   recentLogs.value = [newLog, ...recentLogs.value].slice(0, 30)
 
-  // 任务完成弹窗（step_complete 为归一化后的事件名）
+  // 任务完成流式动画（step_complete 为归一化后的事件名）
+  // 仅对叶子步骤（实际操作步骤）触发；父级步骤（环节/阶段）的级联完成事件
+  // 不触发，避免一次完成产生多个 ghost（1-2-1-2 问题的根因）
   if (eventType === 'step_complete') {
-    showCompletionModal(stepId)
+    const isLeafStep = leafSteps.value.some(s => s.id === stepId)
+    if (isLeafStep) playTaskFlowAnimation(stepId)
   }
 
   // 重新计算 KPI
@@ -1237,10 +1406,6 @@ onBeforeUnmount(() => {
   warnListResizeObserver = null
   if (timeTimer) clearInterval(timeTimer)
   if (dataRefreshTimer) clearTimeout(dataRefreshTimer)
-  if (completionModal.value.timer) {
-    clearTimeout(completionModal.value.timer)
-    completionModal.value.timer = null
-  }
   stopFallbackPolling()
   if (ws) { ws.close(); ws = null }
 })
@@ -2882,330 +3047,185 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
-  .sigil-ring { animation: none !important; }
-  .seal-scan { animation: none !important; display: none; }
-  .sigil-check path { animation: none !important; stroke-dashoffset: 0 !important; }
-  .sigil-hex polygon { animation: none !important; }
+  .fly-ghost, .fly-trail-dot, .hub-shockwave, .hub-burst-particle { display: none !important; }
 }
 
-// ===== 任务完成弹窗 =====
-.completion-overlay {
-  position: fixed;
+// ===== 任务完成流式动画 =====
+// 全屏覆盖层：承载飞行 ghost、尾迹粒子、圆环吸收特效
+.task-fly-layer {
+  position: absolute;
   inset: 0;
-  z-index: 9000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(0, 80, 60, 0.12), transparent 52%),
-    rgba(2, 6, 16, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  cursor: pointer;
-}
-
-.completion-seal {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  min-width: 340px;
-  max-width: 480px;
-  padding: 36px 52px 30px;
-  border: 1px solid rgba(0, 255, 156, 0.42);
-  border-radius: 4px;
-  background:
-    linear-gradient(135deg, rgba(0, 40, 28, 0.72), rgba(4, 14, 34, 0.92)),
-    radial-gradient(circle at 50% 0%, rgba(0, 255, 156, 0.1), transparent 60%);
-  box-shadow:
-    0 0 0 1px rgba(0, 212, 255, 0.12),
-    0 0 36px rgba(0, 255, 156, 0.18),
-    0 0 72px rgba(0, 212, 255, 0.1),
-    inset 0 0 32px rgba(0, 255, 156, 0.06);
-  cursor: default;
+  z-index: 8000;
+  pointer-events: none;
   overflow: hidden;
 }
 
-// 四角 HUD 框
-.seal-corner {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border: 2px solid $neon;
-  pointer-events: none;
-  opacity: 0;
-  animation: corner-snap 0.4s 0.15s ease-out forwards;
-
-  &.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-  &.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-  &.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-  &.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
-}
-
-@keyframes corner-snap {
-  from { opacity: 0; transform: scale(1.6); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-// 扫描线
-.seal-scan {
+// 飞行 ghost：任务卡片的"信息分身"，沿弧线飞向圆环
+.fly-ghost {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, rgba(0, 255, 156, 0.7), transparent);
-  box-shadow: 0 0 12px rgba(0, 255, 156, 0.5);
-  animation: seal-scan-sweep 2.2s 0.3s ease-in-out infinite;
+  will-change: transform, opacity;
   pointer-events: none;
-  z-index: 2;
+  filter: drop-shadow(0 0 14px rgba(45, 228, 255, 0.55)) drop-shadow(0 0 28px rgba(0, 255, 156, 0.22));
 }
 
-@keyframes seal-scan-sweep {
-  0% { top: 0; opacity: 0; }
-  8% { opacity: 1; }
-  50% { top: calc(100% - 3px); opacity: 0.4; }
-  58% { opacity: 0; }
-  100% { top: 0; opacity: 0; }
-}
-
-// 网格纹理
-.seal-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0, 255, 156, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 156, 0.035) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
-  -webkit-mask-image: radial-gradient(circle at center, #000 30%, transparent 80%);
-  pointer-events: none;
-}
-
-// 成功徽记：六边形盾牌 + 雷达环 + 自绘对勾
-.seal-sigil {
+.fly-ghost-shell {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 88px;
-  height: 88px;
-}
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 10px 11px;
+  border: 1px solid rgba(45, 228, 255, 0.62);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(8, 38, 70, 0.94), rgba(4, 18, 42, 0.94));
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 156, 0.16),
+    0 0 22px rgba(45, 228, 255, 0.4),
+    0 0 44px rgba(0, 255, 156, 0.18),
+    inset 0 0 18px rgba(45, 228, 255, 0.12);
+  overflow: hidden;
 
-.sigil-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 64px;
-  height: 64px;
-  border: 1.5px solid rgba(0, 255, 156, 0.55);
-  border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0.5);
-  opacity: 0;
-  animation: sigil-ring-expand 2s ease-out infinite;
-}
+  // 顶部高亮扫描线，强化"数据封装"质感
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(45, 228, 255, 0.9), transparent);
+    box-shadow: 0 0 6px rgba(45, 228, 255, 0.6);
+  }
 
-.sigil-ring-1 { animation-delay: 0s; }
-.sigil-ring-2 { animation-delay: 0.66s; }
-.sigil-ring-3 { animation-delay: 1.32s; }
-
-@keyframes sigil-ring-expand {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.9; border-color: rgba(0, 255, 156, 0.7); }
-  100% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; border-color: rgba(0, 212, 255, 0.1); }
-}
-
-.sigil-hex {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  filter: drop-shadow(0 0 14px rgba(0, 255, 156, 0.4));
-  z-index: 2;
-
-  polygon {
-    fill: rgba(0, 255, 156, 0.1);
-    stroke: rgba(0, 255, 156, 0.65);
-    stroke-width: 2;
-    stroke-linejoin: round;
-    animation: sigil-hex-glow 2s ease-in-out infinite;
+  // 底部网格暗纹
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(45, 228, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45, 228, 255, 0.06) 1px, transparent 1px);
+    background-size: 18px 18px;
+    mask-image: linear-gradient(120deg, transparent, #000 60%, transparent);
+    -webkit-mask-image: linear-gradient(120deg, transparent, #000 60%, transparent);
+    pointer-events: none;
   }
 }
 
-@keyframes sigil-hex-glow {
-  0%, 100% { stroke: rgba(0, 255, 156, 0.55); fill: rgba(0, 255, 156, 0.08); }
-  50% { stroke: rgba(0, 255, 156, 0.85); fill: rgba(0, 255, 156, 0.16); }
+// 左侧能量条（完成态：青绿渐变）
+.fly-ghost-bar {
+  flex: 0 0 4px;
+  align-self: stretch;
+  min-height: 28px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #2cf8d8, #00d4aa 60%, #09b86d);
+  box-shadow:
+    0 0 8px rgba(44, 248, 216, 0.75),
+    0 0 14px rgba(0, 255, 156, 0.4);
 }
 
-.sigil-check {
-  position: absolute;
-  width: 38px;
-  height: 38px;
-  z-index: 3;
-
-  path {
-    fill: none;
-    stroke: $ok;
-    stroke-width: 5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-dasharray: 42;
-    stroke-dashoffset: 42;
-    animation: sigil-check-draw 0.55s 0.25s ease-out forwards;
-    filter: drop-shadow(0 0 6px rgba(0, 255, 156, 0.8));
-  }
-}
-
-@keyframes sigil-check-draw {
-  to { stroke-dashoffset: 0; }
-}
-
-// 文本区
-.seal-body {
+.fly-ghost-body {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  gap: 2px;
 }
 
-.seal-title {
+.fly-ghost-title {
   font-family: $font-cn;
-  font-size: clamp(20px, 1.6em, 26px);
-  font-weight: 900;
-  letter-spacing: 6px;
-  color: #ffffff;
-  text-shadow:
-    0 0 12px rgba(0, 255, 156, 0.7),
-    0 0 24px rgba(0, 212, 255, 0.3);
-  padding-left: 6px;
-}
-
-.seal-step {
-  font-family: $font-cn;
-  font-size: clamp(16px, 1.25em, 21px);
+  font-size: 14px;
   font-weight: 800;
-  color: #2cf8d8;
-  text-shadow: 0 0 10px rgba(44, 248, 216, 0.5);
-  text-align: center;
-  max-width: 380px;
+  line-height: 1.25;
+  color: #eaf6ff;
+  text-shadow: 0 0 6px rgba(45, 228, 255, 0.45);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.seal-path {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+.fly-ghost-path {
   font-family: $font-mono;
-  font-size: clamp(11px, 0.9em, 14px);
-  color: rgba(160, 205, 245, 0.7);
-
-  .path-phase {
-    color: rgba(0, 212, 255, 0.85);
-    font-weight: 700;
-  }
-  .path-sep {
-    color: rgba(120, 160, 200, 0.5);
-  }
-  .path-task {
-    color: rgba(200, 220, 245, 0.7);
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: rgba(45, 228, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-// 自动关闭进度条
-.seal-progress {
+// 右侧"已完成"标签
+.fly-ghost-tag {
   position: relative;
   z-index: 1;
-  width: 100%;
-  height: 3px;
-  margin-top: 4px;
-  border-radius: 2px;
-  background: rgba(0, 255, 156, 0.1);
-  overflow: hidden;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-family: $font-mono;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #baffdd;
+  background: rgba(0, 255, 156, 0.14);
+  border: 1px solid rgba(0, 255, 156, 0.42);
+  text-shadow: 0 0 4px rgba(0, 255, 156, 0.55);
 }
 
-.seal-progress-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, $ok, $neon);
-  box-shadow: 0 0 8px rgba(0, 255, 156, 0.6);
-  animation: seal-progress-drain 3.5s linear forwards;
+// 飞行尾迹粒子：青色光点，随路径散落并衰减
+.fly-trail-dot {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(120, 240, 255, 0.98) 0%, rgba(45, 228, 255, 0.5) 55%, transparent 100%);
+  box-shadow: 0 0 6px rgba(45, 228, 255, 0.65);
+  pointer-events: none;
+  will-change: transform, opacity;
+  transform: translate(-50%, -50%);
 }
 
-@keyframes seal-progress-drain {
-  from { width: 100%; }
-  to { width: 0%; }
+// 圆环吸收：冲击波环（双层，外层青绿 + 内层金白）
+.hub-shockwave {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border-style: solid;
+  pointer-events: none;
+  will-change: width, height, opacity, border-width;
+  box-sizing: border-box;
 }
 
-// Vue Transition: overlay 淡入淡出 + seal 弹性缩放
-.cyber-modal-enter-active {
-  transition: opacity 0.35s ease-out;
-
-  .completion-seal {
-    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease-out;
-    transition-delay: 0.05s;
-  }
+.hub-shockwave-1 {
+  border-color: rgba(45, 228, 255, 0.72);
+  box-shadow:
+    0 0 20px rgba(45, 228, 255, 0.55),
+    inset 0 0 20px rgba(0, 255, 156, 0.32);
 }
 
-.cyber-modal-leave-active {
-  transition: opacity 0.25s ease-in;
-
-  .completion-seal {
-    transition: transform 0.25s ease-in, opacity 0.25s ease-in;
-  }
+.hub-shockwave-2 {
+  border-color: rgba(255, 224, 162, 0.6);
+  box-shadow:
+    0 0 14px rgba(255, 180, 74, 0.45),
+    inset 0 0 14px rgba(255, 224, 162, 0.22);
 }
 
-.cyber-modal-enter-from {
-  opacity: 0;
-
-  .completion-seal {
-    opacity: 0;
-    transform: scale(0.82) translateY(12px);
-  }
-}
-
-.cyber-modal-leave-to {
-  opacity: 0;
-
-  .completion-seal {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-}
-
-@media (max-width: 540px) {
-  .completion-seal {
-    min-width: unset;
-    width: calc(100vw - 48px);
-    max-width: unset;
-    padding: 28px 28px 24px;
-    gap: 14px;
-  }
-
-  .seal-sigil {
-    width: 72px;
-    height: 72px;
-  }
-
-  .sigil-hex {
-    width: 54px;
-    height: 54px;
-  }
-
-  .sigil-check {
-    width: 32px;
-    height: 32px;
-  }
-
-  .seal-step {
-    max-width: 100%;
-  }
+// 圆环吸收：放射状粒子迸发（金白 → 青绿渐变）
+.hub-burst-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff5d6 0%, #ffd36f 35%, #ff8426 70%, transparent 100%);
+  box-shadow:
+    0 0 8px rgba(255, 180, 74, 0.7),
+    0 0 14px rgba(255, 132, 38, 0.35);
+  pointer-events: none;
+  will-change: transform, opacity;
+  transform: translate(-50%, -50%);
 }
 </style>

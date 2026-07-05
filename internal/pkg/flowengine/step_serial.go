@@ -60,6 +60,12 @@ func (e *Engine) requiresManualStartAtPhaseBoundary(inst *FlowInst, completedSte
 		return false
 	}
 
+	completedRoot := inst.Steps[completedRootID]
+	nextRoot := inst.Steps[nextRootID]
+	if completedRoot.Phase != "" && completedRoot.Phase == nextRoot.Phase {
+		return false
+	}
+
 	return e.hasChildSteps(inst, completedRootID) || e.hasChildSteps(inst, nextRootID)
 }
 

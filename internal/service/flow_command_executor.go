@@ -482,6 +482,11 @@ func (e *FlowCommandExecutor) transitionStepInTx(
 			}
 		}
 
+		advanced, err := e.autoAdvanceReadyStepsInTx(tx, &step, to)
+		if err != nil {
+			return err
+		}
+
 		if err := markCommandSucceededInTx(tx, cmd.ID, ownership); err != nil {
 			return err
 		}
@@ -492,6 +497,30 @@ func (e *FlowCommandExecutor) transitionStepInTx(
 			0,
 			json.RawMessage(cmd.Payload),
 		))
+		for _, completed := range advanced.completed {
+			payload, _ := json.Marshal(map[string]any{
+				"step_id": completed.ID,
+				"auto":    true,
+			})
+			collectedEvents = append(collectedEvents, events.NewWSMessage(
+				"step_completed",
+				completed.DrillInstanceID,
+				0,
+				json.RawMessage(payload),
+			))
+		}
+		for _, started := range advanced.started {
+			payload, _ := json.Marshal(map[string]any{
+				"step_id": started.ID,
+				"auto":    true,
+			})
+			collectedEvents = append(collectedEvents, events.NewWSMessage(
+				"step_running",
+				started.DrillInstanceID,
+				0,
+				json.RawMessage(payload),
+			))
+		}
 
 		return nil
 	})
@@ -524,6 +553,215 @@ func markCommandSucceededInTx(tx *gorm.DB, cmdID uint64, ownership repository.Co
 		return repository.ErrOwnershipLost
 	}
 	return nil
+}
+
+type executorAutoAdvanceResult struct {
+	completed []entity.StepInstance
+	started   []entity.StepInstance
+}
+
+func (e *FlowCommandExecutor) autoAdvanceReadyStepsInTx(tx *gorm.DB, step *entity.StepInstance, to string) (executorAutoAdvanceResult, error) {
+	result := executorAutoAdvanceResult{}
+	if !executorDependencySatisfied(to) {
+		return result, nil
+	}
+
+	var steps []entity.StepInstance
+	if err := tx.Where("drill_instance_id = ?", step.DrillInstanceID).
+		Order("seq ASC, id ASC").
+		Find(&steps).Error; err != nil {
+		return result, err
+	}
+
+	byID := make(map[uint64]entity.StepInstance, len(steps))
+	childrenByParent := make(map[uint64][]uint64)
+	for _, candidate := range steps {
+		byID[candidate.ID] = candidate
+		if candidate.ParentStepID != nil {
+			childrenByParent[*candidate.ParentStepID] = append(childrenByParent[*candidate.ParentStepID], candidate.ID)
+		}
+	}
+
+	now := time.Now()
+	changedDependencies := []uint64{step.ID}
+	processedDependencies := make(map[uint64]bool)
+
+	for len(changedDependencies) > 0 {
+		dependencyID := changedDependencies[0]
+		changedDependencies = changedDependencies[1:]
+		if processedDependencies[dependencyID] {
+			continue
+		}
+		processedDependencies[dependencyID] = true
+
+		started, err := e.autoStartSuccessorsForDependencyInTx(tx, dependencyID, steps, byID, now)
+		if err != nil {
+			return result, err
+		}
+		for _, startedStep := range started {
+			byID[startedStep.ID] = startedStep
+			result.started = append(result.started, startedStep)
+		}
+
+		parent, ok, err := e.autoCompleteParentIfReadyInTx(tx, dependencyID, byID, childrenByParent, now)
+		if err != nil {
+			return result, err
+		}
+		if ok {
+			byID[parent.ID] = parent
+			result.completed = append(result.completed, parent)
+			changedDependencies = append(changedDependencies, parent.ID)
+		}
+	}
+
+	return result, nil
+}
+
+func (e *FlowCommandExecutor) autoStartSuccessorsForDependencyInTx(
+	tx *gorm.DB,
+	dependencyID uint64,
+	steps []entity.StepInstance,
+	byID map[uint64]entity.StepInstance,
+	now time.Time,
+) ([]entity.StepInstance, error) {
+	var started []entity.StepInstance
+	for _, candidate := range steps {
+		current := byID[candidate.ID]
+		if current.Status != "pending" {
+			continue
+		}
+		preIDs := parseExecutorPreStepIDs(current.PreStepIDs)
+		if len(preIDs) == 0 || !containsExecutorPreStep(preIDs, dependencyID) {
+			continue
+		}
+		if !executorParentAllowsStart(current, byID) {
+			continue
+		}
+		if !executorPredecessorsSatisfied(preIDs, byID) {
+			continue
+		}
+
+		res := tx.Model(&entity.StepInstance{}).
+			Where("id = ? AND status = ?", current.ID, "pending").
+			Updates(map[string]any{
+				"status":     "running",
+				"start_time": now,
+			})
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			continue
+		}
+		current.Status = "running"
+		current.StartTime = &now
+		byID[current.ID] = current
+		started = append(started, current)
+	}
+	return started, nil
+}
+
+func (e *FlowCommandExecutor) autoCompleteParentIfReadyInTx(
+	tx *gorm.DB,
+	stepID uint64,
+	byID map[uint64]entity.StepInstance,
+	childrenByParent map[uint64][]uint64,
+	now time.Time,
+) (entity.StepInstance, bool, error) {
+	step, ok := byID[stepID]
+	if !ok || step.ParentStepID == nil {
+		return entity.StepInstance{}, false, nil
+	}
+
+	parent, ok := byID[*step.ParentStepID]
+	if !ok || executorTerminalStatus(parent.Status) {
+		return entity.StepInstance{}, false, nil
+	}
+
+	childIDs := childrenByParent[parent.ID]
+	if len(childIDs) == 0 {
+		return entity.StepInstance{}, false, nil
+	}
+	for _, childID := range childIDs {
+		child, ok := byID[childID]
+		if !ok || !executorTerminalStatus(child.Status) {
+			return entity.StepInstance{}, false, nil
+		}
+	}
+
+	res := tx.Model(&entity.StepInstance{}).
+		Where("id = ? AND status NOT IN ?", parent.ID, []string{"completed", "skipped", "timeout", "issue"}).
+		Updates(map[string]any{
+			"status":   "completed",
+			"end_time": now,
+		})
+	if res.Error != nil {
+		return entity.StepInstance{}, false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return entity.StepInstance{}, false, nil
+	}
+	parent.Status = "completed"
+	parent.EndTime = &now
+	return parent, true, nil
+}
+
+func executorDependencySatisfied(status string) bool {
+	return status == "completed" || status == "timeout" || status == "issue"
+}
+
+func executorTerminalStatus(status string) bool {
+	return status == "completed" || status == "skipped" || status == "timeout" || status == "issue"
+}
+
+func executorParentAllowsStart(step entity.StepInstance, byID map[uint64]entity.StepInstance) bool {
+	if step.ParentStepID == nil {
+		return true
+	}
+	parent, ok := byID[*step.ParentStepID]
+	if !ok {
+		return false
+	}
+	return parent.Status == "running"
+}
+
+func executorPredecessorsSatisfied(preIDs []uint64, byID map[uint64]entity.StepInstance) bool {
+	for _, preID := range preIDs {
+		pre, ok := byID[preID]
+		if !ok || !executorDependencySatisfied(pre.Status) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseExecutorPreStepIDs(raw string) []uint64 {
+	if raw == "" || raw == "null" {
+		return nil
+	}
+	var ids []uint64
+	if err := json.Unmarshal([]byte(raw), &ids); err == nil {
+		return ids
+	}
+	var ints []int64
+	if err := json.Unmarshal([]byte(raw), &ints); err != nil {
+		return nil
+	}
+	for _, id := range ints {
+		if id > 0 {
+			ids = append(ids, uint64(id))
+		}
+	}
+	return ids
+}
+
+func containsExecutorPreStep(ids []uint64, target uint64) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
 
 // transitionStepFieldsInTx updates step fields (without changing status) inside

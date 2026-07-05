@@ -882,22 +882,26 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     if (componentDestroyed) return
     try {
-      const data = JSON.parse(event.data)
-      const eventType = normalizeWsEvent(data.type || data.event_type || data.event)
-      if (!eventType) return
+      // 后端 WritePump 会把消息打包成 JSON 数组批量发送，需逐条处理
+      const parsed = JSON.parse(event.data)
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      for (const data of messages) {
+        const eventType = normalizeWsEvent(data.type || data.event_type || data.event)
+        if (!eventType) continue
 
-      const payload = data.payload || data.data || data
+        const payload = data.payload || data.data || data
 
-      // 步骤事件：增量更新 + 推入本地日志
-      if (eventType.startsWith('step_')) {
-        applyStepEvent(eventType, payload)
-      } else if (eventType.startsWith('drill_')) {
-        applyDrillEvent(eventType, payload)
-      }
+        // 步骤事件：增量更新 + 推入本地日志
+        if (eventType.startsWith('step_')) {
+          applyStepEvent(eventType, payload)
+        } else if (eventType.startsWith('drill_')) {
+          applyDrillEvent(eventType, payload)
+        }
 
-      // 合并刷新确保级联状态正确（延迟执行，让增量先生效）
-      if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
-        scheduleDataRefresh()
+        // 合并刷新确保级联状态正确（延迟执行，让增量先生效）
+        if (eventType.startsWith('step_') || eventType.startsWith('drill_') || REFRESH_EVENTS.has(eventType)) {
+          scheduleDataRefresh()
+        }
       }
     } catch (e) { /* ignore */ }
   }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 
 	"gorm.io/driver/sqlite"
@@ -102,6 +103,48 @@ func preIDsToJSON(ids []uint64) string {
 	}
 	b, _ := json.Marshal(ids)
 	return string(b)
+}
+
+func TestSyncPreStepIDsToEngineMapsPredecessorsReadAfterSuccessor(t *testing.T) {
+	db := setupTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	defer func() { repository.DB = origDB }()
+
+	steps := []entity.StepInstance{
+		{ID: 1, DrillInstanceID: 88, StepTemplateID: 2002, Name: "successor", Seq: 2, Status: "pending", AssigneeIDs: "[]", PreStepIDs: "[2]", StepType: "serial"},
+		{ID: 2, DrillInstanceID: 88, StepTemplateID: 2001, Name: "predecessor", Seq: 1, Status: "completed", AssigneeIDs: "[]", PreStepIDs: "[]", StepType: "serial"},
+	}
+	for i := range steps {
+		if err := db.Create(&steps[i]).Error; err != nil {
+			t.Fatalf("插入步骤 %s (id=%d) 失败: %v", steps[i].Name, steps[i].ID, err)
+		}
+	}
+
+	engine := flowengine.NewEngine()
+	flowDef := &flowengine.FlowDef{
+		ID:   88,
+		Name: "sync-prestep-test",
+		Steps: []*flowengine.StepDef{
+			{ID: 2001, Name: "predecessor", Seq: 1, StepType: flowengine.StepTypeSerial},
+			{ID: 2002, Name: "successor", Seq: 2, StepType: flowengine.StepTypeSerial, PreStepIDs: []int64{9999}},
+		},
+	}
+	if _, err := engine.CreateInstance(flowDef, nil, 1); err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	svc := &DrillService{engine: engine}
+	svc.syncPreStepIDsToEngine(88)
+
+	inst, ok := engine.GetInstance(88)
+	if !ok {
+		t.Fatal("expected engine instance")
+	}
+	got := inst.Steps[2002].PreStepIDs
+	if len(got) != 1 || got[0] != 2001 {
+		t.Fatalf("expected successor pre step template IDs [2001], got %v", got)
+	}
 }
 
 func TestComputeInstancePreStepIDs(t *testing.T) {

@@ -1281,8 +1281,10 @@ function connectWS() {
 
   ws.onmessage = (ev) => {
     try {
-      const msg = JSON.parse(ev.data)
-      handleWSMessage(msg)
+      // 后端 WritePump 会把消息打包成 JSON 数组批量发送，需逐条处理
+      const parsed = JSON.parse(ev.data)
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      messages.forEach(msg => handleWSMessage(msg))
     } catch { /* ignored */ }
   }
 }

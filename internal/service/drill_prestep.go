@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"drill-platform/internal/domain/entity"
+	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 
 	"gorm.io/gorm"
@@ -175,7 +176,10 @@ func preStepIDsEqual(current string, expected []uint64) bool {
 }
 
 func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {
-	inst, ok := s.engine.GetInstance(flowInstID)
+	if s == nil || s.engine == nil {
+		return
+	}
+	inst, ok := s.engine.GetInstanceForMutate(flowInstID)
 	if !ok {
 		return
 	}
@@ -186,8 +190,30 @@ func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {
 	instIDToDefID := make(map[uint64]int64)
 	instIDToPres := make(map[int64][]int64)
 	for _, step := range steps {
+		instIDToDefID[step.ID] = int64(step.StepTemplateID)
+	}
+
+	var currentStepIDs []int64
+	for _, step := range steps {
 		defID := int64(step.StepTemplateID)
-		instIDToDefID[step.ID] = defID
+		if si, exists := inst.Steps[defID]; exists {
+			si.ID = int64(step.ID)
+			si.Status = flowengine.StepStatus(step.Status)
+			si.StartTime = step.StartTime
+			si.EndTime = step.EndTime
+			si.TimeoutAt = step.TimeoutAt
+			si.Remark = step.Remark
+			si.IssueDesc = step.IssueDesc
+			if step.ActualOperator != nil {
+				operatorID := int64(*step.ActualOperator)
+				si.ActualOperator = &operatorID
+			} else {
+				si.ActualOperator = nil
+			}
+			if si.Status == flowengine.StepStatusRunning {
+				currentStepIDs = append(currentStepIDs, defID)
+			}
+		}
 
 		if step.PreStepIDs == "" || step.PreStepIDs == "[]" || step.PreStepIDs == "null" {
 			// 数据库中 pre_step_ids 为空，也需要同步到引擎（覆盖模板中错误的 seq 值）
@@ -210,4 +236,5 @@ func (s *DrillService) syncPreStepIDsToEngine(flowInstID int64) {
 			log.Printf("[SYNC] PreStepIDs: step=%d(%s) -> %v", defID, si.Name, preDefIDs)
 		}
 	}
+	inst.CurrentStepIDs = currentStepIDs
 }

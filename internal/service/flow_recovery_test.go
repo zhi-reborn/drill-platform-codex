@@ -221,7 +221,7 @@ func seedRecoveryTestData(t *testing.T, db *gorm.DB) (drillID uint64, expiredTim
 // newFlowRecoveryForTest wires up a FlowRecovery backed by a SQLite test DB.
 // It sets repository.DB so the existing repos (which use the package-level DB)
 // read from the test database.
-func newFlowRecoveryForTest(t *testing.T) (*FlowRecovery, *gorm.DB, *flowengine.Engine, uint64, time.Time) {
+func newFlowRecoveryForTest(t *testing.T) (*FlowRecovery, *gorm.DB, *flowengine.Engine, *DrillFlowAdapter, uint64, time.Time) {
 	t.Helper()
 	db := setupFlowRecoveryTestDB(t)
 
@@ -249,11 +249,11 @@ func newFlowRecoveryForTest(t *testing.T) (*FlowRecovery, *gorm.DB, *flowengine.
 	drillService.SetEngine(engine, adapter)
 
 	recovery := NewFlowRecovery(drillService, drillRepo, stepRepo, flowCommandRepo)
-	return recovery, db, engine, drillID, expiredTimeoutAt
+	return recovery, db, engine, adapter, drillID, expiredTimeoutAt
 }
 
 func TestFlowRecovery_RecoverAll_RebuildsEngineAndRegistersFutureTimeout(t *testing.T) {
-	recovery, db, engine, drillID, _ := newFlowRecoveryForTest(t)
+	recovery, db, engine, _, drillID, _ := newFlowRecoveryForTest(t)
 
 	if err := recovery.RecoverAll(context.Background()); err != nil {
 		t.Fatalf("RecoverAll: %v", err)
@@ -294,8 +294,103 @@ func TestFlowRecovery_RecoverAll_RebuildsEngineAndRegistersFutureTimeout(t *test
 	}
 }
 
+func TestFlowRecovery_RecoverAll_RestoresAdapterContext(t *testing.T) {
+	recovery, _, _, adapter, drillID, _ := newFlowRecoveryForTest(t)
+
+	if err := recovery.RecoverAll(context.Background()); err != nil {
+		t.Fatalf("RecoverAll: %v", err)
+	}
+
+	if _, err := adapter.GetStepDef(int64(drillID), 101); err != nil {
+		t.Fatalf("expected recovered drill context to resolve step definition: %v", err)
+	}
+}
+
+func TestFlowRecovery_RecoverAll_AdvancesFromNewlyReconciledParent(t *testing.T) {
+	db := setupFlowRecoveryTestDB(t)
+	origDB := repository.DB
+	repository.DB = db
+	t.Cleanup(func() { repository.DB = origDB })
+
+	template := entity.DrillTemplate{ID: 50, Name: "reconciled-parent-template", Category: "test", Status: 1}
+	if err := db.Create(&template).Error; err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	templateSteps := []entity.StepTemplate{
+		{ID: 500, DrillTemplateID: 50, Name: "phase", Seq: 1, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+		{ID: 510, DrillTemplateID: 50, ParentStepID: ptrUint64(500), Name: "parent", Seq: 2, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+		{ID: 511, DrillTemplateID: 50, ParentStepID: ptrUint64(510), Name: "child 1", Seq: 3, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+		{ID: 512, DrillTemplateID: 50, ParentStepID: ptrUint64(510), Name: "child 2", Seq: 4, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+		{ID: 520, DrillTemplateID: 50, ParentStepID: ptrUint64(500), Name: "successor", Seq: 5, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+		{ID: 521, DrillTemplateID: 50, ParentStepID: ptrUint64(520), Name: "successor child", Seq: 6, StepType: "serial", TimeoutMinutes: 120, PreStepIDs: "[]"},
+	}
+	for i := range templateSteps {
+		if err := db.Create(&templateSteps[i]).Error; err != nil {
+			t.Fatalf("create template step %d: %v", templateSteps[i].ID, err)
+		}
+	}
+	drill := entity.DrillInstance{ID: 50, TemplateID: 50, Name: "reconciled-parent-drill", Status: "running", CreatedBy: 100}
+	if err := db.Create(&drill).Error; err != nil {
+		t.Fatalf("create drill: %v", err)
+	}
+	steps := []entity.StepInstance{
+		{ID: 5000, DrillInstanceID: 50, StepTemplateID: 500, Name: "phase", Seq: 1, Status: "running", AssigneeIDs: "[]", StepType: "serial"},
+		{ID: 5100, DrillInstanceID: 50, StepTemplateID: 510, ParentStepID: ptrUint64(5000), Name: "parent", Seq: 2, Status: "running", AssigneeIDs: "[]", StepType: "serial"},
+		{ID: 5110, DrillInstanceID: 50, StepTemplateID: 511, ParentStepID: ptrUint64(5100), Name: "child 1", Seq: 3, Status: "completed", AssigneeIDs: "[]", StepType: "serial"},
+		{ID: 5120, DrillInstanceID: 50, StepTemplateID: 512, ParentStepID: ptrUint64(5100), Name: "child 2", Seq: 4, Status: "completed", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[5110]"},
+		{ID: 5200, DrillInstanceID: 50, StepTemplateID: 520, ParentStepID: ptrUint64(5000), Name: "successor", Seq: 5, Status: "pending", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[5100]"},
+		{ID: 5210, DrillInstanceID: 50, StepTemplateID: 521, ParentStepID: ptrUint64(5200), Name: "successor child", Seq: 6, Status: "pending", AssigneeIDs: "[]", StepType: "serial", PreStepIDs: "[5100]"},
+	}
+	for i := range steps {
+		if err := db.Create(&steps[i]).Error; err != nil {
+			t.Fatalf("create step instance %d: %v", steps[i].ID, err)
+		}
+	}
+
+	engine := flowengine.NewEngine()
+	templateRepo := repository.NewTemplateRepo()
+	drillRepo := repository.NewDrillRepo()
+	stepRepo := repository.NewStepRepo()
+	userRepo := repository.NewUserRepo()
+	notificationRepo := repository.NewNotificationRepo()
+	flowCommandRepo := repository.NewFlowCommandRepo(db)
+	adapter := NewDrillFlowAdapter(templateRepo, drillRepo, stepRepo, notificationRepo, userRepo, nil, nil)
+	adapter.engine = engine
+	engine.SetCallbacks(adapter)
+	engine.SetStepLoader(adapter)
+	drillService := NewDrillService(drillRepo, templateRepo, stepRepo, userRepo)
+	drillService.SetEngine(engine, adapter)
+	recovery := NewFlowRecovery(drillService, drillRepo, stepRepo, flowCommandRepo)
+
+	if err := recovery.RecoverAll(context.Background()); err != nil {
+		t.Fatalf("RecoverAll: %v", err)
+	}
+
+	var parent entity.StepInstance
+	if err := db.First(&parent, 5100).Error; err != nil {
+		t.Fatalf("load parent: %v", err)
+	}
+	if parent.Status != "completed" {
+		t.Fatalf("expected parent reconciled completed, got %s", parent.Status)
+	}
+	var successor entity.StepInstance
+	if err := db.First(&successor, 5200).Error; err != nil {
+		t.Fatalf("load successor: %v", err)
+	}
+	if successor.Status != "running" {
+		t.Fatalf("expected successor to advance after reconciled parent, got %s", successor.Status)
+	}
+	var successorChild entity.StepInstance
+	if err := db.First(&successorChild, 5210).Error; err != nil {
+		t.Fatalf("load successor child: %v", err)
+	}
+	if successorChild.Status != "running" {
+		t.Fatalf("expected successor child to advance after reconciled parent, got %s", successorChild.Status)
+	}
+}
+
 func TestFlowRecovery_RecoverAll_ExpiredTimeoutEnqueuesCommand(t *testing.T) {
-	recovery, db, _, drillID, expiredTimeoutAt := newFlowRecoveryForTest(t)
+	recovery, db, _, _, drillID, expiredTimeoutAt := newFlowRecoveryForTest(t)
 
 	if err := recovery.RecoverAll(context.Background()); err != nil {
 		t.Fatalf("RecoverAll: %v", err)
@@ -330,7 +425,7 @@ func TestFlowRecovery_RecoverAll_ExpiredTimeoutEnqueuesCommand(t *testing.T) {
 }
 
 func TestFlowRecovery_RecoverAll_IdempotentCommandSubmission(t *testing.T) {
-	recovery, db, _, drillID, _ := newFlowRecoveryForTest(t)
+	recovery, db, _, _, drillID, _ := newFlowRecoveryForTest(t)
 
 	if err := recovery.RecoverAll(context.Background()); err != nil {
 		t.Fatalf("first RecoverAll: %v", err)
@@ -350,7 +445,7 @@ func TestFlowRecovery_RecoverAll_IdempotentCommandSubmission(t *testing.T) {
 }
 
 func TestFlowRecovery_Recover_DelegatesToRecoverAll(t *testing.T) {
-	recovery, db, _, drillID, _ := newFlowRecoveryForTest(t)
+	recovery, db, _, _, drillID, _ := newFlowRecoveryForTest(t)
 
 	// Recover implements worker.Recoverer interface and should delegate to RecoverAll.
 	if err := recovery.Recover(context.Background()); err != nil {
@@ -368,7 +463,7 @@ func TestFlowRecovery_Recover_DelegatesToRecoverAll(t *testing.T) {
 }
 
 func TestFlowRecovery_IdempotencyKeyFormat(t *testing.T) {
-	recovery, db, _, drillID, expiredTimeoutAt := newFlowRecoveryForTest(t)
+	recovery, db, _, _, drillID, expiredTimeoutAt := newFlowRecoveryForTest(t)
 
 	if err := recovery.RecoverAll(context.Background()); err != nil {
 		t.Fatalf("RecoverAll: %v", err)

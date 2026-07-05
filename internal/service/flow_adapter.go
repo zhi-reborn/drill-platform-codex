@@ -734,10 +734,7 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 	}
 
 	switch parentSI.Status {
-	case flowengine.StepStatusCompleted:
-	case flowengine.StepStatusSkipped:
-	case flowengine.StepStatusTimeout:
-	case flowengine.StepStatusIssue:
+	case flowengine.StepStatusCompleted, flowengine.StepStatusSkipped, flowengine.StepStatusTimeout, flowengine.StepStatusIssue:
 		return
 	}
 
@@ -773,6 +770,8 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 
 		// 仍需递归检查祖父步骤
 		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
+	} else {
+		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
 	}
 
 	if a.wsManager != nil {
@@ -788,7 +787,7 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		})
 	}
 
-	// handleSubtaskCompletion 会由 CompleteStep 发出的 EventStepComplete 自动触发
+	// EventStepComplete 也会触发检查；这里同步递归一次，避免祖先父步骤短暂卡住。
 }
 
 func isStepTerminalStatus(status flowengine.StepStatus) bool {
