@@ -52,13 +52,14 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"gopkg.in/yaml.v3"
 )
 
 // -----------------------------------------------------------------------------
 // 配置加载
 // -----------------------------------------------------------------------------
 
-// Config 携带 .env 中与部署相关的最小字段集合。
+// Config 携带部署相关的最小字段集合。
 type Config struct {
 	DatabaseHost      string
 	DatabasePort      int
@@ -71,8 +72,40 @@ type Config struct {
 	JWTSecret         string
 	PublicBaseURL     string
 
+	// 配置来源描述（用于日志）
+	source string
 	// 原始 env 切片，用于传递给 docker compose 子进程
 	rawEnv []string
+}
+
+// yamlConfig 映射 configs/config.yaml 的结构，只读部署需要的字段。
+type yamlConfig struct {
+	AppRole       string `yaml:"app_role"`
+	InstanceID    string `yaml:"instance_id"`
+	PublicBaseURL string `yaml:"public_base_url"`
+	Server        struct {
+		Port int    `yaml:"port"`
+		Mode string `yaml:"mode"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host"`
+		Port     int    `yaml:"port"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+		Name     string `yaml:"name"`
+	} `yaml:"database"`
+	Redis struct {
+		Addr         string `yaml:"addr"`
+		Host         string `yaml:"host"`
+		Port         int    `yaml:"port"`
+		Password     string `yaml:"password"`
+		ClusterAddrs string `yaml:"cluster_addrs"`
+		TLS          bool   `yaml:"tls"`
+	} `yaml:"redis"`
+	JWT struct {
+		Secret string `yaml:"secret"`
+		Expire int    `yaml:"expire"`
+	} `yaml:"jwt"`
 }
 
 func loadEnvFile(path string) (map[string]string, error) {
@@ -145,6 +178,73 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, in, 0o644)
 }
 
+// loadYAMLConfig 从 YAML 文件读取配置。
+func loadYAMLConfig(path string) (*yamlConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var yc yamlConfig
+	if err := yaml.Unmarshal(data, &yc); err != nil {
+		return nil, fmt.Errorf("解析 YAML 失败: %v", err)
+	}
+	return &yc, nil
+}
+
+// buildConfigFromYAML 从 YAML 配置构建 Config。
+func buildConfigFromYAML(yc *yamlConfig) *Config {
+	cfg := &Config{
+		DatabaseHost:      yc.Database.Host,
+		DatabasePort:      yc.Database.Port,
+		DatabaseUser:      yc.Database.User,
+		DatabasePassword:  yc.Database.Password,
+		DatabaseName:      yc.Database.Name,
+		RedisClusterAddrs: yc.Redis.ClusterAddrs,
+		RedisPassword:    yc.Redis.Password,
+		RedisTLS:         yc.Redis.TLS,
+		JWTSecret:        yc.JWT.Secret,
+		PublicBaseURL:    yc.PublicBaseURL,
+	}
+	if cfg.DatabasePort == 0 {
+		cfg.DatabasePort = 3306
+	}
+	// Redis: cluster_addrs 优先于 addr
+	if cfg.RedisClusterAddrs == "" && yc.Redis.Addr != "" {
+		cfg.RedisClusterAddrs = yc.Redis.Addr
+	}
+	if cfg.RedisClusterAddrs == "" && yc.Redis.Host != "" {
+		port := yc.Redis.Port
+		if port == 0 {
+			port = 6379
+		}
+		cfg.RedisClusterAddrs = fmt.Sprintf("%s:%d", yc.Redis.Host, port)
+	}
+	return cfg
+}
+
+// resolveYAMLFile 查找 configs/config.yaml。
+func resolveYAMLFile(explicit string) (string, error) {
+	if explicit != "" {
+		if _, err := os.Stat(explicit); err != nil {
+			return "", fmt.Errorf("--config 指定的文件不存在: %s", explicit)
+		}
+		return explicit, nil
+	}
+	candidates := []string{
+		"configs/config.yaml",
+		"configs/config.yml",
+		"config.yaml",
+		"config.yml",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			abs, _ := filepath.Abs(c)
+			return abs, nil
+		}
+	}
+	return "", nil // 不存在时返回空串，调用方决定是否 fallback
+}
+
 // buildConfig 从 env map 解析 Config。
 func buildConfig(env map[string]string) (*Config, error) {
 	cfg := &Config{
@@ -184,16 +284,16 @@ func buildConfig(env map[string]string) (*Config, error) {
 func (c *Config) validateForMigrate() error {
 	var missing []string
 	if c.DatabaseHost == "" {
-		missing = append(missing, "DATABASE_HOST")
+		missing = append(missing, "database.host (或 DATABASE_HOST)")
 	}
 	if c.DatabaseUser == "" {
-		missing = append(missing, "DATABASE_USER")
+		missing = append(missing, "database.user (或 DATABASE_USER)")
 	}
 	if c.DatabaseName == "" {
-		missing = append(missing, "DATABASE_NAME")
+		missing = append(missing, "database.name (或 DATABASE_NAME)")
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf(".env 缺少必填字段: %s\n请编辑 .env 填写 MySQL 连接信息", strings.Join(missing, ", "))
+		return fmt.Errorf("缺少必填字段: %s\n请在 configs/config.yaml 或 .env 中填写 MySQL 连接信息", strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -205,13 +305,13 @@ func (c *Config) validateForDeploy() error {
 	}
 	var missing []string
 	if c.RedisClusterAddrs == "" {
-		missing = append(missing, "REDIS_CLUSTER_ADDRS")
+		missing = append(missing, "redis.cluster_addrs (或 REDIS_CLUSTER_ADDRS)")
 	}
-	if c.JWTSecret == "" {
-		missing = append(missing, "JWT_SECRET")
+	if c.JWTSecret == "" || c.JWTSecret == "your-secret-key-change-in-production" {
+		missing = append(missing, "jwt.secret (或 JWT_SECRET)")
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf(".env 缺少必填字段: %s\n请编辑 .env 填写 Redis/JWT 信息", strings.Join(missing, ", "))
+		return fmt.Errorf("缺少必填字段: %s\n请在 configs/config.yaml 或 .env 中填写", strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -242,7 +342,7 @@ func connectDB(c *Config) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("无法连接 MySQL %s:%d/%s: %v\n请确认 .env 中 DATABASE_* 配置正确，且 MySQL 已允许远端访问",
+		return nil, fmt.Errorf("无法连接 MySQL %s:%d/%s: %v\n请确认 configs/config.yaml 或 .env 中数据库配置正确，且 MySQL 已允许远端访问",
 			c.DatabaseHost, c.DatabasePort, c.DatabaseName, err)
 	}
 	return db, nil
@@ -703,20 +803,29 @@ func printHelp() {
   deploy    仅启动 docker-compose.ha.yml
   verify    仅做部署后健康检查
 
+配置来源（优先级从高到低）:
+  1. --config PATH   显式指定 YAML 配置文件
+  2. configs/config.yaml / config.yaml  自动查找
+  3. --env PATH      显式指定 .env 文件
+  4. .env            自动查找
+
 参数:
-  --env PATH      指定 .env 文件路径 (默认 ./.env)
+  --config PATH   指定 YAML 配置文件路径
+  --env PATH      指定 .env 文件路径
   --no-build      启动集群时跳过镜像构建
   --timeout DUR   健康检查超时 (默认 90s)
 
 示例:
-  go run ./cmd/deploy-ha
-  go run ./cmd/deploy-ha migrate
+  go run ./cmd/deploy-ha                        # 自动找 configs/config.yaml
+  go run ./cmd/deploy-ha migrate                # 只迁移，从 YAML 读 DB 配置
+  go run ./cmd/deploy-ha --config /etc/drill/config.yaml migrate
   go run ./cmd/deploy-ha deploy --no-build
   go run ./cmd/deploy-ha verify --timeout 120s`)
 }
 
-func parseFlags(args []string) (envFile string, noBuild bool, timeout time.Duration) {
+func parseFlags(args []string) (configFile string, envFile string, noBuild bool, timeout time.Duration) {
 	fs := flag.NewFlagSet("deploy-ha", flag.ExitOnError)
+	fs.StringVar(&configFile, "config", "", "YAML 配置文件路径 (如 configs/config.yaml)")
 	fs.StringVar(&envFile, "env", "", ".env 文件路径")
 	fs.BoolVar(&noBuild, "no-build", false, "跳过 docker build")
 	timeout = 90 * time.Second
@@ -730,8 +839,8 @@ func parseFlags(args []string) (envFile string, noBuild bool, timeout time.Durat
 }
 
 func runMigrateCmd(args []string) {
-	envFile, _, _ := parseFlags(args)
-	cfg, err := loadConfig(envFile)
+	configFile, envFile, _, _ := parseFlags(args)
+	cfg, err := loadConfig(configFile, envFile)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
@@ -751,8 +860,8 @@ func runMigrateCmd(args []string) {
 }
 
 func runDeployCmd(args []string) {
-	envFile, noBuild, _ := parseFlags(args)
-	cfg, err := loadConfig(envFile)
+	configFile, envFile, noBuild, _ := parseFlags(args)
+	cfg, err := loadConfig(configFile, envFile)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
@@ -766,7 +875,7 @@ func runDeployCmd(args []string) {
 }
 
 func runVerifyCmd(args []string) {
-	_, _, timeout := parseFlags(args)
+	_, _, _, timeout := parseFlags(args)
 	if err := waitForReady(timeout); err != nil {
 		log.Fatalf("健康检查失败: %v", err)
 	}
@@ -774,8 +883,8 @@ func runVerifyCmd(args []string) {
 }
 
 func runAllCmd(args []string) {
-	envFile, noBuild, timeout := parseFlags(args)
-	cfg, err := loadConfig(envFile)
+	configFile, envFile, noBuild, timeout := parseFlags(args)
+	cfg, err := loadConfig(configFile, envFile)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
@@ -809,23 +918,90 @@ func runAllCmd(args []string) {
 	reportStatus()
 }
 
-func loadConfig(envFile string) (*Config, error) {
-	path, err := resolveEnvFile(envFile)
+// loadConfig 按优先级加载配置：YAML → .env → 报错。
+// 环境变量始终可以覆盖文件中的值（与 server 行为一致）。
+func loadConfig(configFile string, envFile string) (*Config, error) {
+	// 1. 尝试从 YAML 加载
+	yamlPath, err := resolveYAMLFile(configFile)
 	if err != nil {
 		return nil, err
 	}
-	env, err := loadEnvFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s 失败: %v", path, err)
+
+	var cfg *Config
+
+	if yamlPath != "" {
+		yc, err := loadYAMLConfig(yamlPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s 失败: %v", yamlPath, err)
+		}
+		cfg = buildConfigFromYAML(yc)
+		cfg.source = yamlPath
+		fmt.Printf("已加载配置: %s\n", yamlPath)
 	}
-	cfg, err := buildConfig(env)
-	if err != nil {
-		return nil, err
+
+	// 2. 尝试从 .env 加载（仅在 YAML 不存在时作为主配置源）
+	// 如果 YAML 已加载，不再读 .env（YAML 优先级高于 .env）
+	if cfg == nil {
+		envPath, err := resolveEnvFile(envFile)
+		if err != nil {
+			return nil, err
+		}
+		if envPath != "" {
+			env, err := loadEnvFile(envPath)
+			if err != nil {
+				return nil, fmt.Errorf("读取 %s 失败: %v", envPath, err)
+			}
+			envCfg, err := buildConfig(env)
+			if err != nil {
+				return nil, err
+			}
+			cfg = envCfg
+			cfg.source = envPath
+			fmt.Printf("已加载配置: %s\n", envPath)
+		}
 	}
-	fmt.Printf("已加载配置: %s\n  MySQL: %s:%d/%s\n  Redis: %s\n",
-		path, cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseName,
+
+	if cfg == nil {
+		return nil, fmt.Errorf("未找到任何配置文件\n请准备 configs/config.yaml 或 .env（参考 .env.example）")
+	}
+
+	// 3. 环境变量始终可以覆盖文件配置（与 drill-server 行为一致）
+	applyOSEnviron(cfg)
+
+	fmt.Printf("  MySQL: %s:%d/%s\n  Redis: %s\n",
+		cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseName,
 		maskAddr(cfg.RedisClusterAddrs))
 	return cfg, nil
+}
+
+// applyOSEnviron 用当前进程的环境变量覆盖配置（与 drill-server 的 applyEnvOverrides 行为一致）。
+func applyOSEnviron(cfg *Config) {
+	if v := os.Getenv("DATABASE_HOST"); v != "" {
+		cfg.DatabaseHost = v
+	}
+	if v := os.Getenv("DATABASE_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.DatabasePort = port
+		}
+	}
+	if v := os.Getenv("DATABASE_USER"); v != "" {
+		cfg.DatabaseUser = v
+	}
+	if v := os.Getenv("DATABASE_PASSWORD"); v != "" {
+		cfg.DatabasePassword = v
+	}
+	if v := os.Getenv("DATABASE_NAME"); v != "" {
+		cfg.DatabaseName = v
+	}
+	if v := os.Getenv("REDIS_CLUSTER_ADDRS"); v != "" {
+		cfg.RedisClusterAddrs = v
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.RedisPassword = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.JWTSecret = v
+	}
 }
 
 // maskAddr 隐藏密码细节，仅显示地址。
