@@ -117,9 +117,18 @@ go run ./cmd/deploy-ha migrate
 
 ### 方式 B：直接执行 SQL（无 Go 环境）
 
+标准 MySQL：
+
 ```bash
 mysql -h <MYSQL_HOST> -P 3306 -u <USER> -p<PASS> drill_platform \
   < scripts/migration/2026-07-05-migrate-to-multi-active.sql
+```
+
+TiDB 不支持该脚本中的存储过程，使用兼容脚本：
+
+```bash
+mysql -h <MYSQL_HOST> -P 4000 -u <USER> -p<PASS> drill_platform \
+  < scripts/migration/2026-07-05-migrate-to-multi-active-tidb.sql
 ```
 
 ---
