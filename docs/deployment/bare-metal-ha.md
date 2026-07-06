@@ -103,7 +103,16 @@ go run ./cmd/deploy-ha migrate
 ./deploy/deploy-ha migrate
 ```
 
-输出末尾应看到：
+也可以使用专用迁移脚本，适合裸机/内网机器只做 schema 升级：
+
+```bash
+go run ./cmd/migrate-multi-active --config configs/config.yaml
+# 或编译后执行
+go build -o deploy/migrate-multi-active ./cmd/migrate-multi-active
+./deploy/migrate-multi-active --config /opt/drill/configs/config.yaml
+```
+
+`deploy-ha migrate` 输出末尾应看到：
 
 ```
 [4/4] 校验多活 schema 关键对象
@@ -113,6 +122,14 @@ go run ./cmd/deploy-ha migrate
   → 多活表结构校验通过
 
 ✓ 数据库迁移完成
+```
+
+`migrate-multi-active` 输出末尾应看到：
+
+```
+[4/4] 校验 schema
+  ✓ 多活 schema 校验通过
+✓ 多活 schema 迁移完成
 ```
 
 ### 方式 B：直接执行 SQL（无 Go 环境）

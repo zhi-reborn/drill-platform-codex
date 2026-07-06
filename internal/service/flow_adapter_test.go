@@ -281,6 +281,16 @@ func TestAutoCompleteParentStepRecursesToAncestorsAndStartsSamePhaseNextStep(t *
 	if inst.Steps[210].Status != flowengine.StepStatusRunning {
 		t.Fatalf("expected same-phase next child running, got %s", inst.Steps[210].Status)
 	}
+
+	var completeLogCount int64
+	if err := db.Table("drill_instance_step_log").
+		Where("action = ?", "complete").
+		Count(&completeLogCount).Error; err != nil {
+		t.Fatalf("count complete logs: %v", err)
+	}
+	if completeLogCount != 0 {
+		t.Fatalf("expected auto-complete path not to emit ordinary complete logs, got %d", completeLogCount)
+	}
 }
 
 func flowAdapterUint64Ptr(v uint64) *uint64 {

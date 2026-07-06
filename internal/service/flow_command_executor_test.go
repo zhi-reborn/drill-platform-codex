@@ -10,9 +10,11 @@ import (
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/infrastructure/events"
+	"drill-platform/internal/pkg/dbcompat"
 	"drill-platform/internal/repository"
 	"drill-platform/internal/worker"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -472,6 +474,46 @@ func TestExecuteCompleteStepOnPendingStepFailsWithInvalidStatus(t *testing.T) {
 	db.First(&step, stepID)
 	if step.Status != "pending" {
 		t.Fatalf("expected step still pending, got %s", step.Status)
+	}
+}
+
+func TestExecuteStepTimeoutMarksRunningStepTimeout(t *testing.T) {
+	executor, db, _ := newExecutorForTest(t)
+	drillID, stepID := seedDrillAndStepForExecutorTest(t, db, "running")
+
+	cmd := createExecutorCommand(t, db, "step_timeout", drillID, &stepID, nil)
+	if err := executor.Execute(context.Background(), cmd, testFence()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var step entity.StepInstance
+	if err := db.First(&step, stepID).Error; err != nil {
+		t.Fatalf("load step: %v", err)
+	}
+	if step.Status != "timeout" {
+		t.Fatalf("expected step status timeout, got %s", step.Status)
+	}
+	if step.EndTime == nil {
+		t.Fatal("expected timeout step end_time to be set")
+	}
+
+	var updated entity.FlowCommand
+	db.First(&updated, cmd.ID)
+	if updated.Status != entity.FlowCommandSucceeded {
+		t.Fatalf("expected command succeeded, got %s", updated.Status)
+	}
+}
+
+func TestTiDBNoopNamedLockErrorIsSkipped(t *testing.T) {
+	err := &mysql.MySQLError{
+		Number:  1235,
+		Message: "function get_lock has only noop implementation in tidb now, use tidb_enable_noop_functions to enable these functions",
+	}
+	if !dbcompat.IsTiDBNoopFunctionError(err, "get_lock") {
+		t.Fatal("expected TiDB noop GET_LOCK error to be skipped")
+	}
+	if dbcompat.IsTiDBNoopFunctionError(err, "release_lock") {
+		t.Fatal("GET_LOCK error must not match RELEASE_LOCK")
 	}
 }
 

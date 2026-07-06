@@ -94,10 +94,7 @@ func (r *FlowCommandRepo) ClaimNext(ctx context.Context, workerID string, lease 
 	var claimed *entity.FlowCommand
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var id uint64
-		claimQuery := "SELECT id FROM drill_flow_command WHERE status = ? ORDER BY created_at, id LIMIT 1"
-		if tx.Dialector.Name() == "mysql" {
-			claimQuery += " FOR UPDATE SKIP LOCKED"
-		}
+		claimQuery := flowCommandClaimQuery(tx.Dialector.Name())
 		row := tx.Raw(claimQuery, entity.FlowCommandPending).Row()
 		if err := row.Scan(&id); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -110,7 +107,7 @@ func (r *FlowCommandRepo) ClaimNext(ctx context.Context, workerID string, lease 
 		leaseUntil := now.Add(lease)
 		epoch := resolveClaimEpoch(tx, workerID, now, lease)
 		token := newLeaseToken()
-		if err := tx.Model(&entity.FlowCommand{}).Where("id = ?", id).Updates(map[string]any{
+		res := tx.Model(&entity.FlowCommand{}).Where("id = ? AND status = ?", id, entity.FlowCommandPending).Updates(map[string]any{
 			"status":       entity.FlowCommandProcessing,
 			"worker_id":    workerID,
 			"worker_epoch": epoch,
@@ -118,8 +115,12 @@ func (r *FlowCommandRepo) ClaimNext(ctx context.Context, workerID string, lease 
 			"attempts":     gorm.Expr("attempts + ?", 1),
 			"lease_until":  leaseUntil,
 			"started_at":   now,
-		}).Error; err != nil {
-			return err
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return nil
 		}
 
 		var cmd entity.FlowCommand
@@ -133,6 +134,10 @@ func (r *FlowCommandRepo) ClaimNext(ctx context.Context, workerID string, lease 
 		return nil, err
 	}
 	return claimed, nil
+}
+
+func flowCommandClaimQuery(_ string) string {
+	return "SELECT id FROM drill_flow_command WHERE status = ? ORDER BY created_at, id LIMIT 1"
 }
 
 // resolveClaimEpoch reads the singleton worker epoch row. When the row does

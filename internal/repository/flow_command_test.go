@@ -271,3 +271,24 @@ func TestFlowCommandRepoRequeueExpired(t *testing.T) {
 		t.Fatalf("active status = %s, want %s", gotActive.Status, entity.FlowCommandProcessing)
 	}
 }
+
+func TestFlowCommandClaimQueryByDialect(t *testing.T) {
+	base := "SELECT id FROM drill_flow_command WHERE status = ? ORDER BY created_at, id LIMIT 1"
+	tests := []struct {
+		name    string
+		dialect string
+		want    string
+	}{
+		{name: "mysql", dialect: "mysql", want: base},
+		{name: "tidb via mysql driver", dialect: "mysql", want: base},
+		{name: "sqlite", dialect: "sqlite", want: base},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := flowCommandClaimQuery(tt.dialect); got != tt.want {
+				t.Fatalf("query = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -123,27 +123,16 @@
     <!-- 页面 2: 选中演练的任务列表 -->
     <div v-else class="tasks-detail-page">
       <div class="page-header">
-        <div class="header-main">
-          <div class="title-block">
-            <div class="breadcrumb" @click="backToDrillList">
-              <el-icon><ArrowLeft /></el-icon>
-              <span>返回演练列表</span>
-            </div>
-            <h2 class="page-title">{{ currentDrill?.name || '任务列表' }}</h2>
-          </div>
-          <div class="header-actions">
-            <el-button type="success" @click="viewScreen(selectedDrillId)">
-              <el-icon><Monitor /></el-icon>
-              大屏
-            </el-button>
-            <el-button type="warning" @click="viewScreen2(selectedDrillId)">
-              <el-icon><DataBoard /></el-icon>
-              大屏2
-            </el-button>
-            <el-button class="screen3-entry" type="primary" @click="viewScreen3(selectedDrillId)">
-              <el-icon><DataBoard /></el-icon>
-              大屏3
-            </el-button>
+        <!-- 左上角：标题区域 -->
+        <div class="title-wrapper">
+          <h2 class="page-title">{{ currentDrill?.name || '任务列表' }}</h2>
+        </div>
+
+        <!-- 右上角：面包屑导航 -->
+        <div class="breadcrumb-wrapper">
+          <div class="breadcrumb" @click="backToDrillList">
+            <el-icon><ArrowLeft /></el-icon>
+            <span>返回演练列表</span>
           </div>
         </div>
         <div class="task-overview">
@@ -176,6 +165,22 @@
             <el-radio-button value="completed">已完成</el-radio-button>
             <el-radio-button value="issue">异常</el-radio-button>
           </el-radio-group>
+        </div>
+
+        <!-- 右下角：操作按钮组 -->
+        <div class="action-buttons-wrapper">
+          <el-button type="success" @click="viewScreen(selectedDrillId)">
+            <el-icon><Monitor /></el-icon>
+            大屏
+          </el-button>
+          <el-button type="warning" @click="viewScreen2(selectedDrillId)">
+            <el-icon><DataBoard /></el-icon>
+            大屏2
+          </el-button>
+          <el-button class="screen3-entry" type="primary" @click="viewScreen3(selectedDrillId)">
+            <el-icon><DataBoard /></el-icon>
+            大屏3
+          </el-button>
         </div>
       </div>
 
@@ -441,6 +446,7 @@ const taskOperatorMap = computed(() => {
 const activeDrillsWithTasks = computed(() => {
   return instances.value
     .filter(i => i.status === 'running' || i.status === 'paused')
+    .sort((a, b) => new Date(b.updated_at || '').getTime() - new Date(a.updated_at || '').getTime())
     .map(drill => {
       const drillTasks = tasks.value.filter((t: StepInstance) => t.drill_instance_id === drill.id)
       return {
@@ -1053,248 +1059,343 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: $spacing-sm;
 
-  .breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: $font-size-sm;
-    color: $text-secondary;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: $radius-base;
-    transition: all 0.2s;
-
-    &:hover {
-      background: $bg-tertiary;
-      color: $text-primary;
-    }
-
-    .el-icon {
-      font-size: 14px;
-    }
-  }
-
   .page-title {
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
     color: $text-primary;
     margin: 0;
   }
-
-  .header-actions {
-    display: flex;
-    gap: $spacing-sm;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    margin-left: auto;
-
-    :deep(.el-button + .el-button) {
-      margin-left: 0;
-    }
-
-    .screen3-entry {
-      border-color: rgba(114, 46, 209, 0.64);
-      background: linear-gradient(135deg, #722ED1, #9254DE);
-      box-shadow: 0 8px 18px rgba(114, 46, 209, 0.28);
-    }
-  }
-
-  .filter-group {
-    width: 100%;
-    margin-top: $spacing-sm;
-
-    :deep(.el-radio-group) {
-      display: flex;
-      flex-wrap: wrap;
-      gap: $spacing-xs;
-    }
-
-    :deep(.el-radio-button__inner) {
-      background: $bg-secondary;
-      border-color: $border-color;
-      color: $text-secondary;
-
-      &:hover {
-        color: $color-accent;
-      }
-    }
-
-    :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-      background: $color-accent;
-      border-color: $color-accent;
-      color: #fff;
-    }
-  }
 }
 
 .tasks-detail-page {
   min-height: calc(100vh - $header-height - 64px);
   padding: $spacing-xl;
-  background:
-    linear-gradient(135deg, rgba(24, 144, 255, 0.12) 0%, rgba(82, 196, 26, 0.06) 42%, rgba(250, 173, 20, 0.08) 100%),
-    repeating-linear-gradient(90deg, rgba(24, 144, 255, 0.08) 0 1px, transparent 1px 64px),
-    $bg-primary;
-  border: 1px solid rgba(24, 144, 255, 0.14);
+  background: $bg-primary;
   border-radius: $radius-md;
 
   .page-header {
-    display: block;
+    display: grid;
+    grid-template-areas:
+      "title breadcrumb"
+      "stats stats"
+      "filter actions";
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: $spacing-lg;
     position: relative;
     padding: $spacing-xl;
+    padding-top: $spacing-lg;
+    padding-bottom: $spacing-lg;
     margin-bottom: $spacing-xl;
     overflow: hidden;
-    background:
-      linear-gradient(120deg, rgba(12, 35, 66, 0.94), rgba(18, 59, 93, 0.92) 58%, rgba(26, 76, 75, 0.9)),
-      #10233d;
-    border: 1px solid rgba(80, 180, 255, 0.28);
-    border-radius: $radius-md;
-    box-shadow: 0 10px 24px rgba(16, 42, 78, 0.12);
+    background: $bg-secondary;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    box-shadow: 0 2px 12px rgba(24, 144, 255, 0.08);
 
+    // 顶部装饰渐变条
     &::before {
       content: '';
       position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background:
-        linear-gradient(90deg, rgba(80, 180, 255, 0.18) 1px, transparent 1px),
-        linear-gradient(0deg, rgba(80, 180, 255, 0.12) 1px, transparent 1px);
-      background-size: 56px 56px;
-      opacity: 0.28;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg,
+        $color-accent 0%,
+        rgba(24, 144, 255, 0.3) 30%,
+        rgba(82, 196, 26, 0.4) 50%,
+        rgba(24, 144, 255, 0.3) 70%,
+        $color-accent 100%
+      );
+      opacity: 0.7;
     }
 
+    // 底部微妙装饰线
     &::after {
       content: '';
       position: absolute;
-      right: 24px;
-      bottom: 18px;
-      width: 180px;
+      left: 0;
+      bottom: 0;
+      width: 30%;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(82, 196, 26, 0.7), transparent);
+      background: linear-gradient(90deg,
+        rgba(24, 144, 255, 0.2),
+        transparent
+      );
     }
 
-    .header-main,
-    .task-overview,
-    .filter-group {
-      position: relative;
-      z-index: 1;
-    }
-
-    .header-main {
+    // 左上角：标题区域
+    .title-wrapper {
+      grid-area: title;
       display: flex;
       align-items: flex-start;
-      justify-content: space-between;
-      gap: $spacing-base;
-      margin-bottom: $spacing-lg;
-    }
+      justify-content: flex-start;
+      padding: $spacing-md 0;
+      position: relative;
 
-    .title-block {
-      min-width: 0;
-    }
+      .page-title {
+        color: $text-primary;
+        font-size: $font-size-2xl;
+        font-weight: $font-weight-bold;
+        letter-spacing: 0.02em;
+        line-height: 1.3;
+        text-align: left;
+        position: relative;
+        padding-bottom: $spacing-sm;
 
-    .breadcrumb {
-      width: fit-content;
-      color: rgba(218, 235, 255, 0.78);
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(121, 192, 255, 0.22);
-
-      &:hover {
-        background: rgba(24, 144, 255, 0.18);
-        color: #fff;
+        // 标题装饰线
+        &::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 40%;
+          height: 3px;
+          background: linear-gradient(90deg,
+            $color-accent,
+            rgba(24, 144, 255, 0.3),
+            transparent
+          );
+          border-radius: 2px;
+        }
       }
     }
 
-    .page-title {
-      margin-top: $spacing-sm;
-      color: #fff;
-      font-size: $font-size-2xl;
-      letter-spacing: 0;
-      line-height: 1.25;
+    // 右上角：面包屑导航
+    .breadcrumb-wrapper {
+      grid-area: breadcrumb;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: $spacing-md 0;
+
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: $font-size-sm;
+        color: $text-secondary;
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: $radius-base;
+        transition: all 0.2s;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(24, 144, 255, 0.12);
+        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.06);
+
+        &:hover {
+          background: rgba(24, 144, 255, 0.08);
+          color: $color-accent;
+          border-color: $color-accent;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(24, 144, 255, 0.12);
+        }
+
+        .el-icon {
+          font-size: 14px;
+        }
+      }
     }
 
-    .header-actions {
+    // 右下角：操作按钮组
+    .action-buttons-wrapper {
+      grid-area: actions;
       display: flex;
-      gap: $spacing-sm;
-      margin-left: 0;
-      flex-shrink: 0;
-      flex-wrap: wrap;
+      align-items: flex-end;
       justify-content: flex-end;
+      gap: $spacing-sm;
+      flex-wrap: wrap;
+      position: relative;
 
       :deep(.el-button) {
-        min-width: 88px;
-        border: 0;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+        min-width: 95px;
+        height: 38px;
+        border-radius: $radius-md;
+        font-weight: $font-weight-semibold;
+        font-size: $font-size-sm;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid;
+        box-shadow: 0 3px 12px rgba(24, 144, 255, 0.15);
+
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(24, 144, 255, 0.25);
+        }
+
+        &:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+        }
       }
 
       :deep(.el-button + .el-button) {
         margin-left: 0;
       }
 
+      // 大屏按钮（绿色）
+      :deep(.el-button--success) {
+        background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+        border-color: #52c41a;
+        color: #fff;
+
+        &:hover {
+          background: linear-gradient(135deg, #73d13d 0%, #95f220 100%);
+        }
+      }
+
+      // 大屏2按钮（橙色）
+      :deep(.el-button--warning) {
+        background: linear-gradient(135deg, #faad14 0%, #ffc53d 100%);
+        border-color: #faad14;
+        color: #fff;
+
+        &:hover {
+          background: linear-gradient(135deg, #ffc53d 0%, #ffd66b 100%);
+        }
+      }
+
+      // 大屏3按钮（紫色）
       .screen3-entry {
-        background: linear-gradient(135deg, #722ED1, #9254DE);
+        background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
+        border-color: #722ED1;
+        color: #ffffff;
+        box-shadow: 0 4px 16px rgba(114, 46, 209, 0.3);
+
+        &:hover {
+          background: linear-gradient(135deg, #9254DE 0%, #b37feb 100%);
+          box-shadow: 0 8px 24px rgba(114, 46, 209, 0.4);
+          transform: translateY(-3px);
+        }
       }
     }
 
     .task-overview {
+      grid-area: stats;
       display: grid;
       grid-template-columns: repeat(5, minmax(96px, 1fr));
       gap: $spacing-sm;
-      margin-bottom: $spacing-base;
+      padding: $spacing-lg 0;
+      border-top: 1px solid rgba(24, 144, 255, 0.08);
+      border-bottom: 1px solid rgba(24, 144, 255, 0.08);
+      position: relative;
+
+      // 统计区域的背景装饰
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg,
+          rgba(24, 144, 255, 0.02) 0%,
+          transparent 50%,
+          rgba(24, 144, 255, 0.02) 100%
+        );
+        pointer-events: none;
+      }
     }
 
     .overview-item {
       min-width: 0;
-      padding: $spacing-sm $spacing-md;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(145, 205, 255, 0.2);
-      border-radius: $radius-base;
+      padding: $spacing-base $spacing-md;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(24, 144, 255, 0.1);
+      border-radius: $radius-md;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+
+      &:hover {
+        background: rgba(24, 144, 255, 0.08);
+        border-color: rgba(24, 144, 255, 0.18);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(24, 144, 255, 0.12);
+      }
 
       .overview-label {
         display: block;
-        margin-bottom: 3px;
-        color: rgba(218, 235, 255, 0.66);
+        margin-bottom: 8px;
+        color: $text-tertiary;
         font-size: $font-size-xs;
+        font-weight: $font-weight-medium;
+        text-align: center;
+        letter-spacing: 0.02em;
       }
 
       strong {
-        color: #f7fbff;
-        font-size: $font-size-lg;
+        color: $text-primary;
+        font-size: $font-size-xl;
+        font-weight: $font-weight-bold;
         line-height: 1.2;
+        text-align: center;
+        display: block;
+        letter-spacing: 0;
 
         &.pending {
-          color: #ffd66b;
+          color: #faad14;
         }
 
         &.running {
-          color: #69c0ff;
+          color: #1890ff;
         }
 
         &.completed {
-          color: #8be36b;
+          color: #52c41a;
         }
       }
     }
 
     .filter-group {
-      width: 100%;
-      margin-top: 0;
+      grid-area: filter;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      position: relative;
+
+      // 筛选区域的背景装饰
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg,
+          rgba(24, 144, 255, 0.03) 0%,
+          transparent 60%
+        );
+        pointer-events: none;
+      }
+
+      :deep(.el-radio-group) {
+        display: flex;
+        justify-content: flex-start;
+        gap: $spacing-xs;
+        flex-wrap: wrap;
+      }
 
       :deep(.el-radio-button__inner) {
-        min-width: 78px;
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(145, 205, 255, 0.2);
-        color: rgba(235, 246, 255, 0.82);
+        min-width: 70px;
+        height: 34px;
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(24, 144, 255, 0.12);
+        color: $text-secondary;
         box-shadow: none;
+        font-weight: $font-weight-medium;
+        font-size: $font-size-sm;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border-radius: $radius-md;
 
         &:hover {
-          color: #fff;
-          border-color: rgba(105, 192, 255, 0.55);
+          color: $color-accent;
+          border-color: rgba(24, 144, 255, 0.25);
+          background: rgba(24, 144, 255, 0.06);
+          transform: translateY(-1px);
+          box-shadow: 0 3px 12px rgba(24, 144, 255, 0.15);
         }
       }
 
       :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-        background: #1890ff;
-        border-color: #1890ff;
+        background: linear-gradient(135deg, $color-accent 0%, rgba(24, 144, 255, 0.85) 100%);
+        border-color: $color-accent;
         color: #fff;
+        box-shadow: 0 4px 14px rgba(24, 144, 255, 0.35);
+        font-weight: $font-weight-semibold;
       }
     }
   }
@@ -1341,61 +1442,109 @@ onBeforeUnmount(() => {
     }
 
     .drill-card {
-      background: $bg-tertiary;
-      border-color: $border-color-light;
-      margin-bottom: $spacing-sm;
+      background: linear-gradient(135deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(248, 250, 252, 0.9) 100%
+      );
+      border: 1px solid rgba(24, 144, 255, 0.12);
+      margin-bottom: $spacing-lg;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: $radius-lg;
+      box-shadow: 0 2px 8px rgba(24, 144, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+
+      // 卡片装饰边框
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg,
+          $color-accent 0%,
+          rgba(82, 196, 26, 0.6) 50%,
+          rgba(114, 46, 209, 0.4) 100%
+        );
+        opacity: 0.6;
+      }
 
       &:hover {
-        transform: translateY(-2px);
-        box-shadow: $shadow-md;
-        border-color: $color-accent;
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(24, 144, 255, 0.15);
+        border-color: rgba(24, 144, 255, 0.2);
       }
 
       .drill-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: $spacing-sm;
+        margin-bottom: $spacing-base;
+        padding-bottom: $spacing-sm;
 
         .drill-name {
-          font-size: $font-size-base;
-          font-weight: $font-weight-semibold;
+          font-size: $font-size-lg;
+          font-weight: $font-weight-bold;
           color: $text-primary;
+          letter-spacing: 0.02em;
         }
       }
 
       .drill-progress {
-        margin-bottom: $spacing-sm;
+        margin-bottom: $spacing-base;
+
+        :deep(.el-progress) {
+          .el-progress-bar__outer {
+            background-color: rgba(24, 144, 255, 0.1);
+            border-radius: $radius-base;
+          }
+
+          .el-progress-bar__inner {
+            border-radius: $radius-base;
+            background: linear-gradient(90deg,
+              $color-accent 0%,
+              rgba(82, 196, 26, 0.8) 100%
+            );
+          }
+
+          .el-progress__text {
+            font-weight: $font-weight-semibold;
+            color: $color-accent;
+          }
+        }
       }
 
       .drill-tasks-summary {
         display: flex;
-        gap: $spacing-base;
-        margin-bottom: $spacing-sm;
-        padding: $spacing-sm 0;
-        border-top: 1px solid $border-color-light;
-        border-bottom: 1px solid $border-color-light;
+        gap: $spacing-lg;
+        margin-bottom: $spacing-base;
+        padding: $spacing-base 0;
+        border-top: 1px solid rgba(24, 144, 255, 0.1);
+        border-bottom: 1px solid rgba(24, 144, 255, 0.1);
 
         .task-stat {
           display: flex;
           flex-direction: column;
           align-items: center;
+          min-width: 80px;
 
           .label {
             font-size: $font-size-xs;
-            color: $text-secondary;
-            margin-bottom: 2px;
+            color: $text-tertiary;
+            margin-bottom: 4px;
+            font-weight: $font-weight-medium;
           }
 
           .value {
-            font-size: $font-size-lg;
+            font-size: $font-size-xl;
             font-weight: $font-weight-bold;
             color: $text-primary;
+            line-height: 1.2;
 
             &.pending {
-              color: $color-warning;
+              color: #faad14;
             }
           }
         }
@@ -1403,31 +1552,118 @@ onBeforeUnmount(() => {
 
       .drill-actions {
         display: flex;
-        gap: 8px;
-        justify-content: flex-end;
-        flex-wrap: wrap;
+        gap: $spacing-xs;
+        justify-content: space-between;
+        flex-wrap: nowrap;
+        margin-top: $spacing-base;
+        padding-top: $spacing-base;
+        border-top: 1px solid rgba(24, 144, 255, 0.1);
+        position: relative;
+
+        // 按钮组的背景装饰
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg,
+            rgba(82, 196, 26, 0.3) 0%,
+            rgba(250, 173, 20, 0.3) 33%,
+            rgba(114, 46, 209, 0.3) 66%,
+            rgba(24, 144, 255, 0.3) 100%
+          );
+          border-radius: 1px;
+        }
+
+        :deep(.el-button) {
+          min-width: 72px;
+          height: 32px;
+          border-radius: $radius-md;
+          font-weight: $font-weight-semibold;
+          font-size: $font-size-xs;
+          border: 1px solid;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+
+          // 通用 hover 效果
+          &:hover {
+            transform: translateY(-2px);
+          }
+
+          &:active {
+            transform: translateY(0);
+          }
+
+          // 图标样式
+          .el-icon {
+            font-size: 14px;
+          }
+        }
 
         :deep(.el-button + .el-button) {
           margin-left: 0;
         }
 
-        .drill-action-button {
-          min-width: 76px;
-          border-radius: 6px;
-          font-weight: $font-weight-medium;
+        // 大屏按钮（绿色渐变）
+        .drill-action-button.el-button--success {
+          background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+          border-color: #52c41a;
+          color: #fff;
+          box-shadow: 0 3px 10px rgba(82, 196, 26, 0.2);
+
+          &:hover {
+            background: linear-gradient(135deg, #73d13d 0%, #95f220 100%);
+            border-color: #73d13d;
+            box-shadow: 0 5px 16px rgba(82, 196, 26, 0.35);
+          }
         }
 
+        // 大屏2按钮（橙色渐变）
+        .drill-action-button.el-button--warning {
+          background: linear-gradient(135deg, #faad14 0%, #ffc53d 100%);
+          border-color: #faad14;
+          color: #fff;
+          box-shadow: 0 3px 10px rgba(250, 173, 20, 0.2);
+
+          &:hover {
+            background: linear-gradient(135deg, #ffc53d 0%, #ffd66b 100%);
+            border-color: #ffc53d;
+            box-shadow: 0 5px 16px rgba(250, 173, 20, 0.35);
+          }
+        }
+
+        // 大屏3按钮（紫色渐变 - 特殊效果）
         .drill-action-screen3 {
-          border-color: rgba(114, 46, 209, 0.58);
-          background: rgba(114, 46, 209, 0.12);
-          color: #722ED1;
+          background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
+          border-color: #722ED1;
+          color: #ffffff;
+          box-shadow: 0 4px 12px rgba(114, 46, 209, 0.25);
 
           &:hover,
           &:focus {
+            background: linear-gradient(135deg, #9254DE 0%, #b37feb 100%);
+            border-color: #9254DE;
             color: #ffffff;
-            border-color: rgba(114, 46, 209, 0.86);
-            background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
-            box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
+            box-shadow: 0 6px 18px rgba(114, 46, 209, 0.4);
+            transform: translateY(-3px);
+          }
+        }
+
+        // 查看任务按钮（蓝色渐变）
+        .drill-action-button.el-button--primary:not(.drill-action-screen3) {
+          background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+          border-color: #1890ff;
+          color: #fff;
+          box-shadow: 0 3px 10px rgba(24, 144, 255, 0.2);
+
+          &:hover {
+            background: linear-gradient(135deg, #40a9ff 0%, #69c0ff 100%);
+            border-color: #40a9ff;
+            box-shadow: 0 5px 16px rgba(24, 144, 255, 0.35);
           }
         }
       }
@@ -1463,10 +1699,10 @@ onBeforeUnmount(() => {
 .tasks-container {
   min-height: 400px;
   padding: $spacing-xl;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(24, 144, 255, 0.12);
-  border-radius: $radius-md;
-  box-shadow: $shadow-sm;
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: 0 2px 12px rgba(24, 144, 255, 0.06);
 }
 
 .flow-list {
@@ -1480,9 +1716,9 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: $spacing-sm;
   padding: $spacing-base $spacing-md $spacing-sm;
-  border-bottom: 1px solid rgba(24, 144, 255, 0.14);
+  border-bottom: 1px solid rgba(24, 144, 255, 0.1);
   margin-bottom: $spacing-sm;
-  background: linear-gradient(90deg, rgba(24, 144, 255, 0.08), transparent);
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.06) 0%, rgba(24, 144, 255, 0.02) 50%, transparent 100%);
   border-radius: $radius-base $radius-base 0 0;
 
   &.is-first {
@@ -1498,8 +1734,8 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     flex-shrink: 0;
     color: $color-accent;
-    background: rgba(24, 144, 255, 0.1);
-    border: 1px solid rgba(24, 144, 255, 0.22);
+    background: rgba(24, 144, 255, 0.08);
+    border: 1px solid rgba(24, 144, 255, 0.2);
 
     svg {
       filter: none;
@@ -1523,10 +1759,11 @@ onBeforeUnmount(() => {
   .phase-stats {
     font-size: $font-size-xs;
     color: $color-accent;
-    background: rgba(24, 144, 255, 0.09);
-    border: 1px solid rgba(24, 144, 255, 0.14);
-    padding: 2px 8px;
-    border-radius: 10px;
+    background: rgba(24, 144, 255, 0.08);
+    border: 1px solid rgba(24, 144, 255, 0.15);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: $font-weight-medium;
   }
 }
 
@@ -1536,7 +1773,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 8px 14px;
   margin: 10px 0 4px 0;
-  background: linear-gradient(90deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.01) 70%, transparent 100%);
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.06) 0%, rgba(24, 144, 255, 0.02) 60%, transparent 100%);
   border-left: 3px solid $color-accent;
   border-radius: 0 $radius-base $radius-base 0;
 
@@ -1547,21 +1784,21 @@ onBeforeUnmount(() => {
   &.depth-2 {
     margin-left: 20px;
     border-left-color: $color-success;
-    background: linear-gradient(90deg, rgba(82, 196, 26, 0.07) 0%, rgba(82, 196, 26, 0.01) 70%, transparent 100%);
+    background: linear-gradient(90deg, rgba(82, 196, 26, 0.06) 0%, rgba(82, 196, 26, 0.02) 60%, transparent 100%);
   }
 
   .section-badge {
     flex-shrink: 0;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 3px 10px;
+    border-radius: 6px;
     font-size: $font-size-xs;
-    font-weight: 500;
-    background: rgba(24, 144, 255, 0.12);
+    font-weight: $font-weight-medium;
+    background: rgba(24, 144, 255, 0.1);
     color: $color-accent;
     letter-spacing: 0.04em;
 
     .depth-2 & {
-      background: rgba(82, 196, 26, 0.12);
+      background: rgba(82, 196, 26, 0.1);
       color: $color-success;
     }
   }
@@ -1569,7 +1806,7 @@ onBeforeUnmount(() => {
   .section-name {
     flex: 1;
     font-size: $font-size-base;
-    font-weight: 600;
+    font-weight: $font-weight-semibold;
     color: $text-primary;
     white-space: nowrap;
     overflow: hidden;
@@ -1580,9 +1817,10 @@ onBeforeUnmount(() => {
     font-size: $font-size-xs;
     color: $text-tertiary;
     background: $bg-tertiary;
-    padding: 1px 8px;
-    border-radius: 10px;
+    padding: 2px 10px;
+    border-radius: 12px;
     flex-shrink: 0;
+    font-weight: $font-weight-medium;
   }
 }
 
@@ -1607,46 +1845,50 @@ onBeforeUnmount(() => {
       justify-content: center;
       flex-shrink: 0;
       z-index: 1;
-      background: $bg-tertiary;
-      border: 2px solid $border-color;
+      background: $bg-secondary;
+      border: 2px solid rgba(24, 144, 255, 0.15);
       color: $text-tertiary;
-      transition: all 0.3s;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
       .dot-inner {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: $text-tertiary;
+        background: rgba(24, 144, 255, 0.2);
       }
 
       &.completed {
-        background: #eefbe9;
+        background: rgba(82, 196, 26, 0.1);
         border-color: $color-success;
         color: $color-success;
+        box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.1);
       }
 
       &.running {
-        background: #e9f5ff;
+        background: rgba(24, 144, 255, 0.1);
         border-color: $color-accent;
         color: $color-accent;
         animation: dot-pulse 2s ease-in-out infinite;
+        box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.1);
       }
 
       &.timeout {
         background: $color-error-bg;
         border-color: $color-error;
         color: $color-error;
+        box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.1);
       }
 
       &.issue {
         background: $color-warning-bg;
         border-color: $color-warning;
         color: $color-warning;
+        box-shadow: 0 0 0 3px rgba(250, 173, 20, 0.1);
       }
 
       &.pending {
-        background: $bg-tertiary;
-        border-color: $border-color;
+        background: $bg-secondary;
+        border-color: rgba(24, 144, 255, 0.15);
         color: $text-tertiary;
       }
     }
@@ -1655,7 +1897,7 @@ onBeforeUnmount(() => {
       width: 2px;
       flex: 1;
       min-height: 8px;
-      background: linear-gradient(180deg, rgba(24, 144, 255, 0.22), rgba(24, 144, 255, 0.04));
+      background: linear-gradient(180deg, rgba(24, 144, 255, 0.15) 0%, rgba(24, 144, 255, 0.05) 100%);
     }
   }
 
@@ -1671,45 +1913,34 @@ onBeforeUnmount(() => {
   .flow-card {
     position: relative;
     overflow: hidden;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.92)),
-      $bg-secondary;
-    border: 1px solid rgba(24, 144, 255, 0.13);
+    background: $bg-secondary;
+    border: 1px solid rgba(24, 144, 255, 0.1);
     border-radius: $radius-md;
     padding: $spacing-md $spacing-base;
-    transition: all 0.2s;
-    border-left: 4px solid $border-color;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 3px solid $border-color;
     cursor: pointer;
-    box-shadow: 0 1px 0 rgba(24, 144, 255, 0.04);
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      width: 120px;
-      height: 100%;
-      pointer-events: none;
-      background: linear-gradient(110deg, transparent 0%, rgba(24, 144, 255, 0.06) 48%, transparent 49%);
-    }
+    box-shadow: 0 1px 3px rgba(24, 144, 255, 0.05);
 
     &:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 18px rgba(24, 74, 126, 0.1);
-      border-color: $color-accent-border;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(24, 144, 255, 0.12);
+      border-color: rgba(24, 144, 255, 0.2);
     }
 
     &.status-in-progress {
       border-left-color: $color-accent;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(232, 247, 255, 0.95) 100%);
     }
 
     &.status-issued {
       border-left-color: $color-error;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(255, 232, 232, 0.95) 100%);
     }
 
     &.status-completed {
       border-left-color: $color-success;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(244, 252, 240, 0.86));
+      background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(240, 252, 244, 0.95) 100%);
     }
 
     .flow-card-header {
@@ -1777,7 +2008,7 @@ onBeforeUnmount(() => {
       flex-wrap: wrap;
       gap: $spacing-xs;
       padding-top: $spacing-sm;
-      border-top: 1px solid $border-color-light;
+      border-top: 1px solid rgba(24, 144, 255, 0.06);
     }
   }
 }
@@ -1788,18 +2019,62 @@ onBeforeUnmount(() => {
 
     .page-header {
       padding: $spacing-base;
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "title"
+        "breadcrumb"
+        "stats"
+        "filter"
+        "actions";
+      grid-template-rows: auto auto auto auto auto;
+      gap: $spacing-base;
 
-      .header-main {
-        flex-direction: column;
+      .title-wrapper {
+        align-items: center;
+        justify-content: center;
+
+        .page-title {
+          text-align: center;
+          font-size: $font-size-xl;
+
+          &::after {
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50%;
+          }
+        }
       }
 
-      .header-actions {
-        width: 100%;
-        flex-wrap: wrap;
+      .breadcrumb-wrapper {
+        align-items: center;
+        justify-content: center;
+
+        .breadcrumb {
+          width: fit-content;
+        }
       }
 
       .task-overview {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .filter-group {
+        align-items: center;
+        justify-content: center;
+
+        :deep(.el-radio-group) {
+          justify-content: center;
+        }
+      }
+
+      .action-buttons-wrapper {
+        align-items: center;
+        justify-content: center;
+
+        :deep(.el-button) {
+          min-width: 80px;
+          height: 36px;
+        }
       }
     }
   }
@@ -1837,7 +2112,11 @@ onBeforeUnmount(() => {
 }
 
 @keyframes dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba($color-accent, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba($color-accent, 0); }
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba($color-accent, 0.1), 0 0 0 0 rgba($color-accent, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba($color-accent, 0.1), 0 0 0 8px rgba($color-accent, 0);
+  }
 }
 </style>

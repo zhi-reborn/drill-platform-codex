@@ -759,20 +759,16 @@ func (a *DrillFlowAdapter) autoCompleteParentStep(flowInstID int64, parentStepDe
 		CreatedAt:       now,
 	})
 
-	if err := a.engine.CompleteStep(flowInstID, parentStepDefID, 0, "子任务全部完成"); err != nil {
-		parentSI.Status = flowengine.StepStatusCompleted
-		parentSI.EndTime = &now
-		inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
+	parentSI.Status = flowengine.StepStatusCompleted
+	parentSI.EndTime = &now
+	inst.CurrentStepIDs = removeFromParentCurrent(inst.CurrentStepIDs, parentStepDefID)
 
-		// CompleteStep 失败时（如父步骤在引擎中非 running 状态），手动推进流程
-		// 否则后续步骤（如环节3）不会被自动激活
-		a.engine.AdvanceFlow(flowInstID, parentStepDefID)
-
-		// 仍需递归检查祖父步骤
-		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
-	} else {
-		a.handleSubtaskCompletion(flowInstID, parentStepDefID)
-	}
+	// Parent auto-completion is already persisted above and announced below.
+	// Advance the in-memory graph directly so we do not re-enter CompleteStep's
+	// callbacks/EventStepComplete path and duplicate logs, notifications, or
+	// ancestor checks.
+	a.engine.AdvanceFlow(flowInstID, parentStepDefID)
+	a.handleSubtaskCompletion(flowInstID, parentStepDefID)
 
 	if a.wsManager != nil {
 		endTimeStr := now.Format(time.RFC3339)

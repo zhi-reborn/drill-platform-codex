@@ -9,6 +9,7 @@ import (
 
 	"drill-platform/internal/domain/entity"
 	"drill-platform/internal/infrastructure/events"
+	"drill-platform/internal/pkg/dbcompat"
 	"drill-platform/internal/pkg/flowengine"
 	"drill-platform/internal/repository"
 	"drill-platform/internal/worker"
@@ -31,13 +32,13 @@ type CommandRepo interface {
 // caller can treat the failure as retryable. This is a package-level variable
 // so tests can substitute a stub to verify call sites without a real MySQL.
 var acquireNamedLock = func(tx *gorm.DB, drillID uint64, timeoutSeconds int) error {
-	if tx.Dialector.Name() != "mysql" {
+	if !dbcompat.IsMySQLDialect(tx.Dialector.Name()) {
 		return nil
 	}
 	name := fmt.Sprintf("drill:%d", drillID)
 	var result int
 	if err := tx.Raw("SELECT GET_LOCK(?, ?)", name, timeoutSeconds).Scan(&result).Error; err != nil {
-		return err
+		return dbcompat.IgnoreTiDBNoopFunctionError(err, "get_lock")
 	}
 	if result != 1 {
 		return &commandError{Code: "lock_timeout", Message: fmt.Sprintf("could not acquire named lock %s within %ds", name, timeoutSeconds)}
@@ -49,11 +50,14 @@ var acquireNamedLock = func(tx *gorm.DB, drillID uint64, timeoutSeconds int) err
 // non-MySQL dialectors it is a no-op. Errors are ignored because the lock is
 // also released when the session ends.
 var releaseNamedLock = func(tx *gorm.DB, drillID uint64) error {
-	if tx.Dialector.Name() != "mysql" {
+	if !dbcompat.IsMySQLDialect(tx.Dialector.Name()) {
 		return nil
 	}
 	name := fmt.Sprintf("drill:%d", drillID)
-	return tx.Exec("DO RELEASE_LOCK(?)", name).Error
+	if err := tx.Exec("DO RELEASE_LOCK(?)", name).Error; err != nil {
+		return dbcompat.IgnoreTiDBNoopFunctionError(err, "release_lock")
+	}
+	return nil
 }
 
 // FlowCommandExecutor maps a durable FlowCommand to its transactional side
@@ -146,6 +150,8 @@ func (e *FlowCommandExecutor) dispatch(ctx context.Context, cmd *entity.FlowComm
 		return e.executeStartStep(ctx, cmd, ownership)
 	case "complete_step":
 		return e.executeCompleteStep(ctx, cmd, ownership)
+	case "step_timeout":
+		return e.executeStepTimeout(ctx, cmd, ownership)
 	case "report_issue":
 		return e.executeReportIssue(ctx, cmd, ownership)
 	case "skip_step":
@@ -305,6 +311,16 @@ func (e *FlowCommandExecutor) executeCompleteStep(ctx context.Context, cmd *enti
 		"actual_operator": cmd.OperatorID,
 		"end_time":        time.Now(),
 		"remark":          payload.Remark,
+	})
+}
+
+func (e *FlowCommandExecutor) executeStepTimeout(ctx context.Context, cmd *entity.FlowCommand, ownership repository.CommandOwnership) error {
+	if cmd.StepInstanceID == nil {
+		return &commandError{Code: "missing_step", Message: "step_instance_id is required"}
+	}
+
+	return e.transitionStepInTx(cmd, ownership, []string{"running"}, "timeout", map[string]any{
+		"end_time": time.Now(),
 	})
 }
 
