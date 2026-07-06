@@ -43,21 +43,21 @@
         <el-table-column prop="created_by_name" label="创建人" width="120" />
         <el-table-column prop="updated_at" label="更新时间" width="160">
           <template #default="{ row }">
-            {{ formatTime(row.updated_at) }}
+            {{ formatTime((row as DrillTemplate).updated_at) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" @click="openEditDialog(row)">编辑</el-button>
-            <el-button text type="primary" @click="goToStepsEditor(row)">编辑步骤</el-button>
+            <el-button text type="primary" @click="openEditDialog(row as DrillTemplate)">编辑</el-button>
+            <el-button text type="primary" @click="goToStepsEditor(row as DrillTemplate)">编辑步骤</el-button>
             <el-button 
               text 
-              :type="(row.status_label || row.status) === 'enabled' || row.status === 2 ? 'warning' : 'success'" 
-              @click="handleToggleStatus(row)"
+              :type="((row as unknown as DrillTemplate).status_label || (row as unknown as DrillTemplate).status) === 'enabled' || (row as unknown as DrillTemplate).status === 2 ? 'warning' : 'success'"
+              @click="handleToggleStatus(row as unknown as DrillTemplate)"
             >
-              {{ (row.status_label || row.status) === 'enabled' || row.status === 2 ? '禁用' : '启用' }}
+              {{ ((row as unknown as DrillTemplate).status_label || (row as unknown as DrillTemplate).status) === 'enabled' || (row as unknown as DrillTemplate).status === 2 ? '禁用' : '启用' }}
             </el-button>
-            <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button text type="danger" @click="handleDelete(row as unknown as DrillTemplate)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

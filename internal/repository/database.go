@@ -24,6 +24,14 @@ type Config struct {
 	Database     string
 	MaxIdleConns int
 	MaxOpenConns int
+	LogSQL       bool
+}
+
+func gormLogLevel(cfg *Config) logger.LogLevel {
+	if cfg != nil && cfg.LogSQL {
+		return logger.Info
+	}
+	return logger.Silent
 }
 
 // InitDB 初始化数据库连接
@@ -33,7 +41,7 @@ func InitDB(cfg *Config) error {
 
 	var err error
 	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(gormLogLevel(cfg)),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %w", err)

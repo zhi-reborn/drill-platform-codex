@@ -111,6 +111,7 @@ func main() {
 		Database:     cfg.Database.Name,
 		MaxIdleConns: cfg.Database.MaxIdleConns,
 		MaxOpenConns: cfg.Database.MaxOpenConns,
+		LogSQL:       cfg.Database.LogSQL,
 	}); err != nil {
 		log.Fatalf("数据库连接失败: %v", err)
 	}

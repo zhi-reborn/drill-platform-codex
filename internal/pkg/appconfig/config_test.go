@@ -30,6 +30,7 @@ database:
   user: yaml-user
   password: yaml-pass
   database: yaml-db
+  logSQL: true
 redis:
   addr: yaml-redis:6379
   password: yaml-redis-pass
@@ -93,7 +94,7 @@ func clearEnv(t *testing.T, keys ...string) {
 // envKeys is the full set of env vars appconfig reads.
 var envKeys = []string{
 	"APP_ROLE", "INSTANCE_ID", "SERVER_MODE", "SERVER_PORT",
-	"DATABASE_HOST", "DATABASE_PORT", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_NAME",
+	"DATABASE_HOST", "DATABASE_PORT", "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_NAME", "DATABASE_LOG_SQL",
 	"REDIS_ADDR", "REDIS_PASSWORD", "REDIS_TLS", "REDIS_USERNAME", "REDIS_SENTINEL_MASTER", "REDIS_CLUSTER_ADDRS",
 	"JWT_SECRET",
 	"PUBLIC_BASE_URL",
@@ -118,6 +119,9 @@ func TestLoad_ReadsYAMLDefaults(t *testing.T) {
 	if cfg.Database.Host != "yaml-host" {
 		t.Errorf("Database.Host = %q, want yaml-host", cfg.Database.Host)
 	}
+	if !cfg.Database.LogSQL {
+		t.Errorf("Database.LogSQL = false, want true")
+	}
 	if cfg.Redis.Addr != "yaml-redis:6379" {
 		t.Errorf("Redis.Addr = %q, want yaml-redis:6379", cfg.Redis.Addr)
 	}
@@ -139,6 +143,7 @@ func TestLoad_EnvOverridesYAML(t *testing.T) {
 		"DATABASE_USER":         "env-user",
 		"DATABASE_PASSWORD":     "env-pass",
 		"DATABASE_NAME":         "env-db",
+		"DATABASE_LOG_SQL":      "false",
 		"REDIS_ADDR":            "env-redis:6380",
 		"REDIS_PASSWORD":        "env-redis-pass",
 		"JWT_SECRET":            "env-secret",
@@ -177,6 +182,9 @@ func TestLoad_EnvOverridesYAML(t *testing.T) {
 	}
 	if cfg.Database.Name != "env-db" {
 		t.Errorf("Database.Name = %q, want env-db", cfg.Database.Name)
+	}
+	if cfg.Database.LogSQL {
+		t.Errorf("Database.LogSQL = true, want false")
 	}
 	if cfg.Redis.Addr != "env-redis:6380" {
 		t.Errorf("Redis.Addr = %q, want env-redis:6380", cfg.Redis.Addr)

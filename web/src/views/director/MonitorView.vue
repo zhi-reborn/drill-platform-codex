@@ -322,21 +322,21 @@
           </el-table-column>
           <el-table-column label="实际耗时" width="85" align="center">
             <template #default="{ row }">
-              {{ isParentStep(row) ? '-' : calculateDuration(row) }}
+              {{ isParentStep(row as StepInstance) ? '-' : calculateDuration(row as StepInstance) }}
             </template>
           </el-table-column>
           <el-table-column label="操作" width="220" align="center" fixed="right">
             <template #default="{ row }">
               <div
-                v-if="!row._isGroup"
-                v-memo="[row.id, row.status, instance?.status, isParentStep(row), getStartDisabledReason(row)]"
+                v-if="!(row as any)._isGroup"
+                v-memo="[(row as StepInstance).id, (row as StepInstance).status, instance?.status, isParentStep(row as StepInstance), getStartDisabledReason(row as StepInstance)]"
               >
-                <el-button type="primary" link size="small" @click="showStepDetail(row)">详情</el-button>
-                <template v-if="!isParentStep(row)">
+                <el-button type="primary" link size="small" @click="showStepDetail(row as StepInstance)">详情</el-button>
+                <template v-if="!isParentStep(row as StepInstance)">
                   <el-tooltip
-                    v-if="row.status === 'pending'"
-                    :content="getStartDisabledReason(row)"
-                    :disabled="canStartStep(row)"
+                    v-if="(row as StepInstance).status === 'pending'"
+                    :content="getStartDisabledReason(row as StepInstance)"
+                    :disabled="canStartStep(row as StepInstance)"
                     placement="top"
                   >
                     <span>
@@ -344,51 +344,51 @@
                         type="primary"
                         link
                         size="small"
-                        :disabled="!canStartStep(row)"
-                        @click="handleStartStep(row)"
+                        :disabled="!canStartStep(row as StepInstance)"
+                        @click="handleStartStep(row as StepInstance)"
                       >开始</el-button>
                     </span>
                   </el-tooltip>
                   <el-button
-                    v-if="row.status === 'running'"
+                    v-if="(row as StepInstance).status === 'running'"
                     type="success"
                     link
                     size="small"
-                    @click="handleDirectorComplete(row)"
+                    @click="handleDirectorComplete(row as StepInstance)"
                   >完成</el-button>
                   <el-button
-                    v-if="row.status === 'issue'"
+                    v-if="(row as StepInstance).status === 'issue'"
                     type="success"
                     link
                     size="small"
-                    @click="confirmStepAction('步骤异常，确认强制完成？', () => handleForceComplete(row))"
+                    @click="confirmStepAction('步骤异常，确认强制完成？', () => handleForceComplete(row as StepInstance))"
                   >
                     完成
                   </el-button>
                   <el-button
-                    v-if="['pending', 'running'].includes(row.status)"
+                    v-if="['pending', 'running'].includes((row as StepInstance).status)"
                     type="warning"
                     link
                     size="small"
-                    @click="confirmStepAction('确认跳过此步骤？', () => handleSkipStep(row))"
+                    @click="confirmStepAction('确认跳过此步骤？', () => handleSkipStep(row as StepInstance))"
                   >
                     跳过
                   </el-button>
                   <el-button
-                    v-if="['pending', 'running'].includes(row.status)"
+                    v-if="['pending', 'running'].includes((row as StepInstance).status)"
                     type="danger"
                     link
                     size="small"
-                    @click="confirmStepAction('确认强制完成此步骤？', () => handleForceComplete(row))"
+                    @click="confirmStepAction('确认强制完成此步骤？', () => handleForceComplete(row as StepInstance))"
                   >
                     强制完成
                   </el-button>
                   <el-button
-                    v-if="['completed', 'skipped'].includes(row.status)"
+                    v-if="['completed', 'skipped'].includes((row as StepInstance).status)"
                     type="primary"
                     link
                     size="small"
-                    @click="confirmStepAction('确认重新派发此步骤？', () => handleResumeTask(row))"
+                    @click="confirmStepAction('确认重新派发此步骤？', () => handleResumeTask(row as StepInstance))"
                   >
                     重新派发
                   </el-button>

@@ -137,7 +137,7 @@ const recentActivities = ref<any[]>([])
 const activeDrills = computed(() => {
   return instances.value
     .filter(i => i.status === 'running' || i.status === 'paused')
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .sort((a, b) => new Date(b.updated_at || '').getTime() - new Date(a.updated_at || '').getTime())
 })
 
 function getCurrentStepName(drillId: number): string {

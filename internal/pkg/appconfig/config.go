@@ -38,6 +38,7 @@ type DatabaseConfig struct {
 	Name         string `yaml:"name"`
 	MaxIdleConns int    `yaml:"maxIdleConns"`
 	MaxOpenConns int    `yaml:"maxOpenConns"`
+	LogSQL       bool   `yaml:"logSQL"`
 }
 
 // RedisConfig describes the Redis connection. Addr is the canonical "host:port"
@@ -215,6 +216,11 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("DATABASE_NAME"); v != "" {
 		cfg.Database.Name = v
+	}
+	if v := os.Getenv("DATABASE_LOG_SQL"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Database.LogSQL = b
+		}
 	}
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v

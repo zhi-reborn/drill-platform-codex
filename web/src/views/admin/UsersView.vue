@@ -35,33 +35,33 @@
         :total="total"
       >
         <template #role="{ row }">
-          <el-tag :type="getRoleTagType(row.role)" size="small">
-            {{ getRoleLabel(row.role) }}
+          <el-tag :type="getRoleTagType((row as unknown as User).role)" size="small">
+            {{ getRoleLabel((row as unknown as User).role) }}
           </el-tag>
         </template>
         <template #status="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
-            {{ row.status === 1 ? '正常' : '禁用' }}
+          <el-tag :type="(row as unknown as User).status === 1 ? 'success' : 'danger'" size="small">
+            {{ (row as unknown as User).status === 1 ? '正常' : '禁用' }}
           </el-tag>
         </template>
         <template #created_at="{ row }">
-          {{ formatTime(row.created_at) }}
+          {{ formatTime((row as unknown as User).created_at!) }}
         </template>
         <template #last_login_at="{ row }">
-          {{ row.last_login_at ? formatTime(row.last_login_at) : '从未登录' }}
+          {{ (row as unknown as User).last_login_at ? formatTime((row as unknown as User).last_login_at!) : '从未登录' }}
         </template>
         <template #actions="{ row }">
           <el-button
             type="warning"
             size="small"
-            @click="handleResetPassword(row)"
+            @click="handleResetPassword(row as unknown as User)"
           >
             重置密码
           </el-button>
           <el-button
             type="primary"
             size="small"
-            @click="handleEditUser(row)"
+            @click="handleEditUser(row as unknown as User)"
           >
             编辑
           </el-button>
@@ -69,16 +69,16 @@
             message="确认要删除该用户吗？删除后无法恢复。"
             danger
             size="small"
-            @confirm="handleDeleteUser(row)"
+            @confirm="handleDeleteUser(row as unknown as User)"
           >
             删除
           </ActionConfirm>
           <ActionConfirm
-            v-if="row.status === 1"
+            v-if="(row as unknown as User).status === 1"
             message="确认要禁用该用户吗？禁用后将无法登录系统。"
             type="warning"
             size="small"
-            @confirm="handleDisableUser(row)"
+            @confirm="handleDisableUser(row as unknown as User)"
           >
             禁用
           </ActionConfirm>
@@ -86,7 +86,7 @@
             v-else
             type="success"
             size="small"
-            @click="handleEnableUser(row)"
+            @click="handleEnableUser(row as unknown as User)"
           >
             启用
           </el-button>

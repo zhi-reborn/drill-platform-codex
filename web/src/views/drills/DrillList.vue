@@ -17,16 +17,16 @@
       @page-change="handlePageChange"
     >
       <template #status="{ row }">
-        <DrillStatusBadge :status="row.status" type="drill" />
+        <DrillStatusBadge :status="(row as unknown as DrillInstance).status" type="drill" />
       </template>
-      
+
       <template #actions="{ row }">
         <el-button link type="primary" size="small">查看</el-button>
         <ActionConfirm
           message="确定要删除此演练吗？"
           danger
           size="small"
-          @confirm="handleDelete(row)"
+          @confirm="handleDelete(row as unknown as DrillInstance)"
         >
           删除
         </ActionConfirm>
@@ -41,6 +41,7 @@ import { Plus } from '@element-plus/icons-vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
+import type { DrillInstance } from '@/types'
 
 const loading = ref(false)
 const total = ref(0)
@@ -59,7 +60,7 @@ function handlePageChange({ page, size }: { page: number; size: number }) {
   console.log('Page change:', page, size)
 }
 
-function handleDelete(row: Record<string, unknown>) {
+function handleDelete(row: any) {
   console.log('Delete:', row)
 }
 </script>

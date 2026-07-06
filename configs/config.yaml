@@ -17,6 +17,7 @@ database:
   name: drill_platform
   maxIdleConns: 10
   maxOpenConns: 100
+  logSQL: false
 
 redis:
   addr: redis:6379       # 优先使用 addr；host/port 保留向后兼容

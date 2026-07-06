@@ -48,20 +48,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-export interface TableColumn {
+export interface TableColumn<T = Record<string, unknown>> {
   prop: string
   label: string
   width?: number | string
   minWidth?: number | string
   sortable?: boolean | string
   align?: 'left' | 'center' | 'right'
-  formatter?: (row: Record<string, unknown>) => string
+  formatter?: (row: T) => string
   slot?: boolean
 }
 
-interface Props {
-  columns: TableColumn[]
-  data: Record<string, unknown>[]
+interface Props<T = Record<string, unknown>> {
+  columns: TableColumn<T>[]
+  data: T[]
   loading?: boolean
   selectable?: boolean
   pagination?: boolean

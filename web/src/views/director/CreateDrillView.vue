@@ -143,7 +143,7 @@ async function loadTemplates() {
   try {
     const result = await templateApi.getList({ page: 1, page_size: 100 })
     // 只显示已发布的模板
-    templates.value = (result.list || []).filter(t => t.status === 'published' || t.status_label === 'enabled')
+    templates.value = (result.list || []).filter(t => t.status === 2 || t.status_label === 'enabled')
   } catch (error) {
     ElMessage.error('加载模板失败')
     console.error('Failed to load templates:', error)

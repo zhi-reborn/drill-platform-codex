@@ -59,8 +59,8 @@ export interface DrillTemplate {
   created_by_name: string
   steps: StepTemplate[]
   phase_order?: string[]
-  status: 'draft' | 'published' | 'archived'
-  status_label?: string
+  status: number // 0 = disabled, 2 = enabled
+  status_label?: string // "disabled" or "enabled"
   created_at: string
   updated_at: string
 }

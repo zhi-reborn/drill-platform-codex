@@ -44,33 +44,33 @@
         </el-table-column>
         <el-table-column prop="progress_pct" label="进度" width="100" align="center">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress_pct" :status="row.status === 'completed' ? 'success' : undefined" />
+            <el-progress :percentage="(row as DrillInstance).progress_pct" :status="(row as DrillInstance).status === 'completed' ? 'success' : undefined" />
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
         <el-table-column prop="created_at" label="创建时间" width="160">
           <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
+            {{ formatTime((row as DrillInstance).created_at) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button class="row-action" text type="primary" size="small" @click="viewMonitor(row)">
+              <el-button class="row-action" text type="primary" size="small" @click="viewMonitor(row as DrillInstance)">
                 详情
               </el-button>
-              <el-button class="row-action" text type="success" size="small" @click="viewScreen(row)">
+              <el-button class="row-action" text type="success" size="small" @click="viewScreen(row as DrillInstance)">
                 大屏
               </el-button>
-              <el-button class="row-action" text type="warning" size="small" @click="viewScreen2(row)">
+              <el-button class="row-action" text type="warning" size="small" @click="viewScreen2(row as DrillInstance)">
                 <el-icon><DataBoard /></el-icon>
                 大屏2
               </el-button>
-              <el-button class="row-action row-action-screen3" text type="primary" size="small" @click="viewScreen3(row)">
+              <el-button class="row-action row-action-screen3" text type="primary" size="small" @click="viewScreen3(row as DrillInstance)">
                 <el-icon><DataBoard /></el-icon>
                 大屏3
               </el-button>
-              <el-button class="row-action" text type="danger" size="small" @click="handleDelete(row)">
+              <el-button class="row-action" text type="danger" size="small" @click="handleDelete(row as DrillInstance)">
                 删除
               </el-button>
             </div>

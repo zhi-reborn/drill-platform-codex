@@ -22,33 +22,33 @@
         <el-table-column prop="template_name" label="模板" width="180" />
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
-            <DrillStatusBadge :status="row.status" type="drill" />
+            <DrillStatusBadge :status="(row as DrillInstance).status" type="drill" />
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="120" />
         <el-table-column label="进度" width="150">
           <template #default="{ row }">
             <el-progress
-              :percentage="row.progress_pct || 0"
+              :percentage="(row as DrillInstance).progress_pct || 0"
               :stroke-width="6"
-              :status="row.status === 'completed' ? 'success' : undefined"
+              :status="(row as DrillInstance).status === 'completed' ? 'success' : undefined"
             />
           </template>
         </el-table-column>
         <el-table-column prop="start_time" label="开始时间" width="180">
           <template #default="{ row }">
-            {{ row.start_time ? formatTime(row.start_time) : '-' }}
+            {{ (row as DrillInstance).start_time ? formatTime((row as DrillInstance).start_time!) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="viewDetail(row)">
+            <el-button text type="primary" size="small" @click="viewDetail(row as DrillInstance)">
               详情
             </el-button>
-            <el-button text type="success" size="small" @click="viewScreen(row)">
+            <el-button text type="success" size="small" @click="viewScreen(row as DrillInstance)">
               大屏
             </el-button>
-            <el-button text type="warning" size="small" @click="viewScreen2(row)">
+            <el-button text type="warning" size="small" @click="viewScreen2(row as DrillInstance)">
               <el-icon><DataBoard /></el-icon>
               大屏2
             </el-button>
