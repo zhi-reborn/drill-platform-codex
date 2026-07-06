@@ -283,9 +283,11 @@
                       v-else-if="task.status === 'pending' && canStartTask(task)"
                       type="primary"
                       size="small"
-                      @click="goToTaskDetail(task.id)"
+                      :loading="isStartingTask(task.id)"
+                      @click="startTaskInline(task)"
                     >
-                      开始执行
+                      <el-icon><Play /></el-icon>
+                      开始
                     </el-button>
                     <el-button
                       v-else-if="task.status === 'running' && !isParentTask(task)"
@@ -362,6 +364,7 @@ const route = useRoute()
 
 const loading = ref(false)
 const completingTaskIds = ref<Set<number>>(new Set())
+const startingTaskIds = ref<Set<number>>(new Set())
 const tasks = ref<StepInstance[]>([])
 const drillFlowSteps = ref<StepInstance[]>([])
 const instances = ref<DrillInstance[]>([])
@@ -798,8 +801,28 @@ function goToTaskDetail(taskId: number) {
   })
 }
 
+function isStartingTask(taskId: number): boolean {
+  return startingTaskIds.value.has(taskId)
+}
+
 function isCompletingTask(taskId: number): boolean {
   return completingTaskIds.value.has(taskId)
+}
+
+async function startTaskInline(task: StepInstance) {
+  if (isStartingTask(task.id)) return
+  startingTaskIds.value = new Set([...startingTaskIds.value, task.id])
+  try {
+    await taskApi.start(task.id)
+    ElMessage.success('任务已开始')
+    await loadTasks({ silent: true, lightweight: true })
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
+  } finally {
+    const next = new Set(startingTaskIds.value)
+    next.delete(task.id)
+    startingTaskIds.value = next
+  }
 }
 
 async function completeTaskInline(task: StepInstance) {

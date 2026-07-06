@@ -286,7 +286,8 @@ type AssignStepPayload struct {
 
 // UpdateStepInfoPayload is the typed payload for update_step_info commands.
 type UpdateStepInfoPayload struct {
-	Remark string `json:"remark"`
+	Remark     string                 `json:"remark"`
+	Attributes map[string]interface{} `json:"attributes"`
 }
 
 func (e *FlowCommandExecutor) executeStartStep(ctx context.Context, cmd *entity.FlowCommand, ownership repository.CommandOwnership) error {
@@ -427,10 +428,20 @@ func (e *FlowCommandExecutor) executeUpdateStepInfo(ctx context.Context, cmd *en
 	if content == "" {
 		content = step.Name + " 信息已更新"
 	}
+
+	updates := map[string]any{"remark": payload.Remark}
+	if len(payload.Attributes) > 0 {
+		attrsJSON, err := json.Marshal(payload.Attributes)
+		if err != nil {
+			return &commandError{Code: "invalid_attributes", Message: "attributes JSON encode failed"}
+		}
+		updates["action_params"] = string(attrsJSON)
+	}
+
 	return e.transitionStepFieldsInTx(
 		cmd,
 		ownership,
-		map[string]any{"remark": payload.Remark},
+		updates,
 		"update_info",
 		content,
 		nil,
