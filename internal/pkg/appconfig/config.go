@@ -107,8 +107,9 @@ type LDAPConfig struct {
 // WorkerConfig holds the leader-election timing parameters consumed by
 // worker.Config.
 type WorkerConfig struct {
-	LeaseTTL      time.Duration `yaml:"lease_ttl"`
-	RenewInterval time.Duration `yaml:"renew_interval"`
+	LeaseTTL       time.Duration `yaml:"lease_ttl"`
+	RenewInterval  time.Duration `yaml:"renew_interval"`
+	RecoverTimeout time.Duration `yaml:"recover_timeout"`
 }
 
 // Config is the single source of truth for drill-platform runtime settings.
@@ -153,8 +154,9 @@ func DefaultConfig() *Config {
 			Expire: 24,
 		},
 		Worker: WorkerConfig{
-			LeaseTTL:      15 * time.Second,
-			RenewInterval: 5 * time.Second,
+			LeaseTTL:       15 * time.Second,
+			RenewInterval:  5 * time.Second,
+			RecoverTimeout: 30 * time.Second,
 		},
 		CommandWaitTimeout: 30 * time.Second,
 		LoginLogFile:       "",
@@ -262,6 +264,11 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("WORKER_RENEW_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Worker.RenewInterval = d
+		}
+	}
+	if v := os.Getenv("WORKER_RECOVER_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Worker.RecoverTimeout = d
 		}
 	}
 	if v := os.Getenv("COMMAND_WAIT_TIMEOUT"); v != "" {

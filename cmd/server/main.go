@@ -234,10 +234,11 @@ func main() {
 
 			flowWorker = worker.NewWorker(
 				worker.Config{
-					LeaseTTL:      cfg.Worker.LeaseTTL,
-					RenewInterval: cfg.Worker.RenewInterval,
-					CommandLease:  60 * time.Second,
-					IdlePoll:      500 * time.Millisecond,
+					LeaseTTL:       cfg.Worker.LeaseTTL,
+					RenewInterval:  cfg.Worker.RenewInterval,
+					RecoverTimeout: cfg.Worker.RecoverTimeout,
+					CommandLease:   60 * time.Second,
+					IdlePoll:       500 * time.Millisecond,
 				},
 				lease,
 				flowCommandRepo,

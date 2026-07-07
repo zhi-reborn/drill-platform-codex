@@ -359,6 +359,69 @@ func TestExecuteCompleteStepAutoStartsReadySuccessor(t *testing.T) {
 	}
 }
 
+func TestExecuteStartStepStartsPendingAncestorsSoSuccessorCanAutoStart(t *testing.T) {
+	executor, db, _ := newExecutorForTest(t)
+	drillID, _ := seedDrillAndStepForExecutorTest(t, db, "completed")
+
+	rootID := uint64(20)
+	parentID := uint64(30)
+	root := entity.StepInstance{
+		ID: rootID, DrillInstanceID: drillID, StepTemplateID: 120, Name: "root",
+		Seq: 1, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+	}
+	parent := entity.StepInstance{
+		ID: parentID, DrillInstanceID: drillID, ParentStepID: &rootID, StepTemplateID: 130, Name: "parent",
+		Seq: 2, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+	}
+	firstTask := entity.StepInstance{
+		ID: 31, DrillInstanceID: drillID, ParentStepID: &parentID, StepTemplateID: 131, Name: "first-task",
+		Seq: 3, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+	}
+	secondTask := entity.StepInstance{
+		ID: 32, DrillInstanceID: drillID, ParentStepID: &parentID, StepTemplateID: 132, Name: "second-task",
+		Seq: 4, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: "[31]",
+	}
+	for _, step := range []entity.StepInstance{root, parent, firstTask, secondTask} {
+		if err := db.Create(&step).Error; err != nil {
+			t.Fatalf("create step %s: %v", step.Name, err)
+		}
+	}
+
+	startCmd := createExecutorCommand(t, db, "start_step", drillID, &firstTask.ID, nil)
+	if err := executor.Execute(context.Background(), startCmd, testFence()); err != nil {
+		t.Fatalf("start Execute: %v", err)
+	}
+
+	var updatedRoot entity.StepInstance
+	if err := db.First(&updatedRoot, rootID).Error; err != nil {
+		t.Fatalf("load root: %v", err)
+	}
+	if updatedRoot.Status != "running" {
+		t.Fatalf("expected root ancestor running after start_step, got %s", updatedRoot.Status)
+	}
+	var updatedParent entity.StepInstance
+	if err := db.First(&updatedParent, parentID).Error; err != nil {
+		t.Fatalf("load parent: %v", err)
+	}
+	if updatedParent.Status != "running" {
+		t.Fatalf("expected parent ancestor running after start_step, got %s", updatedParent.Status)
+	}
+
+	completeCmd := createExecutorCommand(t, db, "complete_step", drillID, &firstTask.ID, CompleteStepPayload{Remark: "done"})
+	if err := executor.Execute(context.Background(), completeCmd, testFence()); err != nil {
+		t.Fatalf("complete Execute: %v", err)
+	}
+
+	var updatedSecond entity.StepInstance
+	if err := db.First(&updatedSecond, secondTask.ID).Error; err != nil {
+		t.Fatalf("load second task: %v", err)
+	}
+	if updatedSecond.Status != "running" {
+		t.Fatalf("expected second task auto-started, got %s", updatedSecond.Status)
+	}
+}
+
 func TestExecuteCompleteStepAutoCompletesParentAndStartsNextTask(t *testing.T) {
 	executor, db, _ := newExecutorForTest(t)
 	drillID, _ := seedDrillAndStepForExecutorTest(t, db, "completed")

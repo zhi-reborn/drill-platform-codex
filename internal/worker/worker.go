@@ -14,20 +14,22 @@ import (
 // Defaults are exposed via DefaultConfig so callers can override only the
 // fields they care about instead of repeating magic numbers.
 type Config struct {
-	LeaseTTL      time.Duration
-	RenewInterval time.Duration
-	CommandLease  time.Duration
-	IdlePoll      time.Duration
+	LeaseTTL       time.Duration
+	RenewInterval  time.Duration
+	RecoverTimeout time.Duration
+	CommandLease   time.Duration
+	IdlePoll       time.Duration
 }
 
 // DefaultConfig returns the plan-approved defaults: 15s lease TTL, 5s renewal,
 // 60s command lease, and 500ms idle polling.
 func DefaultConfig() Config {
 	return Config{
-		LeaseTTL:      15 * time.Second,
-		RenewInterval: 5 * time.Second,
-		CommandLease:  60 * time.Second,
-		IdlePoll:      500 * time.Millisecond,
+		LeaseTTL:       15 * time.Second,
+		RenewInterval:  5 * time.Second,
+		RecoverTimeout: 30 * time.Second,
+		CommandLease:   60 * time.Second,
+		IdlePoll:       500 * time.Millisecond,
 	}
 }
 
@@ -247,16 +249,54 @@ func (w *Worker) Run(ctx context.Context) error {
 // It returns a non-nil error only when the context is cancelled; renewal
 // failure demotes back to standby without an error so the outer loop retries.
 func (w *Worker) serveAsLeader(runCtx context.Context) error {
+	leaderCtx, cancelLeader := context.WithCancel(runCtx)
+	defer cancelLeader()
+	recoverCtx := leaderCtx
+	cancelRecover := func() {}
+	if w.config.RecoverTimeout > 0 {
+		recoverCtx, cancelRecover = context.WithTimeout(leaderCtx, w.config.RecoverTimeout)
+	}
+	defer cancelRecover()
+
+	demotionCh := make(chan struct{})
+	var demotionOnce sync.Once
+	signalDemotion := func() {
+		demotionOnce.Do(func() {
+			close(demotionCh)
+			cancelLeader()
+		})
+	}
+
+	redisRenewalDone := make(chan struct{})
+	go func() {
+		defer close(redisRenewalDone)
+		redisTicker := time.NewTicker(w.config.RenewInterval)
+		defer redisTicker.Stop()
+		w.runRedisRenewal(leaderCtx, redisTicker, signalDemotion)
+	}()
+	defer func() {
+		cancelLeader()
+		<-redisRenewalDone
+	}()
+
 	w.setStatus(StatusRecovering)
 	if w.recoverer != nil {
 		log.Printf("[Worker:%s] recovering flow state...", w.workerID)
-		if err := w.recoverer.Recover(runCtx); err != nil {
+		if err := w.recoverer.Recover(recoverCtx); err != nil {
 			log.Printf("[Worker:%s] Recover failed: %v", w.workerID, err)
-			_, _ = w.lease.Release(runCtx)
+			_, _ = w.lease.Release(context.WithoutCancel(runCtx))
 			w.setStatus(StatusStandby)
+			if isSignaled(demotionCh) {
+				return nil
+			}
 			return w.wait(runCtx)
 		}
 		log.Printf("[Worker:%s] recover completed", w.workerID)
+	}
+	if isSignaled(demotionCh) {
+		_, _ = w.lease.Release(context.WithoutCancel(runCtx))
+		w.setStatus(StatusStandby)
+		return nil
 	}
 
 	// Acquire the MySQL epoch BEFORE claiming any command. This guarantees
@@ -265,11 +305,14 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 	// worker has taken over.
 	if w.epochRenewer != nil {
 		log.Printf("[Worker:%s] advancing epoch...", w.workerID)
-		epoch, err := w.epochRenewer.AdvanceEpoch(runCtx, w.workerID, w.config.LeaseTTL)
+		epoch, err := w.epochRenewer.AdvanceEpoch(recoverCtx, w.workerID, w.config.LeaseTTL)
 		if err != nil || epoch == nil {
 			log.Printf("[Worker:%s] AdvanceEpoch failed: err=%v epoch=%v", w.workerID, err, epoch)
-			_, _ = w.lease.Release(runCtx)
+			_, _ = w.lease.Release(context.WithoutCancel(runCtx))
 			w.setStatus(StatusStandby)
+			if isSignaled(demotionCh) {
+				return nil
+			}
 			return w.wait(runCtx)
 		}
 		w.mu.Lock()
@@ -281,46 +324,53 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 	log.Printf("[Worker:%s] requeueing expired commands...", w.workerID)
 	if _, err := w.claimer.RequeueExpired(time.Now()); err != nil {
 		log.Printf("[Worker:%s] RequeueExpired failed: %v", w.workerID, err)
-		_, _ = w.lease.Release(runCtx)
+		_, _ = w.lease.Release(context.WithoutCancel(runCtx))
 		w.setStatus(StatusStandby)
 		return w.wait(runCtx)
+	}
+	if isSignaled(demotionCh) {
+		_, _ = w.lease.Release(context.WithoutCancel(runCtx))
+		w.setStatus(StatusStandby)
+		return nil
 	}
 
 	log.Printf("[Worker:%s] became leader (leader-ready)", w.workerID)
 	w.setStatus(StatusLeaderReady)
-	return w.runLeaderLoop(runCtx)
+	return w.runLeaderLoop(runCtx, leaderCtx, cancelLeader, demotionCh, signalDemotion)
 }
 
-// runLeaderLoop claims and dispatches commands while three parallel renewal
-// tickers (Redis lease, MySQL epoch, command lease) keep the worker's
-// authority current. Any renewal failure triggers demotion so the outer
-// loop re-acquires leadership.
-func (w *Worker) runLeaderLoop(runCtx context.Context) error {
-	leaderCtx, cancelLeader := context.WithCancel(runCtx)
-	defer cancelLeader()
-
-	demotionCh := make(chan struct{})
-	var demotionOnce sync.Once
-	signalDemotion := func() {
-		demotionOnce.Do(func() { close(demotionCh) })
-	}
-
-	// Renewal goroutine: runs Redis, epoch, and command-lease renewals in
-	// parallel. Any failure triggers demotion. Execution happens in
-	// separate goroutines (see claimAndDispatch) so renewal never blocks
-	// on a long-running command.
+// runLeaderLoop claims and dispatches commands while ready-only renewal
+// tickers keep the worker's MySQL epoch and in-flight command leases current.
+// Redis leadership renewal starts earlier in serveAsLeader so it also covers
+// recovery.
+func (w *Worker) runLeaderLoop(runCtx context.Context, leaderCtx context.Context, cancelLeader context.CancelFunc, demotionCh <-chan struct{}, signalDemotion func()) error {
 	renewalDone := make(chan struct{})
 	go func() {
 		defer close(renewalDone)
-		w.runRenewals(leaderCtx, signalDemotion)
+		w.runReadyRenewals(leaderCtx, signalDemotion)
 	}()
 
 	idleTimer := time.NewTimer(w.config.IdlePoll)
 	defer idleTimer.Stop()
 
 	for {
+		if isSignaled(demotionCh) {
+			log.Printf("[Worker:%s] demoted from leader, releasing lease", w.workerID)
+			cancelLeader()
+			<-renewalDone
+			_, _ = w.lease.Release(context.WithoutCancel(runCtx))
+			w.setStatus(StatusStandby)
+			return nil
+		}
 		select {
 		case <-leaderCtx.Done():
+			if isSignaled(demotionCh) {
+				log.Printf("[Worker:%s] demoted from leader, releasing lease", w.workerID)
+				<-renewalDone
+				_, _ = w.lease.Release(context.WithoutCancel(runCtx))
+				w.setStatus(StatusStandby)
+				return nil
+			}
 			return leaderCtx.Err()
 		case <-demotionCh:
 			// Stop the renewals and wait for them to exit before
@@ -328,7 +378,7 @@ func (w *Worker) runLeaderLoop(runCtx context.Context) error {
 			log.Printf("[Worker:%s] demoted from leader, releasing lease", w.workerID)
 			cancelLeader()
 			<-renewalDone
-			_, _ = w.lease.Release(runCtx)
+			_, _ = w.lease.Release(context.WithoutCancel(runCtx))
 			w.setStatus(StatusStandby)
 			return nil
 		case <-idleTimer.C:
@@ -338,23 +388,16 @@ func (w *Worker) runLeaderLoop(runCtx context.Context) error {
 	}
 }
 
-// runRenewals spawns three parallel renewal goroutines and blocks until all
-// of them exit (either because ctx was cancelled or signalDemotion was
-// triggered by one of them).
-func (w *Worker) runRenewals(ctx context.Context, signalDemotion func()) {
-	redisTicker := time.NewTicker(w.config.RenewInterval)
+// runReadyRenewals spawns the renewals that are only valid after recovery has
+// finished and the worker is leader-ready.
+func (w *Worker) runReadyRenewals(ctx context.Context, signalDemotion func()) {
 	epochTicker := time.NewTicker(w.config.RenewInterval)
 	cmdLeaseTicker := time.NewTicker(w.config.RenewInterval)
-	defer redisTicker.Stop()
 	defer epochTicker.Stop()
 	defer cmdLeaseTicker.Stop()
 
 	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		w.runRedisRenewal(ctx, redisTicker, signalDemotion)
-	}()
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		w.runEpochRenewal(ctx, epochTicker, signalDemotion)
@@ -503,6 +546,15 @@ func (w *Worker) wait(ctx context.Context) error {
 		return ctx.Err()
 	case <-time.After(w.config.IdlePoll):
 		return nil
+	}
+}
+
+func isSignaled(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -73,6 +73,7 @@ ldap:
 worker:
   lease_ttl: 15s
   renew_interval: 5s
+  recover_timeout: 30s
 
 # 流程命令等待超时
 command_wait_timeout: 30s

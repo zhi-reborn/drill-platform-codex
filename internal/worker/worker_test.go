@@ -73,15 +73,15 @@ func (f *fakeLease) firstRenewed() <-chan struct{} {
 }
 
 type fakeClaimer struct {
-	mu           sync.Mutex
-	claimResult  *entity.FlowCommand
-	claimOnce    bool
-	claimedOnce  bool
-	claimErr     error
-	claimCalls   int
-	firstClaimAt time.Time
-	requeueCalls int
-	firstClaimCh chan struct{}
+	mu             sync.Mutex
+	claimResult    *entity.FlowCommand
+	claimOnce      bool
+	claimedOnce    bool
+	claimErr       error
+	claimCalls     int
+	firstClaimAt   time.Time
+	requeueCalls   int
+	firstClaimCh   chan struct{}
 	firstClaimOnce sync.Once
 }
 
@@ -126,18 +126,34 @@ func (f *fakeClaimer) firstClaimed() <-chan struct{} {
 }
 
 type fakeRecoverer struct {
-	mu       sync.Mutex
-	called   bool
-	calledAt time.Time
-	err      error
+	mu        sync.Mutex
+	called    bool
+	calledAt  time.Time
+	err       error
+	startedCh chan struct{}
+	startOnce sync.Once
+	blockCh   chan struct{}
 }
 
 func (f *fakeRecoverer) Recover(ctx context.Context) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.called = true
 	f.calledAt = time.Now()
-	return f.err
+	err := f.err
+	blockCh := f.blockCh
+	f.mu.Unlock()
+
+	if f.startedCh != nil {
+		f.startOnce.Do(func() { close(f.startedCh) })
+	}
+	if blockCh != nil {
+		select {
+		case <-blockCh:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return err
 }
 
 func (f *fakeRecoverer) wasCalled() bool {
@@ -150,6 +166,16 @@ func (f *fakeRecoverer) callTime() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calledAt
+}
+
+func (f *fakeRecoverer) started() <-chan struct{} {
+	return f.startedCh
+}
+
+func (f *fakeRecoverer) release() {
+	if f.blockCh != nil {
+		close(f.blockCh)
+	}
 }
 
 type fakeExecutor struct {
@@ -184,14 +210,14 @@ func (f *fakeExecutor) fence() ExecutionFence {
 // blockingExecutor signals when execution starts and blocks until released.
 // Used to verify renewal tickers keep running while a command is in-flight.
 type blockingExecutor struct {
-	mu           sync.Mutex
-	calls        int
-	lastCmd      *entity.FlowCommand
-	lastFence    ExecutionFence
-	startedCh    chan struct{}
-	startedOnce  sync.Once
-	releaseCh    chan struct{}
-	releaseOnce  sync.Once
+	mu          sync.Mutex
+	calls       int
+	lastCmd     *entity.FlowCommand
+	lastFence   ExecutionFence
+	startedCh   chan struct{}
+	startedOnce sync.Once
+	releaseCh   chan struct{}
+	releaseOnce sync.Once
 }
 
 func newBlockingExecutor() *blockingExecutor {
@@ -463,6 +489,101 @@ func TestAcquiringLeadershipInvokesRecovery(t *testing.T) {
 	}
 }
 
+func TestRedisLeaseRenewalRunsDuringRecovery(t *testing.T) {
+	lease := &fakeLease{
+		value:          "worker-recover-renew/token",
+		acquireResults: []bool{true},
+		renewResult:    true,
+		firstRenewCh:   make(chan struct{}),
+	}
+	claimer := &fakeClaimer{claimResult: nil, firstClaimCh: make(chan struct{})}
+	recoverer := &fakeRecoverer{
+		startedCh: make(chan struct{}),
+		blockCh:   make(chan struct{}),
+	}
+	executor := &fakeExecutor{}
+	epochRenewer := &fakeEpochRenewer{firstAdvanceCh: make(chan struct{})}
+
+	cfg := newTestConfig()
+	cfg.RenewInterval = 5 * time.Millisecond
+
+	w := NewWorker(cfg, lease, claimer, recoverer, executor, epochRenewer, nil, "worker-recover-renew")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runWorkerAsync(t, w, ctx)
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	select {
+	case <-recoverer.started():
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Recover was never started")
+	}
+
+	select {
+	case <-lease.firstRenewed():
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("lease.Renew was not called while recovery was still running")
+	}
+
+	if w.Status() != StatusRecovering {
+		t.Fatalf("Status = %q, want %q while recovery is running", w.Status(), StatusRecovering)
+	}
+
+	recoverer.release()
+}
+
+func TestRecoveryTimeoutDemotesWorker(t *testing.T) {
+	lease := &fakeLease{
+		value:          "worker-recover-timeout/token",
+		acquireResults: []bool{true},
+		renewResult:    true,
+		firstRenewCh:   make(chan struct{}),
+	}
+	claimer := &fakeClaimer{claimResult: nil, firstClaimCh: make(chan struct{})}
+	recoverer := &fakeRecoverer{
+		startedCh: make(chan struct{}),
+		blockCh:   make(chan struct{}),
+	}
+	executor := &fakeExecutor{}
+	epochRenewer := &fakeEpochRenewer{firstAdvanceCh: make(chan struct{})}
+
+	cfg := newTestConfig()
+	cfg.RenewInterval = 5 * time.Millisecond
+	cfg.RecoverTimeout = 20 * time.Millisecond
+
+	w := NewWorker(cfg, lease, claimer, recoverer, executor, epochRenewer, nil, "worker-recover-timeout")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runWorkerAsync(t, w, ctx)
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	select {
+	case <-recoverer.started():
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Recover was never started")
+	}
+
+	deadline := time.After(300 * time.Millisecond)
+	for lease.releaseCount() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("worker did not release lease after recovery timeout")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if claimer.claimCount() != 0 {
+		t.Fatalf("ClaimNext called %d times after recovery timed out, want 0", claimer.claimCount())
+	}
+}
+
 func TestRenewalFailureStopsNewClaims(t *testing.T) {
 	lease := &fakeLease{
 		value:          "worker-renew/token",
@@ -596,9 +717,9 @@ func TestRenewalRunsDuringLongCommand(t *testing.T) {
 		firstRenewCh:   make(chan struct{}),
 	}
 	claimer := &fakeClaimer{
-		claimResult:   &entity.FlowCommand{ID: 1, CommandType: "test", LeaseToken: "tok-1"},
-		claimOnce:     true,
-		firstClaimCh:  make(chan struct{}),
+		claimResult:  &entity.FlowCommand{ID: 1, CommandType: "test", LeaseToken: "tok-1"},
+		claimOnce:    true,
+		firstClaimCh: make(chan struct{}),
 	}
 	recoverer := &fakeRecoverer{}
 	executor := newBlockingExecutor()

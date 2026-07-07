@@ -493,6 +493,15 @@ func (e *FlowCommandExecutor) transitionStepInTx(
 		if err := tx.First(&step, *cmd.StepInstanceID).Error; err != nil {
 			return err
 		}
+		if to == "running" {
+			startedAt := time.Now()
+			if step.StartTime != nil {
+				startedAt = *step.StartTime
+			}
+			if err := e.startPendingAncestorsInTx(tx, &step, startedAt); err != nil {
+				return err
+			}
+		}
 
 		cmdID := cmd.ID
 		logEntry := e.buildStepLog(tx, cmd, &step, to)
@@ -556,6 +565,42 @@ func (e *FlowCommandExecutor) transitionStepInTx(
 	}
 
 	e.publishCollected(collectedEvents)
+	return nil
+}
+
+func (e *FlowCommandExecutor) startPendingAncestorsInTx(tx *gorm.DB, step *entity.StepInstance, startedAt time.Time) error {
+	if step == nil || step.ParentStepID == nil {
+		return nil
+	}
+
+	parentID := *step.ParentStepID
+	visited := map[uint64]bool{}
+	for parentID != 0 {
+		if visited[parentID] {
+			return &commandError{Code: "invalid_step_tree", Message: "step parent cycle detected"}
+		}
+		visited[parentID] = true
+
+		var parent entity.StepInstance
+		if err := tx.First(&parent, parentID).Error; err != nil {
+			return err
+		}
+		if parent.Status == "pending" {
+			res := tx.Model(&entity.StepInstance{}).
+				Where("id = ? AND status = ?", parent.ID, "pending").
+				Updates(map[string]any{
+					"status":     "running",
+					"start_time": startedAt,
+				})
+			if res.Error != nil {
+				return res.Error
+			}
+		}
+		if parent.ParentStepID == nil {
+			break
+		}
+		parentID = *parent.ParentStepID
+	}
 	return nil
 }
 
