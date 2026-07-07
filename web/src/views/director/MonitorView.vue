@@ -1389,32 +1389,54 @@ async function loadDrillData() {
   }
 }
 
+// 演练状态乐观更新
+function optimisticUpdateInstanceStatus(newStatus: 'pending' | 'running' | 'paused' | 'completed' | 'terminated') {
+  if (!instance.value) return
+  instance.value = { ...instance.value, status: newStatus }
+}
+
 async function handlePause() {
+  const previousStatus = instance.value?.status
+  optimisticUpdateInstanceStatus('paused')
   try {
     await drillApi.pause(drillId.value)
     ElMessage.success('演练已暂停')
-    loadDrillData()
+    // 状态已乐观更新，WebSocket 会自动推送日志刷新
+    // 仅在 API 成功后延迟刷新，确保数据一致性
+    scheduleInstanceDetailRefresh(500)
   } catch (error) {
+    // 回滚状态
+    if (previousStatus) optimisticUpdateInstanceStatus(previousStatus)
     ElMessage.error('暂停失败')
   }
 }
 
 async function handleResume() {
+  const previousStatus = instance.value?.status
+  optimisticUpdateInstanceStatus('running')
   try {
     await drillApi.resume(drillId.value)
     ElMessage.success('演练已继续')
-    loadDrillData()
+    scheduleInstanceDetailRefresh(500)
+    // 继续后自动开始轮询刷新步骤
+    startFallbackPolling()
   } catch (error) {
+    if (previousStatus) optimisticUpdateInstanceStatus(previousStatus)
     ElMessage.error('继续失败')
   }
 }
 
 async function handleStart() {
+  const previousStatus = instance.value?.status
+  optimisticUpdateInstanceStatus('running')
   try {
     await drillApi.start(drillId.value)
     ElMessage.success('演练已启动')
-    loadDrillData()
+    scheduleInstanceDetailRefresh(500)
+    // 启动后自动开始轮询刷新步骤
+    startFallbackPolling()
   } catch (error) {
+    if (previousStatus) optimisticUpdateInstanceStatus(previousStatus)
     ElMessage.error('启动失败')
   }
 }
