@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"drill-platform/internal/service"
 	"drill-platform/internal/worker"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -72,6 +74,17 @@ func toServiceLDAP(l appconfig.LDAPConfig) service.LDAPConfig {
 	}
 }
 
+func applyGinMode(mode string) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case gin.ReleaseMode:
+		gin.SetMode(gin.ReleaseMode)
+	case gin.TestMode:
+		gin.SetMode(gin.TestMode)
+	default:
+		gin.SetMode(gin.DebugMode)
+	}
+}
+
 func main() {
 	// 1. Load and validate configuration.
 	configPaths := []string{
@@ -100,6 +113,7 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("配置校验失败：%v", err)
 	}
+	applyGinMode(cfg.Server.Mode)
 	log.Printf("应用角色: %s, 实例ID: %s", cfg.AppRole, cfg.InstanceID)
 
 	// 2. Initialize database.

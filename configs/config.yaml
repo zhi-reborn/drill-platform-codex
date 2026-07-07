@@ -6,7 +6,7 @@ instance_id: node-1      # worker/all 角色必须非空
 
 server:
   port: 8080
-  mode: debug  # debug, release, test
+  mode: release  # debug, release, test
 
 database:
   driver: mysql

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -221,13 +222,21 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		w.setStatus(StatusStandby)
 		acquired, err := w.lease.Acquire(runCtx)
-		if err != nil || !acquired {
+		if err != nil {
+			log.Printf("[Worker:%s] Acquire error: %v", w.workerID, err)
+			if err := w.wait(runCtx); err != nil {
+				return w.exitErr(err)
+			}
+			continue
+		}
+		if !acquired {
 			if err := w.wait(runCtx); err != nil {
 				return w.exitErr(err)
 			}
 			continue
 		}
 
+		log.Printf("[Worker:%s] acquired lease, entering serveAsLeader", w.workerID)
 		if err := w.serveAsLeader(runCtx); err != nil {
 			return w.exitErr(err)
 		}
@@ -240,11 +249,14 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) serveAsLeader(runCtx context.Context) error {
 	w.setStatus(StatusRecovering)
 	if w.recoverer != nil {
+		log.Printf("[Worker:%s] recovering flow state...", w.workerID)
 		if err := w.recoverer.Recover(runCtx); err != nil {
+			log.Printf("[Worker:%s] Recover failed: %v", w.workerID, err)
 			_, _ = w.lease.Release(runCtx)
 			w.setStatus(StatusStandby)
 			return w.wait(runCtx)
 		}
+		log.Printf("[Worker:%s] recover completed", w.workerID)
 	}
 
 	// Acquire the MySQL epoch BEFORE claiming any command. This guarantees
@@ -252,8 +264,10 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 	// any prior worker's, so a stale worker cannot commit after a newer
 	// worker has taken over.
 	if w.epochRenewer != nil {
+		log.Printf("[Worker:%s] advancing epoch...", w.workerID)
 		epoch, err := w.epochRenewer.AdvanceEpoch(runCtx, w.workerID, w.config.LeaseTTL)
 		if err != nil || epoch == nil {
+			log.Printf("[Worker:%s] AdvanceEpoch failed: err=%v epoch=%v", w.workerID, err, epoch)
 			_, _ = w.lease.Release(runCtx)
 			w.setStatus(StatusStandby)
 			return w.wait(runCtx)
@@ -261,14 +275,18 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 		w.mu.Lock()
 		w.currentEpoch = epoch.Epoch
 		w.mu.Unlock()
+		log.Printf("[Worker:%s] epoch advanced: epoch=%d", w.workerID, epoch.Epoch)
 	}
 
+	log.Printf("[Worker:%s] requeueing expired commands...", w.workerID)
 	if _, err := w.claimer.RequeueExpired(time.Now()); err != nil {
+		log.Printf("[Worker:%s] RequeueExpired failed: %v", w.workerID, err)
 		_, _ = w.lease.Release(runCtx)
 		w.setStatus(StatusStandby)
 		return w.wait(runCtx)
 	}
 
+	log.Printf("[Worker:%s] became leader (leader-ready)", w.workerID)
 	w.setStatus(StatusLeaderReady)
 	return w.runLeaderLoop(runCtx)
 }
@@ -307,8 +325,10 @@ func (w *Worker) runLeaderLoop(runCtx context.Context) error {
 		case <-demotionCh:
 			// Stop the renewals and wait for them to exit before
 			// returning, so the next acquisition starts clean.
+			log.Printf("[Worker:%s] demoted from leader, releasing lease", w.workerID)
 			cancelLeader()
 			<-renewalDone
+			_, _ = w.lease.Release(runCtx)
 			w.setStatus(StatusStandby)
 			return nil
 		case <-idleTimer.C:
@@ -357,6 +377,7 @@ func (w *Worker) runRedisRenewal(ctx context.Context, ticker *time.Ticker, signa
 		case <-ticker.C:
 			ok, err := w.lease.Renew(ctx)
 			if err != nil || !ok {
+				log.Printf("[Worker:%s] redis lease renewal failed: ok=%v err=%v", w.workerID, ok, err)
 				signalDemotion()
 				return
 			}
@@ -378,6 +399,7 @@ func (w *Worker) runEpochRenewal(ctx context.Context, ticker *time.Ticker, signa
 		case <-ticker.C:
 			epoch, err := w.epochRenewer.AdvanceEpoch(ctx, w.workerID, w.config.LeaseTTL)
 			if err != nil || epoch == nil {
+				log.Printf("[Worker:%s] epoch renewal failed: err=%v epoch=%v", w.workerID, err, epoch)
 				signalDemotion()
 				return
 			}
@@ -410,6 +432,7 @@ func (w *Worker) runCommandLeaseRenewal(ctx context.Context, ticker *time.Ticker
 				}
 				ok, err := w.leaseExtender.ExtendLeaseFenced(ctx, id, ownership, time.Now().Add(w.config.CommandLease))
 				if err != nil || !ok {
+					log.Printf("[Worker:%s] command lease renewal failed: id=%d ok=%v err=%v", w.workerID, id, ok, err)
 					signalDemotion()
 					return
 				}
