@@ -62,18 +62,18 @@ func (e *Engine) requiresManualStartAtPhaseBoundary(inst *FlowInst, completedSte
 
 	completedRoot := inst.Steps[completedRootID]
 	nextRoot := inst.Steps[nextRootID]
-	
+
 	// 同阶段内的跨环节，允许自动启动
 	if completedRoot.Phase != "" && completedRoot.Phase == nextRoot.Phase {
 		return false
 	}
 
-	// 只有真正的跨阶段（Phase不同）才需要手动启动
-	if completedRoot.Phase == "" || nextRoot.Phase == "" {
-		return false
+	// 明确跨不同阶段时，需要人工确认启动下一阶段。
+	if completedRoot.Phase != "" && nextRoot.Phase != "" {
+		return true
 	}
 
-	// 跨阶段时，仅当有子步骤才需要手动启动
+	// 阶段信息缺失时，仅当根节点表现为阶段容器才需要手动启动。
 	return e.hasChildSteps(inst, completedRootID) || e.hasChildSteps(inst, nextRootID)
 }
 

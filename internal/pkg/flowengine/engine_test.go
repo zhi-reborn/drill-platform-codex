@@ -379,6 +379,35 @@ func TestCompleteStepAutoStartsNextRootWithinSamePhase(t *testing.T) {
 	}
 }
 
+func TestCompleteStepRequiresManualStartAcrossDifferentRootPhases(t *testing.T) {
+	e, _ := newTestEngine()
+	flowDef := &FlowDef{
+		ID:   1,
+		Name: "different-root-phase-flow",
+		Steps: []*StepDef{
+			{ID: 100, Name: "phase1 task", Seq: 1, StepType: StepTypeSerial, TimeoutMinutes: 5, Phase: "phase-a"},
+			{ID: 200, Name: "phase2 task", Seq: 2, StepType: StepTypeSerial, TimeoutMinutes: 5, PreStepIDs: []int64{100}, Phase: "phase-b"},
+		},
+	}
+	loader := &testStepLoader{steps: map[int64]*StepDef{}}
+	for _, step := range flowDef.Steps {
+		loader.steps[step.ID] = step
+	}
+	e.SetStepLoader(loader)
+
+	inst, _ := e.CreateInstance(flowDef, nil, 1)
+	if err := e.Start(inst.ID); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	if err := e.CompleteStep(inst.ID, 100, 1, ""); err != nil {
+		t.Fatalf("CompleteStep phase1 task error: %v", err)
+	}
+
+	if inst.Steps[200].Status != StepStatusPending {
+		t.Fatalf("expected different root phase task to wait for manual start, got %s", inst.Steps[200].Status)
+	}
+}
+
 func TestCompleteStep_AllSteps(t *testing.T) {
 	e, _ := newTestEngine()
 	flowDef := newSerialFlowDef()
