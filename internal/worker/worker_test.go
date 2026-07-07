@@ -62,6 +62,12 @@ func (f *fakeLease) releaseCount() int {
 	return f.releaseCalls
 }
 
+func (f *fakeLease) acquireCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.acquireIdx
+}
+
 func (f *fakeLease) renewCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -581,6 +587,56 @@ func TestRecoveryTimeoutDemotesWorker(t *testing.T) {
 
 	if claimer.claimCount() != 0 {
 		t.Fatalf("ClaimNext called %d times after recovery timed out, want 0", claimer.claimCount())
+	}
+}
+
+func TestRecoveryTimeoutBacksOffBeforeReacquiring(t *testing.T) {
+	lease := &fakeLease{
+		value:          "worker-recover-backoff/token",
+		acquireResults: []bool{true, true},
+		renewResult:    true,
+		firstRenewCh:   make(chan struct{}),
+	}
+	claimer := &fakeClaimer{claimResult: nil, firstClaimCh: make(chan struct{})}
+	recoverer := &fakeRecoverer{
+		startedCh: make(chan struct{}),
+		blockCh:   make(chan struct{}),
+	}
+	executor := &fakeExecutor{}
+	epochRenewer := &fakeEpochRenewer{firstAdvanceCh: make(chan struct{})}
+
+	cfg := newTestConfig()
+	cfg.RenewInterval = 5 * time.Millisecond
+	cfg.RecoverTimeout = 80 * time.Millisecond
+
+	w := NewWorker(cfg, lease, claimer, recoverer, executor, epochRenewer, nil, "worker-recover-backoff")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runWorkerAsync(t, w, ctx)
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	select {
+	case <-recoverer.started():
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Recover was never started")
+	}
+
+	deadline := time.After(300 * time.Millisecond)
+	for lease.releaseCount() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("worker did not release lease after recovery timeout")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	if got := lease.acquireCount(); got != 1 {
+		t.Fatalf("Acquire called %d times before recovery backoff elapsed, want 1", got)
 	}
 }
 

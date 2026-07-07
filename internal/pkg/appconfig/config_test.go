@@ -100,6 +100,7 @@ var envKeys = []string{
 	"PUBLIC_BASE_URL",
 	"CAS_PUBLIC_URL", "CAS_SERVICE_URL",
 	"WORKER_LEASE_TTL", "WORKER_RENEW_INTERVAL",
+	"WORKER_RECOVER_TIMEOUT",
 	"COMMAND_WAIT_TIMEOUT",
 	"LOGIN_LOG_FILE",
 }
@@ -136,24 +137,25 @@ func TestLoad_ReadsYAMLDefaults(t *testing.T) {
 func TestLoad_EnvOverridesYAML(t *testing.T) {
 	clearEnv(t, envKeys...)
 	setEnv(t, map[string]string{
-		"APP_ROLE":              "worker",
-		"INSTANCE_ID":           "env-node",
-		"DATABASE_HOST":         "env-host",
-		"DATABASE_PORT":         "3307",
-		"DATABASE_USER":         "env-user",
-		"DATABASE_PASSWORD":     "env-pass",
-		"DATABASE_NAME":         "env-db",
-		"DATABASE_LOG_SQL":      "false",
-		"REDIS_ADDR":            "env-redis:6380",
-		"REDIS_PASSWORD":        "env-redis-pass",
-		"JWT_SECRET":            "env-secret",
-		"PUBLIC_BASE_URL":       "http://env.example.com",
-		"CAS_PUBLIC_URL":        "http://env.cas.example.com",
-		"CAS_SERVICE_URL":       "http://env.svc.example.com",
-		"WORKER_LEASE_TTL":      "30s",
-		"WORKER_RENEW_INTERVAL": "10s",
-		"COMMAND_WAIT_TIMEOUT":  "45s",
-		"LOGIN_LOG_FILE":        "logs/env.log",
+		"APP_ROLE":               "worker",
+		"INSTANCE_ID":            "env-node",
+		"DATABASE_HOST":          "env-host",
+		"DATABASE_PORT":          "3307",
+		"DATABASE_USER":          "env-user",
+		"DATABASE_PASSWORD":      "env-pass",
+		"DATABASE_NAME":          "env-db",
+		"DATABASE_LOG_SQL":       "false",
+		"REDIS_ADDR":             "env-redis:6380",
+		"REDIS_PASSWORD":         "env-redis-pass",
+		"JWT_SECRET":             "env-secret",
+		"PUBLIC_BASE_URL":        "http://env.example.com",
+		"CAS_PUBLIC_URL":         "http://env.cas.example.com",
+		"CAS_SERVICE_URL":        "http://env.svc.example.com",
+		"WORKER_LEASE_TTL":       "30s",
+		"WORKER_RENEW_INTERVAL":  "10s",
+		"WORKER_RECOVER_TIMEOUT": "2m",
+		"COMMAND_WAIT_TIMEOUT":   "45s",
+		"LOGIN_LOG_FILE":         "logs/env.log",
 	})
 	path := writeYAML(t, baseYAML)
 
@@ -209,6 +211,9 @@ func TestLoad_EnvOverridesYAML(t *testing.T) {
 	}
 	if cfg.Worker.RenewInterval != 10*time.Second {
 		t.Errorf("Worker.RenewInterval = %v, want 10s", cfg.Worker.RenewInterval)
+	}
+	if cfg.Worker.RecoverTimeout != 2*time.Minute {
+		t.Errorf("Worker.RecoverTimeout = %v, want 2m", cfg.Worker.RecoverTimeout)
 	}
 	if cfg.CommandWaitTimeout != 45*time.Second {
 		t.Errorf("CommandWaitTimeout = %v, want 45s", cfg.CommandWaitTimeout)

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -22,12 +23,12 @@ type Config struct {
 }
 
 // DefaultConfig returns the plan-approved defaults: 15s lease TTL, 5s renewal,
-// 60s command lease, and 500ms idle polling.
+// 120s recovery timeout, 60s command lease, and 500ms idle polling.
 func DefaultConfig() Config {
 	return Config{
 		LeaseTTL:       15 * time.Second,
 		RenewInterval:  5 * time.Second,
-		RecoverTimeout: 30 * time.Second,
+		RecoverTimeout: 120 * time.Second,
 		CommandLease:   60 * time.Second,
 		IdlePoll:       500 * time.Millisecond,
 	}
@@ -238,7 +239,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
-		log.Printf("[Worker:%s] acquired lease, entering serveAsLeader", w.workerID)
+		log.Printf("[Worker:%s] acquired leader lease, entering recovery", w.workerID)
 		if err := w.serveAsLeader(runCtx); err != nil {
 			return w.exitErr(err)
 		}
@@ -288,6 +289,9 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 			w.setStatus(StatusStandby)
 			if isSignaled(demotionCh) {
 				return nil
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return w.waitRecoveryBackoff(runCtx)
 			}
 			return w.wait(runCtx)
 		}
@@ -541,10 +545,26 @@ func (w *Worker) snapshotInflight() map[uint64]ExecutionFence {
 
 // wait blocks for the idle poll interval or until the context is cancelled.
 func (w *Worker) wait(ctx context.Context) error {
+	return w.waitFor(ctx, w.config.IdlePoll)
+}
+
+func (w *Worker) waitRecoveryBackoff(ctx context.Context) error {
+	backoff := w.config.RecoverTimeout
+	if backoff <= 0 {
+		backoff = w.config.LeaseTTL
+	}
+	if backoff <= 0 {
+		backoff = w.config.IdlePoll
+	}
+	log.Printf("[Worker:%s] recovery timed out; backing off for %s before retrying leadership", w.workerID, backoff)
+	return w.waitFor(ctx, backoff)
+}
+
+func (w *Worker) waitFor(ctx context.Context, d time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(w.config.IdlePoll):
+	case <-time.After(d):
 		return nil
 	}
 }

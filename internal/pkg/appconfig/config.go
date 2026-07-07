@@ -156,7 +156,7 @@ func DefaultConfig() *Config {
 		Worker: WorkerConfig{
 			LeaseTTL:       15 * time.Second,
 			RenewInterval:  5 * time.Second,
-			RecoverTimeout: 30 * time.Second,
+			RecoverTimeout: 120 * time.Second,
 		},
 		CommandWaitTimeout: 30 * time.Second,
 		LoginLogFile:       "",

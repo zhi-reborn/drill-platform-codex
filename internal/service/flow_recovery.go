@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -79,7 +80,10 @@ func (r *FlowRecovery) RecoverAll(ctx context.Context) error {
 			return err
 		}
 		drillID := drills[i].ID
-		if err := r.drillService.Recover(drillID); err != nil {
+		if err := r.drillService.RecoverContext(ctx, drillID); err != nil {
+			if isContextDone(err) {
+				return err
+			}
 			log.Printf("[FlowRecovery] Recover drill %d failed: %v (continuing)", drillID, err)
 			continue
 		}
@@ -87,10 +91,17 @@ func (r *FlowRecovery) RecoverAll(ctx context.Context) error {
 			return err
 		}
 		if err := r.registerTimeouts(ctx, drillID); err != nil {
+			if isContextDone(err) {
+				return err
+			}
 			log.Printf("[FlowRecovery] register timeouts for drill %d failed: %v (continuing)", drillID, err)
 		}
 	}
 	return nil
+}
+
+func isContextDone(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // registerTimeouts inspects the steps of a recovered drill and:
@@ -113,7 +124,7 @@ func (r *FlowRecovery) registerTimeouts(ctx context.Context, drillID uint64) err
 		return fmt.Errorf("timeout scheduler not available for drill %d", drillID)
 	}
 
-	steps, err := r.stepRepo.FindStepsByDrillID(drillID)
+	steps, err := r.stepRepo.FindStepsByDrillIDContext(ctx, drillID)
 	if err != nil {
 		return fmt.Errorf("load steps for drill %d: %w", drillID, err)
 	}
