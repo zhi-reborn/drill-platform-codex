@@ -306,6 +306,19 @@ func TestFlowRecovery_RecoverAll_RestoresAdapterContext(t *testing.T) {
 	}
 }
 
+func TestFlowRecovery_RecoverAll_StopsWhenContextCanceled(t *testing.T) {
+	recovery, _, engine, _, drillID, _ := newFlowRecoveryForTest(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := recovery.RecoverAll(ctx); err != context.Canceled {
+		t.Fatalf("RecoverAll error = %v, want %v", err, context.Canceled)
+	}
+	if _, ok := engine.GetInstance(int64(drillID)); ok {
+		t.Fatal("expected canceled recovery not to rebuild the drill instance")
+	}
+}
+
 func TestFlowRecovery_RecoverAll_AdvancesFromNewlyReconciledParent(t *testing.T) {
 	db := setupFlowRecoveryTestDB(t)
 	origDB := repository.DB

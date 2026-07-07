@@ -64,20 +64,29 @@ func (r *FlowRecovery) Recover(ctx context.Context) error {
 //
 // Recovery itself does not execute timeout effects directly.
 func (r *FlowRecovery) RecoverAll(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var drills []entity.DrillInstance
-	if err := repository.DB.
+	if err := repository.DB.WithContext(ctx).
 		Where("status IN ?", []string{"running", "paused"}).
 		Find(&drills).Error; err != nil {
 		return fmt.Errorf("load running/paused drills: %w", err)
 	}
 
 	for i := range drills {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		drillID := drills[i].ID
 		if err := r.drillService.Recover(drillID); err != nil {
 			log.Printf("[FlowRecovery] Recover drill %d failed: %v (continuing)", drillID, err)
 			continue
 		}
-		if err := r.registerTimeouts(drillID); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := r.registerTimeouts(ctx, drillID); err != nil {
 			log.Printf("[FlowRecovery] register timeouts for drill %d failed: %v (continuing)", drillID, err)
 		}
 	}
@@ -91,7 +100,10 @@ func (r *FlowRecovery) RecoverAll(ctx context.Context) error {
 //   - Submits an internal step_timeout command for steps with an expired
 //     TimeoutAt and running status, so the Worker can process the timeout
 //     through the durable command queue.
-func (r *FlowRecovery) registerTimeouts(drillID uint64) error {
+func (r *FlowRecovery) registerTimeouts(ctx context.Context, drillID uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	engine := r.drillService.Engine()
 	if engine == nil {
 		return fmt.Errorf("engine not initialized for drill %d", drillID)
@@ -108,6 +120,9 @@ func (r *FlowRecovery) registerTimeouts(drillID uint64) error {
 
 	now := time.Now()
 	for _, step := range steps {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if step.Status != "running" || step.TimeoutAt == nil {
 			continue
 		}

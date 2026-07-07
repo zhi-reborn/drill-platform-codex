@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 
 	"drill-platform/internal/domain/entity"
@@ -62,8 +63,12 @@ func (r *StepRepo) FindStepsByDrillIDs(drillIDs []uint64) (map[uint64][]entity.S
 }
 
 func (r *StepRepo) FindStepsByDrillID(drillID uint64) ([]entity.StepInstance, error) {
+	return r.FindStepsByDrillIDContext(context.Background(), drillID)
+}
+
+func (r *StepRepo) FindStepsByDrillIDContext(ctx context.Context, drillID uint64) ([]entity.StepInstance, error) {
 	var steps []entity.StepInstance
-	err := DB.Where("drill_instance_id = ?", drillID).Order("seq ASC").Find(&steps).Error
+	err := DB.WithContext(ctx).Where("drill_instance_id = ?", drillID).Order("seq ASC").Find(&steps).Error
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +85,7 @@ func (r *StepRepo) FindStepsByDrillID(drillID uint64) ([]entity.StepInstance, er
 			ActionParam string
 		}
 		var rows []row
-		DB.Table("drill_instance_step").Select("id, action_params").Where("id IN ?", ids).Scan(&rows)
+		DB.WithContext(ctx).Table("drill_instance_step").Select("id, action_params").Where("id IN ?", ids).Scan(&rows)
 		m := make(map[uint64]string, len(rows))
 		for _, r := range rows {
 			m[r.ID] = r.ActionParam

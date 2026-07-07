@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,19 +53,35 @@ func (s *DrillService) Engine() *flowengine.Engine {
 }
 
 func (s *DrillService) Recover(id uint64) error {
-	drill, err := s.drillRepo.FindByID(id)
+	return s.RecoverContext(context.Background(), id)
+}
+
+func (s *DrillService) RecoverContext(ctx context.Context, id uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	var drill entity.DrillInstance
+	err := repository.DB.WithContext(ctx).Where("id = ?", id).Preload("Template").First(&drill).Error
 	if err != nil {
 		return err
 	}
 
-	template, err := s.templateRepo.FindByID(drill.TemplateID)
-	if err != nil || template == nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var template entity.DrillTemplate
+	err = repository.DB.WithContext(ctx).Preload("Steps").First(&template, drill.TemplateID).Error
+	if err != nil {
 		return errors.New("关联模板不存在")
 	}
 
-	flowDef := s.adapter.BuildFlowDef(template)
+	flowDef := s.adapter.BuildFlowDef(&template)
 	flowDef.ID = int64(drill.ID)
-	assignees := s.adapter.BuildAssignees(drill.ID)
+	assignees := s.adapter.BuildAssigneesContext(ctx, drill.ID)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.adapter.RegisterDrillContext(int64(drill.ID), drillContext{
 		ID:         drill.ID,
 		Name:       drill.Name,
@@ -78,20 +95,23 @@ func (s *DrillService) Recover(id uint64) error {
 	}
 	inst.Status = flowengine.FlowStatus(drill.Status)
 
-	steps, err := s.stepRepo.FindStepsByDrillID(id)
+	steps, err := s.stepRepo.FindStepsByDrillIDContext(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.backfillMissingStepTemplateIDs(drill.ID, template.Steps, steps); err != nil {
+	if err := s.backfillMissingStepTemplateIDsContext(ctx, drill.ID, template.Steps, steps); err != nil {
 		return err
 	}
 
 	// 同步内存中步骤实例的 ID 到数据库 ID
-	s.adapter.SyncStepInstanceIDs(int64(drill.ID))
+	s.adapter.SyncStepInstanceIDsContext(ctx, int64(drill.ID))
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// 重新计算前序步骤 ID（确保使用最新算法）
-	s.computeInstancePreStepIDsTx(steps, template.Steps, repository.DB)
+	s.computeInstancePreStepIDsTx(steps, template.Steps, repository.DB.WithContext(ctx))
 
 	// 同步前序步骤 ID（将实例 ID 转换为模板步骤 ID）
 	s.syncPreStepIDsToEngine(int64(drill.ID))
@@ -114,8 +134,8 @@ func (s *DrillService) Recover(id uint64) error {
 	}
 
 	// 协调状态：自动完成所有子步骤已终态但自身未终态的父步骤
-	s.reconcileParentSteps(int64(drill.ID), steps)
-	steps, err = s.stepRepo.FindStepsByDrillID(id)
+	s.reconcileParentStepsContext(ctx, int64(drill.ID), steps)
+	steps, err = s.stepRepo.FindStepsByDrillIDContext(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -125,6 +145,9 @@ func (s *DrillService) Recover(id uint64) error {
 	// 对每个已终态的步骤调用 AdvanceFlow，触发 handleStepCompletion 推进流程
 	if drill.Status == "running" {
 		for _, step := range steps {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if step.Status == "completed" || step.Status == "skipped" ||
 				step.Status == "timeout" || step.Status == "issue" {
 				s.engine.AdvanceFlow(int64(drill.ID), int64(step.StepTemplateID))
@@ -138,6 +161,10 @@ func (s *DrillService) Recover(id uint64) error {
 // reconcileParentSteps 检查并自动完成所有子步骤已终态但自身未终态的父步骤
 // 从最深层开始向上逐层处理，确保多层嵌套时祖先节点也能正确完成
 func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.StepInstance) {
+	s.reconcileParentStepsContext(context.Background(), flowInstID, steps)
+}
+
+func (s *DrillService) reconcileParentStepsContext(ctx context.Context, flowInstID int64, steps []entity.StepInstance) {
 	inst, ok := s.engine.GetInstanceForMutate(flowInstID)
 	if !ok {
 		return
@@ -182,6 +209,9 @@ func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.Ste
 	// 从最深层开始，逐层向上处理
 	for d := maxDepth; d >= 0; d-- {
 		for stepDefID, si := range stepMap {
+			if ctx.Err() != nil {
+				return
+			}
 			if depth[stepDefID] != d {
 				continue
 			}
@@ -226,7 +256,7 @@ func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.Ste
 			// 更新数据库
 			for _, step := range steps {
 				if step.StepTemplateID == uint64(stepDefID) {
-					repository.DB.Model(&entity.StepInstance{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
+					repository.DB.WithContext(ctx).Model(&entity.StepInstance{}).Where("id = ?", step.ID).Updates(map[string]interface{}{
 						"status":   string(flowengine.StepStatusCompleted),
 						"end_time": &now,
 					})
@@ -242,7 +272,7 @@ func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.Ste
 					break
 				}
 			}
-			repository.DB.Create(&entity.DrillInstanceLog{
+			repository.DB.WithContext(ctx).Create(&entity.DrillInstanceLog{
 				DrillInstanceID: uint64(flowInstID),
 				Action:          "auto_complete",
 				OperatorName:    "流程引擎",
@@ -256,6 +286,10 @@ func (s *DrillService) reconcileParentSteps(flowInstID int64, steps []entity.Ste
 }
 
 func (s *DrillService) backfillMissingStepTemplateIDs(drillID uint64, templateSteps []entity.StepTemplate, steps []entity.StepInstance) error {
+	return s.backfillMissingStepTemplateIDsContext(context.Background(), drillID, templateSteps, steps)
+}
+
+func (s *DrillService) backfillMissingStepTemplateIDsContext(ctx context.Context, drillID uint64, templateSteps []entity.StepTemplate, steps []entity.StepInstance) error {
 	bySeqName := make(map[string]uint64, len(templateSteps))
 	bySeq := make(map[int]uint64, len(templateSteps))
 	templateIDs := make(map[uint64]struct{}, len(templateSteps))
@@ -268,6 +302,9 @@ func (s *DrillService) backfillMissingStepTemplateIDs(drillID uint64, templateSt
 	}
 
 	for i := range steps {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// 已存在且指向有效模板步骤则跳过；否则按 seq+name 重新匹配
 		if _, ok := templateIDs[steps[i].StepTemplateID]; ok {
 			continue
@@ -280,7 +317,7 @@ func (s *DrillService) backfillMissingStepTemplateIDs(drillID uint64, templateSt
 			return errors.New("步骤模板映射不存在")
 		}
 		steps[i].StepTemplateID = stepTemplateID
-		if err := repository.DB.Model(&entity.StepInstance{}).
+		if err := repository.DB.WithContext(ctx).Model(&entity.StepInstance{}).
 			Where("drill_instance_id = ? AND id = ?", drillID, steps[i].ID).
 			Update("template_step_id", stepTemplateID).Error; err != nil {
 			return err

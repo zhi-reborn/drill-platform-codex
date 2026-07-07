@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -330,8 +331,12 @@ func (a *DrillFlowAdapter) OnStepStatusChanged(stepInstID int64, oldStatus, newS
 }
 
 func (a *DrillFlowAdapter) SyncStepInstanceIDs(flowInstID int64) {
+	a.SyncStepInstanceIDsContext(context.Background(), flowInstID)
+}
+
+func (a *DrillFlowAdapter) SyncStepInstanceIDsContext(ctx context.Context, flowInstID int64) {
 	var steps []entity.StepInstance
-	repository.DB.Where("drill_instance_id = ?", flowInstID).Find(&steps)
+	repository.DB.WithContext(ctx).Where("drill_instance_id = ?", flowInstID).Find(&steps)
 
 	inst, ok := a.engine.GetInstance(flowInstID)
 	if !ok {
@@ -1173,8 +1178,12 @@ func (a *DrillFlowAdapter) BuildFlowDef(template *entity.DrillTemplate) *floweng
 }
 
 func (a *DrillFlowAdapter) BuildAssignees(drillID uint64) map[int64][]int64 {
+	return a.BuildAssigneesContext(context.Background(), drillID)
+}
+
+func (a *DrillFlowAdapter) BuildAssigneesContext(ctx context.Context, drillID uint64) map[int64][]int64 {
 	var steps []entity.StepInstance
-	repository.DB.Where("drill_instance_id = ?", drillID).Find(&steps)
+	repository.DB.WithContext(ctx).Where("drill_instance_id = ?", drillID).Find(&steps)
 
 	assignees := make(map[int64][]int64)
 	for _, step := range steps {
