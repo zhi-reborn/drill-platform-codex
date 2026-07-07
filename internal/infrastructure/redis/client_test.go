@@ -70,6 +70,41 @@ func TestNewUniversalClientUsesSentinelWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestClientModeReportsConfiguredTopology(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{
+			name: "cluster",
+			cfg:  Config{ClusterAddrs: "redis-a:6379,redis-b:6379"},
+			want: "cluster",
+		},
+		{
+			name: "sentinel",
+			cfg:  Config{Addr: "sentinel-a:26379", SentinelMaster: "drill-master"},
+			want: "sentinel",
+		},
+		{
+			name: "standalone",
+			cfg:  Config{Addr: "redis:6379"},
+			want: "standalone",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &Client{rc: newUniversalClient(tc.cfg)}
+			defer client.Close()
+
+			if got := client.Mode(); got != tc.want {
+				t.Fatalf("Mode() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRedisTLSConfig(t *testing.T) {
 	if redisTLSConfig(false) != nil {
 		t.Fatal("redisTLSConfig(false) returned non-nil")

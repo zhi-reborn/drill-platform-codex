@@ -20,7 +20,9 @@ database:
   logSQL: false
 
 redis:
-  addr: redis:6379       # 优先使用 addr；host/port 保留向后兼容
+  # 单实例 Redis 使用 addr；Redis Cluster 必须使用 cluster_addrs，否则会在运行时收到 MOVED 重定向。
+  addr: redis:6379
+  # cluster_addrs: redis-1:6379,redis-2:6379,redis-3:6379
   host: redis
   port: 6379
   password: ""

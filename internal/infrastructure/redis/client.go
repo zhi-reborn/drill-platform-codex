@@ -113,6 +113,21 @@ func (c *Client) Raw() redis.UniversalClient {
 	return c.rc
 }
 
+func (c *Client) Mode() string {
+	switch c.rc.(type) {
+	case *redis.ClusterClient:
+		return "cluster"
+	case *redis.Client:
+		opts := c.rc.(*redis.Client).Options()
+		if opts.Addr == "FailoverClient" {
+			return "sentinel"
+		}
+		return "standalone"
+	default:
+		return "unknown"
+	}
+}
+
 func (c *Client) Get(key string) (string, error) {
 	return c.rc.Get(ctx, key).Result()
 }

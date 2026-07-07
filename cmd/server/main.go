@@ -150,7 +150,7 @@ func main() {
 			log.Printf("Redis连接失败 (可忽略): %v", err)
 		} else {
 			redisClient = rc
-			log.Println("Redis连接成功")
+			log.Printf("Redis连接成功 (mode=%s, addr=%s)", rc.Mode(), addr)
 		}
 	}
 
