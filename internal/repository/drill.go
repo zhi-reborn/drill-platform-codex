@@ -3,6 +3,7 @@ package repository
 import (
 	"drill-platform/internal/domain/entity"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -59,6 +60,11 @@ func (r *DrillRepo) Update(drill *entity.DrillInstance) error {
 
 func (r *DrillRepo) UpdateStatus(id uint64, status string) error {
 	return DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// UpdateStartTime 更新演练的开始时间（用于手动调整总耗时）
+func (r *DrillRepo) UpdateStartTime(id uint64, startTime time.Time) error {
+	return DB.Model(&entity.DrillInstance{}).Where("id = ?", id).Update("start_time", startTime).Error
 }
 
 // TransitionStatus performs a conditional status update: the row is updated

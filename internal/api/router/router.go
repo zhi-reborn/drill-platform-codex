@@ -83,6 +83,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.POST("/drills/:id/steps/resume-task", middleware.RequireDirectorOrAbove(), drillHandler.ResumeTask)
 			v1.POST("/drills/:id/steps/assign", middleware.RequireDirectorOrAbove(), drillHandler.AssignStep)
 			v1.PUT("/drills/:id/steps/info", middleware.RequireDirectorOrAbove(), drillHandler.UpdateStepInfo)
+			v1.PUT("/drills/:id/start-time", middleware.RequireDirectorOrAbove(), drillHandler.UpdateStartTime)
 
 			v1.GET("/tasks/my", taskHandler.GetMyTasks)
 			v1.GET("/tasks/:stepId", taskHandler.GetDetail)

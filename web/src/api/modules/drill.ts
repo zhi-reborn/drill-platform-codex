@@ -159,4 +159,13 @@ export const drillApi = {
       actionId: `drill:${drillId}:step:${stepId}:update-info`,
     })
   },
+
+  updateStartTime: (drillId: number, startTime: string): Promise<MutationResult<void>> => {
+    return mutationRequest<void>({
+      url: `/v1/drills/${drillId}/start-time`,
+      method: 'PUT',
+      data: { start_time: startTime },
+      actionId: `drill:${drillId}:update-start-time`,
+    })
+  },
 }

@@ -318,7 +318,7 @@
                 y="0"
                 text-anchor="start"
                 dominant-baseline="central"
-              >{{ isCurrentPhaseDone ? '完成' : '里程碑' }}</text>
+              >里程碑</text>
             </g>
           </g>
         </g>

@@ -111,13 +111,20 @@
           </div>
         </div>
 
-        <div class="kpi-card">
-          <span class="kpi-orb" />
+        <div class="kpi-card kpi-alert-card" :class="'alert-level-' + alertLevel">
+          <span class="kpi-orb kpi-orb-alert" :class="'orb-alert-' + alertLevel"></span>
           <div class="kpi-copy">
-            <span class="kpi-label-zh">总耗时</span>
+            <span class="kpi-label-zh">异常任务</span>
           </div>
-          <div class="kpi-value-row kpi-queue-row">
-            <span class="kpi-value-num">{{ totalDurationText }}</span>
+          <div class="kpi-value-row kpi-alert-row">
+            <div class="alert-value-block">
+              <span class="kpi-value-num alert-num" :class="'num-' + alertLevel">{{ abnormalTaskCount }}</span>
+            </div>
+          </div>
+          <!-- 异常任务详情提示 -->
+          <div v-if="abnormalTaskCount > 0" class="alert-detail-hint">
+            <span class="hint-dot"></span>
+            <span class="hint-text">查看步骤列表获取详情</span>
           </div>
         </div>
 
@@ -675,6 +682,33 @@ const totalDurationText = computed(() => {
   const m = Math.floor((elapsedSeconds.value % 3600) / 60)
   const s = elapsedSeconds.value % 60
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
+})
+
+// === 异常任务数指标 ===
+// 异常任务：状态为 issue 的任务
+const abnormalTaskCount = computed(() => {
+  if (!drillSteps.value || drillSteps.value.length === 0) return 0
+  // 计算异常任务：issue 状态的步骤
+  const issueCount = drillSteps.value.filter(s => s.status === 'issue').length
+  return issueCount
+})
+
+// 告警等级：safe (0个) -> warning (1-2个) -> danger (≥3个)
+const alertLevel = computed(() => {
+  const count = abnormalTaskCount.value
+  if (count === 0) return 'safe'
+  if (count <= 2) return 'warning'
+  return 'danger'
+})
+
+// 告警状态标签
+const alertLabel = computed(() => {
+  const labels: Record<string, string> = {
+    safe: '运行正常',
+    warning: '轻微异常',
+    danger: '需要关注'
+  }
+  return labels[alertLevel.value] || '运行正常'
 })
 
 // 状态标签
@@ -2071,7 +2105,152 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
   .txt-terminated { color: $danger; }
   .txt-pending { color: $text-dim; }
+
+  // === Alert Card - Abnormal Tasks ===
+  &.kpi-alert-card {
+    // 去掉边框与切角，让数字不受框线包围
+    border: none;
+    clip-path: none;
+    &::before, &::after { display: none; }
+
+    // 保持与其他卡片一致的背景与双列布局，确保标签水平线对齐
+    .kpi-alert-row {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: center; // 偏右但不贴边
+      align-self: center;
+    }
+
+    // 安全状态 - orb 与其他卡片保持一致（青蓝色）
+    &.alert-level-safe {
+      .alert-value-block {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+      }
+
+      .kpi-orb-alert {
+        background:
+          radial-gradient(circle at 36% 34%, #9ffcff 0 14%, #00d4ff 15% 28%, rgba(20, 255, 189, 0.85) 29% 45%, rgba(0, 74, 165, 0.7) 46% 100%);
+        box-shadow:
+          0 0 14px rgba(0, 212, 255, 0.85),
+          0 0 36px rgba(0, 212, 255, 0.22);
+      }
+    }
+
+    // 警告状态 - 黄色 orb（背景不变）
+    &.alert-level-warning {
+      .kpi-orb-alert {
+        background:
+          radial-gradient(circle at 36% 34%, #fff5bd 0 14%, #ffd36f 15% 28%, rgba(255, 180, 74, 0.85) 29% 45%, rgba(130, 80, 20, 0.7) 46% 100%);
+        box-shadow:
+          0 0 14px rgba(255, 180, 74, 0.85),
+          0 0 36px rgba(255, 180, 74, 0.28);
+        animation: orb-pulse-yellow 2s ease-in-out infinite;
+      }
+    }
+
+    // 危险状态 - 红色 orb（背景不变）
+    &.alert-level-danger {
+      .kpi-orb-alert {
+        background:
+          radial-gradient(circle at 36% 34%, #ff9f9f 0 14%, #ff6b6b 15% 28%, rgba(255, 85, 85, 0.85) 29% 45%, rgba(150, 30, 30, 0.7) 46% 100%);
+        box-shadow:
+          0 0 14px rgba(255, 85, 85, 0.85),
+          0 0 36px rgba(255, 85, 85, 0.28);
+        animation: orb-pulse-red 1.6s ease-in-out infinite;
+      }
+    }
+  }
 }
+
+// Alert Value Styles
+.alert-value-block {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; // 靠右，与右栏 center 对齐形成偏右效果
+  width: 100%;
+}
+
+.alert-num {
+  font-size: clamp(30px, 2.8em, 46px);
+  font-weight: 900;
+  letter-spacing: -1px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+
+  &.num-safe {
+    color: #7dffc6;
+    text-shadow: none;
+  }
+
+  &.num-warning {
+    color: #ffd36f;
+    text-shadow: 0 0 16px rgba(255, 180, 74, 0.72);
+  }
+
+  &.num-danger {
+    color: #ff5c5c;
+    text-shadow: 0 0 20px rgba(255, 85, 85, 0.88);
+    animation: num-pulse-red 1.2s ease-in-out infinite;
+  }
+}
+
+.alert-detail-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: rgba(255, 85, 85, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 85, 85, 0.18);
+}
+
+.hint-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff5c5c;
+  box-shadow: 0 0 8px rgba(255, 85, 85, 0.65);
+  animation: hint-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: rgba(255, 200, 200, 0.85);
+  letter-spacing: 0.5px;
+}
+
+@keyframes orb-pulse-yellow {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(255, 180, 74, 0.85), 0 0 36px rgba(255, 180, 74, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 180, 74, 1), 0 0 46px rgba(255, 180, 74, 0.45);
+  }
+}
+
+@keyframes orb-pulse-red {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(255, 85, 85, 0.85), 0 0 36px rgba(255, 85, 85, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(255, 85, 85, 1), 0 0 50px rgba(255, 85, 85, 0.55);
+  }
+}
+
+@keyframes num-pulse-red {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes hint-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }

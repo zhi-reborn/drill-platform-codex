@@ -1135,3 +1135,26 @@ func (s *DrillService) GetLogs(id uint64, limit int) ([]entity.DrillInstanceLog,
 func (s *DrillService) Delete(id uint64) error {
 	return s.drillRepo.Delete(id)
 }
+
+// UpdateStartTime 更新演练开始时间（用于手动调整总耗时显示）
+// 参数: id - 演练ID, startTime - 新的开始时间（ISO 8601格式字符串）
+func (s *DrillService) UpdateStartTime(id uint64, startTime string) error {
+	// 验证演练存在
+	drill, err := s.drillRepo.FindByID(id)
+	if err != nil {
+		return errors.New("演练不存在")
+	}
+	
+	// 只允许更新运行中或暂停状态的演练时间
+	if drill.Status != "running" && drill.Status != "paused" {
+		return errors.New("只能调整运行中或暂停状态的演练时间")
+	}
+	
+	// 解析 ISO 8601 时间格式
+	parsedTime, err := time.Parse(time.RFC3339, startTime)
+	if err != nil {
+		return errors.New("时间格式不正确，请使用 ISO 8601 格式（如 2023-07-07T15:30:00Z）")
+	}
+	
+	return s.drillRepo.UpdateStartTime(id, parsedTime)
+}

@@ -361,6 +361,37 @@ func (h *Handler) UpdateStepInfo(c *gin.Context) {
 	h.submitStepCommand(c, "update_step_info", req.StepID, payload)
 }
 
+// UpdateStartTime 更新演练开始时间（用于手动调整总耗时）
+func (h *Handler) UpdateStartTime(c *gin.Context) {
+	drillIDStr := c.Param("id")
+	drillID, err := strconv.ParseUint(drillIDStr, 10, 64)
+	if err != nil {
+		response.BadRequest(c, "无效的演练ID")
+		return
+	}
+
+	var req struct {
+		StartTime string `json:"start_time" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误："+err.Error())
+		return
+	}
+
+	// 验证时间格式（ISO 8601）
+	if req.StartTime == "" {
+		response.BadRequest(c, "开始时间不能为空")
+		return
+	}
+
+	if err := h.drillService.UpdateStartTime(drillID, req.StartTime); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"message": "开始时间已更新"})
+}
+
 func (h *Handler) CompleteStep(c *gin.Context) {
 	var req struct {
 		StepID uint64 `json:"step_id" binding:"required"`
