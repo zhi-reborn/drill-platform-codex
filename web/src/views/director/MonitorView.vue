@@ -633,17 +633,17 @@ const isValidDrill = computed(() => drillId.value > 0)
 
 function viewScreen() {
   if (!isValidDrill.value) return
-  router.push(`/screen/${drillId.value}`)
+  window.open(`/screen/${drillId.value}`, '_blank')
 }
 
 function viewScreen2() {
   if (!isValidDrill.value) return
-  router.push(`/director/screen/${drillId.value}`)
+  window.open(`/director/screen/${drillId.value}`, '_blank')
 }
 
 function viewScreen3() {
   if (!isValidDrill.value) return
-  router.push(`/screen3/${drillId.value}`)
+  window.open(`/screen3/${drillId.value}`, '_blank')
 }
 
 const sortedSteps = computed(() => {

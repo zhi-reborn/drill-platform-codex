@@ -361,14 +361,15 @@ func (s *DrillService) GetDetail(id uint64) (*entity.DrillInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 用步骤实时状态重算完成率，避免 DB 中 progress_pct 落后于步骤状态
+	// 用步骤实时状态重算完成率与演练状态，避免 DB 中 progress_pct/status 落后于步骤状态
 	if steps, stepErr := s.stepRepo.FindStepsByDrillID(id); stepErr == nil {
 		drill.ProgressPct = ComputeProgressPct(steps)
+		drill.Status = ComputeDrillStatus(drill.Status, steps)
 	}
 	return drill, nil
 }
 
-// refreshProgressPct 批量用步骤实时状态重算完成率，覆盖 DB 中可能滞后的 progress_pct。
+// refreshProgressPct 批量用步骤实时状态重算完成率与演练状态，覆盖 DB 中可能滞后的 progress_pct/status。
 // 查询失败时静默回退到 DB 原值，不阻塞列表返回。
 func (s *DrillService) refreshProgressPct(drills []entity.DrillInstance) {
 	if len(drills) == 0 {
@@ -385,6 +386,7 @@ func (s *DrillService) refreshProgressPct(drills []entity.DrillInstance) {
 	for i := range drills {
 		if steps, ok := stepsByDrill[drills[i].ID]; ok {
 			drills[i].ProgressPct = ComputeProgressPct(steps)
+			drills[i].Status = ComputeDrillStatus(drills[i].Status, steps)
 		}
 	}
 }

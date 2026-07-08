@@ -843,17 +843,17 @@ async function completeTaskInline(task: StepInstance) {
 
 // 查看大屏
 function viewScreen(drillId: number) {
-  router.push(`/screen/${drillId}`)
+  window.open(`/screen/${drillId}`, '_blank')
 }
 
 // 查看大屏2
 function viewScreen2(drillId: number | null) {
-  if (drillId) router.push(`/executor/screen/${drillId}`)
+  if (drillId) window.open(`/executor/screen/${drillId}`, '_blank')
 }
 
 // 查看大屏3
 function viewScreen3(drillId: number | null) {
-  if (drillId) router.push(`/screen3/${drillId}`)
+  if (drillId) window.open(`/screen3/${drillId}`, '_blank')
 }
 
 // 加载数据

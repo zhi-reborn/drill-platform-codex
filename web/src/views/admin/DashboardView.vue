@@ -243,15 +243,15 @@ function viewMonitor(drillId: number) {
 }
 
 function viewScreen(drillId: number) {
-  router.push(`/screen/${drillId}`)
+  window.open(`/screen/${drillId}`, '_blank')
 }
 
 function viewScreen2(drillId: number) {
-  router.push(`/admin/screen/${drillId}`)
+  window.open(`/admin/screen/${drillId}`, '_blank')
 }
 
 function viewScreen3(drillId: number) {
-  router.push(`/screen3/${drillId}`)
+  window.open(`/screen3/${drillId}`, '_blank')
 }
 
 async function loadDashboard() {

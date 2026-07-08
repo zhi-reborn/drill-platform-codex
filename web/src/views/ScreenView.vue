@@ -2065,7 +2065,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
   .txt-running { color: $ok; }
   .txt-paused { color: $warn; }
-  .txt-completed { color: $neon; }
+  .txt-completed {
+    color: #2cf8d8;
+    text-shadow: 0 0 12px rgba(44, 248, 216, 0.6), 0 0 24px rgba(0, 255, 156, 0.35);
+  }
   .txt-terminated { color: $danger; }
   .txt-pending { color: $text-dim; }
 }

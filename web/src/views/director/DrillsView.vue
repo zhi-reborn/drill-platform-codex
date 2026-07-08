@@ -186,15 +186,15 @@ function viewMonitor(row: DrillInstance) {
 }
 
 function viewScreen(row: DrillInstance) {
-  router.push(`/screen/${row.id}`)
+  window.open(`/screen/${row.id}`, '_blank')
 }
 
 function viewScreen2(row: DrillInstance) {
-  router.push(`/director/screen/${row.id}`)
+  window.open(`/director/screen/${row.id}`, '_blank')
 }
 
 function viewScreen3(row: DrillInstance) {
-  router.push(`/screen3/${row.id}`)
+  window.open(`/screen3/${row.id}`, '_blank')
 }
 
 function handleDelete(row: DrillInstance) {

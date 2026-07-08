@@ -255,15 +255,15 @@ function viewDrill(drillId: number) {
 }
 
 function viewScreen(drillId: number) {
-  router.push(`/screen/${drillId}`)
+  window.open(`/screen/${drillId}`, '_blank')
 }
 
 function viewScreen2(drillId: number) {
-  router.push(`/director/screen/${drillId}`)
+  window.open(`/director/screen/${drillId}`, '_blank')
 }
 
 function viewScreen3(drillId: number) {
-  router.push(`/screen3/${drillId}`)
+  window.open(`/screen3/${drillId}`, '_blank')
 }
 
 onMounted(() => {
