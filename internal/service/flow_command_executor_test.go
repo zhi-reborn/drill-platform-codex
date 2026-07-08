@@ -483,6 +483,73 @@ func TestExecuteCompleteStepAutoCompletesParentAndStartsNextTask(t *testing.T) {
 	}
 }
 
+func TestExecuteCompleteStepDoesNotAutoStartFirstTaskAcrossRootPhase(t *testing.T) {
+	executor, db, _ := newExecutorForTest(t)
+	drillID, _ := seedDrillAndStepForExecutorTest(t, db, "completed")
+
+	phaseOneID := uint64(30)
+	phaseTwoID := uint64(40)
+	phaseOne := entity.StepInstance{
+		ID: phaseOneID, DrillInstanceID: drillID, StepTemplateID: 130, Name: "phase-one",
+		Seq: 10, Status: "running", AssigneeIDs: "[]", StepType: "serial",
+		Phase: "phase-one",
+	}
+	completedChild := entity.StepInstance{
+		ID: 31, DrillInstanceID: drillID, ParentStepID: &phaseOneID, StepTemplateID: 131, Name: "completed-child",
+		Seq: 11, Status: "completed", AssigneeIDs: "[]", StepType: "serial",
+		Phase: "phase-one",
+	}
+	lastChild := entity.StepInstance{
+		ID: 32, DrillInstanceID: drillID, ParentStepID: &phaseOneID, StepTemplateID: 132, Name: "last-child",
+		Seq: 12, Status: "running", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: "[31]", Phase: "phase-one",
+	}
+	phaseTwo := entity.StepInstance{
+		ID: phaseTwoID, DrillInstanceID: drillID, StepTemplateID: 140, Name: "phase-two",
+		Seq: 13, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: fmt.Sprintf("[%d]", phaseOneID), Phase: "phase-two",
+	}
+	phaseTwoFirstTask := entity.StepInstance{
+		ID: 41, DrillInstanceID: drillID, ParentStepID: &phaseTwoID, StepTemplateID: 141, Name: "phase-two-first-task",
+		Seq: 14, Status: "pending", AssigneeIDs: "[]", StepType: "serial",
+		PreStepIDs: fmt.Sprintf("[%d]", phaseOneID), Phase: "phase-two",
+	}
+	for _, step := range []entity.StepInstance{phaseOne, completedChild, lastChild, phaseTwo, phaseTwoFirstTask} {
+		if err := db.Create(&step).Error; err != nil {
+			t.Fatalf("create step %s: %v", step.Name, err)
+		}
+	}
+
+	cmd := createExecutorCommand(t, db, "complete_step", drillID, &lastChild.ID, CompleteStepPayload{Remark: "done"})
+	if err := executor.Execute(context.Background(), cmd, testFence()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var updatedPhaseOne entity.StepInstance
+	if err := db.First(&updatedPhaseOne, phaseOneID).Error; err != nil {
+		t.Fatalf("load phase one: %v", err)
+	}
+	if updatedPhaseOne.Status != "completed" {
+		t.Fatalf("expected phase one auto-completed, got %s", updatedPhaseOne.Status)
+	}
+
+	var updatedPhaseTwo entity.StepInstance
+	if err := db.First(&updatedPhaseTwo, phaseTwoID).Error; err != nil {
+		t.Fatalf("load phase two: %v", err)
+	}
+	if updatedPhaseTwo.Status != "pending" {
+		t.Fatalf("expected next root phase to wait for manual start, got %s", updatedPhaseTwo.Status)
+	}
+
+	var updatedFirstTask entity.StepInstance
+	if err := db.First(&updatedFirstTask, phaseTwoFirstTask.ID).Error; err != nil {
+		t.Fatalf("load phase two first task: %v", err)
+	}
+	if updatedFirstTask.Status != "pending" {
+		t.Fatalf("expected next root phase first task to wait for manual start, got %s", updatedFirstTask.Status)
+	}
+}
+
 func TestExecuteReplaySameCommandReturnsSuccessWithoutDuplicateLogOrNotification(t *testing.T) {
 	executor, db, _ := newExecutorForTest(t)
 	drillID, stepID := seedDrillAndStepForExecutorTest(t, db, "running")

@@ -712,6 +712,9 @@ func (e *FlowCommandExecutor) autoStartSuccessorsForDependencyInTx(
 		if !executorPredecessorsSatisfied(preIDs, byID) {
 			continue
 		}
+		if executorRequiresManualStartAtRootPhaseBoundary(dependencyID, current.ID, byID) {
+			continue
+		}
 
 		res := tx.Model(&entity.StepInstance{}).
 			Where("id = ? AND status = ?", current.ID, "pending").
@@ -795,6 +798,38 @@ func executorParentAllowsStart(step entity.StepInstance, byID map[uint64]entity.
 		return false
 	}
 	return parent.Status == "running"
+}
+
+func executorRequiresManualStartAtRootPhaseBoundary(dependencyID uint64, candidateID uint64, byID map[uint64]entity.StepInstance) bool {
+	dependencyRootID := executorRootStepID(dependencyID, byID)
+	candidateRootID := executorRootStepID(candidateID, byID)
+	if dependencyRootID == 0 || candidateRootID == 0 || dependencyRootID == candidateRootID {
+		return false
+	}
+
+	dependencyRoot := byID[dependencyRootID]
+	candidateRoot := byID[candidateRootID]
+	return dependencyRoot.Phase != "" && candidateRoot.Phase != "" && dependencyRoot.Phase != candidateRoot.Phase
+}
+
+func executorRootStepID(stepID uint64, byID map[uint64]entity.StepInstance) uint64 {
+	current, ok := byID[stepID]
+	if !ok {
+		return 0
+	}
+	visited := map[uint64]bool{}
+	for current.ParentStepID != nil && *current.ParentStepID != 0 {
+		if visited[current.ID] {
+			return 0
+		}
+		visited[current.ID] = true
+		parent, ok := byID[*current.ParentStepID]
+		if !ok {
+			return 0
+		}
+		current = parent
+	}
+	return current.ID
 }
 
 func executorPredecessorsSatisfied(preIDs []uint64, byID map[uint64]entity.StepInstance) bool {
