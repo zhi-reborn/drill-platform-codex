@@ -101,7 +101,7 @@ services:
       MYSQL_USER: drill
       MYSQL_PASSWORD: drill123
       TZ: Asia/Shanghai
-    ports: ["3306:3306"]
+    ports: ["${MYSQL_PORT:-13306}:3306"]
     volumes:
       - mysql-local-data:/var/lib/mysql
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -110,6 +110,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [drill-ha-net]
+    restart: unless-stopped
+
+  # ---------- Redis 单节点（仅供 Go integration tests 直连 LeaseStore）----------
+  redis-standalone:
+    image: redis:7-alpine
+    container_name: drill-redis-standalone
+    ports: ["${REDIS_PORT:-16379}:6379"]
     networks: [drill-ha-net]
     restart: unless-stopped
 

@@ -68,6 +68,7 @@ ldap:
   groupFilter: "(memberUid=%s)"
   groupNameAttribute: "cn"
   timeoutSeconds: 60
+  
 
 # Worker 领导选举与命令处理参数
 worker:

@@ -240,6 +240,7 @@ func TestExpiredProcessingCommandsReclaimed(t *testing.T) {
 	if err := db.Model(&entity.FlowCommand{}).Where("id = ?", cmd.ID).Updates(map[string]any{
 		"status":      entity.FlowCommandProcessing,
 		"worker_id":   "dead-worker",
+		"attempts":    1,
 		"lease_until": expiredLease,
 	}).Error; err != nil {
 		t.Fatalf("set expired processing: %v", err)

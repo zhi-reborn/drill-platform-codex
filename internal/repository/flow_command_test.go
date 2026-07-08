@@ -272,6 +272,69 @@ func TestFlowCommandRepoRequeueExpired(t *testing.T) {
 	}
 }
 
+func TestFlowCommandRepoRequeueStaleEpoch(t *testing.T) {
+	repo := setupFlowCommandRepo(t)
+	worker := "old-worker"
+	now := time.Now()
+	futureLease := now.Add(time.Minute)
+
+	stale, _, err := repo.CreateOrGet(newFlowCommand("stale-epoch-1", 10))
+	if err != nil {
+		t.Fatalf("CreateOrGet stale error: %v", err)
+	}
+	current, _, err := repo.CreateOrGet(newFlowCommand("current-epoch-1", 10))
+	if err != nil {
+		t.Fatalf("CreateOrGet current error: %v", err)
+	}
+
+	if err := repo.db.Model(&entity.FlowCommand{}).Where("id = ?", stale.ID).Updates(map[string]any{
+		"status":       entity.FlowCommandProcessing,
+		"worker_id":    worker,
+		"worker_epoch": uint64(1),
+		"lease_until":  futureLease,
+	}).Error; err != nil {
+		t.Fatalf("set stale processing: %v", err)
+	}
+	if err := repo.db.Model(&entity.FlowCommand{}).Where("id = ?", current.ID).Updates(map[string]any{
+		"status":       entity.FlowCommandProcessing,
+		"worker_id":    "current-worker",
+		"worker_epoch": uint64(2),
+		"lease_until":  futureLease,
+	}).Error; err != nil {
+		t.Fatalf("set current processing: %v", err)
+	}
+
+	count, err := repo.RequeueStaleEpoch(2)
+	if err != nil {
+		t.Fatalf("RequeueStaleEpoch error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("requeued count = %d, want 1", count)
+	}
+
+	gotStale, err := repo.FindByID(stale.ID)
+	if err != nil {
+		t.Fatalf("FindByID stale error: %v", err)
+	}
+	if gotStale.Status != entity.FlowCommandPending {
+		t.Fatalf("stale status = %s, want %s", gotStale.Status, entity.FlowCommandPending)
+	}
+	if gotStale.WorkerID != nil {
+		t.Fatalf("stale worker_id = %v, want nil", gotStale.WorkerID)
+	}
+	if gotStale.LeaseUntil != nil {
+		t.Fatalf("stale lease_until = %v, want nil", gotStale.LeaseUntil)
+	}
+
+	gotCurrent, err := repo.FindByID(current.ID)
+	if err != nil {
+		t.Fatalf("FindByID current error: %v", err)
+	}
+	if gotCurrent.Status != entity.FlowCommandProcessing {
+		t.Fatalf("current status = %s, want %s", gotCurrent.Status, entity.FlowCommandProcessing)
+	}
+}
+
 func TestFlowCommandClaimQueryByDialect(t *testing.T) {
 	base := "SELECT id FROM drill_flow_command WHERE status = ? ORDER BY created_at, id LIMIT 1"
 	tests := []struct {

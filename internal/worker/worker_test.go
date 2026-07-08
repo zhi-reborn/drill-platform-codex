@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -356,6 +357,8 @@ type fakeLeaseExtender struct {
 	lastOwnership     repository.CommandOwnership
 	lastUntil         time.Time
 	rejectEpochsBelow uint64
+	commands          map[uint64]*entity.FlowCommand
+	findErr           error
 	firstExtendCh     chan struct{}
 	firstExtendOnce   sync.Once
 	firstFailCh       chan struct{}
@@ -371,13 +374,37 @@ func (f *fakeLeaseExtender) ExtendLeaseFenced(ctx context.Context, id uint64, ow
 	stale := f.rejectEpochsBelow != 0 && ownership.Epoch < f.rejectEpochsBelow
 	f.mu.Unlock()
 
-	f.firstExtendOnce.Do(func() { close(f.firstExtendCh) })
+	f.firstExtendOnce.Do(func() {
+		if f.firstExtendCh != nil {
+			close(f.firstExtendCh)
+		}
+	})
 
 	if stale {
-		f.firstFailOnce.Do(func() { close(f.firstFailCh) })
+		f.firstFailOnce.Do(func() {
+			if f.firstFailCh != nil {
+				close(f.firstFailCh)
+			}
+		})
 		return false, repository.ErrOwnershipLost
 	}
 	return true, nil
+}
+
+func (f *fakeLeaseExtender) FindByID(id uint64) (*entity.FlowCommand, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.findErr != nil {
+		return nil, f.findErr
+	}
+	if f.commands == nil {
+		return nil, errors.New("command not found")
+	}
+	cmd := f.commands[id]
+	if cmd == nil {
+		return nil, errors.New("command not found")
+	}
+	return cmd, nil
 }
 
 func (f *fakeLeaseExtender) extendCount() int {
@@ -415,6 +442,10 @@ func newTestConfig() Config {
 		CommandLease:  50 * time.Millisecond,
 		IdlePoll:      5 * time.Millisecond,
 	}
+}
+
+func ptrString(s string) *string {
+	return &s
 }
 
 func runWorkerAsync(t *testing.T, w *Worker, ctx context.Context) <-chan struct{} {
@@ -864,6 +895,52 @@ func TestCommandLeaseRenewalRunsIndependently(t *testing.T) {
 	executor.release()
 	cancel()
 	<-done
+}
+
+func TestCompletedInflightCommandLeaseLossDoesNotDemote(t *testing.T) {
+	extender := &fakeLeaseExtender{
+		rejectEpochsBelow: 2,
+		commands: map[uint64]*entity.FlowCommand{
+			42: {
+				ID:          42,
+				Status:      entity.FlowCommandSucceeded,
+				WorkerID:    ptrString("worker-cmdlease"),
+				WorkerEpoch: 1,
+				LeaseToken:  "tok-42",
+			},
+		},
+		firstExtendCh: make(chan struct{}),
+		firstFailCh:   make(chan struct{}),
+	}
+	w := NewWorker(newTestConfig(), nil, nil, nil, nil, nil, extender, "worker-cmdlease")
+	w.addInflight(&entity.FlowCommand{ID: 42}, ExecutionFence{
+		WorkerID:    "worker-cmdlease",
+		WorkerEpoch: 1,
+		LeaseToken:  "tok-42",
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	demoted := make(chan struct{})
+	go w.runCommandLeaseRenewal(ctx, ticker, func() { close(demoted) })
+
+	select {
+	case <-extender.firstFailed():
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("ExtendLeaseFenced did not fail for the completed command")
+	}
+
+	select {
+	case <-demoted:
+		t.Fatal("completed command lease loss demoted the leader")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	if got := len(w.snapshotInflight()); got != 0 {
+		t.Fatalf("inflight command count = %d, want 0", got)
+	}
 }
 
 // TestLossOfRedisLeadershipCancelsCommit verifies that when the Redis lease

@@ -49,6 +49,10 @@ type CommandClaimer interface {
 	RequeueExpired(now time.Time) (int64, error)
 }
 
+type staleEpochRequeuer interface {
+	RequeueStaleEpoch(currentEpoch uint64) (int64, error)
+}
+
 // Recoverer rebuilds in-memory flow state after a Worker wins leadership.
 type Recoverer interface {
 	Recover(ctx context.Context) error
@@ -69,6 +73,10 @@ type EpochRenewer interface {
 // renewal (useful for tests that do not exercise long-running commands).
 type CommandLeaseExtender interface {
 	ExtendLeaseFenced(ctx context.Context, id uint64, ownership repository.CommandOwnership, until time.Time) (bool, error)
+}
+
+type commandStateReader interface {
+	FindByID(id uint64) (*entity.FlowCommand, error)
 }
 
 // ExecutionFence is the value object passed to the Executor for each command.
@@ -307,6 +315,7 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 	// every command we claim is stamped with an epoch strictly greater than
 	// any prior worker's, so a stale worker cannot commit after a newer
 	// worker has taken over.
+	var currentEpoch uint64
 	if w.epochRenewer != nil {
 		log.Printf("[Worker:%s] advancing epoch...", w.workerID)
 		epoch, err := w.epochRenewer.AdvanceEpoch(recoverCtx, w.workerID, w.config.LeaseTTL)
@@ -322,7 +331,20 @@ func (w *Worker) serveAsLeader(runCtx context.Context) error {
 		w.mu.Lock()
 		w.currentEpoch = epoch.Epoch
 		w.mu.Unlock()
+		currentEpoch = epoch.Epoch
 		log.Printf("[Worker:%s] epoch advanced: epoch=%d", w.workerID, epoch.Epoch)
+	}
+
+	if currentEpoch > 0 {
+		if requeuer, ok := w.claimer.(staleEpochRequeuer); ok {
+			log.Printf("[Worker:%s] requeueing stale-epoch commands...", w.workerID)
+			if _, err := requeuer.RequeueStaleEpoch(currentEpoch); err != nil {
+				log.Printf("[Worker:%s] RequeueStaleEpoch failed: %v", w.workerID, err)
+				_, _ = w.lease.Release(context.WithoutCancel(runCtx))
+				w.setStatus(StatusStandby)
+				return w.wait(runCtx)
+			}
+		}
 	}
 
 	log.Printf("[Worker:%s] requeueing expired commands...", w.workerID)
@@ -458,9 +480,9 @@ func (w *Worker) runEpochRenewal(ctx context.Context, ticker *time.Ticker, signa
 }
 
 // runCommandLeaseRenewal extends the lease_until of every in-flight command
-// on each tick. If any extend fails (ownership lost because a newer worker
-// bumped the epoch or the lease expired), we demote. Correctness comes from
-// the fenced WHERE clause in ExtendLeaseFenced, not from this demotion.
+// on each tick. If a processing command really loses ownership, we demote.
+// Completed commands can race with the in-flight snapshot and are simply
+// removed locally.
 func (w *Worker) runCommandLeaseRenewal(ctx context.Context, ticker *time.Ticker, signalDemotion func()) {
 	if w.leaseExtender == nil {
 		return
@@ -479,6 +501,9 @@ func (w *Worker) runCommandLeaseRenewal(ctx context.Context, ticker *time.Ticker
 				}
 				ok, err := w.leaseExtender.ExtendLeaseFenced(ctx, id, ownership, time.Now().Add(w.config.CommandLease))
 				if err != nil || !ok {
+					if w.handleCommandLeaseRenewalLoss(id, err) {
+						continue
+					}
 					log.Printf("[Worker:%s] command lease renewal failed: id=%d ok=%v err=%v", w.workerID, id, ok, err)
 					signalDemotion()
 					return
@@ -486,6 +511,27 @@ func (w *Worker) runCommandLeaseRenewal(ctx context.Context, ticker *time.Ticker
 			}
 		}
 	}
+}
+
+func (w *Worker) handleCommandLeaseRenewalLoss(id uint64, err error) bool {
+	if err != nil && !errors.Is(err, repository.ErrOwnershipLost) {
+		return false
+	}
+	reader, ok := w.leaseExtender.(commandStateReader)
+	if !ok {
+		return false
+	}
+	cmd, readErr := reader.FindByID(id)
+	if readErr != nil {
+		log.Printf("[Worker:%s] command lease renewal state lookup failed: id=%d err=%v", w.workerID, id, readErr)
+		return false
+	}
+	if cmd.IsTerminal() {
+		w.removeInflight(id)
+		log.Printf("[Worker:%s] command lease renewal skipped: id=%d status=%s", w.workerID, id, cmd.Status)
+		return true
+	}
+	return false
 }
 
 // claimAndDispatch claims the next pending command (if any) and dispatches

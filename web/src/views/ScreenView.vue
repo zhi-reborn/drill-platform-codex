@@ -407,6 +407,20 @@ function findDirectParent(stepId: number): string {
   return parent?.name || '--'
 }
 
+function detectNewlyCompletedLeafSteps(previousStatuses: Map<number, StepStatus>, steps: StepInstance[]): number[] {
+  if (previousStatuses.size === 0) return []
+
+  const hasChild = new Set<number>()
+  for (const step of steps) {
+    if (step.parent_step_id) hasChild.add(step.parent_step_id)
+  }
+
+  return steps
+    .filter(step => !hasChild.has(step.id))
+    .filter(step => step.status === 'completed' && previousStatuses.get(step.id) !== 'completed')
+    .map(step => step.id)
+}
+
 // 任务完成流式动画：对应任务卡片 ghost 从右侧飞向中心百分数圆环，
 // 营造"信息汇聚、流入圆环汇总"的视觉效果。
 // 调用时机：applyStepEvent 在更新 drillSteps 之后同步调用本函数，
@@ -1105,13 +1119,18 @@ async function loadData() {
   }
   dataLoading = true
   try {
+    const previousStepStatuses = new Map(drillSteps.value.map(step => [step.id, step.status]))
+
     const drill = await drillApi.getDetail(drillId.value)
     if (componentDestroyed) return
     currentDrill.value = drill
 
     const steps = await drillApi.getSteps(drillId.value)
     if (componentDestroyed) return
-    drillSteps.value = steps.sort((a, b) => a.seq - b.seq)
+    const sortedSteps = steps.sort((a, b) => a.seq - b.seq)
+    const newlyCompletedStepIds = detectNewlyCompletedLeafSteps(previousStepStatuses, sortedSteps)
+    drillSteps.value = sortedSteps
+    newlyCompletedStepIds.forEach(playTaskFlowAnimation)
 
     const logs = await drillApi.getLogs(drillId.value)
     if (componentDestroyed) return

@@ -90,6 +90,20 @@ func (r *FlowCommandRepo) RequeueExpired(now time.Time) (int64, error) {
 	return res.RowsAffected, res.Error
 }
 
+func (r *FlowCommandRepo) RequeueStaleEpoch(currentEpoch uint64) (int64, error) {
+	if currentEpoch == 0 {
+		return 0, nil
+	}
+	res := r.db.Model(&entity.FlowCommand{}).
+		Where("status = ? AND worker_epoch > 0 AND worker_epoch < ?", entity.FlowCommandProcessing, currentEpoch).
+		Updates(map[string]any{
+			"status":      entity.FlowCommandPending,
+			"worker_id":   nil,
+			"lease_until": nil,
+		})
+	return res.RowsAffected, res.Error
+}
+
 func (r *FlowCommandRepo) ClaimNext(ctx context.Context, workerID string, lease time.Duration) (*entity.FlowCommand, error) {
 	var claimed *entity.FlowCommand
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
