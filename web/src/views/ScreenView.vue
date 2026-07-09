@@ -55,8 +55,16 @@
           <path class="header-frame-line" d="M26 18 H156 L178 36 H402 L422 70 H462" />
           <path class="header-frame-line" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
           <path class="header-frame-tray" d="M462 70 H738" />
-          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M400 22 L417 64 H783 L800 22" />
-          <path class="header-frame-lower-tray" d="M410 22 L426 62 H774 L790 22" />
+          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M400 34 L417 64 H783 L800 34" />
+          <path class="header-frame-lower-tray" d="M410 34 L426 62 H774 L790 34" />
+          <path class="header-frame-tip header-frame-tip-glow" d="M422 70 H462" />
+          <path class="header-frame-tip header-frame-tip-glow" d="M738 70 H778" />
+          <path class="header-frame-tip-soft header-frame-tip-soft-glow" d="M410 34 L426 62" />
+          <path class="header-frame-tip-soft header-frame-tip-soft-glow" d="M774 62 L790 34" />
+          <path class="header-frame-tip" d="M422 70 H462" />
+          <path class="header-frame-tip" d="M738 70 H778" />
+          <path class="header-frame-tip-soft" d="M410 34 L426 62" />
+          <path class="header-frame-tip-soft" d="M774 62 L790 34" />
         </svg>
         <div class="header-line-targets" aria-label="应急指挥中心顶部折线">
           <span class="header-line-target target-left-wing" data-comment-target="screen-header-left-line" role="img" aria-label="顶部左侧连贯折线" tabindex="0" />
@@ -1764,6 +1772,39 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 
   .header-frame-lower-tray-glow {
+    stroke-width: 5.2;
+    opacity: 0.16;
+  }
+
+  .header-frame-tip {
+    fill: none;
+    stroke: #d4f9ff;
+    stroke-width: 3.6;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+    opacity: 0.96;
+    pointer-events: none;
+  }
+
+  .header-frame-tip-glow {
+    stroke-width: 7;
+    opacity: 0.22;
+  }
+
+  .header-frame-tip-soft {
+    fill: none;
+    stroke: url(#header-line-grad);
+    stroke-width: 2.2;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+    opacity: 0.74;
+    pointer-events: none;
+  }
+
+  .header-frame-tip-soft-glow {
     stroke-width: 5.2;
     opacity: 0.16;
   }
