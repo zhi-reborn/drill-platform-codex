@@ -55,7 +55,8 @@
           <path class="header-frame-line" d="M26 18 H156 L178 36 H402 L422 70 H462" />
           <path class="header-frame-line" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
           <path class="header-frame-tray" d="M462 70 H738" />
-          <path class="header-frame-lower-tray" d="M424 46 L448 64 H752 L776 46" />
+          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M438 44 L451 66 H749 L762 44" />
+          <path class="header-frame-lower-tray" d="M446 47 L457 65 H743 L754 47" />
         </svg>
         <div class="header-line-targets" aria-label="应急指挥中心顶部折线">
           <span class="header-line-target target-left-wing" data-comment-target="screen-header-left-line" role="img" aria-label="顶部左侧连贯折线" tabindex="0" />
@@ -1753,13 +1754,18 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .header-frame-lower-tray {
     fill: none;
     stroke: url(#header-line-grad);
-    stroke-width: 2;
+    stroke-width: 2.2;
     stroke-linecap: square;
     stroke-linejoin: miter;
     vector-effect: non-scaling-stroke;
     filter: url(#header-line-glow);
-    opacity: 0.56;
+    opacity: 0.74;
     pointer-events: none;
+  }
+
+  .header-frame-lower-tray-glow {
+    stroke-width: 5.2;
+    opacity: 0.16;
   }
 
   .header-line-targets {
@@ -1800,10 +1806,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 
   .target-lower-tray {
-    left: 35.3%;
-    top: 43px;
-    width: 29.4%;
-    height: 24px;
+    left: 34.8%;
+    top: 42px;
+    width: 30.4%;
+    height: 25px;
   }
 
   .target-right-wing {
