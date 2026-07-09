@@ -60,7 +60,7 @@
         </div>
         <div class="header-meta">
         </div>
-        <button class="btn-icon" :class="{ active: isFullscreenLike }" @click="toggleFullscreen" title="全屏切换">
+        <button v-if="!isFullscreenLike" class="btn-icon" @click="toggleFullscreen" title="全屏切换">
           <FullScreen :size="16" />
         </button>
         <div class="header-pulse-line" />

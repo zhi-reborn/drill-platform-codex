@@ -25,4 +25,6 @@ for (const api of ['getDetail', 'getSteps', 'getLogs']) {
 assert.match(screen2, /class="[^"]*\bcyber-command-screen\b[^"]*"/, 'ScreenView2 应呈现新版指挥中心大屏外层')
 assert.match(screen2, /class="phase-card-strip"/, 'ScreenView2 应呈现参考图中的阶段卡片区')
 assert.match(screen2, /class="execution-carousel"/, 'ScreenView2 应呈现参考图中的执行中步骤横向卡片区')
+assert.match(screen3, /<button\s+class="btn-icon"[\s\S]*?@click="toggleFullscreen"/, 'ScreenView3 必须保留全屏切换按钮')
+assert.match(readFileSync(resolve(root, 'src/views/ScreenView.vue'), 'utf8'), /<button\s+v-if="!isFullscreenLike"\s+class="btn-icon"[\s\S]*?@click="toggleFullscreen"/, 'ScreenView 全屏后必须隐藏全屏按钮')
 assert.match(adminDashboard, /大屏2[\s\S]*?viewScreen3\(drill\.id\)[\s\S]*?大屏3/, 'Admin 系统概览必须在大屏2后提供大屏3入口')
