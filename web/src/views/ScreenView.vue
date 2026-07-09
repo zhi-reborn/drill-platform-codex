@@ -55,8 +55,8 @@
           <path class="header-frame-line" d="M26 18 H156 L178 36 H402 L422 70 H462" />
           <path class="header-frame-line" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
           <path class="header-frame-tray" d="M462 70 H738" />
-          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M438 44 L451 66 H749 L762 44" />
-          <path class="header-frame-lower-tray" d="M446 47 L457 65 H743 L754 47" />
+          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M420 22 L437 64 H763 L780 22" />
+          <path class="header-frame-lower-tray" d="M430 22 L446 62 H754 L770 22" />
         </svg>
         <div class="header-line-targets" aria-label="应急指挥中心顶部折线">
           <span class="header-line-target target-left-wing" data-comment-target="screen-header-left-line" role="img" aria-label="顶部左侧连贯折线" tabindex="0" />
@@ -1807,9 +1807,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 
   .target-lower-tray {
     left: 34.8%;
-    top: 42px;
+    top: 20px;
     width: 30.4%;
-    height: 25px;
+    height: 46px;
   }
 
   .target-right-wing {

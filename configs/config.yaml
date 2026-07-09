@@ -16,7 +16,7 @@ database:
   password: drill_password123
   name: drill_platform
   maxIdleConns: 10
-  maxOpenConnections: 100
+  maxOpenConns: 100
   logSQL: false
 
 redis:
