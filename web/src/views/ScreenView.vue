@@ -35,15 +35,22 @@
           <defs>
             <linearGradient id="header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#148cff" stop-opacity="0" />
-              <stop offset="12%" stop-color="#11bfff" stop-opacity="0.72" />
-              <stop offset="34%" stop-color="#13d8ff" stop-opacity="1" />
-              <stop offset="50%" stop-color="#75eaff" stop-opacity="0.92" />
-              <stop offset="66%" stop-color="#13d8ff" stop-opacity="1" />
-              <stop offset="88%" stop-color="#11bfff" stop-opacity="0.72" />
+              <stop offset="12%" stop-color="#24d7ff" stop-opacity="0.9" />
+              <stop offset="34%" stop-color="#42efff" stop-opacity="1" />
+              <stop offset="50%" stop-color="#d7fbff" stop-opacity="1" />
+              <stop offset="66%" stop-color="#42efff" stop-opacity="1" />
+              <stop offset="88%" stop-color="#24d7ff" stop-opacity="0.9" />
               <stop offset="100%" stop-color="#148cff" stop-opacity="0" />
             </linearGradient>
+            <linearGradient id="header-flow-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+              <stop offset="42%" stop-color="#9bf8ff" stop-opacity="0.1" />
+              <stop offset="50%" stop-color="#ffffff" stop-opacity="1" />
+              <stop offset="58%" stop-color="#9bf8ff" stop-opacity="0.1" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </linearGradient>
             <filter id="header-line-glow" x="-8%" y="-130%" width="116%" height="360%">
-              <feGaussianBlur stdDeviation="3.4" result="blur" />
+              <feGaussianBlur stdDeviation="4.2" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -65,22 +72,29 @@
           <path class="header-frame-tip" d="M738 70 H778" />
           <path class="header-frame-tip-soft" d="M410 34 L426 62" />
           <path class="header-frame-tip-soft" d="M774 62 L790 34" />
+          <path class="header-flow header-flow-left header-flow-delay-1" d="M410 34 L426 62 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-1" d="M790 34 L774 62 H600" />
+          <path class="header-flow header-flow-left header-flow-delay-2" d="M422 70 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-2" d="M778 70 H600" />
+          <path class="header-flow header-flow-left header-flow-delay-3" d="M462 70 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-3" d="M738 70 H600" />
         </svg>
-        <div class="header-line-targets" aria-label="应急指挥中心顶部折线">
-          <span class="header-line-target target-left-wing" data-comment-target="screen-header-left-line" role="img" aria-label="顶部左侧连贯折线" tabindex="0" />
-          <span class="header-line-target target-center-tray" data-comment-target="screen-header-title-underline" role="img" aria-label="标题下方水平托底线" tabindex="0" />
-          <span class="header-line-target target-lower-tray" data-comment-target="screen-header-title-lower-tray" role="img" aria-label="标题下方开口向上折线" tabindex="0" />
-          <span class="header-line-target target-right-wing" data-comment-target="screen-header-right-line" role="img" aria-label="顶部右侧连贯折线" tabindex="0" />
-        </div>
         <div class="header-title-block">
           <h1 class="drill-title">应急指挥中心</h1>
         </div>
         <div class="header-meta">
         </div>
-        <button v-if="!isFullscreenLike" class="btn-icon" @click="toggleFullscreen" title="全屏切换">
-          <FullScreen :size="16" />
+        <button
+          class="btn-icon btn-fullscreen-mark"
+          :class="{ active: isFullscreenLike }"
+          @click="toggleFullscreen"
+          :title="isFullscreenLike ? '退出全屏' : '全屏切换'"
+          :aria-label="isFullscreenLike ? '退出全屏' : '进入全屏'"
+        >
+          <span class="fullscreen-mark" aria-hidden="true">N</span>
         </button>
         <div class="header-pulse-line" />
+        <span class="header-brand">东风科技有限公司</span>
       </header>
 
       <!-- ========== TOP KPI ROW ========== -->
@@ -302,7 +316,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
-import { CircleClose, FullScreen } from '@element-plus/icons-vue'
+import { CircleClose } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { StepInstance, StepInstanceLog, DrillInstance, StepStatus, DrillStatus } from '@/types/instance'
 import { drillApi } from '@/api/modules/drill'
@@ -1755,7 +1769,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     stroke-linecap: square;
     vector-effect: non-scaling-stroke;
     filter: url(#header-line-glow);
-    opacity: 0.82;
+    opacity: 1;
     pointer-events: none;
   }
 
@@ -1767,13 +1781,13 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     stroke-linejoin: miter;
     vector-effect: non-scaling-stroke;
     filter: url(#header-line-glow);
-    opacity: 0.74;
+    opacity: 0.92;
     pointer-events: none;
   }
 
   .header-frame-lower-tray-glow {
     stroke-width: 5.2;
-    opacity: 0.16;
+    opacity: 0.26;
   }
 
   .header-frame-tip {
@@ -1800,65 +1814,31 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     stroke-linejoin: miter;
     vector-effect: non-scaling-stroke;
     filter: url(#header-line-glow);
-    opacity: 0.74;
+    opacity: 0.92;
     pointer-events: none;
   }
 
   .header-frame-tip-soft-glow {
     stroke-width: 5.2;
-    opacity: 0.16;
+    opacity: 0.26;
   }
 
-  .header-line-targets {
-    position: absolute;
-    inset: 0 24px;
-    z-index: 3;
+  .header-flow {
+    fill: none;
+    stroke: url(#header-flow-grad);
+    stroke-width: 3.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    opacity: 0;
+    stroke-dasharray: 16 292;
     pointer-events: none;
+    animation: header-flow-to-center 4.8s cubic-bezier(0.42, 0, 0.22, 1) infinite;
   }
 
-  .header-line-target {
-    position: absolute;
-    display: block;
-    pointer-events: auto;
-    cursor: crosshair;
-    border-radius: 2px;
-    background: rgba(0, 212, 255, 0.01);
-    outline: 1px solid transparent;
-
-    &:focus-visible,
-    &:hover {
-      outline-color: rgba(33, 229, 255, 0.48);
-      background: rgba(0, 212, 255, 0.08);
-    }
-  }
-
-  .target-left-wing {
-    left: 2.2%;
-    top: 12px;
-    width: 36.7%;
-    height: 66px;
-  }
-
-  .target-center-tray {
-    left: 38.5%;
-    top: 61px;
-    width: 23%;
-    height: 18px;
-  }
-
-  .target-lower-tray {
-    left: 33.2%;
-    top: 20px;
-    width: 33.6%;
-    height: 46px;
-  }
-
-  .target-right-wing {
-    left: 61.5%;
-    top: 12px;
-    width: 36.3%;
-    height: 66px;
-  }
+  .header-flow-delay-1 { animation-delay: 0s; }
+  .header-flow-delay-2 { animation-delay: 0.34s; }
+  .header-flow-delay-3 { animation-delay: 0.68s; }
 
   .header-title-block {
     position: absolute;
@@ -1951,6 +1931,46 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     &:hover,
     &.active { border-color: $neon; box-shadow: 0 0 10px $neon-soft; background: rgba(0, 212, 255, 0.1); }
   }
+
+  .btn-fullscreen-mark {
+    top: auto;
+    bottom: 10px;
+    width: 44px;
+    height: 36px;
+    padding: 0;
+    transform: none;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+
+    &:hover,
+    &.active {
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+  }
+
+  .fullscreen-mark {
+    width: 42px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: $font-display;
+    font-size: 31px;
+    font-weight: 900;
+    font-style: italic;
+    line-height: 1;
+    letter-spacing: 0;
+    color: rgba(255, 255, 255, 0.98);
+    text-shadow:
+      0 0 4px rgba(255, 255, 255, 0.58),
+      0 0 9px rgba(46, 225, 255, 0.5);
+    filter:
+      drop-shadow(0 0 4px rgba(255, 255, 255, 0.5))
+      drop-shadow(0 0 7px rgba(46, 225, 255, 0.38));
+  }
   .header-pulse-line {
     position: absolute;
     bottom: 0; left: 0;
@@ -1958,6 +1978,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     background: linear-gradient(90deg, transparent, $neon, transparent);
     transform: scaleX(0);
     animation: header-pulse 4.8s ease-in-out infinite;
+  }
+
+  .header-brand {
+    position: absolute;
+    right: 90px;
+    bottom: 12px;
+    z-index: 4;
+    font-family: $font-cn;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    color: rgba(180, 210, 255, 0.7);
+    text-shadow: 0 0 8px rgba(0, 128, 255, 0.5);
+    pointer-events: none;
+    user-select: none;
   }
 }
 @keyframes deco-flicker {
@@ -1968,6 +2003,29 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   0% { transform: scaleX(0); opacity: 0; }
   50% { transform: scaleX(1); opacity: 1; }
   100% { transform: scaleX(0); opacity: 0; }
+}
+@keyframes header-flow-to-center {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 260;
+  }
+  16% { opacity: 0.78; }
+  54% {
+    opacity: 0.86;
+    stroke-dashoffset: 0;
+  }
+  72% { opacity: 0; }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -54;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .header-flow {
+    animation: none;
+    opacity: 0.18;
+    stroke-dashoffset: 0;
+  }
 }
 
 // ===== KPI Row =====
@@ -3135,6 +3193,25 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     .btn-icon {
       right: 18px;
       width: 26px; height: 26px;
+    }
+
+    .btn-fullscreen-mark {
+      right: 28px;
+      bottom: 5px;
+      width: 42px;
+      height: 32px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .fullscreen-mark {
+      width: 39px;
+      height: 26px;
+    }
+
+    .header-brand {
+      display: none;
     }
   }
 
