@@ -31,7 +31,7 @@
     <div v-else-if="currentDrill" class="screen-content" :class="{ 'screen-content-fallback-fullscreen': fallbackFullscreen }">
       <!-- ========== HEADER ========== -->
       <header class="screen-header">
-        <svg class="header-frame" viewBox="0 0 1200 74" preserveAspectRatio="none" aria-hidden="true">
+        <svg class="header-frame" viewBox="0 0 1200 82" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#148cff" stop-opacity="0" />
@@ -50,11 +50,19 @@
               </feMerge>
             </filter>
           </defs>
-          <path class="header-frame-line header-frame-line-shadow" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
-          <path class="header-frame-line" d="M26 15 H122 L144 31 H326 L362 57 H838 L874 31 H1056 L1078 15 H1174" />
-          <path class="header-frame-line header-frame-line-inner" d="M312 35 L356 66 H844 L888 35" />
-          <path class="header-frame-cap" d="M392 66 H808" />
+          <path class="header-frame-line header-frame-line-shadow" d="M26 18 H156 L178 36 H402 L422 70 H462" />
+          <path class="header-frame-line header-frame-line-shadow" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
+          <path class="header-frame-line" d="M26 18 H156 L178 36 H402 L422 70 H462" />
+          <path class="header-frame-line" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
+          <path class="header-frame-tray" d="M462 70 H738" />
+          <path class="header-frame-lower-tray" d="M424 46 L448 64 H752 L776 46" />
         </svg>
+        <div class="header-line-targets" aria-label="应急指挥中心顶部折线">
+          <span class="header-line-target target-left-wing" data-comment-target="screen-header-left-line" role="img" aria-label="顶部左侧连贯折线" tabindex="0" />
+          <span class="header-line-target target-center-tray" data-comment-target="screen-header-title-underline" role="img" aria-label="标题下方水平托底线" tabindex="0" />
+          <span class="header-line-target target-lower-tray" data-comment-target="screen-header-title-lower-tray" role="img" aria-label="标题下方开口向上折线" tabindex="0" />
+          <span class="header-line-target target-right-wing" data-comment-target="screen-header-right-line" role="img" aria-label="顶部右侧连贯折线" tabindex="0" />
+        </div>
         <div class="header-title-block">
           <h1 class="drill-title">应急指挥中心</h1>
         </div>
@@ -1707,33 +1715,102 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     pointer-events: none;
   }
 
-  .header-frame-line,
-  .header-frame-cap {
+  .header-frame-line {
     fill: none;
     stroke: url(#header-line-grad);
     stroke-linecap: square;
     stroke-linejoin: miter;
     vector-effect: non-scaling-stroke;
     filter: url(#header-line-glow);
+    pointer-events: none;
   }
 
   .header-frame-line {
-    stroke-width: 3;
+    stroke-width: 2.4;
   }
 
   .header-frame-line-shadow {
-    stroke-width: 10;
-    opacity: 0.16;
+    stroke-width: 8;
+    opacity: 0.14;
   }
 
   .header-frame-line-inner {
-    stroke-width: 2;
-    opacity: 0.72;
+    stroke-width: 2.2;
+    opacity: 0.76;
   }
 
-  .header-frame-cap {
+  .header-frame-tray {
+    fill: none;
+    stroke: url(#header-line-grad);
+    stroke-width: 2.6;
+    stroke-linecap: square;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+    opacity: 0.82;
+    pointer-events: none;
+  }
+
+  .header-frame-lower-tray {
+    fill: none;
+    stroke: url(#header-line-grad);
     stroke-width: 2;
-    opacity: 0.8;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;
+    filter: url(#header-line-glow);
+    opacity: 0.56;
+    pointer-events: none;
+  }
+
+  .header-line-targets {
+    position: absolute;
+    inset: 0 24px;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .header-line-target {
+    position: absolute;
+    display: block;
+    pointer-events: auto;
+    cursor: crosshair;
+    border-radius: 2px;
+    background: rgba(0, 212, 255, 0.01);
+    outline: 1px solid transparent;
+
+    &:focus-visible,
+    &:hover {
+      outline-color: rgba(33, 229, 255, 0.48);
+      background: rgba(0, 212, 255, 0.08);
+    }
+  }
+
+  .target-left-wing {
+    left: 2.2%;
+    top: 12px;
+    width: 36.7%;
+    height: 66px;
+  }
+
+  .target-center-tray {
+    left: 38.5%;
+    top: 61px;
+    width: 23%;
+    height: 18px;
+  }
+
+  .target-lower-tray {
+    left: 35.3%;
+    top: 43px;
+    width: 29.4%;
+    height: 24px;
+  }
+
+  .target-right-wing {
+    left: 61.5%;
+    top: 12px;
+    width: 36.3%;
+    height: 66px;
   }
 
   .header-title-block {
@@ -1754,7 +1831,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       radial-gradient(ellipse at 50% 58%, rgba(0, 218, 255, 0.16), transparent 66%),
       linear-gradient(90deg, transparent, rgba(0, 192, 255, 0.12) 22%, rgba(83, 215, 255, 0.22) 50%, rgba(0, 192, 255, 0.12) 78%, transparent);
     border-top: 0;
-    border-bottom: 1px solid rgba(0, 214, 255, 0.36);
+    border-bottom: 0;
     box-shadow:
       0 0 28px rgba(0, 128, 255, 0.16),
       inset 0 0 22px rgba(0, 114, 255, 0.12);
@@ -1768,13 +1845,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
 
     &::after {
-      bottom: -1px;
-      width: 44%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, rgba(33, 229, 255, 0.42), rgba(117, 234, 255, 0.82), rgba(33, 229, 255, 0.42), transparent);
-      box-shadow:
-        0 0 10px rgba(0, 213, 255, 0.5),
-        0 0 14px rgba(29, 210, 255, 0.38);
+      display: none;
     }
 
     .drill-title {
@@ -1806,7 +1877,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .header-meta {
     margin-left: auto;
     position: relative;
-    z-index: 2;
+    z-index: 4;
     display: flex; align-items: center; gap: 10px;
     font-family: $font-mono;
     .meta-label { color: $text-dim; font-size: 0.88em; letter-spacing: 2px; font-weight: 700; }
@@ -1824,7 +1895,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     right: 34px;
     top: 50%;
     transform: translateY(-50%);
-    z-index: 2;
+    z-index: 4;
     background: transparent; border: 1px solid $line;
     color: $neon; width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
