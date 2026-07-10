@@ -91,10 +91,18 @@
           :title="isFullscreenLike ? '退出全屏' : '全屏切换'"
           :aria-label="isFullscreenLike ? '退出全屏' : '进入全屏'"
         >
-          <span class="fullscreen-mark" aria-hidden="true">N</span>
+          <img
+            v-if="screenBrand.fullscreenIconImage"
+            class="fullscreen-mark fullscreen-mark-image"
+            :src="screenBrand.fullscreenIconImage"
+            alt=""
+            aria-hidden="true"
+            @error="handleBrandIconError"
+          />
+          <span v-else class="fullscreen-mark" aria-hidden="true">{{ screenBrand.fullscreenIconText }}</span>
         </button>
         <div class="header-pulse-line" />
-        <span class="header-brand">东风科技有限公司</span>
+        <span class="header-brand">{{ screenBrand.companyName }}</span>
       </header>
 
       <!-- ========== TOP KPI ROW ========== -->
@@ -328,6 +336,19 @@ const screenRootRef = ref<HTMLElement | null>(null)
 const fallbackFullscreen = ref(false)
 const isNativeFullscreen = ref(false)
 const isFullscreenLike = computed(() => isNativeFullscreen.value || fallbackFullscreen.value)
+type ScreenBrandConfig = {
+  companyName?: string
+  fullscreenIconText?: string
+  fullscreenIconImage?: string
+}
+
+const DEFAULT_SCREEN_BRAND = {
+  companyName: '东风科技有限公司',
+  fullscreenIconText: 'N',
+  fullscreenIconImage: '',
+}
+
+const screenBrand = ref({ ...DEFAULT_SCREEN_BRAND })
 const loading = ref(true)
 const error = ref<string | null>(null)
 const viewportWidth = ref(window.innerWidth)
@@ -1459,8 +1480,35 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+function cleanBrandValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+async function loadScreenBrand() {
+  try {
+    const response = await fetch('/screen-brand.json', { cache: 'no-store' })
+    if (!response.ok) return
+    const config = await response.json() as ScreenBrandConfig
+    screenBrand.value = {
+      companyName: cleanBrandValue(config.companyName) || DEFAULT_SCREEN_BRAND.companyName,
+      fullscreenIconText: cleanBrandValue(config.fullscreenIconText) || DEFAULT_SCREEN_BRAND.fullscreenIconText,
+      fullscreenIconImage: cleanBrandValue(config.fullscreenIconImage),
+    }
+  } catch (err) {
+    console.warn('load screen brand config failed:', err)
+  }
+}
+
+function handleBrandIconError() {
+  screenBrand.value = {
+    ...screenBrand.value,
+    fullscreenIconImage: '',
+  }
+}
+
 onMounted(() => {
   componentDestroyed = false
+  loadScreenBrand()
   loadData()
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeydown)
@@ -1934,7 +1982,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 
   .btn-fullscreen-mark {
     top: auto;
-    bottom: 10px;
+    bottom: 6px;
     width: 44px;
     height: 36px;
     padding: 0;
@@ -1971,6 +2019,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       drop-shadow(0 0 4px rgba(255, 255, 255, 0.5))
       drop-shadow(0 0 7px rgba(46, 225, 255, 0.38));
   }
+
+  .fullscreen-mark-image {
+    display: block;
+    object-fit: contain;
+  }
   .header-pulse-line {
     position: absolute;
     bottom: 0; left: 0;
@@ -1982,15 +2035,17 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 
   .header-brand {
     position: absolute;
-    right: 90px;
+    right: 68px;
     bottom: 12px;
     z-index: 4;
     font-family: $font-cn;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 700;
     letter-spacing: 2px;
-    color: rgba(180, 210, 255, 0.7);
-    text-shadow: 0 0 8px rgba(0, 128, 255, 0.5);
+    color: #f0f7ff;
+    text-shadow:
+      0 0 8px rgba(240, 247, 255, 0.42),
+      0 0 14px rgba(0, 212, 255, 0.28);
     pointer-events: none;
     user-select: none;
   }
