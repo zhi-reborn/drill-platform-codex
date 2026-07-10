@@ -1982,7 +1982,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 
   .btn-fullscreen-mark {
     top: auto;
-    bottom: 6px;
+    right: 22px;
+    bottom: 11px;
     width: 44px;
     height: 36px;
     padding: 0;

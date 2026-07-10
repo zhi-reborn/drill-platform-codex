@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 640" role="img" aria-label="white angular mark">
+  <defs>
+    <mask id="white-angular-mark-mask" maskUnits="userSpaceOnUse">
+      <rect width="1024" height="640" fill="#000000"/>
+      <path
+        fill="#ffffff"
+        d="
+          M 28 586
+          L 378 116
+          L 508 116
+          L 556 382
+          L 776 282
+          L 928 282
+          L 628 586
+          L 494 586
+          L 430 392
+          L 178 586
+          Z
+        "
+      />
+      <path
+        fill="#ffffff"
+        d="M 76 586 L 756 282 L 838 282 L 260 586 Z"
+      />
+      <path
+        fill="#000000"
+        d="M 608 466 L 676 388 L 568 428 Z"
+      />
+    </mask>
+  </defs>
+  <rect width="1024" height="640" fill="#ffffff" mask="url(#white-angular-mark-mask)"/>
+</svg>
