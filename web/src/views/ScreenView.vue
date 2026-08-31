@@ -251,7 +251,7 @@
           </div>
         </section>
 
-        <!-- RIGHT: Active steps -->
+        <!-- RIGHT: Active steps + Exec log -->
         <section class="panel panel-right">
           <div class="sub-panel sub-warn">
             <div class="panel-header">
@@ -264,46 +264,81 @@
               </span>
               <div class="panel-scan-line" />
             </div>
-            <div
-              class="panel-body warn-list"
-              ref="warnListRef"
-              :style="{
+            <div class="panel-body warn-list">
+              <!-- 上部：执行中步骤卡片（自适应可见数量） -->
+              <div class="alert-scroll" ref="warnListRef" :style="{
                 '--visible-alert-count': Math.max(visibleAlerts.length, 1),
                 '--alert-card-gap': `${alertCardGap}px`,
-              }"
-            >
-              <div
-                v-for="(alert, ai) in visibleAlerts"
-                :key="alert.stepId"
-                class="alert-card"
-                :class="'alert-' + alert.level"
-                :data-step-id="alert.stepId"
-                :ref="el => setAlertCardRef(el, ai)"
-              >
-                <!-- 顶部：状态指示条 + 标题行 -->
-                <div class="alert-head">
-                  <span class="alert-indicator" />
-                  <span class="alert-title">{{ alert.title }}</span>
-                  <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
+              }">
+                <div
+                  v-for="(alert, ai) in visibleAlerts"
+                  :key="alert.stepId"
+                  class="alert-card"
+                  :class="'alert-' + alert.level"
+                  :data-step-id="alert.stepId"
+                  :ref="el => setAlertCardRef(el, ai)"
+                >
+                  <!-- 顶部：状态指示条 + 标题行 -->
+                  <div class="alert-head">
+                    <span class="alert-indicator" />
+                    <span class="alert-title">{{ alert.title }}</span>
+                    <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
+                  </div>
+                  <!-- 元数据行 -->
+                  <div class="alert-foot">
+                    <span v-if="alert.operator" class="alert-meta">
+                      <span class="meta-icon">◈</span>
+                      <span class="meta-label">操作人</span>
+                      <span class="meta-val operator-val">{{ alert.operator }}</span>
+                    </span>
+                  </div>
+                  <!-- 层级路径：环节名 - 任务名 -->
+                  <div class="alert-hierarchy">
+                    <span class="hierarchy-phase">{{ alert.parentPhase }}</span>
+                    <span v-if="alert.directParent !== '--'" class="hierarchy-dash">—</span>
+                    <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
+                  </div>
                 </div>
-                <!-- 元数据行 -->
-                <div class="alert-foot">
-                  <span v-if="alert.operator" class="alert-meta">
-                    <span class="meta-icon">◈</span>
-                    <span class="meta-label">操作人</span>
-                    <span class="meta-val operator-val">{{ alert.operator }}</span>
-                  </span>
-                </div>
-                <!-- 层级路径：环节名 - 任务名 -->
-                <div class="alert-hierarchy">
-                  <span class="hierarchy-phase">{{ alert.parentPhase }}</span>
-                  <span v-if="alert.directParent !== '--'" class="hierarchy-dash">—</span>
-                  <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
+                <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
+                <div v-else-if="visibleAlerts.length < activeAlerts.length" ref="moreTipRef" class="more-tip">
+                  还有 {{ activeAlerts.length - visibleAlerts.length }} 个执行中步骤...
                 </div>
               </div>
-              <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
-              <div v-else-if="visibleAlerts.length < activeAlerts.length" ref="moreTipRef" class="more-tip">
-                还有 {{ pendingCount }} 个步骤待执行...
+            </div>
+          </div>
+          <!-- 下部：执行日志流（独立面板，标题与"执行中步骤"同款） -->
+          <div class="sub-panel sub-log">
+            <div class="panel-header">
+              <span class="panel-deco-corner tl" />
+              <span class="panel-deco-corner tr" />
+              <span class="panel-title-zh">执行日志</span>
+              <span class="panel-realtime">
+                <span class="rt-dot" />
+                实时
+              </span>
+              <div class="panel-scan-line" />
+            </div>
+            <div class="panel-body exec-log">
+              <div class="exec-log-view" ref="execLogRef">
+                <div
+                  class="exec-log-track"
+                  :class="{ 'is-animated': execLogAnimated }"
+                  :style="execLogAnimated ? { animationDuration: `${execLogDuration}s` } : undefined"
+                >
+                  <div v-for="half in 2" :key="half" class="exec-log-half">
+                    <div
+                      v-for="(log, li) in execLogLines"
+                      :key="`${half}-${log.id}-${li}`"
+                      class="log-line"
+                      :class="'log-' + logActionClass(log.action)"
+                    >
+                      <span class="log-time">{{ formatTime(log.created_at) }}</span>
+                      <span class="log-step">{{ resolveStepName(log) }}</span>
+                      <span class="log-action">{{ logActionLabel(log.action) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="!execLogLines.length" class="log-empty">暂无执行日志</div>
               </div>
             </div>
           </div>
@@ -380,6 +415,9 @@ const drillSteps = ref<StepInstance[]>([])
 const recentLogs = ref<StepInstanceLog[]>([])
 const warnListRef = ref<HTMLElement | null>(null)
 const alertCardRefs = ref<HTMLElement[]>([])
+const execLogRef = ref<HTMLElement | null>(null)
+const execLogViewHeight = ref(96)
+const EXEC_LOG_LINE_HEIGHT = 26
 const moreTipRef = ref<HTMLElement | null>(null)
 
 // 任务完成流式动画
@@ -714,7 +752,6 @@ const completedCount = computed(() =>
   leafSteps.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
 )
 const totalCount = computed(() => leafSteps.value.length)
-const pendingCount = computed(() => leafSteps.value.filter(s => s.status === 'pending').length)
 const progressPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)
@@ -1015,9 +1052,7 @@ const activeAlerts = computed(() => {
     seq: number
   }> = []
 
-  const pending: typeof running = []
-
-  // 进行中步骤（只看叶子步骤）
+  // 只展示进行中步骤（只看叶子步骤）；pending 不再进入列表
   leafSteps.value
     .filter(s => s.status === 'running')
     .forEach(s => {
@@ -1038,31 +1073,8 @@ const activeAlerts = computed(() => {
       })
     })
 
-  // 待执行步骤（始终展示，排在运行中之后）
-  leafSteps.value
-    .filter(s => s.status === 'pending')
-    .forEach((s) => {
-      const attrs = typeof (s as any).attributes === 'string'
-        ? safeParseJSON((s as any).attributes)
-        : (s as any).attributes
-      const operatorName = attrs?.operator
-      pending.push({
-        stepId: s.id,
-        title: s.name,
-        operator: operatorName || '',
-        team: s.executor_team || '运维部',
-        parentPhase: findParentPhase(s.id),
-        directParent: findDirectParent(s.id),
-        statusLabel: '待执行',
-        level: 'info',
-        seq: s.seq,
-      })
-    })
-
-  // 先按类型分组排序（running/issue/timeout 在前，pending 在后），再按 seq 排序
-  const sortedRunning = running.sort((a, b) => a.seq - b.seq)
-  const sortedPending = pending.sort((a, b) => a.seq - b.seq)
-  return [...sortedRunning, ...sortedPending]
+  // 按流程顺序排序
+  return running.sort((a, b) => a.seq - b.seq)
 })
 
 // 可见步骤数量：按容器和实际卡片尺寸自适应，避免在不同屏幕上写死展示数量
@@ -1095,7 +1107,21 @@ function measureWarnList() {
     alertCardHeight.value = Math.max(minHeight, ALERT_CARD_FALLBACK_HEIGHT)
   }
   if (moreTipRef.value) moreTipHeight.value = moreTipRef.value.getBoundingClientRect().height || MORE_TIP_FALLBACK_HEIGHT
+  if (execLogRef.value) execLogViewHeight.value = execLogRef.value.clientHeight || 96
 }
+
+// 执行日志：按时间正序展示；不足一屏时静态显示，超出时重复补齐后无缝滚动
+const execLogAnimated = computed(() => recentLogs.value.length * EXEC_LOG_LINE_HEIGHT > execLogViewHeight.value)
+const execLogLines = computed(() => {
+  const lines = [...recentLogs.value].reverse()
+  if (!lines.length || !execLogAnimated.value) return lines
+  // 单份内容不足一屏时重复补齐，保证滚动无空档
+  const perCopy = Math.max(1, Math.ceil(execLogViewHeight.value / (lines.length * EXEC_LOG_LINE_HEIGHT)))
+  const out: StepInstanceLog[] = []
+  for (let i = 0; i < perCopy; i++) out.push(...lines)
+  return out
+})
+const execLogDuration = computed(() => Math.max(12, Math.round(execLogLines.value.length * 2.4)))
 
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
@@ -1122,21 +1148,10 @@ function logActionClass(action: string): string {
   if (action.includes('complete') || action.includes('terminate')) return 'step'
   return 'step'
 }
+// 日志动作统一收敛为两种状态：完成（含各类完成变体）/ 异常（含超时）
 function logActionLabel(action: string): string {
-  const map: Record<string, string> = {
-    complete: '完成', step_complete: '完成',
-    issue: '异常', step_issue: '异常',
-    timeout: '超时', step_timeout: '超时',
-    force_complete: '强制完成',
-    skip: '跳过', step_skip: '跳过',
-    start: '启动', step_start: '启动',
-    pause: '暂停', drill_paused: '暂停',
-    resume: '恢复', drill_resumed: '恢复',
-    drill_started: '演练启动',
-    drill_completed: '演练完成',
-    drill_terminated: '演练终止',
-  }
-  return map[action] || action
+  if (action.includes('issue') || action.includes('timeout')) return '异常'
+  return '完成'
 }
 
 // 根据 log 中的 step_instance_id 在 drillSteps 中查节点名称
@@ -2805,6 +2820,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 .panel-right {
   display: flex; flex-direction: column;
   background: transparent; border: none; padding: 0;
+  gap: clamp(8px, 1vh, 14px);
   min-height: 0;
   .sub-panel {
     position: relative;
@@ -2813,17 +2829,25 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     min-height: 0;
     flex: 1;
   }
+  // 执行日志为固定占比的独立面板，不与执行中步骤争抢空间
+  .sub-log {
+    flex: 0 0 clamp(178px, 24vh, 258px);
+  }
 }
 
 // ===== Alerts =====
 .warn-list {
-  --visible-alert-count: 5;
-  --alert-card-gap: 9px;
-  display: flex; flex-direction: column; gap: clamp(8px, 0.95vh, 11px);
+  display: flex; flex-direction: column;
   overflow: hidden;
   flex: 1;
   min-height: 0;
-  padding-bottom: clamp(8px, 0.95vh, 12px);
+  .alert-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex; flex-direction: column;
+    gap: var(--alert-card-gap, 9px);
+    overflow: hidden;
+  }
   .alert-card {
     position: relative;
     background: linear-gradient(135deg, rgba(15, 30, 58, 0.96), rgba(8, 18, 40, 0.9));
@@ -2997,6 +3021,110 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 }
 
+// ===== 执行日志（独立面板的日志视图区） =====
+.exec-log {
+  display: flex; flex-direction: column;
+  padding: 8px 4px 8px 2px;
+
+  .exec-log-view {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(0, 212, 255, 0.16);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg, rgba(5, 15, 32, 0.9), rgba(3, 10, 24, 0.95));
+
+    // 上下渐隐遮罩，制造日志流入/流出的纵深感
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      height: 14px;
+      z-index: 1;
+      pointer-events: none;
+    }
+    &::before { top: 0; background: linear-gradient(180deg, rgba(3, 10, 24, 0.92), transparent); }
+    &::after { bottom: 0; background: linear-gradient(0deg, rgba(3, 10, 24, 0.92), transparent); }
+  }
+
+  .exec-log-track {
+    display: flex; flex-direction: column;
+
+    &.is-animated {
+      animation: exec-log-marquee linear infinite;
+    }
+    // 悬停时暂停滚动便于阅读
+    &:hover {
+      animation-play-state: paused;
+    }
+  }
+
+  .log-line {
+    display: flex; align-items: center; gap: 10px;
+    height: 26px;
+    padding: 0 12px;
+    font-size: clamp(12px, 0.78vw, 13.5px);
+    line-height: 1;
+    white-space: nowrap;
+
+    // 偶数行微弱底色，终端行码感
+    &:nth-child(even) {
+      background: rgba(0, 212, 255, 0.035);
+    }
+
+    .log-time {
+      font-family: $font-mono;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: rgba(120, 175, 215, 0.75);
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+    .log-step {
+      min-width: 0;
+      overflow: hidden; text-overflow: ellipsis;
+      font-weight: 700;
+      color: rgba(226, 240, 255, 0.92);
+    }
+    .log-action {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-family: $font-cn;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      padding: 2.5px 7px;
+      border-radius: 2px;
+      line-height: 1;
+    }
+  }
+
+  // 动作语义配色：启动绿 / 完成青 / 异常超时红 / 跳过灰 / 强制橙
+  .log-ok .log-action { color: #55ffb0; background: rgba(73, 255, 166, 0.1); border: 1px solid rgba(73, 255, 166, 0.28); }
+  .log-step .log-action { color: #6fd8ff; background: rgba(0, 212, 255, 0.09); border: 1px solid rgba(0, 212, 255, 0.25); }
+  .log-danger .log-action { color: #ff6b8a; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.32); }
+  .log-skip .log-action { color: rgba(178, 196, 220, 0.85); background: rgba(150, 175, 205, 0.08); border: 1px solid rgba(150, 175, 205, 0.25); }
+  .log-force .log-action { color: #ffb547; background: rgba(255, 182, 72, 0.1); border: 1px solid rgba(255, 182, 72, 0.3); }
+
+  .log-empty {
+    position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: $font-mono;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: rgba(150, 195, 235, 0.5);
+  }
+}
+
+@keyframes exec-log-marquee {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
 @keyframes indicator-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(255, 182, 72, 0.7); }
   50% { opacity: 0.5; box-shadow: 0 0 10px rgba(255, 182, 72, 0.9); }
@@ -3091,14 +3219,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 
   .warn-list {
-    gap: clamp(6px, 0.8vh, 9px);
-
     .alert-card {
       min-height: 84px;
       max-height: 112px;
       padding-top: 8px;
       padding-bottom: 8px;
       gap: 5px;
+    }
+  }
+
+  .sub-log {
+    flex-basis: clamp(150px, 21vh, 210px);
+
+    .log-line {
+      height: 22px;
+      font-size: 12px;
     }
   }
 

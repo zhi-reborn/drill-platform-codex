@@ -231,6 +231,12 @@
               r="19"
               :class="['node-core', `node-core-${node.visualStatus}`]"
             />
+            <!-- 已完成节点圆心对勾：粗描边 + 圆角端点，完成瞬间一次成型动画 -->
+            <path
+              v-if="node.visualStatus === 'completed' && !node.isFinish"
+              class="node-check"
+              d="M -8 0.5 L -2.5 6 L 8 -6"
+            />
             <g
               v-if="node.visualStatus === 'running'"
               class="baton-group"
@@ -1482,6 +1488,24 @@ function splitName(name: string): string[] {
 .node-core-completed {
   fill: #073c31;
   stroke: #55ffb0;
+}
+
+// 完成节点圆心对勾：亮绿描边 + 柔光，入场时描边一次成型
+.node-check {
+  fill: none;
+  stroke: #7dffc6;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(73, 255, 166, 0.7));
+  stroke-dasharray: 26;
+  stroke-dashoffset: 0;
+  animation: node-check-draw 0.5s cubic-bezier(0.25, 1, 0.4, 1) both;
+}
+
+@keyframes node-check-draw {
+  from { stroke-dashoffset: 26; opacity: 0.4; }
+  to { stroke-dashoffset: 0; opacity: 1; }
 }
 
 .node-core-pending {
