@@ -15,7 +15,12 @@
   >
     <div class="relay-runway">
       <div class="runway-head">
-        <div class="runway-title">当前阶段所属环节</div>
+        <div class="phase-tag">
+          <div class="phase-tag-inner">
+            <div class="phase-tag-name">{{ currentPhaseLabel }}</div>
+          </div>
+          <div class="phase-tag-scan"></div>
+        </div>
         <div class="head-stats">
           <div class="stats-block stats-done">
             <span class="stats-num">{{ phaseCompletedCount }}</span>
@@ -72,31 +77,11 @@
             <stop offset="0" stop-color="#ff8426" />
             <stop offset="1" stop-color="#ffe0a2" />
           </linearGradient>
-          <linearGradient id="crown-gold" x1="0" y1="-20" x2="0" y2="14" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#fff5bd" />
-            <stop offset=".28" stop-color="#ffd36f" />
-            <stop offset=".58" stop-color="#b86b16" />
-            <stop offset="1" stop-color="#f2b64d" />
-          </linearGradient>
-          <linearGradient id="crown-ridge" x1="-26" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#7a3f0b" />
-            <stop offset=".2" stop-color="#fff0a8" />
-            <stop offset=".5" stop-color="#d8861f" />
-            <stop offset=".8" stop-color="#fff0a8" />
-            <stop offset="1" stop-color="#7a3f0b" />
-          </linearGradient>
-          <radialGradient id="crown-gem" cx="50%" cy="35%" r="65%">
-            <stop offset="0" stop-color="#ffffff" />
-            <stop offset=".34" stop-color="#7ff6ff" />
-            <stop offset="1" stop-color="#0b77a4" />
+          <radialGradient id="target-core" cx="50%" cy="42%" r="62%">
+            <stop offset="0" stop-color="#fff5d6" />
+            <stop offset=".45" stop-color="#ffd36f" />
+            <stop offset="1" stop-color="#e8891c" />
           </radialGradient>
-          <filter id="crown-glow" x="-60%" y="-70%" width="220%" height="240%">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
           <filter id="relay-glow" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="4" result="blur" />
             <feMerge>
@@ -208,7 +193,7 @@
               class="node-pulse-ring"
             />
             <circle
-              v-else-if="node.visualStatus === 'completed'"
+              v-else-if="node.visualStatus === 'completed' && !node.isFinish"
               r="25"
               fill="rgba(73, 255, 166, .12)"
               stroke="rgba(73, 255, 166, .35)"
@@ -220,6 +205,23 @@
               fill="rgba(255, 85, 85, .11)"
               stroke="rgba(255, 85, 85, .38)"
               stroke-width="1.5"
+            />
+            <!-- 终点靶心：最后一个环节的节点圆环由靶心取代；先于接力棒绘制，抵达终点时箭头压在靶心上呈"命中目标" -->
+            <g
+              v-if="node.isFinish"
+              class="finish-target"
+              :class="{ 'finish-target-done': node.visualStatus === 'completed' }"
+            >
+              <circle r="26" class="finish-target-board" />
+              <circle r="21.5" class="finish-target-scan" />
+              <circle r="16.5" class="finish-target-ring finish-target-ring-outer" />
+              <circle r="10.5" class="finish-target-ring finish-target-ring-mid" />
+              <circle r="4.2" class="finish-target-bullseye" />
+            </g>
+            <circle
+              v-else
+              r="19"
+              :class="['node-core', `node-core-${node.visualStatus}`]"
             />
             <g
               v-if="node.visualStatus === 'running'"
@@ -244,20 +246,6 @@
                 class="baton-arrow"
               />
             </g>
-            <circle
-              v-else
-              r="19"
-              :class="['node-core', `node-core-${node.visualStatus}`]"
-            />
-            <path
-              v-if="node.visualStatus === 'completed'"
-              d="M-8 0 l6 6 12-14"
-              fill="none"
-              stroke="#baffdd"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
             <text
               class="node-label"
               :class="{ 'node-label-multiline': node.lines.length > 1 }"
@@ -273,68 +261,8 @@
               >{{ line }}</tspan>
             </text>
           </g>
-
-          <g :transform="`translate(${finishPoint.x} ${finishPoint.y}) scale(${finishScale})`" class="finish-node" :class="{ 'finish-node-done': isCurrentPhaseDone }">
-            <circle r="34" fill="none" stroke="rgba(255, 214, 130, .34)" stroke-width="2" class="finish-beacon-ring finish-beacon-ring-a" />
-            <circle r="27" fill="none" stroke="rgba(45, 228, 255, .28)" stroke-width="1.6" class="finish-beacon-ring finish-beacon-ring-b" />
-            <g class="finish-sparks">
-              <line x1="0" y1="-35" x2="0" y2="-42" />
-              <line x1="28" y1="-28" x2="34" y2="-34" />
-              <line x1="38" y1="0" x2="46" y2="0" />
-              <line x1="28" y1="28" x2="34" y2="34" />
-              <line x1="-28" y1="28" x2="-34" y2="34" />
-              <line x1="-38" y1="0" x2="-46" y2="0" />
-              <line x1="-28" y1="-28" x2="-34" y2="-34" />
-            </g>
-            <line
-              x1="0"
-              y1="-38"
-              x2="0"
-              y2="-29"
-              stroke="rgba(255, 213, 129, .72)"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              class="finish-tether"
-            />
-            <circle r="34" fill="rgba(255, 180, 74, .11)" stroke="rgba(255, 214, 130, .45)" stroke-width="2" class="finish-disc" />
-            <circle r="24" fill="none" stroke="rgba(45, 228, 255, .42)" stroke-width="1.5" stroke-dasharray="12 8" class="finish-orbit" />
-            <path class="finish-crown-shadow" d="M-27 -5 L-20 15 H20 L27 -5 L14 1 L7 -15 L0 -3 L-7 -15 L-14 1 Z" />
-            <path
-              class="finish-crown"
-              d="M-27 -5 L-20 15 H20 L27 -5 L14 1 L7 -15 L0 -3 L-7 -15 L-14 1 Z"
-            />
-            <path class="finish-crown-ridge" d="M-19 14 H19 M-14 1 L-20 15 M0 -3 V15 M14 1 L20 15" />
-            <ellipse class="finish-crown-gem finish-crown-gem-main" cx="0" cy="-3" rx="3.5" ry="4.4" />
-            <circle class="finish-crown-gem" cx="-7" cy="-15" r="3" />
-            <circle class="finish-crown-gem" cx="7" cy="-15" r="3" />
-            <circle class="finish-crown-gem" cx="-27" cy="-5" r="2.8" />
-            <circle class="finish-crown-gem" cx="27" cy="-5" r="2.8" />
-            <g class="finish-milestone">
-              <path class="finish-milestone-lead" d="M37 0 H48" />
-              <circle class="finish-milestone-dot" cx="48" cy="0" r="2" />
-              <text
-                class="finish-milestone-text"
-                x="54"
-                y="0"
-                text-anchor="start"
-                dominant-baseline="central"
-              >里程碑</text>
-            </g>
-          </g>
         </g>
       </svg>
-
-      <div class="runway-foot">
-        <div class="foot-status">
-          <span class="status-dot"></span>
-          <span class="status-text">{{ instanceName || '未命名演练' }}</span>
-        </div>
-        <div class="foot-phase-name">
-          <span class="phase-name-tag">当前阶段</span>
-          <span class="phase-name-text">{{ currentPhaseLabel }}</span>
-        </div>
-      </div>
-
     </div>
   </div>
 </template>
@@ -364,7 +292,6 @@ const props = defineProps<{
   centerNumerator: number
   centerDenominator: number
   centerHint: string
-  instanceName?: string
   size?: number
   fullscreen?: boolean
 }>()
@@ -501,6 +428,7 @@ const turnPips = computed(() => {
 })
 
 const visibleNodes = computed(() => {
+  const lastIndex = currentNodes.value.length - 1
   return currentNodes.value.map((name, index) => {
     const status = currentStatuses.value[index]
     const visualStatus = visualStatusOf(status, index)
@@ -530,6 +458,8 @@ const visibleNodes = computed(() => {
       labelY,
       labelLineHeight,
       flowDir,
+      // 最后一个环节为跑道终点，节点圆环由靶心取代
+      isFinish: index === lastIndex,
       // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
       trail: [
         { cx: trailSign * 50, r: 3.4 },
@@ -551,27 +481,6 @@ const activePath = computed(() => {
   const activeIdx = activeNodeIndex.value
   if (activeIdx <= 0) return ''
   return trackPathThroughIndexes([activeIdx - 1, activeIdx])
-})
-
-const finishPoint = computed(() => {
-  const lastPoint = trackPoints.value[trackPoints.value.length - 1] || { x: LANE_RIGHT, y: laneY.value[laneY.value.length - 1] }
-  // 非全屏下皇冠上移贴近跑道终点；全屏保持原间距不受影响
-  if (isCompact.value) {
-    return {
-      x: lastPoint.x,
-      y: lastPoint.y + 108,
-    }
-  }
-  return {
-    x: lastPoint.x,
-    y: lastPoint.y + (props.fullscreen ? 82 : 58),
-  }
-})
-
-// 非全屏下皇冠与底部胶囊易挤占重叠，等比缩小一点；全屏保持原比例
-const finishScale = computed(() => {
-  if (isCompact.value) return 1
-  return props.fullscreen ? 1 : 0.8
 })
 
 function pointAt(index: number): TrackPoint {
@@ -805,20 +714,83 @@ function splitName(name: string): string[] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 56px;
+  min-height: 56px;
   pointer-events: none;
 }
 
-.runway-title {
-  padding: 5px 12px 6px;
-  color: #ffffff;
-  font-size: clamp(16px, 1.6em, 28px);
+// 左上角当前阶段标签：切角 HUD 面板 + 扫光
+.phase-tag {
+  --chamfer: 12px;
+  position: relative;
+  padding: 1px; /* 渐变描边厚度 */
+  background: linear-gradient(135deg, rgba(45, 228, 255, 0.65), rgba(45, 228, 255, 0.12) 45%, rgba(45, 228, 255, 0.45));
+  clip-path: polygon(
+    var(--chamfer) 0,
+    100% 0,
+    100% calc(100% - var(--chamfer)),
+    calc(100% - var(--chamfer)) 100%,
+    0 100%,
+    0 var(--chamfer)
+  );
+  box-shadow: 0 0 18px rgba(45, 228, 255, 0.16);
+  animation: phase-tag-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.phase-tag-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 22px 9px 16px;
+  background:
+    linear-gradient(90deg, rgba(45, 228, 255, 0.14), rgba(45, 228, 255, 0) 55%),
+    linear-gradient(160deg, rgba(10, 28, 62, 0.92), rgba(8, 24, 56, 0.78));
+  clip-path: polygon(
+    var(--chamfer) 0,
+    100% 0,
+    100% calc(100% - var(--chamfer)),
+    calc(100% - var(--chamfer)) 100%,
+    0 100%,
+    0 var(--chamfer)
+  );
+  overflow: hidden;
+}
+
+.phase-tag-name {
+  font-size: clamp(17px, 1.55em, 27px);
   font-weight: 900;
-  letter-spacing: 2px;
-  border-left: 3px solid #2de4ff;
-  background: linear-gradient(90deg, rgba(45, 228, 255, 0.16), rgba(45, 228, 255, 0.02));
-  box-shadow: 0 0 18px rgba(45, 228, 255, 0.08);
-  text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
+  letter-spacing: 4px;
+  line-height: 1.15;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  background: linear-gradient(180deg, #ffffff 35%, #a5ecff 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 9px rgba(45, 228, 255, 0.4));
+}
+
+.phase-tag-scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 34%;
+  background: linear-gradient(100deg, transparent, rgba(151, 240, 255, 0.16), rgba(151, 240, 255, 0.32), rgba(151, 240, 255, 0.16), transparent);
+  transform: skewX(-14deg);
+  animation: phase-tag-scan 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes phase-tag-in {
+  from { opacity: 0; transform: translateY(-10px); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes phase-tag-scan {
+  0%, 55% { left: -40%; opacity: 0; }
+  60% { opacity: 1; }
+  90% { left: 110%; opacity: 0.9; }
+  100% { left: 110%; opacity: 0; }
 }
 
 // 右上角统计信息
@@ -1236,129 +1208,69 @@ function splitName(name: string): string[] {
   box-shadow: 0 0 8px rgba(73, 255, 166, 0.7), 0 0 12px rgba(45, 228, 255, 0.5);
 }
 
-// 跑道底部 - 信息栏
-.runway-foot {
-  position: absolute;
-  left: 24px;
-  right: 24px;
-  bottom: 16px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  pointer-events: none;
+/* 终点靶心：靶盘（覆盖跑道端帽）+ 旋转虚线扫描环 + 三层同心环 + 呼吸靶心 */
+.finish-target-board {
+  fill: rgba(7, 19, 40, 0.95);
+  stroke: rgba(255, 214, 130, 0.4);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.28));
 }
 
-.foot-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  color: rgba(211, 239, 255, 0.92);
-  font-size: clamp(13px, 1.1em, 18px);
-  font-weight: 800;
-  letter-spacing: 1px;
-  border: 1px solid rgba(45, 228, 255, 0.32);
-  border-radius: 12px;
-  background: rgba(8, 24, 56, 0.58);
-  box-shadow: 0 0 12px rgba(45, 228, 255, 0.12);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #2de4ff;
-  box-shadow: 0 0 8px rgba(45, 228, 255, 0.85);
-  animation: status-pulse 1.8s ease-in-out infinite;
-}
-
-.status-text {
-  max-width: min(320px, 38vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
-}
-
-.foot-phase-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border: 1px solid rgba(45, 228, 255, 0.28);
-  border-radius: 12px;
-  background: rgba(8, 24, 56, 0.58);
-  box-shadow:
-    0 0 12px rgba(45, 228, 255, 0.1),
-    inset 0 0 16px rgba(45, 228, 255, 0.04);
-}
-
-.phase-name-tag {
-  font-size: clamp(13px, 1.1em, 18px);
-  color: rgba(211, 239, 255, 0.92);
-  font-weight: 800;
-  letter-spacing: 1px;
-  white-space: nowrap;
-  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
-
-  &::after {
-    content: '';
-    display: inline-block;
-    width: 1px;
-    height: 12px;
-    margin-left: 8px;
-    background: linear-gradient(180deg, transparent, rgba(45, 228, 255, 0.5), transparent);
-    vertical-align: middle;
-  }
-}
-
-.phase-name-text {
-  font-size: clamp(13px, 1.1em, 18px);
-  color: #ff9a2f;
-  font-weight: 800;
-  letter-spacing: 1px;
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  text-shadow: 0 0 10px rgba(255, 154, 47, 0.5);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 12em;
-}
-
-/* 里程碑标签：皇冠右侧 HUD 引出线 + 鎏金文字 */
-.finish-milestone {
-  opacity: 0.95;
-}
-
-.finish-milestone-lead {
+.finish-target-scan {
   fill: none;
-  stroke: rgba(255, 211, 111, 0.5);
-  stroke-width: 1.4;
-  stroke-linecap: round;
+  stroke: rgba(255, 214, 130, 0.55);
+  stroke-width: 1.6;
+  stroke-dasharray: 10 7;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: finish-scan-spin 6s linear infinite;
 }
 
-.finish-milestone-dot {
-  fill: #ffd36f;
-  filter: drop-shadow(0 0 3px rgba(255, 180, 74, 0.8));
+.finish-target-ring-outer {
+  fill: rgba(255, 180, 74, 0.07);
+  stroke: #ffd36f;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 6px rgba(255, 180, 74, 0.5));
 }
 
-.finish-milestone-text {
-  fill: #ffd36f;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 3px;
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.55));
+.finish-target-ring-mid {
+  fill: none;
+  stroke: rgba(45, 228, 255, 0.72);
+  stroke-width: 1.6;
 }
 
-.finish-node-done .finish-milestone-text {
-  fill: #ffe1a5;
+.finish-target-bullseye {
+  fill: url(#target-core);
+  transform-origin: center;
+  transform-box: fill-box;
+  filter: drop-shadow(0 0 5px rgba(255, 189, 98, 0.85));
+  animation: target-bullseye-pulse 1.8s ease-in-out infinite;
 }
 
-@keyframes status-pulse {
-  0%, 100% { opacity: 0.85; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 12px rgba(45, 228, 255, 1); }
+.finish-target-done {
+  .finish-target-board {
+    fill: rgba(6, 32, 26, 0.95);
+    stroke: rgba(115, 255, 192, 0.45);
+    filter: drop-shadow(0 0 8px rgba(73, 255, 166, 0.32));
+  }
+
+  .finish-target-scan {
+    stroke: rgba(115, 255, 192, 0.6);
+  }
+
+  .finish-target-ring-outer {
+    stroke: #73ffc0;
+    filter: drop-shadow(0 0 6px rgba(73, 255, 166, 0.5));
+  }
+
+  .finish-target-ring-mid {
+    stroke: rgba(125, 255, 198, 0.65);
+  }
+
+  .finish-target-bullseye {
+    fill: #7dffc6;
+    filter: drop-shadow(0 0 6px rgba(73, 255, 166, 0.85));
+  }
 }
 
 @keyframes progress-pulse {
@@ -1380,12 +1292,20 @@ function splitName(name: string): string[] {
     top: 10px;
     left: 14px;
     right: 28px;
-    height: 46px;
+    min-height: 46px;
   }
 
-  .runway-title {
-    font-size: clamp(14px, 1.35em, 22px);
-    padding: 4px 10px 5px;
+  .phase-tag {
+    --chamfer: 9px;
+
+    .phase-tag-inner {
+      padding: 6px 18px 7px 12px;
+    }
+
+    .phase-tag-name {
+      font-size: clamp(14px, 1.3em, 21px);
+      letter-spacing: 3px;
+    }
   }
 
   .head-stats {
@@ -1434,74 +1354,6 @@ function splitName(name: string): string[] {
   .node-label {
     font-size: 26px;
     stroke-width: 2.4px;
-  }
-
-  .finish-node {
-    opacity: 0.9;
-    transform: scale(0.58);
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-
-  .finish-beacon-ring,
-  .finish-sparks {
-    display: none;
-  }
-
-  .finish-tether {
-    display: none;
-  }
-
-  .runway-foot {
-    left: 18px;
-    right: 18px;
-    bottom: 10px;
-  }
-
-  .foot-status,
-  .foot-phase-name {
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 9px;
-  }
-
-  .phase-name-tag,
-  .phase-name-text,
-  .foot-status {
-    font-size: clamp(12px, 1em, 15px);
-  }
-}
-
-@media (max-height: 820px) {
-  .runway-foot {
-    left: 18px;
-    right: 18px;
-    bottom: 10px;
-    // 始终保持 space-between：实例名在左、当前阶段胶囊在右，与宽屏一致
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .foot-status,
-  .foot-phase-name {
-    min-width: 0;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 9px;
-  }
-
-  .phase-name-tag,
-  .phase-name-text,
-  .foot-status {
-    font-size: clamp(12px, 1em, 15px);
-  }
-
-  .status-text {
-    max-width: 16em;
-  }
-
-  .phase-name-text {
-    max-width: 14em;
   }
 }
 
@@ -1610,88 +1462,13 @@ function splitName(name: string): string[] {
   stroke-width: 2.5px;
 }
 
-.finish-node {
-  opacity: 0.82;
-}
-
-.finish-beacon-ring {
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: finish-beacon-ring 2.2s ease-out infinite;
-}
-
-.finish-beacon-ring-b {
-  animation-delay: -1.1s;
-}
-
-.finish-sparks {
-  stroke: rgba(255, 224, 162, 0.82);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  animation: finish-sparks-flash 1.8s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-}
-
-.finish-tether {
-  animation: finish-tether-pulse 1.6s ease-in-out infinite;
-}
-
-.finish-disc {
-  stroke-width: 2.4px;
-}
-
-.finish-crown-shadow {
-  fill: rgba(25, 12, 2, 0.62);
-  transform: translate(2px, 4px);
-}
-
-.finish-crown {
-  fill: url(#crown-gold);
-  stroke: #fff0a8;
-  stroke-width: 2.1;
-  stroke-linejoin: round;
-  paint-order: stroke fill;
-}
-
-.finish-crown-ridge {
-  fill: none;
-  stroke: url(#crown-ridge);
-  stroke-width: 1.35;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.8;
-}
-
-.finish-crown-gem {
-  fill: url(#crown-gem);
-  stroke: rgba(255, 255, 255, 0.82);
-  stroke-width: 0.8;
-}
-
-.finish-crown-gem-main {
-  fill: #e53e2f;
-  stroke: #ffd7b0;
-}
-
-.finish-orbit {
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: finish-orbit-spin 5s linear infinite;
-}
-
-.finish-orbit-outer {
-  animation: finish-orbit-pulse 2.2s ease-in-out infinite;
-}
-
-.finish-node-done {
-  opacity: 1;
-  animation: finish-beacon 1.5s ease-in-out infinite;
-}
-
-@keyframes panel-sweep {
-  from { transform: rotate(0deg); }
+@keyframes finish-scan-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes target-bullseye-pulse {
+  0%, 100% { transform: scale(0.86); }
+  50% { transform: scale(1.12); }
 }
 
 @keyframes runway-svg-turn-pip {
@@ -1723,46 +1500,6 @@ function splitName(name: string): string[] {
   to { opacity: 0; transform: scale(1.78); }
 }
 
-@keyframes finish-beacon {
-  50% {
-    opacity: 0.88;
-  }
-}
-
-@keyframes finish-beacon-ring {
-  from {
-    opacity: 0.82;
-    transform: scale(0.72);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.42);
-  }
-}
-
-@keyframes finish-sparks-flash {
-  0%, 100% {
-    opacity: 0.34;
-    transform: scale(0.9);
-  }
-  48% {
-    opacity: 0.95;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes finish-tether-pulse {
-  50% { opacity: 0.52; stroke-width: 3.4; }
-}
-
-@keyframes finish-orbit-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes finish-orbit-pulse {
-  50% { opacity: 0.38; transform: scale(1.12); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .relay-runway::before,
   .runway-svg-turn-pip,
@@ -1771,12 +1508,8 @@ function splitName(name: string): string[] {
   .baton-core,
   .baton-trail-dot,
   .node-pulse-ring,
-  .finish-node-done,
-  .finish-beacon-ring,
-  .finish-sparks,
-  .finish-tether,
-  .finish-orbit,
-  .finish-orbit-outer,
+  .finish-target-scan,
+  .finish-target-bullseye,
   .progress-num,
   .foot-tag-dot {
     animation: none;

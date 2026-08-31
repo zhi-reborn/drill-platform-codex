@@ -19,10 +19,10 @@ const failures = forbidden.filter(([, pattern]) => pattern.test(source))
 const required = [
   ['runway short center dashes', /stroke-dasharray="22 28"[\s\S]*class="lane-dash"/],
   ['svg-aligned runway turn short dashes', /<rect[\s\S]*class="runway-svg-turn-pip"/],
-  ['milestone beacon rings', /finish-beacon-ring/],
-  ['milestone sparks', /finish-sparks/],
-  ['milestone crown', /finish-crown/],
-  ['milestone anchored below last node', /x:\s*lastPoint\.x[\s\S]*y:\s*lastPoint\.y\s*\+\s*108/],
+  ['milestone target board', /finish-target-board/],
+  ['milestone target rings', /finish-target-ring/],
+  ['milestone target bullseye', /finish-target-bullseye/],
+  ['milestone target replaces last node core', /isFinish:\s*index\s*===\s*lastIndex/],
   ['transform-only turn animation', /@keyframes\s+runway-svg-turn-pip[\s\S]*transform/],
 ]
 const missing = required.filter(([, pattern]) => !pattern.test(source))

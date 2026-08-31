@@ -245,7 +245,6 @@
               :center-numerator="displayPhaseStepNum"
               :center-denominator="displayPhaseStepDen"
               :center-hint="`阶段${chineseNum(displayPhaseIndex + 1)} · ${displayPhaseName}`"
-              :instance-name="currentDrill.name"
               :size="ringSize"
               :fullscreen="isFullscreenLike"
             />

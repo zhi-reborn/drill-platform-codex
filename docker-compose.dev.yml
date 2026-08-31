@@ -45,11 +45,13 @@ services:
       dockerfile: Dockerfile-dev
     container_name: drill-backend-dev
     restart: "no"
+    environment:
+      GOPROXY: https://goproxy.cn,direct
     ports:
       - "8080:8080"
     volumes:
       - .:/app
-      - /home/brent/go/pkg/mod:/go/pkg/mod
+      - go_mod_cache:/go/pkg/mod
     depends_on:
       mysql:
         condition: service_healthy
@@ -95,6 +97,8 @@ volumes:
   redis_data:
     driver: local
   go_cache:
+    driver: local
+  go_mod_cache:
     driver: local
   node_modules:
     driver: local
