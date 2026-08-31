@@ -59,21 +59,22 @@
 
       <svg ref="runwaySvgRef" class="runway-svg" viewBox="0 0 1040 500" preserveAspectRatio="xMidYMid meet" aria-label="当前阶段接力能量跑道">
         <defs>
-          <linearGradient id="lane-base" x1="0" y1="0" x2="1" y2="0">
+          <!-- 渐变统一 userSpaceOnUse：objectBoundingBox 在纯水平/垂直路径（零高度 bbox）上不渲染，会导致同一行完成节点间连线消失 -->
+          <linearGradient id="lane-base" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1040" y2="0">
             <stop offset="0" stop-color="#123050" />
             <stop offset=".5" stop-color="#23618d" />
             <stop offset="1" stop-color="#123050" />
           </linearGradient>
-          <linearGradient id="lane-aura" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id="lane-aura" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1040" y2="0">
             <stop offset="0" stop-color="#23f0ff" stop-opacity=".12" />
             <stop offset=".5" stop-color="#6bd6ff" stop-opacity=".32" />
             <stop offset="1" stop-color="#ffbd62" stop-opacity=".22" />
           </linearGradient>
-          <linearGradient id="lane-done" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id="lane-done" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1040" y2="0">
             <stop offset="0" stop-color="#09b86d" />
             <stop offset="1" stop-color="#73ffc0" />
           </linearGradient>
-          <linearGradient id="lane-active" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id="lane-active" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1040" y2="0">
             <stop offset="0" stop-color="#ff8426" />
             <stop offset="1" stop-color="#ffe0a2" />
           </linearGradient>
@@ -166,6 +167,7 @@
           stroke-width="10"
           stroke-linecap="round"
           stroke-linejoin="round"
+          class="lane-done-path"
         />
         <path
           v-if="activePath"
@@ -212,11 +214,17 @@
               class="finish-target"
               :class="{ 'finish-target-done': node.visualStatus === 'completed' }"
             >
-              <circle r="26" class="finish-target-board" />
-              <circle r="21.5" class="finish-target-scan" />
-              <circle r="16.5" class="finish-target-ring finish-target-ring-outer" />
-              <circle r="10.5" class="finish-target-ring finish-target-ring-mid" />
-              <circle r="4.2" class="finish-target-bullseye" />
+              <circle r="38" class="finish-target-board" />
+              <circle r="31.5" class="finish-target-scan" />
+              <circle r="24" class="finish-target-ring finish-target-ring-outer" />
+              <circle r="15.5" class="finish-target-ring finish-target-ring-mid" />
+              <circle r="7.5" class="finish-target-bullseye" />
+              <!-- 终点下方"里程碑"标注：金色 HUD 字样 + 两侧短线，字号与环节名称一致 -->
+              <g class="milestone-tag" :class="{ 'milestone-tag-done': node.visualStatus === 'completed' }">
+                <line x1="-66" y1="60" x2="-52" y2="60" />
+                <text x="2.5" y="68" :style="{ fontSize: node.labelFontSize + 'px' }">里程碑</text>
+                <line x1="52" y1="60" x2="66" y2="60" />
+              </g>
             </g>
             <circle
               v-else
@@ -470,9 +478,10 @@ const visibleNodes = computed(() => {
   })
 })
 
+// 已走完的链路：issue/timeout 节点视为"已流经"，一并纳入连线，避免完成链与运行节点间断开
 const donePath = computed(() => {
   const indexes = currentStatuses.value
-    .map((status, idx) => (isDone(status) ? idx : -1))
+    .map((status, idx) => (isDone(status) || isIssue(status) ? idx : -1))
     .filter(idx => idx >= 0)
   return indexes.length > 1 ? trackPathThroughIndexes(indexes) : ''
 })
@@ -568,13 +577,17 @@ function shouldLabelAbove(_index: number, _point: TrackPoint): boolean {
 
 function visualStatusOf(status: NodeStatus | undefined, index: number): 'completed' | 'running' | 'issue' | 'pending' {
   if (isDone(status)) return 'completed'
-  if (status?.status === 'issue' || status?.status === 'timeout') return 'issue'
+  if (isIssue(status)) return 'issue'
   if (status?.status === 'running' || index === activeNodeIndex.value) return 'running'
   return 'pending'
 }
 
 function isDone(status: NodeStatus | undefined): boolean {
   return status?.status === 'completed' || status?.status === 'done'
+}
+
+function isIssue(status: NodeStatus | undefined): boolean {
+  return status?.status === 'issue' || status?.status === 'timeout'
 }
 
 // 将环节名处理为最多 2 行的展示文本
@@ -850,15 +863,15 @@ function splitName(name: string): string[] {
 // 数据汇聚点 - 阶段进度
 .progress-hub {
   position: absolute;
-  top: 38px;
+  top: 44px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 118px;
-  height: 118px;
+  width: 140px;
+  height: 140px;
   pointer-events: none;
   isolation: isolate;
 }
@@ -868,8 +881,8 @@ function splitName(name: string): string[] {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 170px;
-  height: 170px;
+  width: 208px;
+  height: 208px;
   border-radius: 50%;
   background:
     radial-gradient(circle, rgba(45, 228, 255, 0.26) 0%, rgba(45, 228, 255, 0.12) 34%, transparent 66%);
@@ -882,8 +895,8 @@ function splitName(name: string): string[] {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 114px;
-  height: 114px;
+  width: 136px;
+  height: 136px;
   z-index: 1;
 }
 
@@ -924,10 +937,10 @@ function splitName(name: string): string[] {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  width: 88px;
-  height: 88px;
-  padding-top: 24px;
-  padding-bottom: 16px;
+  width: 104px;
+  height: 104px;
+  padding-top: 29px;
+  padding-bottom: 18px;
   background:
     radial-gradient(circle at 50% 42%, rgba(54, 245, 255, 0.2), transparent 46%),
     radial-gradient(circle at center, rgba(18, 92, 210, 0.3) 0%, transparent 72%),
@@ -935,9 +948,9 @@ function splitName(name: string): string[] {
   border: 1px solid rgba(45, 228, 255, 0.52);
   border-radius: 50%;
   box-shadow:
-    0 0 26px rgba(45, 228, 255, 0.28),
-    inset 0 0 18px rgba(45, 228, 255, 0.15),
-    inset 0 -12px 22px rgba(2, 8, 24, 0.5);
+    0 0 30px rgba(45, 228, 255, 0.32),
+    inset 0 0 22px rgba(45, 228, 255, 0.16),
+    inset 0 -14px 26px rgba(2, 8, 24, 0.5);
   overflow: hidden;
 }
 
@@ -966,13 +979,13 @@ function splitName(name: string): string[] {
   position: relative;
   z-index: 1;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
-  font-size: 38px;
+  font-size: 45px;
   font-weight: 900;
   color: #2de4ff;
   line-height: 1;
   text-shadow:
-    0 0 14px rgba(45, 228, 255, 0.82),
-    0 0 28px rgba(45, 228, 255, 0.42);
+    0 0 16px rgba(45, 228, 255, 0.82),
+    0 0 32px rgba(45, 228, 255, 0.42);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   animation: hub-num-glow 2.8s ease-in-out infinite;
@@ -983,8 +996,8 @@ function splitName(name: string): string[] {
   z-index: 1;
   font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
   align-self: baseline;
-  margin-left: 2px;
-  font-size: 19px;
+  margin-left: 3px;
+  font-size: 22px;
   font-weight: 900;
   color: rgba(142, 237, 255, 0.84);
   line-height: 1;
@@ -1208,68 +1221,94 @@ function splitName(name: string): string[] {
   box-shadow: 0 0 8px rgba(73, 255, 166, 0.7), 0 0 12px rgba(45, 228, 255, 0.5);
 }
 
-/* 终点靶心：靶盘（覆盖跑道端帽）+ 旋转虚线扫描环 + 三层同心环 + 呼吸靶心 */
+/* 终点靶心：靶盘（覆盖跑道端帽）+ 静态虚线环 + 三层同心环 + 靶心，纯静态无动画 */
+// 整体下移，避开终点环节名称标签（标签位于节点上方两行）
+.finish-target {
+  transform: translateY(16px);
+}
+
 .finish-target-board {
   fill: rgba(7, 19, 40, 0.95);
-  stroke: rgba(255, 214, 130, 0.4);
-  stroke-width: 1.5;
-  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.28));
+  stroke: rgba(255, 214, 130, 0.5);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 12px rgba(255, 180, 74, 0.4));
 }
 
 .finish-target-scan {
   fill: none;
-  stroke: rgba(255, 214, 130, 0.55);
-  stroke-width: 1.6;
+  stroke: rgba(255, 214, 130, 0.6);
+  stroke-width: 1.8;
   stroke-dasharray: 10 7;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: finish-scan-spin 6s linear infinite;
 }
 
 .finish-target-ring-outer {
-  fill: rgba(255, 180, 74, 0.07);
+  fill: rgba(255, 180, 74, 0.08);
   stroke: #ffd36f;
-  stroke-width: 2.4;
-  filter: drop-shadow(0 0 6px rgba(255, 180, 74, 0.5));
+  stroke-width: 3;
+  filter: drop-shadow(0 0 8px rgba(255, 180, 74, 0.6));
 }
 
 .finish-target-ring-mid {
   fill: none;
-  stroke: rgba(45, 228, 255, 0.72);
-  stroke-width: 1.6;
+  stroke: rgba(45, 228, 255, 0.75);
+  stroke-width: 1.8;
 }
 
 .finish-target-bullseye {
   fill: url(#target-core);
-  transform-origin: center;
-  transform-box: fill-box;
-  filter: drop-shadow(0 0 5px rgba(255, 189, 98, 0.85));
-  animation: target-bullseye-pulse 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 7px rgba(255, 189, 98, 0.9));
 }
 
 .finish-target-done {
   .finish-target-board {
     fill: rgba(6, 32, 26, 0.95);
-    stroke: rgba(115, 255, 192, 0.45);
-    filter: drop-shadow(0 0 8px rgba(73, 255, 166, 0.32));
+    stroke: rgba(115, 255, 192, 0.5);
+    filter: drop-shadow(0 0 12px rgba(73, 255, 166, 0.4));
   }
 
   .finish-target-scan {
-    stroke: rgba(115, 255, 192, 0.6);
+    stroke: rgba(115, 255, 192, 0.65);
   }
 
   .finish-target-ring-outer {
     stroke: #73ffc0;
-    filter: drop-shadow(0 0 6px rgba(73, 255, 166, 0.5));
+    filter: drop-shadow(0 0 8px rgba(73, 255, 166, 0.6));
   }
 
   .finish-target-ring-mid {
-    stroke: rgba(125, 255, 198, 0.65);
+    stroke: rgba(125, 255, 198, 0.7);
   }
 
   .finish-target-bullseye {
     fill: #7dffc6;
-    filter: drop-shadow(0 0 6px rgba(73, 255, 166, 0.85));
+    filter: drop-shadow(0 0 8px rgba(73, 255, 166, 0.9));
+  }
+}
+
+// 终点下方"里程碑"标注：金色字样 + 两侧短线，完成态转为绿色
+.milestone-tag {
+  line {
+    stroke: rgba(255, 211, 111, 0.6);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  text {
+    font-weight: 900;
+    letter-spacing: 5px;
+    fill: #ffd36f;
+    filter: drop-shadow(0 0 5px rgba(255, 189, 98, 0.55));
+  }
+}
+
+.milestone-tag-done {
+  line {
+    stroke: rgba(115, 255, 192, 0.6);
+  }
+
+  text {
+    fill: #7dffc6;
+    filter: drop-shadow(0 0 5px rgba(73, 255, 166, 0.55));
   }
 }
 
@@ -1280,9 +1319,10 @@ function splitName(name: string): string[] {
 
 .runway-svg {
   position: absolute;
-  inset: 128px 6px 70px;
+  // 顶部让位于中心百分比环（标准模式环底部约 184px），避免第一行节点标签与环重叠
+  inset: 206px 6px 34px;
   width: calc(100% - 18px);
-  height: calc(100% - 198px);
+  height: calc(100% - 240px);
   overflow: visible;
   z-index: 1;
 }
@@ -1316,39 +1356,40 @@ function splitName(name: string): string[] {
   }
 
   .progress-hub {
-    top: 28px;
-    width: 94px;
-    height: 94px;
+    top: 32px;
+    width: 110px;
+    height: 110px;
   }
 
   .hub-glow {
-    width: 132px;
-    height: 132px;
+    width: 158px;
+    height: 158px;
   }
 
   .hub-rings {
-    width: 92px;
-    height: 92px;
+    width: 106px;
+    height: 106px;
   }
 
   .hub-core {
-    width: 72px;
-    height: 72px;
-    padding-top: 19px;
-    padding-bottom: 13px;
+    width: 84px;
+    height: 84px;
+    padding-top: 23px;
+    padding-bottom: 14px;
   }
 
   .hub-num {
-    font-size: 30px;
+    font-size: 36px;
   }
 
   .hub-unit {
-    font-size: 15px;
+    font-size: 18px;
   }
 
   .runway-svg {
-    inset: 104px 6px 58px;
-    height: calc(100% - 162px);
+    // 紧凑模式环较小（底部约 142px），下移量相应较小
+    inset: 164px 6px 26px;
+    height: calc(100% - 190px);
   }
 
   .node-label {
@@ -1359,6 +1400,11 @@ function splitName(name: string): string[] {
 
 .lane-aura {
   opacity: 0.72;
+}
+
+// 完成链发光：CSS drop-shadow 基于 rendered pixels，纯水平路径也能正常发光（SVG filter 受 bbox 限制不适用）
+.lane-done-path {
+  filter: drop-shadow(0 0 5px rgba(73, 255, 166, 0.55));
 }
 
 .lane-dash {
@@ -1462,15 +1508,6 @@ function splitName(name: string): string[] {
   stroke-width: 2.5px;
 }
 
-@keyframes finish-scan-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes target-bullseye-pulse {
-  0%, 100% { transform: scale(0.86); }
-  50% { transform: scale(1.12); }
-}
-
 @keyframes runway-svg-turn-pip {
   0%, 100% {
     opacity: 0.22;
@@ -1508,8 +1545,6 @@ function splitName(name: string): string[] {
   .baton-core,
   .baton-trail-dot,
   .node-pulse-ring,
-  .finish-target-scan,
-  .finish-target-bullseye,
   .progress-num,
   .foot-tag-dot {
     animation: none;
