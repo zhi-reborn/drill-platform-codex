@@ -257,7 +257,7 @@
             <div class="panel-header">
               <span class="panel-deco-corner tl" />
               <span class="panel-deco-corner tr" />
-              <span class="panel-title-zh">执行中步骤</span>
+              <span class="panel-title-zh">当前环节待完成的任务</span>
               <span class="panel-realtime">
                 <span class="rt-dot" />
                 实时
@@ -292,20 +292,28 @@
                       <span class="meta-val operator-val">{{ alert.operator }}</span>
                     </span>
                   </div>
-                  <!-- 剩余时间进度条：默认超时 10 分钟，仅大屏展示，不参与流程流转 -->
-                  <div class="alert-countdown" :class="{ 'is-urgent': alertCountdownPercent(alert) >= 100 }">
+                  <!-- 剩余时间进度条：默认超时 10 分钟，仅大屏展示，不参与流程流转；
+                       待执行任务不计时，显示"未开始"占位 -->
+                  <div
+                    class="alert-countdown"
+                    :class="{
+                      'is-urgent': alert.startedAt && alertCountdownPercent(alert) >= 100,
+                      'is-idle': !alert.startedAt,
+                    }"
+                  >
                     <div class="countdown-bar">
                       <div
+                        v-if="alert.startedAt"
                         class="countdown-fill"
                         :style="{ width: Math.min(alertCountdownPercent(alert), 100) + '%' }"
                       />
                     </div>
-                    <span class="countdown-text">{{ alertCountdownText(alert) }}</span>
+                    <span class="countdown-text">{{ alert.startedAt ? alertCountdownText(alert) : '未开始' }}</span>
                   </div>
                 </div>
-                <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
+                <div v-if="activeAlerts.length === 0" class="empty-tip">当前环节任务已全部完成</div>
                 <div v-else-if="visibleAlerts.length < activeAlerts.length" ref="moreTipRef" class="more-tip">
-                  还有 {{ activeAlerts.length - visibleAlerts.length }} 个执行中步骤...
+                  还有 {{ activeAlerts.length - visibleAlerts.length }} 个任务...
                 </div>
               </div>
             </div>
@@ -988,6 +996,18 @@ const ringPhaseNames = computed(() => {
   return stages.value.map(s => s.phaseNames || [])
 })
 
+// 当前进行中的环节名（取跑道当前阶段里状态为 running 的环节节点），
+// 无运行环节时回退：首个未完成环节 → 当前阶段名
+const currentRunningNodeName = computed(() => {
+  const names = ringPhaseNames.value[displayPhaseIndex.value] || []
+  const statuses = ringPhaseNodeStatuses.value[displayPhaseIndex.value] || []
+  const runningIdx = statuses.findIndex(s => s?.status === 'running')
+  if (runningIdx >= 0 && names[runningIdx]) return names[runningIdx]
+  const pendingIdx = statuses.findIndex(s => s?.status !== 'completed')
+  if (pendingIdx >= 0 && names[pendingIdx]) return names[pendingIdx]
+  return currentPhaseName.value
+})
+
 const ringPhaseStatuses = computed(() => {
   return stages.value.map(s => s.status)
 })
@@ -1053,7 +1073,7 @@ const activeAlerts = computed(() => {
   // 依赖 elapsedSeconds 使 computed 每秒重算
   const _now = elapsedSeconds.value
 
-  const running: Array<{
+  const items: Array<{
     stepId: number
     title: string
     operator: string
@@ -1061,37 +1081,65 @@ const activeAlerts = computed(() => {
     parentPhase: string
     directParent: string
     statusLabel: string
-    level: 'warn' | 'info' | 'danger'
+    level: 'warn' | 'info' | 'danger' | 'ok' | 'pending'
     seq: number
     startedAt: string | null
     timeoutMin: number
   }> = []
 
-  // 只展示进行中步骤（只看叶子步骤）；pending 不再进入列表
-  leafSteps.value
-    .filter(s => s.status === 'running')
+  // 展示当前运行环节下的全部叶子任务（含各状态），与跑道当前环节节点联动
+  const names = ringPhaseNames.value[displayPhaseIndex.value] || []
+  const statuses = ringPhaseNodeStatuses.value[displayPhaseIndex.value] || []
+  const runningIdx = statuses.findIndex(s => s?.status === 'running')
+  const nodeIdx = runningIdx >= 0 ? runningIdx : statuses.findIndex(s => s?.status !== 'completed')
+  if (nodeIdx < 0 || !names[nodeIdx]) return items
+
+  // 定位环节节点对应的步骤（根步骤的直接子节点）
+  const root = rootSteps.value[displayPhaseIndex.value]
+  const nodeStep = root ? (childMap.value.get(root.id) || [])[nodeIdx] : undefined
+  if (!nodeStep) return items
+
+  const levelOf = (status: string): 'warn' | 'info' | 'danger' | 'ok' | 'pending' => {
+    if (status === 'running') return 'warn'
+    if (status === 'issue' || status === 'timeout') return 'danger'
+    if (status === 'completed' || status === 'done' || status === 'skipped') return 'ok'
+    return 'pending'
+  }
+  const labelOf = (status: string): string => {
+    if (status === 'running') return '执行中'
+    if (status === 'issue') return '异常'
+    if (status === 'timeout') return '超时'
+    if (status === 'completed' || status === 'done') return '已完成'
+    if (status === 'skipped') return '已跳过'
+    return '待执行'
+  }
+
+  // 只保留未完成任务（已完成/已跳过视为完成，不进入列表）
+  const isIncomplete = (status: string) => !['completed', 'done', 'skipped'].includes(status)
+
+  collectLeaves(nodeStep.id)
+    .filter(s => isIncomplete(s.status))
     .forEach(s => {
-      const attrs = typeof (s as any).attributes === 'string'
-        ? safeParseJSON((s as any).attributes)
-        : (s as any).attributes
-      const operatorName = attrs?.operator
-      running.push({
-        stepId: s.id,
-        title: s.name,
-        operator: operatorName || '',
-        team: s.executor_team || '运维部',
-        parentPhase: findParentPhase(s.id),
-        directParent: findDirectParent(s.id),
-        statusLabel: '执行中',
-        level: 'warn',
-        seq: s.seq,
-        startedAt: (s as any).start_time || null,
-        timeoutMin: (s as any).timeout_minutes || COUNTDOWN_DEFAULT_MIN,
-      })
+    const attrs = typeof (s as any).attributes === 'string'
+      ? safeParseJSON((s as any).attributes)
+      : (s as any).attributes
+    items.push({
+      stepId: s.id,
+      title: s.name,
+      operator: attrs?.operator || '',
+      team: s.executor_team || '运维部',
+      parentPhase: findParentPhase(s.id),
+      directParent: findDirectParent(s.id),
+      statusLabel: labelOf(s.status),
+      level: levelOf(s.status),
+      seq: s.seq,
+      startedAt: (s as any).start_time || null,
+      timeoutMin: (s as any).timeout_minutes || COUNTDOWN_DEFAULT_MIN,
     })
+  })
 
   // 按流程顺序排序
-  return running.sort((a, b) => a.seq - b.seq)
+  return items.sort((a, b) => a.seq - b.seq)
 })
 
 // ===== 执行中步骤剩余时间进度条（仅大屏展示，不影响流程流转） =====
@@ -2597,6 +2645,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     color: #ffffff;
     letter-spacing: 2px;
     text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
+    // 标题承载动态环节名，超长时省略并加提示，避免挤压右侧"实时"标签
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .panel-title-en {
     font-family: $font-display;
@@ -2926,10 +2978,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       background: linear-gradient(90deg, $neon, rgba(0, 212, 255, 0.15));
     }
 
-    // 运行中卡片微光（边框色与左侧 stage-running 阶段卡片统一为同一橙色系）
+    // 运行中卡片突出显示：橙色辉光描边 + 呼吸动效，与跑道运行节点同色系
     &.alert-warn {
       border-color: #ff9a2f;
-      box-shadow: inset 0 0 22px rgba(255, 122, 0, 0.12);
+      background: linear-gradient(135deg, rgba(58, 28, 6, 0.96), rgba(20, 12, 8, 0.92));
+      box-shadow:
+        inset 0 0 22px rgba(255, 122, 0, 0.14),
+        0 0 16px rgba(255, 154, 47, 0.28);
+      animation: alert-running-breathe 2.2s ease-in-out infinite;
+      &::before {
+        background: linear-gradient(90deg, #ffc179, rgba(255, 154, 47, 0.35));
+        height: 3px;
+        box-shadow: 0 0 8px rgba(255, 154, 47, 0.8);
+      }
+      .alert-indicator {
+        background: #ffb75e;
+        box-shadow: 0 0 8px rgba(255, 183, 94, 0.95);
+      }
     }
     &.alert-danger {
       border-color: rgba(255, 77, 106, 0.42);
@@ -2937,6 +3002,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
     &.alert-info {
       border-color: rgba(0, 212, 255, 0.28);
+    }
+    // 已完成 / 待执行卡片配色（与跑道节点完成绿/待定蓝呼应）
+    &.alert-ok {
+      border-color: rgba(73, 255, 166, 0.4);
+      &::before { background: linear-gradient(90deg, #49ffa6, rgba(73, 255, 166, 0.15)); }
+    }
+    &.alert-pending {
+      border-color: rgba(123, 167, 201, 0.3);
+      &::before { background: linear-gradient(90deg, #7ba7c9, rgba(123, 167, 201, 0.12)); }
+      // 待执行指示灯：灰蓝色呼吸，与待执行徽标同色系（覆盖默认橘黄）
+      .alert-indicator {
+        background: #7ba7c9;
+        box-shadow: 0 0 6px rgba(123, 167, 201, 0.65);
+        animation: indicator-pulse-cool 2.4s ease-in-out infinite;
+      }
     }
   }
   .alert-head {
@@ -2965,6 +3045,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       &.badge-warn { color: $warn; background: rgba(255, 182, 72, 0.12); border: 1px solid rgba(255, 182, 72, 0.3); }
       &.badge-danger { color: $danger; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.3); animation: badge-danger-flash 1s ease-in-out infinite; }
       &.badge-info { color: $neon; background: rgba(0, 212, 255, 0.08); border: 1px solid rgba(0, 212, 255, 0.25); }
+      &.badge-ok { color: #7dffc6; background: rgba(73, 255, 166, 0.1); border: 1px solid rgba(73, 255, 166, 0.32); }
+      &.badge-pending { color: $text-dim; background: rgba(110, 141, 181, 0.12); border: 1px solid $line; }
     }
   }
   .alert-foot {
@@ -3059,6 +3141,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       .countdown-fill {
         box-shadow: 0 0 12px rgba(0, 212, 255, 0.85);
         animation: countdown-urgent-pulse 1.2s ease-in-out infinite;
+      }
+    }
+
+    // 待执行态：不计时，进度条空置，文本弱化显示"未开始"
+    &.is-idle {
+      .countdown-text {
+        color: $text-dim;
+        text-shadow: none;
       }
     }
   }
@@ -3195,9 +3285,21 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   50% { opacity: 0.5; box-shadow: 0 0 10px rgba(255, 182, 72, 0.9); }
 }
 
+// 待执行指示灯呼吸：灰蓝色、节奏更缓（区别于执行中的活跃橘黄）
+@keyframes indicator-pulse-cool {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px rgba(123, 167, 201, 0.55); }
+  50% { opacity: 0.45; box-shadow: 0 0 8px rgba(123, 167, 201, 0.75); }
+}
+
 @keyframes badge-danger-flash {
   0%, 100% { border-color: rgba(255, 77, 106, 0.3); }
   50% { border-color: rgba(255, 77, 106, 0.8); box-shadow: 0 0 6px rgba(255, 77, 106, 0.4); }
+}
+
+// 执行中任务卡片呼吸：外辉光强弱缓慢起伏，营造"进行中"的活跃感
+@keyframes alert-running-breathe {
+  0%, 100% { box-shadow: inset 0 0 22px rgba(255, 122, 0, 0.14), 0 0 14px rgba(255, 154, 47, 0.22); }
+  50% { box-shadow: inset 0 0 26px rgba(255, 122, 0, 0.2), 0 0 24px rgba(255, 154, 47, 0.42); }
 }
 
 // ===== Footer =====
@@ -3701,6 +3803,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
   .fly-ghost, .fly-trail-dot, .hub-shockwave, .hub-burst-particle { display: none !important; }
+  .alert-card.alert-warn,
+  .alert-card.alert-pending .alert-indicator { animation: none !important; }
 }
 
 // ===== 任务完成流式动画 =====
