@@ -292,11 +292,15 @@
                       <span class="meta-val operator-val">{{ alert.operator }}</span>
                     </span>
                   </div>
-                  <!-- 层级路径：环节名 - 任务名 -->
-                  <div class="alert-hierarchy">
-                    <span class="hierarchy-phase">{{ alert.parentPhase }}</span>
-                    <span v-if="alert.directParent !== '--'" class="hierarchy-dash">—</span>
-                    <span v-if="alert.directParent !== '--'" class="hierarchy-task">{{ alert.directParent }}</span>
+                  <!-- 剩余时间进度条：默认超时 10 分钟，仅大屏展示，不参与流程流转 -->
+                  <div class="alert-countdown" :class="{ 'is-urgent': alertCountdownPercent(alert) >= 100 }">
+                    <div class="countdown-bar">
+                      <div
+                        class="countdown-fill"
+                        :style="{ width: Math.min(alertCountdownPercent(alert), 100) + '%' }"
+                      />
+                    </div>
+                    <span class="countdown-text">{{ alertCountdownText(alert) }}</span>
                   </div>
                 </div>
                 <div v-if="activeAlerts.length === 0" class="empty-tip">暂无活跃步骤</div>
@@ -1050,6 +1054,8 @@ const activeAlerts = computed(() => {
     statusLabel: string
     level: 'warn' | 'info' | 'danger'
     seq: number
+    startedAt: string | null
+    timeoutMin: number
   }> = []
 
   // 只展示进行中步骤（只看叶子步骤）；pending 不再进入列表
@@ -1070,12 +1076,44 @@ const activeAlerts = computed(() => {
         statusLabel: '执行中',
         level: 'warn',
         seq: s.seq,
+        startedAt: (s as any).start_time || null,
+        timeoutMin: (s as any).timeout_minutes || COUNTDOWN_DEFAULT_MIN,
       })
     })
 
   // 按流程顺序排序
   return running.sort((a, b) => a.seq - b.seq)
 })
+
+// ===== 执行中步骤剩余时间进度条（仅大屏展示，不影响流程流转） =====
+// 超时时间默认 10 分钟；无 start_time 时以当前时间为起点
+const COUNTDOWN_DEFAULT_MIN = 10
+// 无 start_time 的步骤以组件加载时刻为计时起点
+const elapsedBase = Date.now()
+
+function alertCountdownPercent(alert: { startedAt: string | null, timeoutMin: number }): number {
+  const start = alert.startedAt ? new Date(alert.startedAt).getTime() : elapsedBase
+  const total = Math.max(alert.timeoutMin, 1) * 60 * 1000
+  const used = Math.max(Date.now() - start, 0)
+  return (used / total) * 100
+}
+
+// 文本改为展示已耗时：正常态"已耗时"，超时态"已超时"（超时后继续计时）
+// 时长自适应格式：<1h 用 m:ss，<1d 用 h:mm:ss，≥1d 用 d天h小时
+function alertCountdownText(alert: { startedAt: string | null, timeoutMin: number }): string {
+  const start = alert.startedAt ? new Date(alert.startedAt).getTime() : elapsedBase
+  const total = Math.max(alert.timeoutMin, 1) * 60 * 1000
+  const used = Math.max(Date.now() - start, 0)
+  const s = Math.floor((used % 60000) / 1000)
+  const m = Math.floor((used % 3600000) / 60000)
+  const h = Math.floor((used % 86400000) / 3600000)
+  const d = Math.floor(used / 86400000)
+  let time: string
+  if (d >= 1) time = `${d}天${h}小时`
+  else if (h >= 1) time = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  else time = `${m}:${String(s).padStart(2, '0')}`
+  return used >= total ? `已超时 ${time}` : `已耗时 ${time}`
+}
 
 // 可见步骤数量：按容器和实际卡片尺寸自适应，避免在不同屏幕上写死展示数量
 const ALERT_CARD_FALLBACK_HEIGHT = 106
@@ -2972,34 +3010,52 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       }
     }
   }
-  .alert-hierarchy {
-    display: flex; align-items: center; gap: 0;
+  // 剩余时间进度条：横向能量条 + 等宽字体倒计时
+  .alert-countdown {
+    display: flex; align-items: center; gap: 10px;
     min-height: 20px;
     padding-top: clamp(5px, 0.6vh, 7px);
-    padding-bottom: 1px;
+    padding-bottom: 2px;
     border-top: 1px solid rgba(0, 212, 255, 0.1);
-    font-size: clamp(12px, 0.78vw, 14px);
-    line-height: 1.2;
-    min-width: 0;
-    overflow: hidden;
-    .hierarchy-phase {
-      font-weight: 600;
-      color: rgba(0, 212, 255, 0.85);
-      line-height: 1.2;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      max-width: 45%;
+
+    .countdown-bar {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(8, 22, 42, 0.9);
+      border: 1px solid rgba(0, 212, 255, 0.18);
+      overflow: hidden;
+      position: relative;
     }
-    .hierarchy-dash {
-      color: rgba(200, 220, 245, 0.6); margin: 0 6px;
-      font-weight: 400;
-      line-height: 1.2;
+    .countdown-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #00d4ff, #2cf7d8);
+      box-shadow: 0 0 8px rgba(0, 212, 255, 0.65);
+      transition: width 0.6s ease;
     }
-    .hierarchy-task {
-      font-weight: 600;
-      color: rgba(226, 240, 255, 0.86);
-      line-height: 1.2;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      max-width: 45%;
+    .countdown-text {
+      flex-shrink: 0;
+      font-family: $font-mono;
+      font-size: clamp(11px, 0.72vw, 12.5px);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: rgba(44, 248, 216, 0.95);
+      text-shadow: 0 0 8px rgba(44, 248, 216, 0.35);
+      white-space: nowrap;
+    }
+
+    // 超时态：能量条转红脉冲，文本提示已超时（仅视觉提醒，不改变任务状态）
+    &.is-urgent {
+      .countdown-fill {
+        background: linear-gradient(90deg, #ff4d6a, #ff8426);
+        box-shadow: 0 0 10px rgba(255, 77, 106, 0.7);
+        animation: countdown-urgent-pulse 1.2s ease-in-out infinite;
+      }
+      .countdown-text {
+        color: #ff6b8a;
+        text-shadow: 0 0 8px rgba(255, 77, 106, 0.45);
+      }
     }
   }
   .empty-tip,
@@ -3123,6 +3179,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 @keyframes exec-log-marquee {
   from { transform: translateY(0); }
   to { transform: translateY(-50%); }
+}
+
+@keyframes countdown-urgent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 @keyframes indicator-pulse {
@@ -3611,8 +3672,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       }
     }
 
-    .alert-hierarchy {
-      font-size: 9px;
+    .alert-countdown {
+      .countdown-text {
+        font-size: 9px;
+      }
     }
   }
 
