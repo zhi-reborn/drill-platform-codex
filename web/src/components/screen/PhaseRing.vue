@@ -224,11 +224,12 @@
               <circle r="24" class="finish-target-ring finish-target-ring-outer" />
               <circle r="15.5" class="finish-target-ring finish-target-ring-mid" />
               <circle r="7.5" class="finish-target-bullseye" />
-              <!-- 终点右下"里程碑"标注：斜向引导线沿靶心外缘 45° 伸出，金色字样落于右下角；
-                   数字进度徽标在靶心正下方（下移留足间隙），三者互不重叠 -->
+              <!-- 终点上方"里程碑"标注：金色字样居中悬于靶心正上方，两侧短线装饰；
+                   靶心正下方留空，与跑道链路互不重叠 -->
               <g class="milestone-tag" :class="{ 'milestone-tag-done': node.visualStatus === 'completed' }">
-                <line x1="34" y1="34" x2="46" y2="46" />
-                <text x="104" y="54.5" style="font-size: 24px;">里程碑</text>
+                <line x1="-72" y1="-68" x2="-56" y2="-68" />
+                <line x1="56" y1="-68" x2="72" y2="-68" />
+                <text x="0" y="-56" style="font-size: 24px;">里程碑</text>
               </g>
             </g>
             <circle
@@ -371,7 +372,10 @@ const LANE_MIN_GAP = 200
 const LANE_TOP_PAD = 72
 const LANE_BOTTOM_PAD = 72
 
-const rowCount = computed(() => Math.max(1, Math.ceil(Math.max(currentNodes.value.length, 1) / LANE_CAPACITY)))
+// 展示节点数 = 真实环节数 + 1 个虚拟里程碑终点（固定追加在跑道末尾，不计入环节统计）
+const displayNodeCount = computed(() => currentNodes.value.length + 1)
+
+const rowCount = computed(() => Math.max(1, Math.ceil(Math.max(displayNodeCount.value, 1) / LANE_CAPACITY)))
 
 // 画布高度随行数自适应：行数多时加高 viewBox（内容等比缩小换取垂直间距），1~2 行维持 500 不变
 const viewBoxHeight = computed(() =>
@@ -451,12 +455,12 @@ const activeNodeIndex = computed(() => {
 })
 
 const trackPoints = computed<TrackPoint[]>(() => {
-  const count = Math.max(currentNodes.value.length, 1)
+  const count = Math.max(displayNodeCount.value, 1)
   return Array.from({ length: count }, (_, i) => pointAt(i))
 })
 
 const laneNodeCounts = computed(() => {
-  const count = Math.max(currentNodes.value.length, 1)
+  const count = Math.max(displayNodeCount.value, 1)
   const rows = rowCount.value
   const baseCount = Math.floor(count / rows)
   const extraCount = count % rows
@@ -489,16 +493,22 @@ const turnPips = computed(() => {
 })
 
 const visibleNodes = computed(() => {
-  const lastIndex = currentNodes.value.length - 1
-  return currentNodes.value.map((name, index) => {
-    const status = currentStatuses.value[index]
-    const visualStatus = visualStatusOf(status, index)
+  const realCount = currentNodes.value.length
+  // 真实环节之后固定追加一个虚拟里程碑终点节点（靶心形态）：
+  // 不承载真实环节状态与任务数，全部环节完成时才点亮为完成态
+  return Array.from({ length: realCount + 1 }, (_, index) => {
+    const isVirtualFinish = index === realCount
+    const name = isVirtualFinish ? '' : currentNodes.value[index]
+    const status = isVirtualFinish ? undefined : currentStatuses.value[index]
+    const visualStatus = isVirtualFinish
+      ? (isCurrentPhaseDone.value ? 'completed' : 'pending')
+      : visualStatusOf(status, index)
     const p = trackPoints.value[index]
     const { row } = locateLaneNode(index)
     // 跑道流向：偶数行（0,2…）由左向右，奇数行（1,3…）由右向左
     const flowDir = row % 2 === 1 ? 'left' : 'right'
     const trailSign = flowDir === 'left' ? 1 : -1
-    const lines = splitName(name)
+    const lines = isVirtualFinish ? [] : splitName(name)
     const isMulti = lines.length > 1
     // 多行时字号略缩，但不低于 stage-name 的最小字号（14px CSS → SVG 单位约 18px）
     // 字号收一点 + 节点内边距缩小，让相邻标签留出更舒展的呼吸间距
@@ -508,18 +518,15 @@ const visibleNodes = computed(() => {
     const labelLineHeight = isCompact.value ? 24 : 29
     // 末行基线固定在 -32（与原单行一致），多出的行向上延伸
     const labelY = -32 - (lines.length - 1) * labelLineHeight
-    // 任务进度徽标（已完成/总数）：普通节点置于圆下方居中；终点节点与"里程碑"标注同行并排于靶心下方
+    // 任务进度徽标（已完成/总数）：普通节点置于圆下方居中；虚拟里程碑终点无任务数，不展示徽标
     const total = Math.max(0, status?.total ?? 0)
     const completed = Math.min(Math.max(0, status?.completed ?? 0), total)
     const ratio = total > 0 ? completed / total : 0
     // 完成数为主数字（30px）放大加粗，斜杠/总数略小（20/22px），按各自动态宽度计算胶囊宽度
     const countW = 40 + String(completed).length * 19 + 12 + String(total).length * 14
     const countFillW = completed > 0 ? Math.max(14, Math.round((countW - 9) * ratio)) : 0
-    // 终点节点：徽标置于靶心正下方居中，介于靶心辉光（底约 +50）与下方边界之间取中，
-    // 徽标顶 +60 避开辉光，底 +104 不溢出画布；"里程碑"标注在靶心右下角，互不重叠
-    const isFinishNode = index === lastIndex
     const countX = 0
-    const countY = isFinishNode ? 82 : 46
+    const countY = 46
     // baton 前移：初始停靠在节点脉冲环外缘（±70），随任务完成比例沿"当前→下一节点"直线推进，
     // 终点停靠在下一节点环外缘前；跨行弯道（U 转弯）不走直线，保持原位避免切内角
     let batonOffsetX = flowDir === 'left' ? -70 : 70
@@ -548,8 +555,8 @@ const visibleNodes = computed(() => {
       countX,
       countY,
       batonOffsetX,
-      // 最后一个环节为跑道终点，节点圆环由靶心取代
-      isFinish: index === lastIndex,
+      // 虚拟里程碑节点为跑道终点，节点圆环由靶心取代
+      isFinish: isVirtualFinish,
       // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
       trail: [
         { cx: trailSign * 50, r: 3.4 },
@@ -560,22 +567,25 @@ const visibleNodes = computed(() => {
   })
 })
 
-// 已走完的链路（绿）：issue/timeout 节点视为"已流经"，运行节点本身也算"已抵达"，一并纳入连线
+// 已走完的链路（绿）：issue/timeout 节点视为"已流经"，运行节点本身也算"已抵达"，一并纳入连线；
+// 全部环节完成后延伸至虚拟里程碑靶心
 const donePath = computed(() => {
   const indexes = currentStatuses.value
     .map((status, idx) => (isDone(status) || isIssue(status) ? idx : -1))
     .filter(idx => idx >= 0)
   const activeIdx = activeNodeIndex.value
   if (activeIdx > 0 && !indexes.includes(activeIdx)) indexes.push(activeIdx)
+  if (isCurrentPhaseDone.value) indexes.push(displayNodeCount.value - 1)
   return indexes.length > 1 ? trackPathThroughIndexes(indexes) : ''
 })
 
-// 运行节点 → 下一节点（橘黄进度线，长度由 activeRatio 裁剪）
+// 运行节点 → 下一节点（橘黄进度线，长度由 activeRatio 裁剪）；
+// 最后一个真实环节运行时，进度线指向虚拟里程碑靶心
 const activePath = computed(() => {
   const activeIdx = activeNodeIndex.value
   if (activeIdx < 0) return ''
   const nextIdx = activeIdx + 1
-  if (nextIdx >= currentNodes.value.length) return ''
+  if (nextIdx >= displayNodeCount.value) return ''
   return trackPathThroughIndexes([activeIdx, nextIdx])
 })
 
@@ -1379,7 +1389,7 @@ function splitName(name: string): string[] {
   }
 }
 
-// 终点下方"里程碑"标注：金色字样 + 两侧短线，完成态转为绿色
+// 终点上方"里程碑"标注：金色字样居中 + 两侧短线，完成态转为绿色
 .milestone-tag {
   line {
     stroke: rgba(255, 211, 111, 0.6);
