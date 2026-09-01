@@ -57,7 +57,7 @@
         </div>
       </div>
 
-      <svg ref="runwaySvgRef" class="runway-svg" viewBox="0 0 1040 500" preserveAspectRatio="xMidYMid meet" aria-label="当前阶段接力能量跑道">
+      <svg ref="runwaySvgRef" class="runway-svg" :viewBox="`0 0 1040 ${viewBoxHeight}`" preserveAspectRatio="xMidYMid meet" aria-label="当前阶段接力能量跑道">
         <defs>
           <!-- 渐变统一 userSpaceOnUse：objectBoundingBox 在纯水平/垂直路径（零高度 bbox）上不渲染，会导致同一行完成节点间连线消失 -->
           <linearGradient id="lane-base" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1040" y2="0">
@@ -169,6 +169,7 @@
           stroke-linejoin="round"
           class="lane-done-path"
         />
+        <!-- 运行节点 → 下一节点：橘黄进度线，长度 = 环节任务完成比例（pathLength 归一化 + dashoffset 裁剪） -->
         <path
           v-if="activePath"
           :d="activePath"
@@ -177,6 +178,10 @@
           stroke-width="10"
           stroke-linecap="round"
           stroke-linejoin="round"
+          pathLength="100"
+          stroke-dasharray="100"
+          :stroke-dashoffset="Math.round((1 - activeRatio) * 100)"
+          class="lane-active-path"
         />
 
         <g font-family="Microsoft YaHei, PingFang SC, sans-serif" text-anchor="middle">
@@ -219,11 +224,11 @@
               <circle r="24" class="finish-target-ring finish-target-ring-outer" />
               <circle r="15.5" class="finish-target-ring finish-target-ring-mid" />
               <circle r="7.5" class="finish-target-bullseye" />
-              <!-- 终点下方"里程碑"标注：金色 HUD 字样 + 两侧短线，字号与环节名称一致 -->
+              <!-- 终点右下"里程碑"标注：斜向引导线沿靶心外缘 45° 伸出，金色字样落于右下角；
+                   数字进度徽标在靶心正下方（下移留足间隙），三者互不重叠 -->
               <g class="milestone-tag" :class="{ 'milestone-tag-done': node.visualStatus === 'completed' }">
-                <line x1="-66" y1="60" x2="-52" y2="60" />
-                <text x="2.5" y="68" :style="{ fontSize: node.labelFontSize + 'px' }">里程碑</text>
-                <line x1="52" y1="60" x2="66" y2="60" />
+                <line x1="34" y1="34" x2="46" y2="46" />
+                <text x="104" y="54.5" style="font-size: 24px;">里程碑</text>
               </g>
             </g>
             <circle
@@ -237,11 +242,14 @@
               class="node-check"
               d="M -8 0.5 L -2.5 6 L 8 -6"
             />
+            <!-- baton 到达终点靶心后不再显示：箭头"命中"靶心即隐去，由靶心辉光接管视觉焦点 -->
             <g
-              v-if="node.visualStatus === 'running'"
+              v-if="node.visualStatus === 'running' && !node.isFinish"
               class="baton-group"
               :class="`flow-${node.flowDir}`"
+              :style="{ transform: `translateX(${node.batonOffsetX}px)` }"
             >
+              <!-- baton 停靠在节点前方（流向一侧），箭头领航指向下一环节，呈"冲刺突破"态势 -->
               <!-- 能量尾迹：位于 baton 后方（与流向相反），逐渐衰减，强化方向感 -->
               <circle
                 v-for="(t, i) in node.trail"
@@ -274,6 +282,33 @@
                 :dy="li === 0 ? 0 : node.labelLineHeight"
               >{{ line }}</tspan>
             </text>
+            <!-- 环节任务进度徽标：已完成/总数，随步骤状态实时刷新；key 绑定完成数，每完成一个任务重触发弹跳 -->
+            <g v-if="node.total > 0" :transform="`translate(${node.countX} ${node.countY})`">
+              <g :key="'cnt-' + node.completed" class="node-count">
+                <rect
+                  class="node-count-pill"
+                  :x="-node.countW / 2"
+                  y="-22"
+                  :width="node.countW"
+                  height="44"
+                  rx="22"
+                />
+                <rect
+                  v-if="node.countFillW > 0"
+                  class="node-count-fill"
+                  :x="(-node.countW + 9) / 2"
+                  y="-17"
+                  :width="node.countFillW"
+                  height="34"
+                  rx="17"
+                />
+                <text class="node-count-text" y="10.5">
+                  <tspan class="node-count-done">{{ node.completed }}</tspan>
+                  <tspan class="node-count-sep">/</tspan>
+                  <tspan class="node-count-total">{{ node.total }}</tspan>
+                </text>
+              </g>
+            </g>
           </g>
         </g>
       </svg>
@@ -284,7 +319,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-type NodeStatus = { status: string; progress: number }
+type NodeStatus = { status: string; progress: number; completed?: number; total?: number }
 type TrackPoint = { x: number; y: number }
 
 const LANE_CAPACITY = 4
@@ -330,13 +365,24 @@ const currentPhaseLabel = computed(() => {
   return props.phases?.[safeCurrentIndex.value] || props.centerHint || '当前阶段'
 })
 
+// 相邻跑道最小垂直间距：下方节点标签顶(约 -84) + 上方进度徽标底(约 +60) + 呼吸空隙，
+// 保证任意行数下"环节名称"与"数字进度"互不重叠
+const LANE_MIN_GAP = 200
+const LANE_TOP_PAD = 72
+const LANE_BOTTOM_PAD = 72
+
+const rowCount = computed(() => Math.max(1, Math.ceil(Math.max(currentNodes.value.length, 1) / LANE_CAPACITY)))
+
+// 画布高度随行数自适应：行数多时加高 viewBox（内容等比缩小换取垂直间距），1~2 行维持 500 不变
+const viewBoxHeight = computed(() =>
+  Math.max(500, LANE_TOP_PAD + (rowCount.value - 1) * LANE_MIN_GAP + LANE_BOTTOM_PAD))
+
 const laneY = computed(() => {
-  const startY = 72
-  const endY = 428
-  const rowCount = Math.max(1, Math.ceil(Math.max(currentNodes.value.length, 1) / LANE_CAPACITY))
-  if (rowCount === 1) return [startY]
-  return Array.from({ length: rowCount }, (_, row) => (
-    Math.round(startY + ((endY - startY) * row) / (rowCount - 1))
+  const startY = LANE_TOP_PAD
+  const endY = viewBoxHeight.value - LANE_BOTTOM_PAD
+  if (rowCount.value === 1) return [startY]
+  return Array.from({ length: rowCount.value }, (_, row) => (
+    Math.round(startY + ((endY - startY) * row) / (rowCount.value - 1))
   ))
 })
 
@@ -345,11 +391,12 @@ function updateConnectorY() {
   const phaseRing = phaseRingRef.value
   if (!svg || !phaseRing) return
 
-  const scale = Math.min(svg.clientWidth / 1040, svg.clientHeight / 500)
+  const vbHeight = viewBoxHeight.value
+  const scale = Math.min(svg.clientWidth / 1040, svg.clientHeight / vbHeight)
   if (!Number.isFinite(scale) || scale <= 0) return
 
   const svgTop = svg.getBoundingClientRect().top - phaseRing.getBoundingClientRect().top
-  const yOffset = (svg.clientHeight - 500 * scale) / 2
+  const yOffset = (svg.clientHeight - vbHeight * scale) / 2
   const y = svgTop + yOffset + laneY.value[0] * scale + DASH_VISUAL_OFFSET_Y
   connectorY.value = `${Math.round(y * 10) / 10}px`
 }
@@ -410,10 +457,10 @@ const trackPoints = computed<TrackPoint[]>(() => {
 
 const laneNodeCounts = computed(() => {
   const count = Math.max(currentNodes.value.length, 1)
-  const rowCount = Math.max(1, Math.ceil(count / LANE_CAPACITY))
-  const baseCount = Math.floor(count / rowCount)
-  const extraCount = count % rowCount
-  return Array.from({ length: rowCount }, (_, row) => baseCount + (row < extraCount ? 1 : 0))
+  const rows = rowCount.value
+  const baseCount = Math.floor(count / rows)
+  const extraCount = count % rows
+  return Array.from({ length: rows }, (_, row) => baseCount + (row < extraCount ? 1 : 0))
 })
 
 const trackPath = computed(() => {
@@ -461,6 +508,28 @@ const visibleNodes = computed(() => {
     const labelLineHeight = isCompact.value ? 24 : 29
     // 末行基线固定在 -32（与原单行一致），多出的行向上延伸
     const labelY = -32 - (lines.length - 1) * labelLineHeight
+    // 任务进度徽标（已完成/总数）：普通节点置于圆下方居中；终点节点与"里程碑"标注同行并排于靶心下方
+    const total = Math.max(0, status?.total ?? 0)
+    const completed = Math.min(Math.max(0, status?.completed ?? 0), total)
+    const ratio = total > 0 ? completed / total : 0
+    // 完成数为主数字（30px）放大加粗，斜杠/总数略小（20/22px），按各自动态宽度计算胶囊宽度
+    const countW = 40 + String(completed).length * 19 + 12 + String(total).length * 14
+    const countFillW = completed > 0 ? Math.max(14, Math.round((countW - 9) * ratio)) : 0
+    // 终点节点：徽标置于靶心正下方居中，介于靶心辉光（底约 +50）与下方边界之间取中，
+    // 徽标顶 +60 避开辉光，底 +104 不溢出画布；"里程碑"标注在靶心右下角，互不重叠
+    const isFinishNode = index === lastIndex
+    const countX = 0
+    const countY = isFinishNode ? 82 : 46
+    // baton 前移：初始停靠在节点脉冲环外缘（±70），随任务完成比例沿"当前→下一节点"直线推进，
+    // 终点停靠在下一节点环外缘前；跨行弯道（U 转弯）不走直线，保持原位避免切内角
+    let batonOffsetX = flowDir === 'left' ? -70 : 70
+    const nextP = trackPoints.value[index + 1]
+    if (visualStatus === 'running' && nextP && total > 0 && nextP.y === p.y && nextP.x !== p.x) {
+      const dist = Math.abs(nextP.x - p.x)
+      const advRatio = Math.min(1, Math.max(0, completed / total))
+      const offsetDist = 70 + advRatio * Math.max(0, dist - 140)
+      batonOffsetX = Math.sign(nextP.x - p.x) * offsetDist
+    }
     return {
       ...p,
       index,
@@ -472,6 +541,13 @@ const visibleNodes = computed(() => {
       labelY,
       labelLineHeight,
       flowDir,
+      completed,
+      total,
+      countW,
+      countFillW,
+      countX,
+      countY,
+      batonOffsetX,
       // 最后一个环节为跑道终点，节点圆环由靶心取代
       isFinish: index === lastIndex,
       // 尾迹位于 baton 后方（与流向相反），半径与透明度逐级衰减
@@ -484,18 +560,30 @@ const visibleNodes = computed(() => {
   })
 })
 
-// 已走完的链路：issue/timeout 节点视为"已流经"，一并纳入连线，避免完成链与运行节点间断开
+// 已走完的链路（绿）：issue/timeout 节点视为"已流经"，运行节点本身也算"已抵达"，一并纳入连线
 const donePath = computed(() => {
   const indexes = currentStatuses.value
     .map((status, idx) => (isDone(status) || isIssue(status) ? idx : -1))
     .filter(idx => idx >= 0)
+  const activeIdx = activeNodeIndex.value
+  if (activeIdx > 0 && !indexes.includes(activeIdx)) indexes.push(activeIdx)
   return indexes.length > 1 ? trackPathThroughIndexes(indexes) : ''
 })
 
+// 运行节点 → 下一节点（橘黄进度线，长度由 activeRatio 裁剪）
 const activePath = computed(() => {
   const activeIdx = activeNodeIndex.value
-  if (activeIdx <= 0) return ''
-  return trackPathThroughIndexes([activeIdx - 1, activeIdx])
+  if (activeIdx < 0) return ''
+  const nextIdx = activeIdx + 1
+  if (nextIdx >= currentNodes.value.length) return ''
+  return trackPathThroughIndexes([activeIdx, nextIdx])
+})
+
+// 当前环节任务完成比例：驱动橘黄进度线伸展与 baton 前移
+const activeRatio = computed(() => {
+  const status = currentStatuses.value[activeNodeIndex.value]
+  if (!status || !(status.total > 0)) return 0
+  return Math.min(1, Math.max(0, status.completed / status.total))
 })
 
 function pointAt(index: number): TrackPoint {
@@ -1413,6 +1501,17 @@ function splitName(name: string): string[] {
   filter: drop-shadow(0 0 5px rgba(73, 255, 166, 0.55));
 }
 
+// 运行段进度线：dashoffset 随任务完成比例平滑伸缩（进度条效果）+ 暖橙辉光
+.lane-active-path {
+  filter: drop-shadow(0 0 5px rgba(255, 168, 68, 0.6));
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.25, 0.8, 0.35, 1);
+}
+
+// 接力棒随进度前移，与进度线同步缓动
+.baton-group {
+  transition: transform 0.9s cubic-bezier(0.25, 0.8, 0.35, 1);
+}
+
 .lane-dash {
   opacity: 0.58;
   stroke: rgba(211, 245, 255, 0.54);
@@ -1490,6 +1589,13 @@ function splitName(name: string): string[] {
   stroke: #55ffb0;
 }
 
+// 执行中节点核心：暖琥珀底 + 亮金描边 + 径向光晕，与跑道 active 段（lane-active 橙金渐变）同色系
+.node-core-running {
+  fill: #4a2a0c;
+  stroke: #ffb75e;
+  filter: drop-shadow(0 0 6px rgba(255, 168, 68, 0.75));
+}
+
 // 完成节点圆心对勾：亮绿描边 + 柔光，入场时描边一次成型
 .node-check {
   fill: none;
@@ -1532,6 +1638,75 @@ function splitName(name: string): string[] {
   stroke-width: 2.5px;
 }
 
+// 环节任务进度徽标：HUD 胶囊 + 比例填充 + 高亮完成数；
+// key 绑定完成数，每完成一个任务整枚徽标弹跳一次
+.node-count {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: node-count-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.node-count-pill {
+  fill: rgba(5, 14, 30, 0.88);
+  stroke-width: 1.2;
+  transition: stroke 0.3s;
+}
+
+.node-count-fill {
+  transition: width 0.5s cubic-bezier(0.25, 1, 0.4, 1);
+}
+
+.node-count-text {
+  // 等宽字体 + 数字层级：完成数为主数字放大加粗，斜杠/总数略小弱化
+  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-count-done {
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.node-count-sep {
+  font-size: 20px;
+  opacity: 0.45;
+}
+
+.node-count-total {
+  font-size: 22px;
+  opacity: 0.78;
+}
+
+// 按节点状态着色：描边 / 填充 / 完成数三处呼应跑道配色
+.runway-node-completed .node-count-pill { stroke: rgba(73, 255, 166, 0.5); }
+.runway-node-completed .node-count-fill { fill: rgba(73, 255, 166, 0.26); }
+.runway-node-completed .node-count-done { fill: #7dffc6; }
+
+.runway-node-running .node-count-pill { stroke: rgba(255, 189, 98, 0.55); }
+.runway-node-running .node-count-fill { fill: rgba(255, 189, 98, 0.3); }
+.runway-node-running .node-count-done { fill: #ffd98f; }
+
+.runway-node-issue .node-count-pill { stroke: rgba(255, 85, 85, 0.55); }
+.runway-node-issue .node-count-fill { fill: rgba(255, 85, 85, 0.26); }
+.runway-node-issue .node-count-done { fill: #ff9a9d; }
+
+.runway-node-pending .node-count-pill { stroke: rgba(123, 167, 201, 0.3); }
+.runway-node-pending .node-count-fill { fill: rgba(123, 167, 201, 0.16); }
+.runway-node-pending .node-count-done { fill: rgba(226, 247, 255, 0.85); }
+
+.node-count-text .node-count-sep,
+.node-count-text .node-count-total {
+  fill: rgba(226, 247, 255, 0.82);
+}
+
+@keyframes node-count-pop {
+  0% { transform: scale(0.55); opacity: 0; }
+  60% { transform: scale(1.16); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @keyframes runway-svg-turn-pip {
   0%, 100% {
     opacity: 0.22;
@@ -1569,6 +1744,7 @@ function splitName(name: string): string[] {
   .baton-core,
   .baton-trail-dot,
   .node-pulse-ring,
+  .node-count,
   .progress-num,
   .foot-tag-dot {
     animation: none;

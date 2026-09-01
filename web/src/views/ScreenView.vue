@@ -598,10 +598,10 @@ function playTaskFlowAnimation(stepId: number) {
   shell.appendChild(tag)
   ghost.appendChild(shell)
 
-  // 飞行动画参数
-  const flightMs = 1000
+  // 飞行动画参数：慢速平移滑入，卡片保持较大尺寸飞抵圆环
+  const flightMs = 1600
   const startScale = 0.94
-  const endScale = 0.16
+  const endScale = 0.42
 
   // 初始位置内联设置，避免 WAAPI 首帧前的瞬闪（ghost 默认在 0,0）
   const startTransform = `translate(${fromX}px, ${fromY}px) translate(-50%, -50%) scale(${startScale}) rotate(-3deg)`
@@ -609,9 +609,9 @@ function playTaskFlowAnimation(stepId: number) {
   ghost.style.opacity = '1'
   flyLayer.appendChild(ghost)
 
-  // 二次贝塞尔轨迹：从卡片位置弧形飞向圆环
+  // 二次贝塞尔轨迹：平缓弧线滑向圆环，营造"平移"感
   const cpX = (fromX + hubCx) / 2
-  const cpY = (fromY + hubCy) / 2 - 90
+  const cpY = (fromY + hubCy) / 2 - 55
   const bezier = (t: number) => {
     const u = 1 - t
     return {
@@ -626,17 +626,17 @@ function playTaskFlowAnimation(stepId: number) {
     const t = i / steps
     const p = bezier(t)
     const scale = startScale + (endScale - startScale) * t
-    // 末段渐隐：被圆环"吸收"
-    const opacity = t < 0.82 ? 1 : Math.max(0, 1 - (t - 0.82) / 0.18)
+    // 末段渐隐：贴近圆环时才被"吸收"，平移过程保持清晰
+    const opacity = t < 0.9 ? 1 : Math.max(0, 1 - (t - 0.9) / 0.1)
     keyframes.push({
-      transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${scale}) rotate(${(t - 0.5) * 6}deg)`,
+      transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${scale}) rotate(${(t - 0.5) * 4}deg)`,
       opacity,
       offset: t,
     })
   }
   const flight = ghost.animate(keyframes, {
     duration: flightMs,
-    easing: 'cubic-bezier(0.45, 0, 0.25, 1)',
+    easing: 'cubic-bezier(0.4, 0.05, 0.3, 1)',
     fill: 'forwards',
   })
 
@@ -644,7 +644,7 @@ function playTaskFlowAnimation(stepId: number) {
   let trailTimer: number | null = window.setInterval(() => {
     const rect = ghost.getBoundingClientRect()
     spawnTrailDot(flyLayer, rect.left + rect.width / 2 - screenRect.left, rect.top + rect.height / 2 - screenRect.top)
-  }, 42)
+  }, 64)
 
   flight.onfinish = () => {
     if (trailTimer !== null) {
@@ -729,24 +729,29 @@ function triggerHubAbsorption(layer: HTMLElement, x: number, y: number) {
   }
 }
 
-// 圆环脉冲：hub-core 短暂放大增亮，hub-glow 扩散，模拟"吞噬信息后的一次心跳"
+// 圆环波动：卡片"扔进"圆环后的阻尼震荡——
+// 放大 → 回落 → 二次微涨 → 复原，模拟水面涟漪式的能量衰减
 function pulseHub(hubCore: HTMLElement, hubGlow: HTMLElement | null) {
   hubCore.animate(
     [
       { transform: 'scale(1)', filter: 'brightness(1) saturate(1)' },
-      { transform: 'scale(1.16)', filter: 'brightness(1.7) saturate(1.3)', offset: 0.35 },
+      { transform: 'scale(1.32)', filter: 'brightness(1.9) saturate(1.45)', offset: 0.22 },
+      { transform: 'scale(1.05)', filter: 'brightness(1.25) saturate(1.1)', offset: 0.5 },
+      { transform: 'scale(1.14)', filter: 'brightness(1.5) saturate(1.2)', offset: 0.72 },
       { transform: 'scale(1)', filter: 'brightness(1) saturate(1)' },
     ],
-    { duration: 720, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+    { duration: 1100, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
   )
   if (hubGlow) {
     hubGlow.animate(
       [
         { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
-        { transform: 'translate(-50%, -50%) scale(1.45)', opacity: 1, offset: 0.35 },
+        { transform: 'translate(-50%, -50%) scale(1.55)', opacity: 1, offset: 0.22 },
+        { transform: 'translate(-50%, -50%) scale(1.12)', opacity: 1, offset: 0.5 },
+        { transform: 'translate(-50%, -50%) scale(1.28)', opacity: 1, offset: 0.72 },
         { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
       ],
-      { duration: 720, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+      { duration: 1100, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
     )
   }
 }
@@ -997,7 +1002,11 @@ const ringPhaseNodeStatuses = computed(() => {
     const directChildren = childMap.value.get(root.id) || []
     return directChildren.map(child => {
       const leaves = collectLeaves(child.id)
-      if (leaves.length === 0) return { status: child.status, progress: 0 }
+      if (leaves.length === 0) {
+        // 无子任务的环节：以自身状态计 0/1 或 1/1
+        const selfDone = isTerminal(child) ? 1 : 0
+        return { status: child.status, progress: selfDone * 100, completed: selfDone, total: 1 }
+      }
 
       const totalLeaves = leaves.length
       const finishedLeaves = leaves.filter(s => isTerminal(s)).length
@@ -1014,7 +1023,7 @@ const ringPhaseNodeStatuses = computed(() => {
       }
 
       const status = isDone ? 'completed' : hasIssue ? 'issue' : isRunning ? 'running' : 'pending'
-      return { status, progress: Math.min(progress, 100) }
+      return { status, progress: Math.min(progress, 100), completed: finishedLeaves, total: totalLeaves }
     })
   })
 })
@@ -1093,16 +1102,16 @@ const elapsedBase = Date.now()
 
 function alertCountdownPercent(alert: { startedAt: string | null, timeoutMin: number }): number {
   const start = alert.startedAt ? new Date(alert.startedAt).getTime() : elapsedBase
-  const total = Math.max(alert.timeoutMin, 1) * 60 * 1000
+  // 进度条固定按 10 分钟窗口推进：满 10 分钟即 100% 不再增长（不影响右侧耗时文本继续计时）
+  const total = COUNTDOWN_DEFAULT_MIN * 60 * 1000
   const used = Math.max(Date.now() - start, 0)
-  return (used / total) * 100
+  return Math.min((used / total) * 100, 100)
 }
 
-// 文本改为展示已耗时：正常态"已耗时"，超时态"已超时"（超时后继续计时）
+// 展示已耗时：一直显示"已耗时"文案，超时后仅进度条转红脉冲提醒，文本继续计时
 // 时长自适应格式：<1h 用 m:ss，<1d 用 h:mm:ss，≥1d 用 d天h小时
 function alertCountdownText(alert: { startedAt: string | null, timeoutMin: number }): string {
   const start = alert.startedAt ? new Date(alert.startedAt).getTime() : elapsedBase
-  const total = Math.max(alert.timeoutMin, 1) * 60 * 1000
   const used = Math.max(Date.now() - start, 0)
   const s = Math.floor((used % 60000) / 1000)
   const m = Math.floor((used % 3600000) / 60000)
@@ -1112,7 +1121,7 @@ function alertCountdownText(alert: { startedAt: string | null, timeoutMin: numbe
   if (d >= 1) time = `${d}天${h}小时`
   else if (h >= 1) time = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   else time = `${m}:${String(s).padStart(2, '0')}`
-  return used >= total ? `已超时 ${time}` : `已耗时 ${time}`
+  return `已耗时 ${time}`
 }
 
 // 可见步骤数量：按容器和实际卡片尺寸自适应，避免在不同屏幕上写死展示数量
@@ -3045,16 +3054,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       white-space: nowrap;
     }
 
-    // 超时态：能量条转红脉冲，文本提示已超时（仅视觉提醒，不改变任务状态）
+    // 超时态：满格后保持青蓝渐变并轻微呼吸辉光（仅视觉提醒，不改变任务状态）
     &.is-urgent {
       .countdown-fill {
-        background: linear-gradient(90deg, #ff4d6a, #ff8426);
-        box-shadow: 0 0 10px rgba(255, 77, 106, 0.7);
+        box-shadow: 0 0 12px rgba(0, 212, 255, 0.85);
         animation: countdown-urgent-pulse 1.2s ease-in-out infinite;
-      }
-      .countdown-text {
-        color: #ff6b8a;
-        text-shadow: 0 0 8px rgba(255, 77, 106, 0.45);
       }
     }
   }
