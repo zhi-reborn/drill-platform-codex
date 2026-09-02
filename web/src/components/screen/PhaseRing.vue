@@ -580,8 +580,10 @@ const donePath = computed(() => {
 })
 
 // 运行节点 → 下一节点（橘黄进度线，长度由 activeRatio 裁剪）；
-// 最后一个真实环节运行时，进度线指向虚拟里程碑靶心
+// 最后一个真实环节运行时，进度线指向虚拟里程碑靶心；
+// 全部环节完成后不再渲染，改由绿色 donePath 延伸至靶心
 const activePath = computed(() => {
+  if (isCurrentPhaseDone.value) return ''
   const activeIdx = activeNodeIndex.value
   if (activeIdx < 0) return ''
   const nextIdx = activeIdx + 1

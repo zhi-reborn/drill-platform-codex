@@ -332,22 +332,17 @@
             </div>
             <div class="panel-body exec-log">
               <div class="exec-log-view" ref="execLogRef">
-                <div
-                  class="exec-log-track"
-                  :class="{ 'is-animated': execLogAnimated }"
-                  :style="execLogAnimated ? { animationDuration: `${execLogDuration}s` } : undefined"
-                >
-                  <div v-for="half in 2" :key="half" class="exec-log-half">
-                    <div
-                      v-for="(log, li) in execLogLines"
-                      :key="`${half}-${log.id}-${li}`"
-                      class="log-line"
-                      :class="'log-' + logActionClass(log.action)"
-                    >
-                      <span class="log-time">{{ formatTime(log.created_at) }}</span>
-                      <span class="log-step">{{ resolveStepName(log) }}</span>
-                      <span class="log-action">{{ logActionLabel(log.action) }}</span>
-                    </div>
+                <!-- 贴底驻留模式：最新日志始终在最下面，产生新日志时整体上移一条 -->
+                <div class="exec-log-track">
+                  <div
+                    v-for="(log, li) in execLogLines"
+                    :key="`${log.id}-${li}`"
+                    class="log-line"
+                    :class="['log-' + logActionClass(log.action), { 'is-newest': li === execLogLines.length - 1 }]"
+                  >
+                    <span class="log-time">{{ formatTime(log.created_at) }}</span>
+                    <span class="log-step">{{ resolveStepName(log) }}</span>
+                    <span class="log-action">{{ logActionLabel(log.action) }}</span>
                   </div>
                 </div>
                 <div v-if="!execLogLines.length" class="log-empty">暂无执行日志</div>
@@ -1205,18 +1200,13 @@ function measureWarnList() {
   if (execLogRef.value) execLogViewHeight.value = execLogRef.value.clientHeight || 96
 }
 
-// 执行日志：按时间正序展示；不足一屏时静态显示，超出时重复补齐后无缝滚动
-const execLogAnimated = computed(() => recentLogs.value.length * EXEC_LOG_LINE_HEIGHT > execLogViewHeight.value)
+// 执行日志：贴底驻留展示（时间正序，最新在最下）；
+// 超出一屏时旧日志在顶部被裁剪，产生新日志时整体上移一条
 const execLogLines = computed(() => {
   const lines = [...recentLogs.value].reverse()
-  if (!lines.length || !execLogAnimated.value) return lines
-  // 单份内容不足一屏时重复补齐，保证滚动无空档
-  const perCopy = Math.max(1, Math.ceil(execLogViewHeight.value / (lines.length * EXEC_LOG_LINE_HEIGHT)))
-  const out: StepInstanceLog[] = []
-  for (let i = 0; i < perCopy; i++) out.push(...lines)
-  return out
+  const maxVisible = Math.max(1, Math.floor(execLogViewHeight.value / EXEC_LOG_LINE_HEIGHT) + 2)
+  return lines.slice(Math.max(0, lines.length - maxVisible))
 })
-const execLogDuration = computed(() => Math.max(12, Math.round(execLogLines.value.length * 2.4)))
 
 const visibleAlertCount = computed(() => {
   // 依赖 elapsedSeconds 使其每秒重算
@@ -3186,30 +3176,24 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     background:
       linear-gradient(180deg, rgba(5, 15, 32, 0.9), rgba(3, 10, 24, 0.95));
 
-    // 上下渐隐遮罩，制造日志流入/流出的纵深感
-    &::before,
-    &::after {
+    // 顶部渐隐遮罩：超出一屏时最旧的日志在顶部淡出
+    &::before {
       content: '';
       position: absolute;
-      left: 0; right: 0;
-      height: 14px;
+      top: 0; left: 0; right: 0;
+      height: 16px;
       z-index: 1;
       pointer-events: none;
+      background: linear-gradient(180deg, rgba(3, 10, 24, 0.95), transparent);
     }
-    &::before { top: 0; background: linear-gradient(180deg, rgba(3, 10, 24, 0.92), transparent); }
-    &::after { bottom: 0; background: linear-gradient(0deg, rgba(3, 10, 24, 0.92), transparent); }
   }
 
+  // 贴底驻留：日志整体沉底，最新一条永远贴着可视区底部
   .exec-log-track {
+    position: absolute;
+    inset: 0;
     display: flex; flex-direction: column;
-
-    &.is-animated {
-      animation: exec-log-marquee linear infinite;
-    }
-    // 悬停时暂停滚动便于阅读
-    &:hover {
-      animation-play-state: paused;
-    }
+    justify-content: flex-end;
   }
 
   .log-line {
@@ -3225,6 +3209,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       background: rgba(0, 212, 255, 0.035);
     }
 
+    // 最新一条：入场动效（轻微下落淡入），配合列表整体上移形成"新日志挤入"的节奏
+    &.is-newest {
+      animation: log-line-in 0.45s cubic-bezier(0.22, 0.9, 0.32, 1);
+    }
+
     .log-time {
       font-family: $font-mono;
       font-size: 11.5px;
@@ -3234,13 +3223,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       flex-shrink: 0;
     }
     .log-step {
+      // 占满剩余空间并允许收缩：任务名过长时省略号截断，不与右侧动作徽标重叠
+      flex: 1 1 auto;
       min-width: 0;
       overflow: hidden; text-overflow: ellipsis;
       font-weight: 700;
       color: rgba(226, 240, 255, 0.92);
     }
     .log-action {
-      margin-left: auto;
       flex-shrink: 0;
       font-family: $font-cn;
       font-size: 11px;
@@ -3270,9 +3260,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   }
 }
 
-@keyframes exec-log-marquee {
-  from { transform: translateY(0); }
-  to { transform: translateY(-50%); }
+// 新日志入场：轻微下落 + 淡入，模拟"挤入"列表底部
+@keyframes log-line-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes countdown-urgent-pulse {
@@ -3804,7 +3795,8 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .segment.seg-active { animation: none !important; }
   .fly-ghost, .fly-trail-dot, .hub-shockwave, .hub-burst-particle { display: none !important; }
   .alert-card.alert-warn,
-  .alert-card.alert-pending .alert-indicator { animation: none !important; }
+  .alert-card.alert-pending .alert-indicator,
+  .log-line.is-newest { animation: none !important; }
 }
 
 // ===== 任务完成流式动画 =====
