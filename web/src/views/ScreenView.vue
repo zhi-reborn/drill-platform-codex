@@ -30,7 +30,8 @@
     <!-- Main content -->
     <div v-else-if="currentDrill" class="screen-content" :class="{ 'screen-content-fallback-fullscreen': fallbackFullscreen }">
       <!-- ========== HEADER ========== -->
-      <header class="screen-header">
+      <!-- v-memo：头部不依赖秒级数据，避免每秒心跳触发无谓重渲染 -->
+      <header v-memo="[screenBrand, isFullscreenLike]" class="screen-header">
         <svg class="header-frame" viewBox="0 0 1200 82" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -106,7 +107,11 @@
       </header>
 
       <!-- ========== TOP KPI ROW ========== -->
-      <section class="kpi-row">
+      <!-- v-memo：KPI 只随业务数据变化，跳过每秒心跳的重渲染 -->
+      <section
+        v-memo="[drillStatusLabel, progressPercent, completedCount, totalCount, alertLevel, abnormalTaskCount, currentPhaseIndex]"
+        class="kpi-row"
+      >
         <div class="kpi-card">
           <span class="kpi-orb" />
           <div class="kpi-copy">
@@ -181,7 +186,8 @@
       <!-- ========== MAIN GRID ========== -->
       <main class="screen-main">
         <!-- LEFT: Stage overview -->
-        <section class="panel panel-stages">
+        <!-- v-memo：左侧阶段列表只随 stages / 展示阶段变化重渲染 -->
+        <section v-memo="[stages, displayPhaseIndex]" class="panel panel-stages">
           <div class="panel-header">
             <span class="panel-deco-corner tl" />
             <span class="panel-deco-corner tr" />
@@ -233,7 +239,12 @@
         </section>
 
         <!-- CENTER: Phase ring -->
-        <section ref="centerPanelRef" class="panel panel-center">
+        <!-- v-memo：中心跑道图是最重的子树（大 SVG），只在阶段/进度数据真正变化时重渲染 -->
+        <section
+          ref="centerPanelRef"
+          v-memo="[ringPhases, ringPhaseNames, ringPhaseNodeStatuses, ringPhaseStatuses, displayPhaseIndex, displayPhaseName, displayPhaseProgress, displayPhaseStepNum, displayPhaseStepDen, ringSize, isFullscreenLike]"
+          class="panel panel-center"
+        >
           <div class="center-stage" :class="`center-stage-${displayPhaseIndex}`">
             <PhaseRing
               :phases="ringPhases"
@@ -843,8 +854,8 @@ const buildStageSegments = (finished: number, total: number, active: boolean) =>
 }
 
 const stages = computed(() => {
-  // 依赖 elapsedSeconds 每秒刷新，使未结束阶段的截止时间实时跳动
-  const _tick = elapsedSeconds.value
+  // 注：不再依赖 elapsedSeconds 每秒重算——截止时间为分钟粒度展示，
+  // 数据刷新（WS 事件 / 5s 轮询）时重算即可，避免每秒全屏级联重渲染
   const allSteps = drillSteps.value
   if (allSteps.length === 0) return []
 
@@ -1012,8 +1023,6 @@ const ringPhaseStatuses = computed(() => {
 
 // 每个阶段中每个环节节点的状态信息
 const ringPhaseNodeStatuses = computed(() => {
-  const _tick = elapsedSeconds.value
-  const nowMs = Date.now()
   const isTerminal = (s: StepInstance) => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)
 
   return rootSteps.value.map(root => {
@@ -1290,8 +1299,8 @@ function tick() {
       elapsedSeconds.value = Math.max(0, Math.round((end - start) / 1000))
     }
   }
-  // 更新容器高度（用于截断计算）
-  measureWarnList()
+  // 注：不再每秒 measureWarnList()——高度变化已由 ResizeObserver 覆盖，
+  // 避免每秒 getComputedStyle / getBoundingClientRect 强制回流
 }
 
 // 数据加载
@@ -1651,7 +1660,9 @@ function handleResize() {
   measureWarnList()
 }
 
-watch(visibleAlerts, () => {
+// 按内容签名监听（activeAlerts 每秒心跳重算会生成新数组引用，
+// 直接 watch 数组会导致每秒 measureWarnList 强制回流，这里只在任务集合真正变化时测量）
+watch(() => visibleAlerts.value.map(a => `${a.stepId}:${a.level}`).join(','), () => {
   nextTick(measureWarnList)
 }, { flush: 'post' })
 </script>
@@ -3007,13 +3018,23 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     }
 
     // 运行中卡片突出显示：橙色辉光描边 + 呼吸动效，与跑道运行节点同色系
+    // 性能：无 GPU 环境下 box-shadow 逐帧动画开销大，改为静态辉光 +
+    // ::after 内辉光透明度呼吸（opacity 可被合成器缓存，视觉等效）
     &.alert-warn {
       border-color: #ff9a2f;
       background: linear-gradient(135deg, rgba(58, 28, 6, 0.96), rgba(20, 12, 8, 0.92));
       box-shadow:
-        inset 0 0 22px rgba(255, 122, 0, 0.14),
-        0 0 16px rgba(255, 154, 47, 0.28);
-      animation: alert-running-breathe 2.2s ease-in-out infinite;
+        inset 0 0 22px rgba(255, 122, 0, 0.17),
+        0 0 20px rgba(255, 154, 47, 0.35);
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 26px rgba(255, 122, 0, 0.1);
+        animation: alert-running-breathe 2.2s ease-in-out infinite;
+        pointer-events: none;
+      }
       &::before {
         background: linear-gradient(90deg, #ffc179, rgba(255, 154, 47, 0.35));
         height: 3px;
@@ -3309,15 +3330,16 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   50% { opacity: 0.45; }
 }
 
+// 指示灯呼吸：仅动画 opacity（辉光静态化），合成器可缓存光栅，无 GPU 也流畅
 @keyframes indicator-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(255, 182, 72, 0.7); }
-  50% { opacity: 0.5; box-shadow: 0 0 10px rgba(255, 182, 72, 0.9); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 // 待执行指示灯呼吸：灰蓝色、节奏更缓（区别于执行中的活跃橘黄）
 @keyframes indicator-pulse-cool {
-  0%, 100% { opacity: 1; box-shadow: 0 0 5px rgba(123, 167, 201, 0.55); }
-  50% { opacity: 0.45; box-shadow: 0 0 8px rgba(123, 167, 201, 0.75); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 @keyframes badge-danger-flash {
@@ -3325,10 +3347,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   50% { border-color: rgba(255, 77, 106, 0.8); box-shadow: 0 0 6px rgba(255, 77, 106, 0.4); }
 }
 
-// 执行中任务卡片呼吸：外辉光强弱缓慢起伏，营造"进行中"的活跃感
+// 执行中任务卡片呼吸：改为 opacity 起伏（辉光已静态化，避免逐帧重绘阴影）
 @keyframes alert-running-breathe {
-  0%, 100% { box-shadow: inset 0 0 22px rgba(255, 122, 0, 0.14), 0 0 14px rgba(255, 154, 47, 0.22); }
-  50% { box-shadow: inset 0 0 26px rgba(255, 122, 0, 0.2), 0 0 24px rgba(255, 154, 47, 0.42); }
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 // ===== Footer =====
