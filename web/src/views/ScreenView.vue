@@ -257,7 +257,10 @@
             <div class="panel-header">
               <span class="panel-deco-corner tl" />
               <span class="panel-deco-corner tr" />
-              <span class="panel-title-zh">当前环节待完成的任务</span>
+              <span class="panel-title-zh title-tasks">
+                <span class="title-text">当前环节待完成任务</span>
+                <span v-if="activeAlerts.length" class="title-count">{{ activeAlerts.length }}</span>
+              </span>
               <span class="panel-realtime">
                 <span class="rt-dot" />
                 实时
@@ -2921,6 +2924,41 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   // 执行日志为固定占比的独立面板，不与执行中步骤争抢空间
   .sub-log {
     flex: 0 0 clamp(178px, 24vh, 258px);
+  }
+
+  // "当前环节待完成任务" HUD 风标题：渐变点阵 + 待办计数胶囊
+  .sub-warn .panel-title-zh.title-tasks {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+
+    .title-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      // 渐变文字用 drop-shadow 代替基础 text-shadow，避免重影
+      text-shadow: none;
+      background: linear-gradient(180deg, #ffffff 30%, #bfe6ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      // 渐变文字下保留同色光晕
+      filter: drop-shadow(0 0 10px rgba(64, 170, 255, 0.8));
+    }
+
+    .title-count {
+      flex-shrink: 0;
+      min-width: 20px; height: 18px;
+      padding: 0 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: $font-mono;
+      font-size: 13px; font-weight: 700; line-height: 1;
+      color: #031022;
+      background: linear-gradient(135deg, #37e0ff, #0074ff);
+      border-radius: 9px;
+      box-shadow: 0 0 8px rgba(0, 168, 255, 0.55);
+    }
   }
 }
 
