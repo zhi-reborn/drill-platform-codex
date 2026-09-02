@@ -239,6 +239,9 @@
               </div>
             </div>
             <div class="steps-card-actions">
+              <el-button size="small" type="primary" plain :icon="Aim" class="track-btn" @click="focusFirstPendingStep">
+                一键跟踪
+              </el-button>
               <el-button size="small" @click="expandAllSteps">全部展开</el-button>
               <el-button size="small" @click="collapseAllSteps">全部折叠</el-button>
             </div>
@@ -546,11 +549,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
-import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled, ArrowDown, ArrowRight, DataBoard } from '@element-plus/icons-vue'
+import { VideoPause, VideoPlay, VideoCamera, Back, Warning, DArrowRight, CircleCheck, RefreshRight, CircleCheckFilled, ArrowDown, ArrowRight, DataBoard, Aim } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance, StepStatus } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import ActionConfirm from '@/components/common/ActionConfirm.vue'
@@ -700,6 +703,66 @@ function expandAllSteps() {
 function collapseAllSteps() {
   usesDefaultExpandedKeys = false
   expandedStepKeys.value = []
+}
+
+// ===== 一键跟踪：定位第一个待完成任务 =====
+// 展开目标的所有祖先（含虚拟分组）、平滑滚动到目标行并脉冲高亮，
+// 免去用户手动展开/下滑翻找第一个待完成任务
+const trackedStepId = ref<number | null>(null)
+let trackedTimer: number | null = null
+
+function focusFirstPendingStep() {
+  // 按步骤列表从上到下的展示顺序（树序，与展开状态无关）收集叶子步骤
+  const leafInDisplayOrder: StepInstance[] = []
+  const walk = (items: any[]) => {
+    for (const item of items) {
+      if (!item._isGroup && !isParentStep(item)) leafInDisplayOrder.push(item as StepInstance)
+      if (item.children?.length) walk(item.children)
+    }
+  }
+  walk(drillStepTree.value)
+
+  // 目标：第一个"按钮可点击"的任务——执行中/异常（完成按钮可点），
+  // 或待执行且满足开始条件（开始按钮可点）；被前序依赖挡住的 pending 不算
+  const operable = (s: StepInstance) =>
+    s.status === 'running' || s.status === 'issue' || (s.status === 'pending' && canStartStep(s))
+  const target = leafInDisplayOrder.find(operable)
+    // 兜底：暂无任何可操作任务时定位第一个未完成，便于了解进度
+    || leafInDisplayOrder.find(s => !PROGRESS_TERMINAL_STATUSES.has(s.status))
+  if (!target) {
+    ElMessage.success('所有任务均已完成')
+    return
+  }
+
+  // 沿树搜索目标，把路径上的祖先（真实父步骤 + 虚拟分组）全部展开
+  usesDefaultExpandedKeys = false
+  const keys = new Set(expandedStepKeys.value.map(String))
+  const expandPathTo = (items: any[], chain: string[]): boolean => {
+    for (const item of items) {
+      if (item.id === target.id) {
+        chain.forEach(k => keys.add(k))
+        return true
+      }
+      if (item.children?.length && expandPathTo(item.children, [...chain, String(item.id)])) return true
+    }
+    return false
+  }
+  expandPathTo(drillStepTree.value, [])
+  expandedStepKeys.value = [...keys]
+
+  nextTick(() => {
+    const tableEl = stepsTableRef.value?.$el as HTMLElement | undefined
+    const idx = visibleStepRows.value.findIndex(r => r.id === target.id)
+    if (!tableEl || idx === -1) return
+    const rows = tableEl.querySelectorAll('.el-table__body .el-table__row')
+    const tr = rows[idx] as HTMLElement | undefined
+    tr?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+    // 目标行脉冲高亮，数个呼吸周期后自动熄灭
+    trackedStepId.value = target.id
+    if (trackedTimer) clearTimeout(trackedTimer)
+    trackedTimer = window.setTimeout(() => { trackedStepId.value = null }, 3200)
+  })
 }
 
 function collectExpandableStepKeys(data: any[]): string[] {
@@ -873,10 +936,11 @@ function getDepthTagType(depth: number): 'primary' | 'success' | 'warning' | 'in
   return types[Math.min(depth, 3)] || 'info'
 }
 
-// el-table 行类名：按深度添加样式
+// el-table 行类名：按深度添加样式；一键跟踪的目标行附加 row-tracked
 function stepRowClassName({ row }: { row: any }): string {
   const depth = getStepDepth(row)
-  return `step-depth-${Math.min(depth, 3)}`
+  const tracked = row.id === trackedStepId.value ? ' row-tracked' : ''
+  return `step-depth-${Math.min(depth, 3)}${tracked}`
 }
 
 // 完成率口径：仅统计叶子步骤，终态含 completed/skipped/timeout/issue。
@@ -2707,6 +2771,22 @@ onUnmounted(() => {
     // hover 时引导线高亮，强化树形感知
     .el-table__body tr:hover > .name-col {
       --tree-line: var(--tree-line-strong);
+    }
+
+    // 一键跟踪定位：目标行青蓝脉冲 + 名称列左侧光带，帮助视线立刻锁定
+    .el-table__row.row-tracked > td {
+      background-color: rgba(24, 144, 255, 0.1);
+      animation: tracked-row-pulse 1s ease-in-out 3;
+    }
+
+    .el-table__row.row-tracked > td.name-col {
+      border-left-color: var(--el-color-primary);
+      box-shadow: inset 6px 0 12px -4px rgba(24, 144, 255, 0.55);
+    }
+
+    @keyframes tracked-row-pulse {
+      0%, 100% { background-color: rgba(24, 144, 255, 0.07); }
+      50% { background-color: rgba(24, 144, 255, 0.2); }
     }
   }
 

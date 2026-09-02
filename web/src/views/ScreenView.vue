@@ -538,6 +538,48 @@ function detectNewlyCompletedLeafSteps(previousStatuses: Map<number, StepStatus>
     .map(step => step.id)
 }
 
+// ===== 完成保持（completion hold）=====
+// 时序要求：任务卡片 ghost 飞抵中心圆环、冲击波展开后，环上数字才增长。
+// 实现：叶子步骤完成时先以旧状态展示（卡片仍在列表中，但已被"抽离"动画隐去），
+// 飞行结束后释放保持、写入真实 completed 状态，hub 百分比 / 徽标计数随之统一跳动。
+interface StepHold {
+  prev: StepStatus
+  real: StepInstance
+}
+const stepHolds = new Map<number, StepHold>()
+
+// 卡片当前可见（DOM 中存在）才会产生飞行 ghost，也只有这种情况需要"到达后计数"
+function shouldHoldFlight(stepId: number): boolean {
+  return Boolean(screenRootRef.value?.querySelector(`[data-step-id="${stepId}"]`))
+}
+
+function holdCompletion(stepId: number, prev: StepStatus, real: StepInstance) {
+  stepHolds.set(stepId, { prev, real })
+  // 兜底：若 onfinish 因标签页节流等未触发，超时强制释放，避免数字卡住
+  window.setTimeout(() => releaseHold(stepId), 3400)
+}
+
+// 应用保持：被保持步骤回退旧状态展示，其余字段取最新值
+function applyHolds(steps: StepInstance[]): StepInstance[] {
+  if (stepHolds.size === 0) return steps
+  return steps.map(s => {
+    const hold = stepHolds.get(s.id)
+    return hold ? { ...s, status: hold.prev } : s
+  })
+}
+
+// 释放保持：卡片已抵达圆环，数字真正增长
+function releaseHold(stepId: number) {
+  const hold = stepHolds.get(stepId)
+  if (!hold) return
+  stepHolds.delete(stepId)
+  const idx = drillSteps.value.findIndex(s => s.id === stepId)
+  if (idx === -1) return
+  const next = [...drillSteps.value]
+  next[idx] = { ...next[idx], status: hold.real.status }
+  drillSteps.value = next
+}
+
 // 任务完成流式动画：对应任务卡片 ghost 从右侧飞向中心百分数圆环，
 // 营造"信息汇聚、流入圆环汇总"的视觉效果。
 // 调用时机：applyStepEvent 在更新 drillSteps 之后同步调用本函数，
@@ -671,6 +713,9 @@ function playTaskFlowAnimation(stepId: number) {
     ghost.remove()
     triggerHubAbsorption(flyLayer, hubCx, hubCy)
     pulseHub(hubCore, hubGlow)
+    // 数字增长与冲击波峰值同步：到达瞬间稍作停顿后释放完成保持，
+    // 卡片"注入"圆环、能量爆开的同帧，环上数字才跳变
+    window.setTimeout(() => releaseHold(stepId), 220)
   }
 }
 
@@ -1326,8 +1371,26 @@ async function loadData() {
     if (componentDestroyed) return
     const sortedSteps = steps.sort((a, b) => a.seq - b.seq)
     const newlyCompletedStepIds = detectNewlyCompletedLeafSteps(previousStepStatuses, sortedSteps)
-    drillSteps.value = sortedSteps
-    newlyCompletedStepIds.forEach(playTaskFlowAnimation)
+    // 完成保持：卡片可见的完成步骤先回退旧状态展示，飞行抵达圆环后再释放
+    const heldNowIds = new Set<number>()
+    for (const id of newlyCompletedStepIds) {
+      const real = sortedSteps.find(s => s.id === id)
+      const existing = stepHolds.get(id)
+      if (existing) {
+        // 飞行进行中：仅更新真实数据，展示仍保持旧状态，也不重播动画
+        if (real) existing.real = real
+        continue
+      }
+      if (shouldHoldFlight(id) && real) {
+        holdCompletion(id, previousStepStatuses.get(id) || 'running', real)
+        heldNowIds.add(id)
+      }
+    }
+    drillSteps.value = applyHolds(sortedSteps)
+    newlyCompletedStepIds.forEach(id => {
+      if (stepHolds.has(id) && !heldNowIds.has(id)) return
+      playTaskFlowAnimation(id)
+    })
 
     const logs = await drillApi.getLogs(drillId.value)
     if (componentDestroyed) return
@@ -1449,6 +1512,7 @@ function applyStepEvent(eventType: string, payload: any) {
     scheduleDataRefresh()
     return
   }
+  const prevStatus = drillSteps.value[idx].status
   const target = { ...drillSteps.value[idx] }
   const newStatus = payload.new_status || mapEventToStatus(eventType)
   if (newStatus) target.status = newStatus as StepStatus
@@ -1459,8 +1523,17 @@ function applyStepEvent(eventType: string, payload: any) {
   if (payload.issue_desc) target.issue_desc = payload.issue_desc
   if (payload.assignee_names) target.assignee_names = payload.assignee_names
 
+  // 完成保持：叶子步骤完成且卡片可见时，先以旧状态展示，
+  // 待卡片飞抵中心圆环、冲击波展开后再释放（见 stepHolds 注释）
+  const isLeafStep = leafSteps.value.some(s => s.id === stepId)
+  const heldNow = eventType === 'step_complete' && isLeafStep
+    && !stepHolds.has(stepId) && shouldHoldFlight(stepId)
+  if (heldNow) holdCompletion(stepId, prevStatus, target)
+
+  const hold = stepHolds.get(stepId)
+  if (hold) hold.real = target
   const nextSteps = [...drillSteps.value]
-  nextSteps[idx] = target
+  nextSteps[idx] = hold ? { ...target, status: hold.prev } : target
   drillSteps.value = nextSteps
 
   // 推入一条本地日志
@@ -1478,10 +1551,10 @@ function applyStepEvent(eventType: string, payload: any) {
 
   // 任务完成流式动画（step_complete 为归一化后的事件名）
   // 仅对叶子步骤（实际操作步骤）触发；父级步骤（环节/阶段）的级联完成事件
-  // 不触发，避免一次完成产生多个 ghost（1-2-1-2 问题的根因）
-  if (eventType === 'step_complete') {
-    const isLeafStep = leafSteps.value.some(s => s.id === stepId)
-    if (isLeafStep) playTaskFlowAnimation(stepId)
+  // 不触发，避免一次完成产生多个 ghost（1-2-1-2 问题的根因）；
+  // 已处于完成保持中（飞行进行中）的重复完成事件同样不重播
+  if (eventType === 'step_complete' && isLeafStep && (heldNow || !stepHolds.has(stepId))) {
+    playTaskFlowAnimation(stepId)
   }
 
   // 重新计算 KPI
