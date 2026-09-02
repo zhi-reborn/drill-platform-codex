@@ -294,7 +294,11 @@
                 >
                   <!-- 顶部：状态指示条 + 标题行 -->
                   <div class="alert-head">
-                    <span class="alert-indicator" />
+                    <!-- 执行中卡片：旋转齿轮取代指示灯，机械传动感直接传达"处理中" -->
+                    <svg v-if="alert.level === 'warn'" class="alert-gear" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg>
+                    <span v-else class="alert-indicator" />
                     <span class="alert-title">{{ alert.title }}</span>
                     <span class="alert-status-badge" :class="'badge-' + alert.level">{{ alert.statusLabel }}</span>
                   </div>
@@ -3154,6 +3158,14 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
       flex-shrink: 0;
       animation: indicator-pulse 1.6s ease-in-out infinite;
     }
+    // 执行中齿轮：比指示灯略大以读清齿形，橙色 + 静态辉光（性能约定：仅 transform 旋转）
+    .alert-gear {
+      width: 15px; height: 15px;
+      flex-shrink: 0;
+      fill: #ffb75e;
+      filter: drop-shadow(0 0 4px rgba(255, 183, 94, 0.85));
+      animation: gear-spin 2.8s linear infinite;
+    }
     .alert-title {
       min-width: 0;
       font-size: clamp(16px, 1vw, 20px); color: #f5f9ff; font-weight: 900;
@@ -3407,6 +3419,11 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
 @keyframes indicator-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+// 执行中齿轮匀速旋转：linear 保持机械传动感，transform 可被合成器加速
+@keyframes gear-spin {
+  to { transform: rotate(360deg); }
 }
 
 // 待执行指示灯呼吸：灰蓝色、节奏更缓（区别于执行中的活跃橘黄）
@@ -3888,6 +3905,10 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
         width: 4px; height: 4px;
       }
 
+      .alert-gear {
+        width: 10px; height: 10px;
+      }
+
       .alert-status-badge {
         font-size: 10px;
         padding: 1px 4px;
@@ -3929,6 +3950,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .fly-ghost, .fly-trail-dot, .hub-shockwave, .hub-burst-particle { display: none !important; }
   .alert-card.alert-warn,
   .alert-card.alert-pending .alert-indicator,
+  .alert-gear,
   .log-line.is-newest { animation: none !important; }
 }
 
