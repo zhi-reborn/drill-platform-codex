@@ -560,7 +560,8 @@ function shouldHoldFlight(stepId: number): boolean {
 function holdCompletion(stepId: number, prev: StepStatus, real: StepInstance) {
   stepHolds.set(stepId, { prev, real })
   // 兜底：若 onfinish 因标签页节流等未触发，超时强制释放，避免数字卡住
-  window.setTimeout(() => releaseHold(stepId), 3400)
+  // （三段式动画总时长 ≈ 飞行 1200 + 驻留 1250 + 俯冲 520 + 释放延迟 220，留出裕量）
+  window.setTimeout(() => releaseHold(stepId), 4600)
 }
 
 // 应用保持：被保持步骤回退旧状态展示，其余字段取最新值
@@ -584,8 +585,10 @@ function releaseHold(stepId: number) {
   drillSteps.value = next
 }
 
-// 任务完成流式动画：对应任务卡片 ghost 从右侧飞向中心百分数圆环，
-// 营造"信息汇聚、流入圆环汇总"的视觉效果。
+// 任务完成流式动画（三段式编排）：
+// ① 汇流 —— 任务卡片 ghost 沿弧线飞至中心百分数环侧畔；
+// ② 高亮驻留 —— ghost 切换"完成绿"高亮呼吸，环旁弹出「任务已完成」确认横幅，环体同步预热发光；
+// ③ 俯冲吸收 —— ghost 缩小俯冲钻入环内，冲击波迸发，环上数字随之增长。
 // 调用时机：applyStepEvent 在更新 drillSteps 之后同步调用本函数，
 // 此时 Vue 尚未 patch DOM，原 alert-card 仍在原位，可精确捕获其位置。
 function playTaskFlowAnimation(stepId: number) {
@@ -604,6 +607,8 @@ function playTaskFlowAnimation(stepId: number) {
   const hubRect = hubCore.getBoundingClientRect()
   const hubCx = hubRect.left + hubRect.width / 2 - screenRect.left
   const hubCy = hubRect.top + hubRect.height / 2 - screenRect.top
+  // 以 hub 光晕外沿作为环体边界，ghost 停在"环旁"而非压在环上
+  const hubR = Math.max(hubRect.width, 208) / 2
 
   // 任务卡片元素（DOM 尚未 patch，原卡片仍在）
   const cardEl = screenRoot.querySelector<HTMLElement>(`[data-step-id="${stepId}"]`)
@@ -661,10 +666,20 @@ function playTaskFlowAnimation(stepId: number) {
   shell.appendChild(tag)
   ghost.appendChild(shell)
 
-  // 飞行动画参数：慢速平移滑入，卡片保持较大尺寸飞抵圆环
-  const flightMs = 1600
+  // 动画参数：飞行 → 环旁驻留 → 俯冲入环
   const startScale = 0.94
-  const endScale = 0.42
+  const showScale = 0.78 // 驻留尺寸：标题可读，又不遮挡环体
+  const flightMs = 1200
+  const showcaseMs = 1250
+  const diveMs = 520
+
+  // 驻留点：圆环右侧、与环心齐平；右侧空间不足时翻到左侧
+  const ghostHalfW = (cardW * showScale) / 2
+  let showX = hubCx + hubR + ghostHalfW + 24
+  if (showX + ghostHalfW > screenRect.width - 16) {
+    showX = hubCx - hubR - ghostHalfW - 24
+  }
+  const showY = hubCy
 
   // 初始位置内联设置，避免 WAAPI 首帧前的瞬闪（ghost 默认在 0,0）
   const startTransform = `translate(${fromX}px, ${fromY}px) translate(-50%, -50%) scale(${startScale}) rotate(-3deg)`
@@ -672,54 +687,131 @@ function playTaskFlowAnimation(stepId: number) {
   ghost.style.opacity = '1'
   flyLayer.appendChild(ghost)
 
-  // 二次贝塞尔轨迹：平缓弧线滑向圆环，营造"平移"感
-  const cpX = (fromX + hubCx) / 2
-  const cpY = (fromY + hubCy) / 2 - 55
+  // ① 汇流：二次贝塞尔弧线滑至环旁，途中轻微回正
+  const cpX = (fromX + showX) / 2
+  const cpY = Math.min(fromY, showY) - 64
   const bezier = (t: number) => {
     const u = 1 - t
     return {
-      x: u * u * fromX + 2 * u * t * cpX + t * t * hubCx,
-      y: u * u * fromY + 2 * u * t * cpY + t * t * hubCy,
+      x: u * u * fromX + 2 * u * t * cpX + t * t * showX,
+      y: u * u * fromY + 2 * u * t * cpY + t * t * showY,
     }
   }
 
-  const steps = 28
+  const steps = 24
   const keyframes: Keyframe[] = []
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
     const p = bezier(t)
-    const scale = startScale + (endScale - startScale) * t
-    // 末段渐隐：贴近圆环时才被"吸收"，平移过程保持清晰
-    const opacity = t < 0.9 ? 1 : Math.max(0, 1 - (t - 0.9) / 0.1)
+    const scale = startScale + (showScale - startScale) * t
     keyframes.push({
-      transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${scale}) rotate(${(t - 0.5) * 4}deg)`,
-      opacity,
+      transform: `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${scale}) rotate(${-3 * (1 - t)}deg)`,
       offset: t,
     })
   }
   const flight = ghost.animate(keyframes, {
     duration: flightMs,
-    easing: 'cubic-bezier(0.4, 0.05, 0.3, 1)',
+    easing: 'cubic-bezier(0.3, 0.08, 0.22, 1)',
     fill: 'forwards',
   })
 
   // 飞行尾迹粒子
-  let trailTimer: number | null = window.setInterval(() => {
+  const trailTimer = window.setInterval(() => {
     const rect = ghost.getBoundingClientRect()
     spawnTrailDot(flyLayer, rect.left + rect.width / 2 - screenRect.left, rect.top + rect.height / 2 - screenRect.top)
   }, 64)
 
   flight.onfinish = () => {
-    if (trailTimer !== null) {
-      clearInterval(trailTimer)
-      trailTimer = null
-    }
-    ghost.remove()
-    triggerHubAbsorption(flyLayer, hubCx, hubCy)
-    pulseHub(hubCore, hubGlow)
-    // 数字增长与冲击波峰值同步：到达瞬间稍作停顿后释放完成保持，
-    // 卡片"注入"圆环、能量爆开的同帧，环上数字才跳变
-    window.setTimeout(() => releaseHold(stepId), 220)
+    clearInterval(trailTimer)
+
+    // ② 高亮驻留：切换"完成绿"呼吸，环旁弹出完成横幅，环体预热发光
+    ghost.classList.add('is-highlight')
+    const ghostH = ghost.getBoundingClientRect().height
+    const banner = spawnDoneBanner(flyLayer, step.name, showX, showY + ghostH / 2 + 16)
+
+    const settleTransform = `translate(${showX}px, ${showY}px) translate(-50%, -50%) scale(${showScale})`
+    ghost.animate(
+      [
+        { transform: settleTransform },
+        { transform: `translate(${showX}px, ${showY}px) translate(-50%, -50%) scale(${showScale * 1.06})`, offset: 0.5 },
+        { transform: settleTransform },
+      ],
+      { duration: showcaseMs, easing: 'ease-in-out' },
+    )
+    // 环体预热：小幅亮度脉冲，预告即将吸收
+    hubCore.animate(
+      [
+        { filter: 'brightness(1) saturate(1)' },
+        { filter: 'brightness(1.35) saturate(1.22)', offset: 0.45 },
+        { filter: 'brightness(1) saturate(1)' },
+      ],
+      { duration: showcaseMs, easing: 'ease-in-out' },
+    )
+
+    window.setTimeout(() => {
+      // ③ 俯冲吸收：缩小、模糊、淡出，钻入环心
+      banner.fadeOut()
+      shell.animate(
+        [{ filter: 'blur(0px)' }, { filter: 'blur(4px)' }],
+        { duration: diveMs, easing: 'cubic-bezier(0.55, 0, 0.85, 0.4)', fill: 'forwards' },
+      )
+      const dive = ghost.animate(
+        [
+          { transform: settleTransform, opacity: 1 },
+          { transform: `translate(${hubCx}px, ${hubCy}px) translate(-50%, -50%) scale(0.14)`, opacity: 0.1 },
+        ],
+        { duration: diveMs, easing: 'cubic-bezier(0.55, 0, 0.85, 0.4)', fill: 'forwards' },
+      )
+      dive.onfinish = () => {
+        ghost.remove()
+        triggerHubAbsorption(flyLayer, hubCx, hubCy)
+        pulseHub(hubCore, hubGlow)
+        // 数字增长与冲击波峰值同步：到达瞬间稍作停顿后释放完成保持，
+        // 卡片"注入"圆环、能量爆开的同帧，环上数字才跳变
+        window.setTimeout(() => releaseHold(stepId), 220)
+      }
+    }, showcaseMs)
+  }
+}
+
+// 完成确认横幅：ghost 环旁驻留时弹出的「任务已完成」提示，俯冲开始后淡出
+function spawnDoneBanner(layer: HTMLElement, taskName: string, x: number, y: number) {
+  const banner = document.createElement('div')
+  banner.className = 'fly-done-banner'
+
+  const icon = document.createElement('span')
+  icon.className = 'done-banner-icon'
+  icon.innerHTML =
+    '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="#04241a" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'
+
+  const text = document.createElement('span')
+  text.className = 'done-banner-text'
+  text.textContent = `「${taskName}」已完成`
+
+  banner.appendChild(icon)
+  banner.appendChild(text)
+  banner.style.left = x + 'px'
+  banner.style.top = y + 'px'
+  layer.appendChild(banner)
+
+  banner.animate(
+    [
+      { opacity: 0, transform: 'translate(-50%, -10px) scale(0.9)' },
+      { opacity: 1, transform: 'translate(-50%, 0) scale(1)' },
+    ],
+    { duration: 380, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)', fill: 'forwards' },
+  )
+
+  return {
+    fadeOut() {
+      banner.animate(
+        [
+          { opacity: 1, transform: 'translate(-50%, 0) scale(1)' },
+          { opacity: 0, transform: 'translate(-50%, -8px) scale(0.94)' },
+        ],
+        { duration: 300, easing: 'ease-in', fill: 'forwards' },
+      ).onfinish = () => banner.remove()
+    },
   }
 }
 
@@ -3947,12 +4039,20 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   .rt-dot { animation: none !important; }
   .bg-scan { animation: none !important; }
   .segment.seg-active { animation: none !important; }
-  .fly-ghost, .fly-trail-dot, .hub-shockwave, .hub-burst-particle { display: none !important; }
   .alert-card.alert-warn,
   .alert-card.alert-pending .alert-indicator,
   .alert-gear,
   .log-line.is-newest { animation: none !important; }
 }
+</style>
+
+<!-- 任务完成流式动画样式必须全局（非 scoped）：
+     ghost 卡片 / 完成横幅 / 尾迹粒子 / 冲击波均为 JS 动态创建的元素，
+     不携带 scoped 的 data-v 属性，scoped 选择器无法命中 -->
+<style lang="scss">
+// 字体变量（scoped 块内同名定义的副本，动态元素样式需全局作用域）
+$font-mono: Consolas, Menlo, Monaco, 'Courier New', monospace;
+$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
 
 // ===== 任务完成流式动画 =====
 // 全屏覆盖层：承载飞行 ghost、尾迹粒子、圆环吸收特效
@@ -3992,6 +4092,7 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
     0 0 44px rgba(0, 255, 156, 0.18),
     inset 0 0 18px rgba(45, 228, 255, 0.12);
   overflow: hidden;
+  transition: border-color 0.28s ease, box-shadow 0.28s ease;
 
   // 顶部高亮扫描线，强化"数据封装"质感
   &::before {
@@ -4080,6 +4181,79 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   background: rgba(0, 255, 156, 0.14);
   border: 1px solid rgba(0, 255, 156, 0.42);
   text-shadow: 0 0 4px rgba(0, 255, 156, 0.55);
+  transition:
+    background-color 0.28s ease,
+    border-color 0.28s ease,
+    transform 0.28s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+// 高亮驻留态：ghost 停靠环旁的确认瞬间，边框与辉光整体切换为"完成绿"
+.fly-ghost.is-highlight {
+  .fly-ghost-shell {
+    border-color: rgba(0, 255, 156, 0.75);
+    box-shadow:
+      0 0 0 1px rgba(0, 255, 156, 0.28),
+      0 0 26px rgba(0, 255, 156, 0.5),
+      0 0 54px rgba(0, 255, 156, 0.26),
+      inset 0 0 20px rgba(0, 255, 156, 0.18);
+
+    &::before {
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 156, 0.95), transparent);
+      box-shadow: 0 0 6px rgba(0, 255, 156, 0.7);
+    }
+  }
+
+  .fly-ghost-tag {
+    background: rgba(0, 255, 156, 0.24);
+    border-color: rgba(0, 255, 156, 0.7);
+    transform: scale(1.1);
+  }
+}
+
+// 完成确认横幅：ghost 环旁驻留时弹出，告知"该任务已完成"，俯冲时淡出
+.fly-done-banner {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 156, 0.5);
+  background: linear-gradient(135deg, rgba(6, 40, 36, 0.96), rgba(4, 20, 32, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 156, 0.1),
+    0 0 20px rgba(0, 255, 156, 0.32),
+    0 8px 24px rgba(2, 10, 24, 0.6);
+  pointer-events: none;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+.done-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2cf8d8, #0ba36f);
+  box-shadow: 0 0 8px rgba(0, 255, 156, 0.65);
+
+  svg {
+    width: 12px;
+    height: 12px;
+    fill: #04241a;
+  }
+}
+
+.done-banner-text {
+  font-family: $font-cn;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #c8ffe6;
+  text-shadow: 0 0 6px rgba(0, 255, 156, 0.4);
 }
 
 // 飞行尾迹粒子：青色光点，随路径散落并衰减
@@ -4131,5 +4305,16 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
   pointer-events: none;
   will-change: transform, opacity;
   transform: translate(-50%, -50%);
+}
+
+// 减弱动态效果：整体关闭飞行动画
+@media (prefers-reduced-motion: reduce) {
+  .fly-ghost,
+  .fly-trail-dot,
+  .fly-done-banner,
+  .hub-shockwave,
+  .hub-burst-particle {
+    display: none !important;
+  }
 }
 </style>
