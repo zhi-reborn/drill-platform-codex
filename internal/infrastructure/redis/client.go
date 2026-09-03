@@ -43,14 +43,15 @@ func NewClient(cfg *Config) (*Client, error) {
 func newUniversalClient(cfg Config) redis.UniversalClient {
 	if addrs := splitAddrs(cfg.ClusterAddrs); len(addrs) > 0 {
 		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        addrs,
-			Username:     cfg.Username,
-			Password:     cfg.Password,
-			PoolSize:     cfg.PoolSize,
-			DialTimeout:  60 * time.Second,
-			ReadTimeout:  60 * time.Second,
-			WriteTimeout: 60 * time.Second,
-			TLSConfig:    redisTLSConfig(cfg.TLS),
+			ContextTimeoutEnabled: true,
+			Addrs:                 addrs,
+			Username:              cfg.Username,
+			Password:              cfg.Password,
+			PoolSize:              cfg.PoolSize,
+			DialTimeout:           60 * time.Second,
+			ReadTimeout:           60 * time.Second,
+			WriteTimeout:          60 * time.Second,
+			TLSConfig:             redisTLSConfig(cfg.TLS),
 		})
 	}
 
@@ -61,29 +62,31 @@ func newUniversalClient(cfg Config) redis.UniversalClient {
 
 	if cfg.SentinelMaster != "" {
 		return redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:    cfg.SentinelMaster,
-			SentinelAddrs: splitAddrs(addr),
-			Username:      cfg.Username,
-			Password:      cfg.Password,
-			DB:            cfg.DB,
-			PoolSize:      cfg.PoolSize,
-			DialTimeout:   60 * time.Second,
-			ReadTimeout:   60 * time.Second,
-			WriteTimeout:  60 * time.Second,
-			TLSConfig:     redisTLSConfig(cfg.TLS),
+			ContextTimeoutEnabled: true,
+			MasterName:            cfg.SentinelMaster,
+			SentinelAddrs:         splitAddrs(addr),
+			Username:              cfg.Username,
+			Password:              cfg.Password,
+			DB:                    cfg.DB,
+			PoolSize:              cfg.PoolSize,
+			DialTimeout:           60 * time.Second,
+			ReadTimeout:           60 * time.Second,
+			WriteTimeout:          60 * time.Second,
+			TLSConfig:             redisTLSConfig(cfg.TLS),
 		})
 	}
 
 	return redis.NewClient(&redis.Options{
-		Addr:         addr,
-		Username:     cfg.Username,
-		Password:     cfg.Password,
-		DB:           cfg.DB,
-		PoolSize:     cfg.PoolSize,
-		DialTimeout:  60 * time.Second,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		TLSConfig:    redisTLSConfig(cfg.TLS),
+		ContextTimeoutEnabled: true,
+		Addr:                  addr,
+		Username:              cfg.Username,
+		Password:              cfg.Password,
+		DB:                    cfg.DB,
+		PoolSize:              cfg.PoolSize,
+		DialTimeout:           60 * time.Second,
+		ReadTimeout:           60 * time.Second,
+		WriteTimeout:          60 * time.Second,
+		TLSConfig:             redisTLSConfig(cfg.TLS),
 	})
 }
 

@@ -15,6 +15,7 @@ import (
 	"drill-platform/internal/api/handler/health"
 	"drill-platform/internal/api/router"
 	"drill-platform/internal/infrastructure/events"
+	"drill-platform/internal/infrastructure/presence"
 	"drill-platform/internal/infrastructure/redis"
 	"drill-platform/internal/infrastructure/websocket"
 	"drill-platform/internal/pkg/appconfig"
@@ -160,6 +161,9 @@ func main() {
 
 	// 5. Services.
 	services := service.NewServices(wsManager, redisClient)
+	if redisClient != nil {
+		services.DashboardService.SetPresence(presence.NewStore(redisClient.Raw()))
+	}
 	services.AuthService.SetJWTConfig(cfg.JWT.Secret, cfg.JWT.Expire)
 	services.AuthService.SetExternalAuthConfig(service.ExternalAuthConfig{
 		AutoCreateUser: cfg.Auth.AutoCreateUser,

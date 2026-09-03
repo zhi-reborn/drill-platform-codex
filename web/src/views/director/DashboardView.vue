@@ -28,7 +28,7 @@
         <el-col :span="6">
           <el-card class="stat-card">
             <div class="stat-label">我的模板</div>
-            <div class="stat-value">{{ stats.myTemplates }}</div>
+            <div class="stat-value">{{ templateMetric?.my_template_count ?? '—' }}</div>
           </el-card>
         </el-col>
       </el-row>
@@ -120,14 +120,16 @@ import { Monitor, ArrowRight, DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import { drillApi } from '@/api/modules/drill'
+import { dashboardApi } from '@/api/modules/dashboard'
+import { useDashboardMetric } from '@/composables/useDashboardMetric'
 
 const router = useRouter()
+const { value: templateMetric, refresh: refreshTemplateMetric } = useDashboardMetric(dashboardApi.getMyTemplates)
 
 const stats = ref({
   todayDrills: 0,
   activeDrills: 0,
   successRate: 0,
-  myTemplates: 0,
 })
 
 const instances = ref<DrillInstance[]>([])
@@ -197,7 +199,8 @@ function formatTime(dateStr: string): string {
   })
 }
 
-async function loadDashboard() {
+async function loadDashboard(refreshMetric = true) {
+  if (refreshMetric) void refreshTemplateMetric()
   try {
     // 加载演练列表
     const result = await drillApi.getList({ page: 1, page_size: 50 })
@@ -211,7 +214,6 @@ async function loadDashboard() {
     stats.value.successRate = instances.value.length > 0 
       ? Math.round((completed / instances.value.length) * 100) 
       : 0
-    stats.value.myTemplates = 0 // TODO: 需要模板 API
     
     // 加载每个演练的步骤
     for (const drill of activeDrills.value) {
@@ -267,7 +269,7 @@ function viewScreen3(drillId: number) {
 }
 
 onMounted(() => {
-  loadDashboard()
+  loadDashboard(false)
 })
 </script>
 

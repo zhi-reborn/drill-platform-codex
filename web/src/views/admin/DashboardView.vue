@@ -60,8 +60,8 @@
               </svg>
             </div>
               <div class="stat-content">
-                <div class="stat-label">团队在线</div>
-                <div class="stat-value">{{ stats.team_online_count }}/{{ stats.team_total_count }}</div>
+                <div class="stat-label" title="最近 5 分钟活跃的已启用用户 / 全部已启用用户">团队在线</div>
+                <div class="stat-value">{{ teamMetric?.team_online_count ?? '—' }}/{{ teamMetric?.team_total_count ?? '—' }}</div>
               </div>
           </el-card>
         </el-col>
@@ -155,8 +155,11 @@ import { Monitor, DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import { drillApi } from '@/api/modules/drill'
+import { dashboardApi } from '@/api/modules/dashboard'
+import { useDashboardMetric } from '@/composables/useDashboardMetric'
 
 const router = useRouter()
+const { value: teamMetric, refresh: refreshTeamMetric } = useDashboardMetric(dashboardApi.getTeam)
 
 const instances = ref<DrillInstance[]>([])
 const stepsMap = ref<Map<number, StepInstance[]>>(new Map())
@@ -165,8 +168,6 @@ const stats = ref({
   total_drills: 0,
   active_drills: 0,
   success_rate: 0,
-  team_online_count: 0,
-  team_total_count: 0,
 })
 
 const activeDrills = computed(() => {
@@ -254,7 +255,8 @@ function viewScreen3(drillId: number) {
   window.open(`/screen3/${drillId}`, '_blank')
 }
 
-async function loadDashboard() {
+async function loadDashboard(refreshMetric = true) {
+  if (refreshMetric) void refreshTeamMetric()
   try {
     // 加载演练列表
     const result = await drillApi.getList({ page: 1, page_size: 50 })
@@ -267,8 +269,6 @@ async function loadDashboard() {
     stats.value.success_rate = instances.value.length > 0 
       ? Math.round((completed / instances.value.length) * 100) 
       : 0
-    stats.value.team_online_count = 0 // TODO: 需要用户在线状态 API
-    stats.value.team_total_count = 0 // TODO: 需要用户总数 API
     
     // 加载每个演练的步骤
     for (const drill of activeDrills.value) {
@@ -309,7 +309,7 @@ async function loadDashboard() {
 }
 
 onMounted(() => {
-  loadDashboard()
+  loadDashboard(false)
 })
 </script>
 

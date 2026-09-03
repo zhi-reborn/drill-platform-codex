@@ -17,6 +17,16 @@ export const authApi = {
     })
   },
 
+  heartbeat: (signal?: AbortSignal) => {
+    return apiRequest<void>({
+      url: '/v1/auth/heartbeat',
+      method: 'POST',
+      signal,
+      timeout: 10000,
+      silentError: true,
+    })
+  },
+
   getCurrentUser: () => {
     return apiRequest<User>({
       url: '/v1/auth/me',

@@ -25,6 +25,9 @@ func TestNewUniversalClientUsesClusterWhenConfigured(t *testing.T) {
 	}
 
 	opts := cluster.Options()
+	if !opts.ContextTimeoutEnabled {
+		t.Fatal("cluster must honor context deadlines for presence requests")
+	}
 	if !reflect.DeepEqual(opts.Addrs, []string{"redis-a:6379", "redis-b:6379"}) {
 		t.Fatalf("cluster addrs = %#v, want redis-a/redis-b", opts.Addrs)
 	}
@@ -56,6 +59,9 @@ func TestNewUniversalClientUsesSentinelWhenConfigured(t *testing.T) {
 	}
 
 	opts := standalone.Options()
+	if !opts.ContextTimeoutEnabled {
+		t.Fatal("sentinel must honor context deadlines for presence requests")
+	}
 	if opts.Addr != "FailoverClient" {
 		t.Fatalf("sentinel client addr = %q, want FailoverClient", opts.Addr)
 	}
@@ -106,6 +112,11 @@ func TestClientModeReportsConfiguredTopology(t *testing.T) {
 }
 
 func TestRedisTLSConfig(t *testing.T) {
+	standalone := newUniversalClient(Config{Addr: "localhost:6379"})
+	defer standalone.Close()
+	if !standalone.(*goredis.Client).Options().ContextTimeoutEnabled {
+		t.Fatal("standalone must honor context deadlines for presence requests")
+	}
 	if redisTLSConfig(false) != nil {
 		t.Fatal("redisTLSConfig(false) returned non-nil")
 	}
