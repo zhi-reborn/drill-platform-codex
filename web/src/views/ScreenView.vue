@@ -560,7 +560,7 @@ function shouldHoldFlight(stepId: number): boolean {
 function holdCompletion(stepId: number, prev: StepStatus, real: StepInstance) {
   stepHolds.set(stepId, { prev, real })
   // 兜底：若 onfinish 因标签页节流等未触发，超时强制释放，避免数字卡住
-  // （三段式动画总时长 ≈ 飞行 1200 + 驻留 1250 + 俯冲 520 + 释放延迟 220，留出裕量）
+  // （三段式动画总时长 ≈ 飞行 760 + 驻留 1250 + 俯冲 460 + 释放延迟 220，留出裕量）
   window.setTimeout(() => releaseHold(stepId), 4600)
 }
 
@@ -669,9 +669,9 @@ function playTaskFlowAnimation(stepId: number) {
   // 动画参数：飞行 → 环旁驻留 → 俯冲入环
   const startScale = 0.94
   const showScale = 0.78 // 驻留尺寸：标题可读，又不遮挡环体
-  const flightMs = 1200
+  const flightMs = 760 // 快出缓收：迅捷掠向圆环，抵环前自然减速
   const showcaseMs = 1250
-  const diveMs = 520
+  const diveMs = 460
 
   // 驻留点：圆环右侧、与环心齐平；右侧空间不足时翻到左侧
   const ghostHalfW = (cardW * showScale) / 2
@@ -711,15 +711,15 @@ function playTaskFlowAnimation(stepId: number) {
   }
   const flight = ghost.animate(keyframes, {
     duration: flightMs,
-    easing: 'cubic-bezier(0.3, 0.08, 0.22, 1)',
+    easing: 'cubic-bezier(0.12, 0.62, 0.24, 1)',
     fill: 'forwards',
   })
 
-  // 飞行尾迹粒子
+  // 飞行尾迹粒子（提速后加密发射，保持轨迹连贯）
   const trailTimer = window.setInterval(() => {
     const rect = ghost.getBoundingClientRect()
     spawnTrailDot(flyLayer, rect.left + rect.width / 2 - screenRect.left, rect.top + rect.height / 2 - screenRect.top)
-  }, 64)
+  }, 44)
 
   flight.onfinish = () => {
     clearInterval(trailTimer)
