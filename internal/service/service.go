@@ -15,6 +15,7 @@ type Services struct {
 	DrillService        *DrillService
 	TaskService         *TaskService
 	DisplayService      *DisplayService
+	DashboardService    *DashboardService
 	ReportService       *ReportService
 	NotificationService *NotificationService
 	FlowCommandService  *FlowCommandService
@@ -67,6 +68,7 @@ func NewServices(wsManager *websocket.Manager, redisClient RedisClient) *Service
 		DrillService:        drillService,
 		TaskService:         taskService,
 		DisplayService:      NewDisplayService(drillRepo, stepRepo),
+		DashboardService:    NewDashboardService(repository.NewDashboardRepo(), nil),
 		ReportService:       NewReportService(drillRepo, stepRepo),
 		NotificationService: notificationService,
 		FlowCommandService:  NewFlowCommandService(flowCommandRepo, 2*time.Second),

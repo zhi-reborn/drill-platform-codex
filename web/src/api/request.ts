@@ -5,6 +5,12 @@ import type { ApiResponse } from '@/types'
 import type { FlowCommand } from '@/types/flowCommand'
 import { getKeyForAction, clearKey } from './idempotency'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silentError?: boolean
+  }
+}
+
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 60000,
@@ -27,7 +33,7 @@ request.interceptors.response.use(
     // 解包后端返回的数据
     const res = response.data
     if (res.code !== 0) {
-      ElMessage.error(res.message || '请求失败')
+      if (!response.config.silentError) ElMessage.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
     }
     // 202 Accepted: 异步命令已受理，返回 pending 标记与命令对象
@@ -52,7 +58,7 @@ request.interceptors.response.use(
         }
         break
       case 403:
-        ElMessage.error(message || '没有权限执行此操作')
+        if (!error.config?.silentError) ElMessage.error(message || '没有权限执行此操作')
         break
       case 404:
         // 404 时透传后端业务消息（如"演练不存在"），避免上层误判
@@ -61,7 +67,7 @@ request.interceptors.response.use(
         }
         break
       case 500:
-        ElMessage.error(message || '服务器错误')
+        if (!error.config?.silentError) ElMessage.error(message || '服务器错误')
         break
     }
     return Promise.reject(error)
@@ -74,6 +80,9 @@ export function apiRequest<T>(config: {
   data?: unknown
   params?: Record<string, unknown>
   headers?: Record<string, string>
+  silentError?: boolean
+  signal?: AbortSignal
+  timeout?: number
 }): Promise<T> {
   return request(config) as Promise<T>
 }

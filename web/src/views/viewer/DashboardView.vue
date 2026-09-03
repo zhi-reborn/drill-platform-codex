@@ -27,8 +27,8 @@
         </el-col>
         <el-col :span="6">
           <el-card class="stat-card">
-            <div class="stat-label">平均耗时</div>
-            <div class="stat-value">{{ formatDuration(stats.avg_step_duration_seconds) }}</div>
+            <div class="stat-label" title="已完成叶子步骤的平均耗时">平均耗时</div>
+            <div class="stat-value">{{ formatDuration(durationMetric?.avg_step_duration_seconds ?? null) }}</div>
           </el-card>
         </el-col>
       </el-row>
@@ -113,8 +113,11 @@ import { Monitor, DataBoard } from '@element-plus/icons-vue'
 import type { DrillInstance, StepInstance } from '@/types'
 import DrillStatusBadge from '@/components/common/DrillStatusBadge.vue'
 import { drillApi } from '@/api/modules/drill'
+import { dashboardApi } from '@/api/modules/dashboard'
+import { useDashboardMetric } from '@/composables/useDashboardMetric'
 
 const router = useRouter()
+const { value: durationMetric, refresh: refreshDurationMetric } = useDashboardMetric(dashboardApi.getStepDuration)
 
 const instances = ref<DrillInstance[]>([])
 const stepsMap = ref<Map<number, StepInstance[]>>(new Map())
@@ -124,7 +127,6 @@ const stats = ref({
   total_drills: 0,
   active_drills: 0,
   success_rate: 0,
-  avg_step_duration_seconds: 0,
 })
 
 const activeDrills = computed(() => {
@@ -190,10 +192,11 @@ function formatTime(dateStr: string): string {
   })
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return '—'
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
-  return `${mins}m ${secs}s`
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
 }
 
 function viewScreen(drillId: number) {
@@ -204,7 +207,8 @@ function viewScreen2(drillId: number) {
   router.push(`/viewer/screen/${drillId}`)
 }
 
-async function loadDashboard() {
+async function loadDashboard(refreshMetric = true) {
+  if (refreshMetric) void refreshDurationMetric()
   try {
     // 加载演练列表
     const result = await drillApi.getList({ page: 1, page_size: 50 })
@@ -217,7 +221,6 @@ async function loadDashboard() {
     stats.value.success_rate = instances.value.length > 0 
       ? Math.round((completed / instances.value.length) * 100) 
       : 0
-    stats.value.avg_step_duration_seconds = 0 // TODO: 需要计算平均耗时
     
     // 加载每个演练的步骤
     for (const drill of activeDrills.value) {
@@ -256,7 +259,7 @@ async function loadDashboard() {
 }
 
 onMounted(() => {
-  loadDashboard()
+  loadDashboard(false)
 })
 </script>
 

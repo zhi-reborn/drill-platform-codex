@@ -21,7 +21,9 @@
       <header class="command-header">
         <div class="header-scanline" />
         <div class="header-title-shell">
+          <span class="title-rail is-left" aria-hidden="true" />
           <h1 class="command-title">应急处置指挥中心</h1>
+          <span class="title-rail is-right" aria-hidden="true" />
         </div>
         <div class="header-meta">
           <div class="progress-console">
@@ -44,61 +46,91 @@
 
       <main class="command-main">
         <div class="main-rect-sweep" />
-        <section class="phase-card-strip">
-          <article v-for="(phase, index) in phaseCards" :key="phase.name" class="phase-card" :class="['is-' + phase.status, { active: phase.active }]">
-            <div class="phase-card-grid" />
-            <div class="phase-accent" />
-            <div class="phase-head">
-              <h2>阶段{{ index + 1 }} {{ phase.name }}</h2>
-              <span class="phase-status">{{ phase.statusText }}</span>
-            </div>
-            <div class="phase-segments" :aria-label="phase.statusText">
-              <span v-for="seg in phase.segmentCount" :key="seg" :class="{ filled: seg <= phase.filledSegments }" />
-            </div>
-            <div class="phase-stats">
-              <span><b>{{ phase.completedPhaseSteps }}</b>/{{ phase.totalPhaseSteps }}<em>环节</em></span>
-              <span><b>{{ phase.completedSteps }}</b>/{{ phase.totalSteps }}<em>步骤</em></span>
-            </div>
-          </article>
-        </section>
+        <section ref="phaseFlowRef" class="phase-flow-chamber" :class="'phase-state-' + selectedPhaseStatus" aria-label="阶段与环节流程">
+          <svg class="phase-chamber-surface" aria-hidden="true">
+            <defs>
+              <linearGradient id="phaseSurface" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#0a304b" />
+                <stop offset="0.6" stop-color="#04192e" />
+                <stop offset="1" stop-color="#07283d" />
+              </linearGradient>
+              <linearGradient id="phaseOutline" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="var(--phase-link-color)" />
+                <stop offset="0.32" stop-color="#41bdd6" />
+                <stop offset="1" stop-color="#246880" />
+              </linearGradient>
+            </defs>
+            <path :d="chamberPath" fill="url(#phaseSurface)" stroke="url(#phaseOutline)" stroke-width="1.5" />
+          </svg>
+          <section class="phase-card-strip" aria-label="选择预览阶段" @scroll.passive="updateChamberOutline">
+            <template v-for="(phase, index) in phaseCards" :key="phase.name">
+              <button
+                type="button"
+                class="phase-card"
+                :class="['is-' + phase.status, { active: index === selectedPhaseIdx }]"
+                :aria-pressed="index === selectedPhaseIdx"
+                aria-controls="selected-phase-flow"
+                :title="`查看阶段${index + 1} ${phase.name}`"
+                @click="selectPhase(index)"
+              >
+                <span class="phase-card-grid" aria-hidden="true" />
+                <span class="phase-accent" aria-hidden="true" />
+                <span class="phase-head">
+                  <span class="phase-name"><span class="phase-number">阶段{{ index + 1 }}</span> {{ phase.name }}</span>
+                  <span class="phase-status">{{ phase.statusText }}</span>
+                </span>
+                <span class="phase-segments" aria-hidden="true">
+                  <span v-for="seg in phase.segmentCount" :key="seg" :class="{ filled: seg <= phase.filledSegments }" />
+                </span>
+                <span class="phase-stats">
+                  <span><b>{{ phase.completedPhaseSteps }}</b>/{{ phase.totalPhaseSteps }}<em>环节</em></span>
+                  <span><b>{{ phase.completedSteps }}</b>/{{ phase.totalSteps }}<em>步骤</em></span>
+                </span>
+              </button>
+              <span v-if="index < phaseCards.length - 1" class="phase-sequence-arrow" :class="'is-' + phase.status" aria-hidden="true">
+                <svg viewBox="0 0 36 16"><path d="M 3 8 H 31 M 25 2 L 31 8 L 25 14" /></svg>
+              </span>
+            </template>
+          </section>
 
-        <section class="flow-board" :class="{ 'all-done': allPhasesDone }">
-          <div class="flow-board-grid" />
-          <div class="flow-board-label">
-            <span class="label-pulse" aria-hidden="true" />
-            <span>当前环节</span>
-          </div>
-          <div class="flow-row flow-row-top">
-            <div v-for="(node, index) in topFlowNodes" :key="node.id" class="flow-node-wrap">
-              <div class="flow-node" :class="'is-' + node.status">
-                <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
-                <span class="node-tag">
-                  <span class="node-label">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
-                </span>
-                <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
-                  <i class="node-gear" />
-                  <i class="node-live-dot" />
-                </span>
+          <section id="selected-phase-flow" class="flow-board" :class="{ 'all-done': selectedPhaseStatus === 'done', 'is-preview': selectedPhaseStatus !== 'running' }">
+            <div class="flow-board-grid" />
+            <header class="flow-board-heading" aria-live="polite">
+              <div class="flow-board-label">
+                <span class="label-pulse" aria-hidden="true" />
+                <span>{{ selectedPhaseStatus === 'running' ? '当前环节' : '阶段预览' }}</span>
               </div>
-              <span v-if="index < topFlowNodes.length - 1" class="flow-arrow right" />
-              <span v-else-if="bottomFlowNodes.length" class="flow-arrow turn" />
-            </div>
-          </div>
-          <div class="flow-row flow-row-bottom">
-            <div v-for="(node, index) in bottomFlowNodes" :key="node.id" class="flow-node-wrap">
-              <span v-if="index > 0" class="flow-arrow left" />
-              <div class="flow-node" :class="'is-' + node.status">
-                <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
-                <span class="node-tag">
-                  <span class="node-label">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
-                </span>
-                <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
-                  <i class="node-gear" />
-                  <i class="node-live-dot" />
-                </span>
+            </header>
+            <div v-if="!flowNodes.length" class="flow-empty">该阶段暂无环节</div>
+            <div v-show="flowNodes.length" ref="flowViewportRef" class="flow-viewport">
+              <div ref="flowTrackRef" class="flow-track" :style="trackTransform">
+                <template v-for="(node, index) in flowNodes" :key="node.id">
+                  <div class="flow-node-wrap" :style="focusStyle(index)">
+                    <div class="flow-node" :class="'is-' + node.status">
+                      <span v-if="node.status === 'running'" class="node-ripple" aria-hidden="true" />
+                      <span class="node-tag">
+                        <span class="node-label">{{ node.status === 'done' ? '✓ ' + node.name : node.name }}</span>
+                      </span>
+                      <span v-if="node.status === 'running'" class="node-motion" aria-hidden="true">
+                        <i class="node-gear" />
+                        <i class="node-live-dot" />
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    v-if="index < flowNodes.length - 1"
+                    class="flow-arrow"
+                    :class="'is-' + node.status"
+                    :style="arrowStyle(index)"
+                    aria-hidden="true"
+                  >
+                    <i class="arrow-port" />
+                  </span>
+                </template>
               </div>
             </div>
-          </div>
+          </section>
+
         </section>
 
         <section class="execution-section">
@@ -175,13 +207,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { FullScreen } from '@element-plus/icons-vue'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance, DrillStatus } from '@/types/instance'
 import { DRILL_STATUS_LABELS } from '@/types/instance'
+import { getFlowFocusIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -378,16 +411,6 @@ const displayLogs = computed(() => logs.value.slice(0, maxVisibleLogs.value))
 
 // ======== 阶段 Tab ========
 
-// 找到包含 running 步骤的阶段名
-function findActivePhaseName(): string | null {
-  for (const s of steps.value) {
-    if (s.status === 'running') {
-      return s.phase || null
-    }
-  }
-  return null
-}
-
 // 阶段整体状态：done / running / pending（仅看叶子步骤，避免父步骤状态滞后）
 function getPhaseStatus(phase: TreeNodePhase): string {
   const all = phase.phaseSteps.flatMap(ps => ps.stepNodes)
@@ -397,24 +420,6 @@ function getPhaseStatus(phase: TreeNodePhase): string {
   if (stepsToCheck.every(s => s.status === 'completed' || s.status === 'skipped')) return 'done'
   return 'pending'
 }
-
-// 当前选中的阶段索引，默认跟随活动阶段
-const selectedPhaseIdx = ref(0)
-
-// 当前阶段的数据（仅展示选中阶段）
-const currentPhaseData = computed<TreeNodePhase | null>(() => {
-  if (!treeData.value.length) return null
-  const idx = selectedPhaseIdx.value
-  if (idx < 0 || idx >= treeData.value.length) return treeData.value[0]
-  return treeData.value[idx]
-})
-
-// 活动阶段自动切换 Tab
-watch(() => findActivePhaseName(), (name) => {
-  if (!name) return
-  const idx = treeData.value.findIndex(p => p.name === name)
-  if (idx >= 0) selectedPhaseIdx.value = idx
-})
 
 // ======== 树结构 ========
 
@@ -457,10 +462,17 @@ const treeData = computed<TreeNodePhase[]>(() => {
   return result
 })
 
+const phaseSummaries = computed(() => treeData.value.map(phase => ({ name: phase.name, status: getPhaseStatus(phase) })))
+const { selectedPhaseIdx } = useScreenPhaseSelection(phaseSummaries, drillId)
+const currentPhaseData = computed<TreeNodePhase | null>(() => treeData.value[selectedPhaseIdx.value] ?? null)
+const selectedPhaseStatus = computed(() => phaseSummaries.value[selectedPhaseIdx.value]?.status ?? 'pending')
+
+function selectPhase(index: number) {
+  selectedPhaseIdx.value = index
+}
+
 const phaseCards = computed(() => {
-  const activeName = findActivePhaseName()
-  const fallbackActiveIdx = treeData.value.findIndex(p => getPhaseStatus(p) === 'running')
-  return treeData.value.map((phase, index) => {
+  return treeData.value.map(phase => {
     const allSteps = phase.phaseSteps.flatMap(ps => ps.stepNodes)
     const leafSteps = allSteps.filter(isLeafStep)
     const status = getPhaseStatus(phase)
@@ -474,7 +486,6 @@ const phaseCards = computed(() => {
       name: phase.name,
       status,
       statusText: status === 'done' ? '已完成' : status === 'running' ? '进行中' : '待开始',
-      active: activeName ? activeName === phase.name : index === fallbackActiveIdx,
       completedSteps,
       totalSteps,
       completedPhaseSteps,
@@ -486,30 +497,131 @@ const phaseCards = computed(() => {
   })
 })
 
-const flowNodes = computed(() => {
-  let source: TreeNodePhaseStep[] = []
-  if (currentPhaseData.value?.phaseSteps.length) {
-    const phase = currentPhaseData.value
-    source = phase.phaseSteps.filter(ps => ps.name !== phase.name)
-  } else {
-    source = treeData.value.flatMap(p => p.phaseSteps.filter(ps => ps.name !== p.name))
+const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus))
+
+// 环节轮播：单行横向排列，进行中节点聚焦居中（游戏选人式）
+const flowViewportRef = ref<HTMLElement | null>(null)
+const flowTrackRef = ref<HTMLElement | null>(null)
+const focusShift = ref(0)
+let flowViewportObserver: ResizeObserver | null = null
+
+const focusedNodeIndex = computed(() => getFlowFocusIndex(flowNodes.value))
+
+// 每个节点相对进行中节点的聚焦样式：中间放大、两侧渐小渐暗
+function focusScale(index: number): number {
+  const r = focusedNodeIndex.value
+  const d = r === -1 ? 0 : index - r
+  const abs = Math.abs(d)
+  // 进行中节点放大 1.3，其余按距离递减
+  return abs === 0 ? 1.3 : Math.max(0.55, 1 - (abs - 1) * 0.16)
+}
+
+function focusOpacity(index: number): number {
+  const r = focusedNodeIndex.value
+  const d = r === -1 ? 0 : index - r
+  const abs = Math.abs(d)
+  return abs === 0 ? 1 : Math.max(0.32, 1 - abs * 0.24)
+}
+
+function focusStyle(index: number): CSSProperties {
+  const r = focusedNodeIndex.value
+  const d = r === -1 ? 0 : index - r
+  return {
+    transform: `scale(${focusScale(index).toFixed(3)})`,
+    opacity: focusOpacity(index).toFixed(3),
+    zIndex: String(30 - Math.abs(d)),
   }
-  return source.slice(0, 12).map((ps, index) => ({
-    id: `${ps.name}-${index}`,
-    name: ps.name,
-    index: index + 1,
-    status: getPhaseStepStatus(ps) === 'done' ? 'done' : getPhaseStepStatus(ps) === 'running' ? 'running' : 'pending',
-  }))
+}
+
+// 衔接箭头：通过负边距吃掉卡片缩放留出的空白，使任意相邻卡片的视觉间距恒等于 --arrow-gap
+const flowWrapWidth = ref(180)
+
+function arrowStyle(index: number): CSSProperties {
+  const w = flowWrapWidth.value
+  // 卡片缩放后，wrap 两侧留出的空白 = w * (1 - scale) / 2（scale > 1 时为负，即卡片外溢）
+  const extendL = (w * (1 - focusScale(index))) / 2
+  const extendR = (w * (1 - focusScale(index + 1))) / 2
+  return {
+    marginLeft: `${(-extendL).toFixed(1)}px`,
+    marginRight: `${(-extendR).toFixed(1)}px`,
+    opacity: Math.min(focusOpacity(index), focusOpacity(index + 1)).toFixed(3),
+  }
+}
+
+const trackTransform = computed<CSSProperties>(() => ({
+  transform: `translateX(${focusShift.value}px)`,
+}))
+
+// 平移轨道，使进行中节点对准视口中线
+function recomputeFocusShift() {
+  const viewport = flowViewportRef.value
+  const track = flowTrackRef.value
+  if (!viewport || !track) return
+  const r = focusedNodeIndex.value
+  const items = track.querySelectorAll<HTMLElement>('.flow-node-wrap')
+  if (items.length && flowWrapWidth.value !== items[0].offsetWidth) {
+    flowWrapWidth.value = items[0].offsetWidth
+    nextTick(recomputeFocusShift)
+    return
+  }
+  if (r < 0 || !items.length || r >= items.length) {
+    focusShift.value = 0
+    return
+  }
+  const target = items[r]
+  const targetCenter = target.offsetLeft + target.offsetWidth / 2
+  focusShift.value = Math.round(viewport.clientWidth / 2 - targetCenter)
+}
+
+watch(flowNodes, () => nextTick(recomputeFocusShift))
+
+// ======== 所选阶段与环节内容的连接 ========
+const phaseFlowRef = ref<HTMLElement | null>(null)
+const chamberPath = ref('')
+let chamberResizeObserver: ResizeObserver | null = null
+
+function updateChamberOutline() {
+  const mainEl = phaseFlowRef.value
+  if (!mainEl) return
+  const card = mainEl.querySelector<HTMLElement>('.phase-card.active')
+  const board = mainEl.querySelector<HTMLElement>('.flow-board')
+  if (!board) return
+  const m = mainEl.getBoundingClientRect()
+  const cr = card?.getBoundingClientRect()
+  chamberPath.value = getPhaseChamberPath(m.width, m.height, board.getBoundingClientRect().top - m.top,
+    cr ? { left: cr.left - m.left, right: cr.right - m.left, top: cr.top - m.top } : undefined)
+}
+
+watch(phaseCards, () => {
+  nextTick(updatePhaseLayout)
 })
 
-const topFlowNodes = computed(() => flowNodes.value.slice(0, Math.ceil(flowNodes.value.length / 2)))
-const bottomFlowNodes = computed(() => flowNodes.value.slice(Math.ceil(flowNodes.value.length / 2)).reverse())
+function updatePhaseLayout() {
+  const strip = phaseFlowRef.value?.querySelector<HTMLElement>('.phase-card-strip')
+  const card = strip?.querySelector<HTMLElement>('.phase-card.active')
+  if (strip && card) {
+    const gutter = parseFloat(getComputedStyle(strip).paddingLeft)
+    strip.scrollLeft = getPhaseStripScrollLeft(strip.scrollLeft, strip.clientWidth, card.offsetLeft - gutter, card.offsetWidth + gutter * 2)
+  }
+  updateChamberOutline()
+}
 
-// 所有阶段是否全部完成
-const allPhasesDone = computed(() => {
-  if (!treeData.value.length) return false
-  return treeData.value.every(p => getPhaseStatus(p) === 'done')
-})
+watch(selectedPhaseIdx, () => nextTick(updatePhaseLayout))
+
+// 模板在加载结束后才创建，观察实际挂载的元素。
+watch([phaseFlowRef, flowViewportRef], ([chamber, viewport]) => {
+  chamberResizeObserver?.disconnect()
+  flowViewportObserver?.disconnect()
+  if (chamber) {
+    chamberResizeObserver = new ResizeObserver(updatePhaseLayout)
+    chamberResizeObserver.observe(chamber)
+  }
+  if (viewport) {
+    flowViewportObserver = new ResizeObserver(recomputeFocusShift)
+    flowViewportObserver.observe(viewport)
+  }
+  nextTick(() => { updatePhaseLayout(); recomputeFocusShift() })
+}, { flush: 'post' })
 
 // 过滤阶段节点（phase === phase_step）和环节节点（有子步骤的父步骤）
 function isLeafStep(s: StepInstance): boolean {
@@ -1263,23 +1375,27 @@ function connectWS() {
   if (!id || isNaN(id)) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const url = `${proto}://${location.host}/ws/display/${id}?token=${authStore.token}`
-  ws = new WebSocket(url)
+  const socket = new WebSocket(url)
+  ws = socket
 
-  ws.onopen = () => {
+  socket.onopen = () => {
+    if (socket !== ws) return
     wsConnected.value = true
     wsReconnectCount = 0
   }
 
-  ws.onclose = () => {
+  socket.onclose = () => {
+    if (socket !== ws) return
     wsConnected.value = false
     scheduleReconnect()
   }
 
-  ws.onerror = () => {
-    ws?.close()
+  socket.onerror = () => {
+    socket.close()
   }
 
-  ws.onmessage = (ev) => {
+  socket.onmessage = (ev) => {
+    if (socket !== ws) return
     try {
       // 后端 WritePump 会把消息打包成 JSON 数组批量发送，需逐条处理
       const parsed = JSON.parse(ev.data)
@@ -1287,6 +1403,16 @@ function connectWS() {
       messages.forEach(msg => handleWSMessage(msg))
     } catch { /* ignored */ }
   }
+}
+
+function disconnectWS() {
+  const socket = ws
+  ws = null
+  socket?.close()
+  wsConnected.value = false
+  if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+  wsReconnectTimer = null
+  wsReconnectCount = 0
 }
 
 function scheduleReconnect() {
@@ -1431,16 +1557,21 @@ function scheduleRefresh(...kinds: ('drill' | 'steps' | 'logs')[]) {
 }
 
 async function fetchDrillData() {
+  const requestId = drillId.value
   try {
-    instance.value = await drillApi.getDetail(drillId.value)
+    const data = await drillApi.getDetail(drillId.value)
+    if (requestId !== drillId.value) return
+    instance.value = data
   } catch {
     // 静默失败
   }
 }
 
 async function fetchSteps() {
+  const requestId = drillId.value
   try {
     const data = await drillApi.getSteps(drillId.value)
+    if (requestId !== drillId.value) return
     steps.value = (data || []).sort((a: StepInstance, b: StepInstance) => a.seq - b.seq)
   } catch {
     // 静默失败
@@ -1448,8 +1579,10 @@ async function fetchSteps() {
 }
 
 async function fetchLogs() {
+  const requestId = drillId.value
   try {
     const data = await drillApi.getLogs(drillId.value)
+    if (requestId !== drillId.value) return
     const logData = (data || [])
     const items = logData.slice(0, 8).map((l: Record<string, unknown>) => {
       const action = (l.Action || l.action || '') as string
@@ -1473,6 +1606,7 @@ async function fetchLogs() {
 }
 
 async function loadAllData() {
+  const requestId = drillId.value
   loading.value = true
   error.value = ''
   try {
@@ -1480,7 +1614,7 @@ async function loadAllData() {
   } catch {
     error.value = '数据加载失败'
   } finally {
-    loading.value = false
+    if (requestId === drillId.value) loading.value = false
   }
 }
 
@@ -1548,6 +1682,18 @@ function updateTimer() {
 
 // ======== 生命周期 ========
 
+watch(drillId, () => {
+  disconnectWS()
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = null
+  pendingRefresh.clear()
+  steps.value = []
+  instance.value = null
+  logs.value = []
+  loadAllData()
+  connectWS()
+})
+
 onMounted(() => {
   // 阻断父容器滚动条
   const html = document.documentElement
@@ -1560,6 +1706,8 @@ onMounted(() => {
     initCanvas()
     drawFlowTree()
     updateMaxVisibleLogs()
+    updatePhaseLayout()
+    nextTick(recomputeFocusShift)
   })
   connectWS()
   timerInterval = setInterval(() => {
@@ -1581,11 +1729,13 @@ onUnmounted(() => {
   document.documentElement.style.overflow = ''
   document.body.style.overflow = ''
 
-  if (ws) { ws.close(); ws = null }
-  if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+  disconnectWS()
+  if (refreshTimer) clearTimeout(refreshTimer)
   if (timerInterval) clearInterval(timerInterval)
   if (pollingTimer) clearInterval(pollingTimer)
   window.removeEventListener('resize', onResize)
+  chamberResizeObserver?.disconnect()
+  flowViewportObserver?.disconnect()
   const canvasEl = flowCanvasRef.value
   if (canvasEl) canvasEl.removeEventListener('click', handleCanvasClick)
 })
@@ -1593,6 +1743,7 @@ onUnmounted(() => {
 function onResize() {
   initCanvas()
   updateMaxVisibleLogs()
+  updatePhaseLayout()
 }
 
 // 侦听 steps 变化重绘 Canvas（不重设尺寸，避免闪黑）
@@ -2454,7 +2605,7 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: clamp(18px, 2vw, 40px);
   padding: 0 clamp(18px, 2.4vw, 44px);
@@ -2503,26 +2654,63 @@ function fmtTime(ts: string): string {
 .header-title-shell {
   position: relative;
   z-index: 1;
+  grid-column: 2;
+  justify-self: center;
   display: flex;
   align-items: center;
+  gap: clamp(14px, 1.6vw, 26px);
   min-width: 0;
   min-height: 100%;
 }
 
+/* 标题两侧对称能量导轨：渐隐光线 + 内端菱形焊点 */
+.title-rail {
+  position: relative;
+  flex-shrink: 0;
+  width: clamp(36px, 5vw, 110px);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(41, 243, 255, 0.55) 78%, #29f3ff);
+  box-shadow: 0 0 8px rgba(41, 243, 255, 0.45);
+}
+
+.title-rail.is-right {
+  background: linear-gradient(90deg, #29f3ff, rgba(41, 243, 255, 0.55) 22%, transparent);
+}
+
+.title-rail::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  background: #2ff0a0;
+  transform: translateY(-50%) rotate(45deg);
+  box-shadow: 0 0 10px rgba(47, 240, 160, 0.75);
+}
+
+.title-rail.is-left::after { left: -2px; }
+.title-rail.is-right::after { right: -2px; }
+
 .command-title {
   margin: 0;
-  color: #ffffff;
+  background: linear-gradient(180deg, #ffffff 8%, #d9f7ff 46%, #7fe3f7 88%, #4fd8ef);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   font-size: clamp(25px, 2.6em, 42px);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: 0.08em;
-  text-shadow: 0 0 10px rgba(21, 183, 255, 0.82), 0 0 24px rgba(47, 240, 160, 0.2);
+  letter-spacing: 0.14em;
+  padding-left: 0.14em; /* 平衡尾部字距，保持光学居中 */
+  filter: drop-shadow(0 0 10px rgba(21, 183, 255, 0.85)) drop-shadow(0 0 26px rgba(47, 240, 160, 0.28));
   white-space: nowrap;
 }
 
 .header-meta {
   position: relative;
   z-index: 1;
+  grid-column: 3;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: clamp(14px, 1.5em, 28px);
@@ -2713,7 +2901,7 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: clamp(108px, 14vh, 150px) minmax(260px, 1fr) clamp(150px, 20vh, 190px);
+  grid-template-rows: minmax(0, 1fr) clamp(150px, 20vh, 190px);
   gap: clamp(8px, 1.1vh, 16px);
   padding: clamp(10px, 1.2vh, 18px) clamp(18px, 2vw, 36px) clamp(8px, 1vh, 16px);
   overflow: hidden;
@@ -2764,68 +2952,95 @@ function fmtTime(ts: string): string {
   box-shadow: 0 0 18px rgba(255, 213, 106, 0.62), 0 0 36px rgba(47, 240, 160, 0.32);
 }
 
+.phase-flow-chamber {
+  --phase-height: clamp(120px, 14vh, 156px);
+  --phase-link-color: #52dfff;
+  --phase-tab-tint: rgba(35, 167, 200, 0.16);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: var(--phase-height) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.phase-flow-chamber.phase-state-running { --phase-link-color: #ffcc76; --phase-tab-tint: rgba(225, 153, 51, 0.2); }
+.phase-flow-chamber.phase-state-done { --phase-link-color: #64e7b0; --phase-tab-tint: rgba(52, 190, 137, 0.16); }
+
+.phase-chamber-surface {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 4px 12px rgba(0, 8, 20, 0.28));
+  pointer-events: none;
+}
+
 .phase-card-strip {
-  --phase-gap: clamp(6px, 0.75vw, 12px);
+  --phase-gap: clamp(32px, 3.6vw, 64px);
   --phase-card-w: calc((100% - var(--phase-gap) * 3) / 4);
   position: relative;
   display: flex;
   flex-wrap: nowrap;
-  gap: var(--phase-gap);
-  padding: clamp(5px, 0.65vw, 10px);
+  align-items: flex-start;
+  padding: 10px clamp(24px, 3vw, 48px) 0;
+  z-index: 3;
+  min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(48, 188, 235, 0.28);
-  border-radius: clamp(16px, 1.5vw, 26px);
-  background: linear-gradient(180deg, rgba(5, 25, 54, 0.72), rgba(2, 12, 30, 0.5));
-  box-shadow: inset 0 0 24px rgba(0, 205, 255, 0.06), 0 0 24px rgba(0, 166, 255, 0.06);
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(103, 232, 249, 0.42) rgba(3, 18, 38, 0.3);
-}
-
-.phase-card-strip::before {
-  content: "";
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 50%;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(20, 226, 255, 0.1), rgba(20, 226, 255, 0.55), rgba(29, 255, 154, 0.24));
-  box-shadow: 0 0 14px rgba(20, 226, 255, 0.22);
-  transform: translateY(-50%);
-  pointer-events: none;
+  scrollbar-width: none;
 }
 
 .phase-card-strip::-webkit-scrollbar {
-  height: 7px;
+  display: none;
 }
 
-.phase-card-strip::-webkit-scrollbar-track {
-  border-radius: 999px;
-  background: rgba(3, 18, 38, 0.34);
+.phase-sequence-arrow {
+  flex: 0 0 var(--phase-gap);
+  display: grid;
+  place-items: center;
+  height: calc(100% - 18px);
+  color: #4c819a;
 }
-
-.phase-card-strip::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(41, 243, 255, 0.36), rgba(47, 240, 160, 0.28));
+.phase-sequence-arrow svg {
+  width: 70%;
+  max-width: 36px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
+.phase-sequence-arrow.is-running { color: #d3ac6b; }
+.phase-sequence-arrow.is-done { color: #51b99a; }
 
 .phase-card {
   position: relative;
   z-index: 1;
-  flex: 0 0 var(--phase-card-w);
+  flex: 1 0 var(--phase-card-w);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-content: stretch;
-  min-width: 220px;
+  min-width: 210px;
   min-height: 0;
+  height: calc(100% - 18px);
   padding: clamp(7px, 0.72vw, 13px) clamp(10px, 1.15vw, 20px);
   border: 1px solid rgba(72, 124, 177, 0.28);
-  border-radius: clamp(10px, 1vw, 16px);
-  background: linear-gradient(180deg, rgba(6, 30, 64, 0.82), rgba(4, 14, 31, 0.56));
+  border-radius: 10px;
+  background: linear-gradient(180deg, #102e49, #081d34);
   box-shadow: inset 0 -3px 0 rgba(65, 120, 170, 0.22);
   overflow: hidden;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
+
+.phase-card:hover { border-color: rgba(105, 219, 248, 0.8); }
+.phase-card:focus-visible { outline: 2px solid #ddfbff; outline-offset: 3px; }
 
 .phase-card-grid {
   position: absolute;
@@ -2838,51 +3053,42 @@ function fmtTime(ts: string): string {
   pointer-events: none;
 }
 
-.phase-card > *:not(.phase-card-grid) {
+.phase-card > *:not(.phase-card-grid):not(.phase-accent) {
   position: relative;
   z-index: 1;
 }
 
-.phase-card:first-child {
-  border-left: 1px solid rgba(72, 124, 177, 0.28);
-}
-
-.phase-card::after {
-  content: "";
-  position: absolute;
-  top: 12px;
-  right: -6px;
-  bottom: 12px;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(48, 188, 235, 0.34), transparent);
-  z-index: 2;
-}
-
-.phase-card:last-child::after { display: none; }
 .phase-card.is-done {
   border-color: rgba(47, 240, 160, 0.42);
-  background: linear-gradient(180deg, rgba(12, 74, 58, 0.86), rgba(5, 30, 32, 0.62));
-  box-shadow: inset 0 -4px 0 #2ff0a0, inset 0 0 24px rgba(47, 240, 160, 0.14);
+  background: linear-gradient(180deg, #104735, #092c2d);
+  box-shadow: inset 0 -2px 0 #2bb887;
 }
 .phase-card.is-running {
   z-index: 3;
   border-color: rgba(255, 176, 64, 0.62);
-  background: linear-gradient(180deg, rgba(99, 58, 10, 0.92), rgba(48, 31, 17, 0.72));
-  box-shadow: inset 0 -4px 0 #ffb13d, inset 0 0 24px rgba(255, 177, 61, 0.18), 0 0 20px rgba(255, 154, 47, 0.24);
+  background: linear-gradient(140deg, #5c3d1d, #2b251f);
+  box-shadow: inset 0 -2px 0 #c9943c;
 }
 .phase-card.is-pending {
   border-color: rgba(112, 145, 176, 0.28);
-  background: linear-gradient(180deg, rgba(30, 54, 82, 0.7), rgba(12, 24, 42, 0.58));
-  box-shadow: inset 0 -4px 0 rgba(112, 145, 176, 0.42), inset 0 0 18px rgba(112, 145, 176, 0.08);
+  background: linear-gradient(160deg, #17344f, #0b2036);
+  box-shadow: inset 0 -2px 0 rgba(112, 145, 176, 0.35);
 }
 
 .phase-card.is-running .phase-accent {
   animation: accent-flow 2.2s ease-in-out infinite;
 }
 .phase-card.active {
-  transform: translateY(-2px);
-  border-color: #ffb13d;
+  z-index: 4;
+  height: 100%;
+  padding-bottom: 24px;
+  border-color: transparent;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(180deg, var(--phase-tab-tint), transparent 95%);
+  box-shadow: none;
 }
+.phase-card.active .phase-card-grid { mask-image: linear-gradient(#000, transparent); }
+.phase-card.active .phase-accent { bottom: auto; top: 0; height: 2px; }
 
 .phase-accent {
   position: absolute;
@@ -2906,7 +3112,7 @@ function fmtTime(ts: string): string {
   min-width: 0;
 }
 
-.phase-head h2 {
+.phase-head .phase-name {
   min-width: 0;
   margin: 0;
   color: #f5fbff;
@@ -2917,6 +3123,9 @@ function fmtTime(ts: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.phase-number { font-size: 0.78em; font-weight: 500; color: #a0bdcf; }
+.phase-card.active .phase-number { color: var(--phase-link-color); }
 
 .phase-status {
   flex: 0 0 auto;
@@ -3008,79 +3217,32 @@ function fmtTime(ts: string): string {
 }
 
 .flow-board {
-  --flow-row-gap: clamp(26px, 4vh, 52px);
   --arrow-gap: clamp(40px, 4vw, 68px);
-  --arrow-margin: 8px;
-  --tag-half-h: calc(clamp(14px, 1.4vh, 22px) + clamp(15px, 1.3vw, 24px) * 0.6 + 2px);
   position: relative;
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  align-content: center;
-  row-gap: var(--flow-row-gap);
-  padding: clamp(34px, 4vh, 58px) clamp(32px, 4.2vw, 84px) clamp(18px, 2.4vh, 42px);
+  display: flex;
+  align-items: center;
+  padding: clamp(68px, 8vh, 92px) clamp(24px, 3vw, 60px) 30px;
+  min-width: 0;
   min-height: 0;
-  border: 2px solid rgba(67, 226, 255, 0.72);
-  border-radius: clamp(18px, 1.6vw, 28px);
-  background:
-    linear-gradient(90deg, rgba(12, 89, 151, 0.74), rgba(5, 24, 52, 0.9) 36%, rgba(8, 35, 70, 0.76)),
-    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.08) 0 1px, transparent 1px 54px);
-  box-shadow:
-    inset 0 0 0 1px rgba(103, 232, 249, 0.18),
-    inset 0 0 34px rgba(0, 178, 255, 0.12),
-    0 0 0 1px rgba(67, 226, 255, 0.12),
-    0 0 28px rgba(0, 178, 255, 0.16),
-    0 0 56px rgba(47, 240, 160, 0.08);
+  border-radius: 0 0 14px 14px;
   overflow: hidden;
 }
 
-.flow-board::before,
-.flow-board::after {
-  content: "";
+.flow-board-heading {
   position: absolute;
-  pointer-events: none;
-  z-index: 2;
+  top: 25px;
+  left: clamp(22px, 2.5vw, 42px);
+  right: clamp(22px, 2.5vw, 42px);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  z-index: 4;
 }
 
-.flow-board::before {
-  inset: 10px;
-  border-radius: calc(clamp(18px, 1.6vw, 28px) - 8px);
-  border: 1px solid rgba(103, 232, 249, 0.18);
-  box-shadow: inset 0 0 18px rgba(41, 243, 255, 0.1);
-}
-
-.flow-board::after {
-  left: clamp(22px, 2.2vw, 40px);
-  right: clamp(22px, 2.2vw, 40px);
-  top: 0;
-  height: 5px;
-  background: linear-gradient(90deg, transparent, #29f3ff 18%, #2ff0a0 50%, #29f3ff 82%, transparent);
-  box-shadow: 0 0 16px rgba(41, 243, 255, 0.62), 0 0 28px rgba(47, 240, 160, 0.24);
-}
-
-/* 全部完成时外框变绿 */
-.flow-board.all-done {
-  border-color: rgba(74, 222, 128, 0.82);
-  background:
-    linear-gradient(180deg, rgba(20, 83, 45, 0.28), rgba(12, 50, 30, 0.18)),
-    radial-gradient(circle at 50% 50%, rgba(74, 222, 128, 0.14), transparent 48%),
-    linear-gradient(90deg, rgba(74, 222, 128, 0.1), rgba(34, 197, 94, 0.06), rgba(74, 222, 128, 0.1));
-  box-shadow:
-    inset 0 0 0 1px rgba(187, 247, 208, 0.34),
-    inset 0 0 34px rgba(74, 222, 128, 0.18),
-    0 0 0 1px rgba(74, 222, 128, 0.16),
-    0 0 28px rgba(74, 222, 128, 0.26),
-    0 0 56px rgba(34, 197, 94, 0.14);
-}
-
-.flow-board.all-done::before {
-  border-color: rgba(187, 247, 208, 0.42);
-  box-shadow: inset 0 0 18px rgba(74, 222, 128, 0.12);
-}
-
-.flow-board.all-done::after {
-  background: linear-gradient(90deg, transparent, #4ade80 15%, #86efac 50%, #4ade80 85%, transparent);
-  box-shadow: 0 0 16px rgba(74, 222, 128, 0.78), 0 0 28px rgba(34, 197, 94, 0.4);
-}
+.flow-empty { width: 100%; text-align: center; color: #83aabd; font-size: 16px; }
+.flow-board.is-preview .label-pulse { background: var(--phase-link-color); animation: none; box-shadow: 0 0 8px rgba(82, 223, 255, 0.3); }
+.flow-board.is-preview .flow-board-label { color: #b2dceb; }
 
 .flow-board.all-done .flow-board-grid {
   background-image:
@@ -3105,16 +3267,16 @@ function fmtTime(ts: string): string {
     linear-gradient(rgba(103, 232, 249, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(103, 232, 249, 0.045) 1px, transparent 1px);
   background-size: 42px 42px;
+  background-position: -1px -1px;
   mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
   pointer-events: none;
 }
 
 .flow-board-label {
-  position: absolute;
-  top: clamp(12px, 1.4vh, 20px);
-  right: clamp(18px, 2vw, 34px);
-  z-index: 4;
+  position: relative;
+  z-index: 8;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   height: clamp(26px, 2.8vh, 36px);
@@ -3129,10 +3291,6 @@ function fmtTime(ts: string): string {
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.08em;
-  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55);
-  box-shadow:
-    inset 0 0 14px rgba(41, 243, 255, 0.12),
-    0 0 18px rgba(0, 178, 255, 0.14);
 }
 
 .flow-board-label::before,
@@ -3160,8 +3318,8 @@ function fmtTime(ts: string): string {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #2ff0a0;
-  box-shadow: 0 0 8px rgba(47, 240, 160, 0.86), 0 0 16px rgba(47, 240, 160, 0.42);
+  background: radial-gradient(circle at 35% 30%, #ffd9a0, #ffb75e 62%, #f08c2e);
+  box-shadow: 0 0 8px rgba(255, 183, 94, 0.9), 0 0 18px rgba(255, 152, 66, 0.45);
   animation: label-pulse 1.6s ease-in-out infinite;
 }
 
@@ -3170,20 +3328,30 @@ function fmtTime(ts: string): string {
   50% { opacity: 1; transform: scale(1.18); }
 }
 
-.flow-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  align-items: stretch;
-  column-gap: var(--arrow-gap);
+.flow-viewport {
+  position: relative;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding-block: clamp(12px, 2.5vh, 26px);
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+
+.flow-track {
+  display: flex;
+  align-items: center;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .flow-node-wrap {
   position: relative;
+  flex: 0 0 auto;
+  width: clamp(150px, 14vw, 210px);
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.7s ease;
 }
 
 .flow-node {
@@ -3211,18 +3379,19 @@ function fmtTime(ts: string): string {
   background: rgba(4, 31, 55, 0.76);
   box-shadow: 0 0 28px rgba(0, 209, 255, 0.18), inset 0 0 18px rgba(0, 209, 255, 0.12);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-shadow: 0 0 10px rgba(0, 211, 255, 0.24);
 }
 
 .node-label {
-  display: block;
-  max-width: 100%;
-  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: center;
+  line-height: 1.35;
+  word-break: break-all;
+  max-width: 6.2em;
+  min-width: 0;
 }
 
 .flow-node.is-pending {
@@ -3264,18 +3433,10 @@ function fmtTime(ts: string): string {
   pointer-events: none;
 }
 
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow {
-  background: linear-gradient(90deg, #4ade80, #22c55e);
-  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6);
-}
-
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.right::after { border-left-color: #22c55e; }
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.left::after { border-right-color: #22c55e; }
-.flow-node-wrap:has(.flow-node.is-done) .flow-arrow.turn::after { border-top-color: #22c55e; }
-
 .flow-node.is-running .node-tag {
   border-color: rgba(255, 177, 61, 0.92);
   color: #ffe1a3;
+  padding-right: clamp(24px, 2.2vw, 38px);
   background:
     radial-gradient(circle at 18% 22%, rgba(255, 235, 170, 0.28), transparent 26%),
     linear-gradient(180deg, rgba(114, 67, 12, 0.94), rgba(48, 31, 17, 0.74));
@@ -3324,11 +3485,11 @@ function fmtTime(ts: string): string {
 }
 
 .node-motion {
-  top: -10px;
-  right: -10px;
+  top: -9px;
+  right: -12px;
   z-index: 3;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -3338,8 +3499,8 @@ function fmtTime(ts: string): string {
 
 .node-gear {
   position: relative;
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
   background:
     radial-gradient(circle, rgba(255, 248, 212, 0.98) 0 11%, rgba(255, 214, 118, 0.92) 12% 23%, rgba(255, 154, 47, 0.34) 24% 29%, transparent 30%),
@@ -3362,15 +3523,6 @@ function fmtTime(ts: string): string {
   box-shadow: 0 0 0 3px rgba(255, 177, 61, 0.24), 0 0 12px rgba(255, 226, 160, 0.82);
   animation: node-live-blink 1.05s ease-in-out infinite;
 }
-
-.flow-node-wrap:has(.flow-node.is-running) .flow-arrow {
-  background: linear-gradient(90deg, #ffd46a, #ff9a2f);
-  box-shadow: 0 0 12px rgba(255, 177, 61, 0.62);
-}
-
-.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.right::after { border-left-color: #ff9a2f; }
-.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.left::after { border-right-color: #ff9a2f; }
-.flow-node-wrap:has(.flow-node.is-running) .flow-arrow.turn::after { border-top-color: #ff9a2f; }
 
 @keyframes node-pulse {
   0%, 100% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d; }
@@ -3404,74 +3556,90 @@ function fmtTime(ts: string): string {
 }
 
 .flow-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  --arrow-c1: #53c7e6;
+  --arrow-c2: #57c7ff;
+  --arrow-glow: rgba(80, 200, 255, 0.4);
+  position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+  width: var(--arrow-gap);
   height: 3px;
-  background: linear-gradient(90deg, #24e9ff, #1dff9a);
-  box-shadow: 0 0 10px rgba(0, 245, 194, 0.5);
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--arrow-c1), var(--arrow-c2));
+  box-shadow: 0 0 10px var(--arrow-glow);
   z-index: 1;
+  transition: margin 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.7s ease;
 }
 
+/* 焊接在左侧卡片边缘的菱形接点：一半压在卡片边框下，视觉上无缝 */
+.arrow-port {
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateY(-50%) rotate(45deg);
+  border-radius: 1.5px;
+  background: linear-gradient(135deg, #ffffff, var(--arrow-c2));
+  box-shadow: 0 0 8px var(--arrow-glow);
+  pointer-events: none;
+}
+
+/* 箭头三角：尖端没入右侧卡片边框 */
 .flow-arrow::after {
   content: "";
   position: absolute;
+  right: -1px;
   top: 50%;
   transform: translateY(-50%);
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid var(--arrow-c2);
+  filter: drop-shadow(0 0 4px var(--arrow-glow));
 }
 
-.flow-arrow.right {
-  left: calc(100% + var(--arrow-margin));
-  width: calc(var(--arrow-gap) - var(--arrow-margin) * 2);
-}
-
-.flow-arrow.right::after {
-  right: -1px;
-  border-left: 12px solid #1dff9a;
-}
-
-.flow-arrow.left {
-  right: calc(100% + var(--arrow-margin));
-  width: calc(var(--arrow-gap) - var(--arrow-margin) * 2);
-  background: linear-gradient(90deg, #1dff9a, #24e9ff);
-}
-
-.flow-arrow.left::after {
-  left: -1px;
-  border-right: 12px solid #1dff9a;
-}
-
-.flow-arrow.turn {
+/* 沿箭头全程流动的光点 */
+.flow-arrow::before {
+  content: "";
   position: absolute;
-  left: 50%;
-  top: calc(50% + var(--tag-half-h) + 8px);
-  width: 5px;
-  height: calc(100% - var(--tag-half-h) * 2 + var(--flow-row-gap) - 24px);
-  background: linear-gradient(180deg, #24e9ff, #1dff9a);
-  box-shadow: 0 0 14px rgba(0, 245, 194, 0.65), 0 0 4px rgba(36, 233, 255, 0.9);
-  border-radius: 3px;
-  transform: translateX(-50%);
-  z-index: 1;
-  animation: turn-flow 2.4s ease-in-out infinite;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 26%, #bff6ff 52%, transparent 74%);
+  filter: drop-shadow(0 0 6px rgba(190, 250, 255, 0.9));
+  animation: arrow-dot-flow 1.7s linear infinite;
+  pointer-events: none;
 }
 
-@keyframes turn-flow {
-  0%, 100% { box-shadow: 0 0 14px rgba(0, 245, 194, 0.65), 0 0 4px rgba(36, 233, 255, 0.9); }
-  50% { box-shadow: 0 0 22px rgba(0, 245, 194, 0.9), 0 0 8px rgba(36, 233, 255, 1); }
+/* 状态着色：已完成节点的出边（绿） */
+.flow-arrow.is-done {
+  --arrow-c1: #4ade80;
+  --arrow-c2: #22c55e;
+  --arrow-glow: rgba(74, 222, 128, 0.6);
 }
 
-.flow-arrow.turn::after {
-  left: 50%;
-  top: auto;
-  bottom: -2px;
-  transform: translateX(-50%);
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 14px solid #1dff9a;
-  border-bottom: none;
-  filter: drop-shadow(0 0 6px rgba(0, 245, 194, 0.8));
+/* 进行中节点的出边（金） */
+.flow-arrow.is-running {
+  --arrow-c1: #ffd46a;
+  --arrow-c2: #ff9a2f;
+  --arrow-glow: rgba(255, 177, 61, 0.62);
+}
+
+/* 待执行节点的出边（冷蓝） */
+.flow-arrow.is-pending {
+  --arrow-c1: #3b7f9f;
+  --arrow-c2: #4a9ab8;
+  --arrow-glow: rgba(90, 170, 210, 0.3);
+}
+
+@keyframes arrow-dot-flow {
+  0% { left: 0; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: calc(100% - 6px); opacity: 0; }
 }
 
 .execution-section {
@@ -3898,6 +4066,8 @@ function fmtTime(ts: string): string {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .phase-card, .flow-track, .flow-node-wrap { transition: none !important; }
+  .label-pulse { animation: none !important; }
   .header-scanline,
   .main-rect-sweep,
   .phase-card.is-running .phase-accent,
@@ -3907,7 +4077,7 @@ function fmtTime(ts: string): string {
   .node-ripple,
   .node-gear,
   .node-live-dot,
-  .flow-arrow.turn,
+  .flow-arrow::before,
   .execution-section::before,
   .signal-bars i,
   .card-scan {
@@ -3916,22 +4086,21 @@ function fmtTime(ts: string): string {
 }
 
 @media (max-width: 1180px) {
-  .command-header { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding-block: 6px; }
+  .command-header { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; padding-block: 6px; }
+  .header-title-shell { gap: 10px; }
+  .title-rail { width: 28px; }
+  .title-rail::after { width: 5px; height: 5px; }
   .header-meta { justify-content: flex-end; min-width: 0; }
   .progress-console { flex: 0 0 auto; min-height: 32px; padding-inline: 8px; gap: 6px; }
   .drill-name-tag { max-width: clamp(96px, 13vw, 150px); }
   .phase-card-strip {
-    --phase-gap: 6px;
-    gap: var(--phase-gap);
-    padding: 5px;
+    --phase-gap: 32px;
   }
   .phase-card {
     padding: 7px 9px 6px;
-    border-radius: 10px;
   }
-  .phase-card::after { display: none; }
   .phase-head { gap: 5px; }
-  .phase-head h2 {
+  .phase-head .phase-name {
     font-size: clamp(14px, 1.55vw, 16px);
     letter-spacing: -0.02em;
   }
@@ -3988,12 +4157,8 @@ function fmtTime(ts: string): string {
 }
 
 @media (max-width: 1060px) {
-  .phase-card-strip {
-    gap: 5px;
-    padding-inline: 4px;
-  }
   .phase-card { padding-inline: 8px; }
-  .phase-head h2 { font-size: 14px; }
+  .phase-head .phase-name { font-size: 14px; }
   .phase-status {
     padding-inline: 5px;
     font-size: 10px;

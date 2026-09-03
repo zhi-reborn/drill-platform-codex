@@ -594,8 +594,9 @@ const activePath = computed(() => {
 // 当前环节任务完成比例：驱动橘黄进度线伸展与 baton 前移
 const activeRatio = computed(() => {
   const status = currentStatuses.value[activeNodeIndex.value]
-  if (!status || !(status.total > 0)) return 0
-  return Math.min(1, Math.max(0, status.completed / status.total))
+  const total = status?.total ?? 0
+  if (!(total > 0)) return 0
+  return Math.min(1, Math.max(0, (status?.completed ?? 0) / total))
 })
 
 function pointAt(index: number): TrackPoint {

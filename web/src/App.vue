@@ -6,4 +6,9 @@
 
 <script setup lang="ts">
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import { useAuthStore } from '@/stores/auth'
+import { usePresenceHeartbeat } from '@/composables/usePresenceHeartbeat'
+
+const authStore = useAuthStore()
+usePresenceHeartbeat(() => authStore.token)
 </script>

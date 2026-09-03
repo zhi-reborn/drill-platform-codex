@@ -2,6 +2,7 @@ package router
 
 import (
 	"drill-platform/internal/api/handler/auth"
+	"drill-platform/internal/api/handler/dashboard"
 	"drill-platform/internal/api/handler/display"
 	"drill-platform/internal/api/handler/drill"
 	"drill-platform/internal/api/handler/flowcommand"
@@ -32,6 +33,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 	reportHandler := report.NewHandler(services.ReportService)
 	notificationHandler := notification.NewHandler(services.NotificationService)
 	flowCommandHandler := flowcommand.NewHandler(services.FlowCommandService)
+	dashboardHandler := dashboard.NewHandler(services.DashboardService)
 
 	jwtAuth := middleware.JWTAuth(middleware.JWTConfig{Secret: jwtSecret})
 
@@ -42,8 +44,13 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 		v1.GET("/auth/cas/callback", authHandler.CASCallback)
 		v1.GET("/auth/dev-users", authHandler.ListUsers)
 		v1.Use(jwtAuth)
+		v1.POST("/auth/heartbeat", dashboardHandler.Heartbeat)
+		v1.Use(middleware.RecordPresence(services.DashboardService))
 		{
 			v1.GET("/auth/me", authHandler.GetCurrentUser)
+			v1.GET("/dashboard/team", dashboardHandler.Team)
+			v1.GET("/dashboard/my-templates", dashboardHandler.MyTemplates)
+			v1.GET("/dashboard/step-duration", dashboardHandler.StepDuration)
 			v1.GET("/flow-commands/:id", flowCommandHandler.Get)
 
 			v1.GET("/users", authHandler.ListUsers)
