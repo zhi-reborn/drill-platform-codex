@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { getFlowFocusIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
+import {
+  getFlowFocusIndex,
+  getFlowFocusPresentation,
+  getFlowTargetItemIndex,
+  getPhaseChamberPath,
+  getPhaseFlowNodes,
+  getPhaseStripScrollLeft,
+  useScreenPhaseSelection,
+} from './screenPhaseFlow'
 
 const scopes: ReturnType<typeof effectScope>[] = []
 
@@ -142,6 +150,21 @@ describe('selected phase nodes', () => {
     expect(getFlowFocusIndex([{ status: 'done' }, { status: 'pending' }])).toBe(1)
     expect(getFlowFocusIndex([{ status: 'done' }, { status: 'done' }])).toBe(1)
     expect(getFlowFocusIndex([])).toBe(-1)
+  })
+
+  it('steps focus presentation down from the selected node toward both edges', () => {
+    expect(getFlowFocusPresentation(2, 2)).toEqual({ scale: 1.3, opacity: 1, zIndex: 30 })
+    expect(getFlowFocusPresentation(1, 2)).toEqual({ scale: 1, opacity: 0.76, zIndex: 29 })
+    expect(getFlowFocusPresentation(0, 2)).toEqual({ scale: 0.84, opacity: 0.52, zIndex: 28 })
+    expect(getFlowFocusPresentation(-1, 2)).toEqual({ scale: 0.68, opacity: 0.32, zIndex: 27 })
+    expect(getFlowFocusPresentation(7, 2)).toEqual({ scale: 0.58, opacity: 0.24, zIndex: 25 })
+  })
+
+  it('maps real focus indices past the leading virtual wrapper', () => {
+    expect(getFlowTargetItemIndex(0, 7)).toBe(1)
+    expect(getFlowTargetItemIndex(4, 7)).toBe(5)
+    expect(getFlowTargetItemIndex(-1, 7)).toBe(-1)
+    expect(getFlowTargetItemIndex(6, 7)).toBe(-1)
   })
 })
 

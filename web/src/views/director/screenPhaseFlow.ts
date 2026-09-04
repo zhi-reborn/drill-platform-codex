@@ -64,6 +64,30 @@ export function getFlowFocusIndex(nodes: { status: string }[]): number {
   return pending >= 0 ? pending : nodes.length - 1
 }
 
+export interface FlowFocusPresentation {
+  scale: number
+  opacity: number
+  zIndex: number
+}
+
+export function getFlowFocusPresentation(index: number, focusedIndex: number): FlowFocusPresentation {
+  const distance = focusedIndex < 0 ? 0 : Math.abs(index - focusedIndex)
+  const scales = [1.3, 1, 0.84, 0.68, 0.58]
+  const opacities = [1, 0.76, 0.52, 0.32, 0.24]
+  const tier = Math.min(distance, scales.length - 1)
+  return {
+    scale: scales[tier],
+    opacity: opacities[tier],
+    zIndex: 30 - distance,
+  }
+}
+
+export function getFlowTargetItemIndex(focusedIndex: number, itemCount: number): number {
+  if (focusedIndex < 0) return -1
+  const targetIndex = focusedIndex + 1
+  return targetIndex < itemCount ? targetIndex : -1
+}
+
 export function getPhaseStripScrollLeft(scrollLeft: number, viewportWidth: number, cardLeft: number, cardWidth: number): number {
   if (cardLeft < scrollLeft) return cardLeft
   if (cardLeft + cardWidth > scrollLeft + viewportWidth) return cardLeft + cardWidth - viewportWidth

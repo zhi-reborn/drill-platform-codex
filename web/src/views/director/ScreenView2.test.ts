@@ -42,4 +42,24 @@ describe('phase chamber template wiring', () => {
     expect(styles).toMatch(/\.phase-card\.active\s*\{[^}]*border-color: transparent/)
     expect(styles).toMatch(/\.phase-card\.active\s*\{[^}]*box-shadow: none/)
   })
+
+  it('renders restrained rail caps for virtual endpoints', () => {
+    expect(template).toContain('class="rail-cap"')
+    expect(template).toContain('<span class="virtual-name">起点</span>')
+    expect(template).toContain('<span class="virtual-name">终点</span>')
+    expect(template).toContain("index === flowNodes.length - 1 ? virtualArrowStyle('end') : arrowStyle(index)")
+    expect(template).toContain(":class=\"['is-' + node.status, { 'is-virtual': index === flowNodes.length - 1 }]\"")
+    expect(template).not.toContain('virtual-badge')
+    expect(template).not.toContain('virtual-glyph')
+
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    expect(styles).toContain('.rail-cap')
+    expect(styles).toContain('.rail-cap-core')
+    expect(styles).toMatch(/prefers-reduced-motion[\s\S]*?\.rail-cap-core/)
+  })
+
+  it('keeps arrow layout geometry stable while focus transitions', () => {
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    expect(styles).toMatch(/\.flow-arrow\s*\{[^}]*transition:\s*opacity 0\.7s ease;/)
+  })
 })

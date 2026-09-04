@@ -106,10 +106,8 @@
                 <!-- 虚拟开始节点：首个环节聚焦时左侧仍有延伸，保持居中选人效果 -->
                 <div class="flow-node-wrap is-virtual" :style="focusStyle(-1)">
                   <div class="flow-node is-virtual-start">
-                    <span class="virtual-badge">
-                      <i class="virtual-glyph virtual-glyph-start" />
-                    </span>
-                    <span class="virtual-name">开始</span>
+                    <span class="rail-cap" aria-hidden="true"><i class="rail-cap-core" /></span>
+                    <span class="virtual-name">起点</span>
                   </div>
                 </div>
                 <span class="flow-arrow is-virtual" :style="virtualArrowStyle('start')" aria-hidden="true">
@@ -148,8 +146,8 @@
                   </div>
                   <span
                     class="flow-arrow"
-                    :class="'is-' + node.status"
-                    :style="arrowStyle(index)"
+                    :class="['is-' + node.status, { 'is-virtual': index === flowNodes.length - 1 }]"
+                    :style="index === flowNodes.length - 1 ? virtualArrowStyle('end') : arrowStyle(index)"
                     aria-hidden="true"
                   >
                     <i class="arrow-port" />
@@ -158,10 +156,8 @@
                 <!-- 虚拟结束节点：末尾环节聚焦时右侧仍有延伸 -->
                 <div class="flow-node-wrap is-virtual" :style="focusStyle(flowNodes.length)">
                   <div class="flow-node is-virtual-end">
-                    <span class="virtual-badge">
-                      <i class="virtual-glyph virtual-glyph-end" />
-                    </span>
-                    <span class="virtual-name">结束</span>
+                    <span class="rail-cap" aria-hidden="true"><i class="rail-cap-core" /></span>
+                    <span class="virtual-name">终点</span>
                   </div>
                 </div>
               </div>
@@ -238,7 +234,7 @@ import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance, DrillStatus } from '@/types/instance'
 import { DRILL_STATUS_LABELS } from '@/types/instance'
-import { getFlowFocusIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
+import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -556,28 +552,16 @@ let flowViewportObserver: ResizeObserver | null = null
 const focusedNodeIndex = computed(() => getFlowFocusIndex(flowNodes.value))
 
 // 每个节点相对进行中节点的聚焦样式：中间放大、两侧渐小渐暗
-function focusScale(index: number): number {
-  const r = focusedNodeIndex.value
-  const d = r === -1 ? 0 : index - r
-  const abs = Math.abs(d)
-  // 进行中节点放大 1.3，其余按距离递减
-  return abs === 0 ? 1.3 : Math.max(0.55, 1 - (abs - 1) * 0.16)
-}
-
-function focusOpacity(index: number): number {
-  const r = focusedNodeIndex.value
-  const d = r === -1 ? 0 : index - r
-  const abs = Math.abs(d)
-  return abs === 0 ? 1 : Math.max(0.32, 1 - abs * 0.24)
+function focusPresentation(index: number) {
+  return getFlowFocusPresentation(index, focusedNodeIndex.value)
 }
 
 function focusStyle(index: number): CSSProperties {
-  const r = focusedNodeIndex.value
-  const d = r === -1 ? 0 : index - r
+  const presentation = focusPresentation(index)
   return {
-    transform: `scale(${focusScale(index).toFixed(3)})`,
-    opacity: focusOpacity(index).toFixed(3),
-    zIndex: String(30 - Math.abs(d)),
+    transform: `scale(${presentation.scale.toFixed(3)})`,
+    opacity: presentation.opacity.toFixed(3),
+    zIndex: String(presentation.zIndex),
   }
 }
 
@@ -586,13 +570,15 @@ const flowWrapWidth = ref(180)
 
 function arrowStyle(index: number): CSSProperties {
   const w = flowWrapWidth.value
+  const left = focusPresentation(index)
+  const right = focusPresentation(index + 1)
   // 卡片缩放后，wrap 两侧留出的空白 = w * (1 - scale) / 2（scale > 1 时为负，即卡片外溢）
-  const extendL = (w * (1 - focusScale(index))) / 2
-  const extendR = (w * (1 - focusScale(index + 1))) / 2
+  const extendL = (w * (1 - left.scale)) / 2
+  const extendR = (w * (1 - right.scale)) / 2
   return {
     marginLeft: `${(-extendL).toFixed(1)}px`,
     marginRight: `${(-extendR).toFixed(1)}px`,
-    opacity: Math.min(focusOpacity(index), focusOpacity(index + 1)).toFixed(3),
+    opacity: Math.min(left.opacity, right.opacity).toFixed(3),
   }
 }
 
@@ -600,20 +586,22 @@ const trackTransform = computed<CSSProperties>(() => ({
   transform: `translateX(${focusShift.value}px)`,
 }))
 
-// 虚拟起止节点：徽章直径占 wrap 宽度比例（与 CSS 中 .virtual-badge 的 width 对应）
-const VIRTUAL_BADGE_RATIO = 0.4
+// 虚拟起止节点：端帽可见宽度占 wrap 宽度比例（与 CSS 中 .rail-cap 的 width 对应）
+const VIRTUAL_CAP_RATIO = 0.18
 
-// 虚拟节点与相邻卡片的衔接箭头：徽章远小于 wrap，需按徽章实际视觉边缘收拢负边距
+// 虚拟节点与相邻卡片的衔接箭头：端帽远小于 wrap，需按其实际视觉边缘收拢负边距
 function virtualArrowStyle(side: 'start' | 'end'): CSSProperties {
   const w = flowWrapWidth.value
   const virtualIndex = side === 'start' ? -1 : flowNodes.value.length
   const nodeIndex = side === 'start' ? 0 : flowNodes.value.length - 1
-  const badgeInset = (w * (1 - VIRTUAL_BADGE_RATIO * focusScale(virtualIndex))) / 2
-  const cardExtend = (w * (1 - focusScale(nodeIndex))) / 2
+  const virtual = focusPresentation(virtualIndex)
+  const node = focusPresentation(nodeIndex)
+  const capInset = (w * (1 - VIRTUAL_CAP_RATIO * virtual.scale)) / 2
+  const cardExtend = (w * (1 - node.scale)) / 2
   return {
-    marginLeft: `${(-(side === 'start' ? badgeInset : cardExtend)).toFixed(1)}px`,
-    marginRight: `${(-(side === 'start' ? cardExtend : badgeInset)).toFixed(1)}px`,
-    opacity: Math.min(focusOpacity(virtualIndex), focusOpacity(nodeIndex)).toFixed(3),
+    marginLeft: `${(-(side === 'start' ? capInset : cardExtend)).toFixed(1)}px`,
+    marginRight: `${(-(side === 'start' ? cardExtend : capInset)).toFixed(1)}px`,
+    opacity: Math.min(virtual.opacity, node.opacity).toFixed(3),
   }
 }
 
@@ -630,11 +618,12 @@ function recomputeFocusShift() {
     return
   }
   // items[0] 是虚拟开始节点，真实节点索引需 +1
-  if (r < 0 || !items.length || r + 1 >= items.length) {
+  const targetItemIndex = getFlowTargetItemIndex(r, items.length)
+  if (targetItemIndex < 0) {
     focusShift.value = 0
     return
   }
-  const target = items[r + 1]
+  const target = items[targetItemIndex]
   const targetCenter = target.offsetLeft + target.offsetWidth / 2
   focusShift.value = Math.round(viewport.clientWidth / 2 - targetCenter)
 }
@@ -4219,7 +4208,7 @@ function fmtTime(ts: string): string {
   background: linear-gradient(90deg, var(--arrow-c1), var(--arrow-c2));
   box-shadow: 0 0 10px var(--arrow-glow);
   z-index: 1;
-  transition: margin 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.7s ease;
+  transition: opacity 0.7s ease;
 }
 
 /* 焊接在左侧卡片边缘的菱形接点：一半压在卡片边框下，视觉上无缝 */
@@ -4286,104 +4275,73 @@ function fmtTime(ts: string): string {
   --arrow-glow: rgba(90, 170, 210, 0.3);
 }
 
-/* ===== 虚拟起止节点（游戏关卡端点风格） ===== */
-/* 固定占位高度与环节标签一致，保证徽章中心对齐箭头中线 */
+/* ===== 虚拟起止节点（轨道端帽） ===== */
+/* 保留完整节点占位用于首尾居中，但可见部分只呈现为流程边界。 */
 .flow-node.is-virtual-start,
 .flow-node.is-virtual-end {
+  --cap-color: 81, 230, 255;
   height: var(--node-tag-h);
   display: grid;
   place-items: center;
 }
 
-.virtual-badge {
-  --virtual-glow: rgba(0, 209, 255, 0.3);
-  position: relative;
-  width: 40%;
-  aspect-ratio: 1;
+.flow-node.is-virtual-end {
+  --cap-color: 75, 231, 173;
+}
+
+.rail-cap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18%;
+  height: 68%;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  animation: virtual-breathe 3.4s ease-in-out infinite;
+  color: rgb(var(--cap-color));
+  transform: translate(-50%, -50%);
 }
 
-/* 开始：青色传送门 */
-.flow-node.is-virtual-start .virtual-badge {
-  border: 2px solid rgba(0, 210, 255, 0.58);
-  background:
-    radial-gradient(circle at 34% 28%, rgba(103, 232, 249, 0.3), transparent 50%),
-    linear-gradient(180deg, rgba(9, 42, 74, 0.92), rgba(3, 20, 40, 0.85));
+.rail-cap-core {
+  width: 3px;
+  height: 78%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, transparent, rgba(var(--cap-color), 0.95), transparent);
+  box-shadow:
+    -8px 0 rgba(var(--cap-color), 0.13),
+    8px 0 rgba(var(--cap-color), 0.13),
+    0 0 14px rgba(var(--cap-color), 0.48);
+  animation: rail-cap-breathe 3.2s ease-in-out infinite;
 }
 
-/* 结束：绿色终点 */
-.flow-node.is-virtual-end .virtual-badge {
-  --virtual-glow: rgba(52, 211, 153, 0.28);
-  border: 2px solid rgba(125, 240, 200, 0.52);
-  background:
-    radial-gradient(circle at 34% 28%, rgba(167, 243, 208, 0.26), transparent 50%),
-    linear-gradient(180deg, rgba(10, 48, 46, 0.92), rgba(4, 26, 30, 0.85));
-  animation-delay: 1.7s;
-}
-
-/* 徽章外旋转虚线环：开始顺时针、结束逆时针，形成首尾呼应 */
-.flow-node.is-virtual-start .virtual-badge::before,
-.flow-node.is-virtual-end .virtual-badge::before {
+/* 开放折角统一指向轨道内部，形成不闭合的边界而非卡片。 */
+.rail-cap::after {
   content: "";
   position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  border: 1px dashed rgba(103, 232, 249, 0.4);
-  animation: virtual-spin 16s linear infinite;
-  pointer-events: none;
+  width: 20px;
+  height: 20px;
+  border-top: 1px solid rgba(var(--cap-color), 0.48);
+  border-right: 1px solid rgba(var(--cap-color), 0.48);
+  transform: rotate(45deg);
 }
 
-.flow-node.is-virtual-end .virtual-badge::before {
-  border-color: rgba(125, 240, 200, 0.34);
-  animation-direction: reverse;
+.flow-node.is-virtual-end .rail-cap::after {
+  transform: rotate(-135deg);
 }
 
-.virtual-glyph {
-  display: block;
-}
-
-/* 开始：播放三角 */
-.virtual-glyph-start {
-  width: 0;
-  height: 0;
-  margin-left: 16%;
-  border-top: 11px solid transparent;
-  border-bottom: 11px solid transparent;
-  border-left: 17px solid #7ef0ff;
-  filter: drop-shadow(0 0 8px rgba(126, 240, 255, 0.85));
-}
-
-/* 结束：终点格纹旗 */
-.virtual-glyph-end {
-  width: 48%;
-  aspect-ratio: 1;
-  border-radius: 3px;
-  background: conic-gradient(#e6f7ff 0 25%, #123a54 0 50%, #e6f7ff 0 75%, #123a54 0) 0 0 / 50% 50%;
-  box-shadow: inset 0 0 0 1.5px rgba(148, 233, 255, 0.5), 0 0 10px rgba(103, 232, 249, 0.3);
-}
-
-/* 徽章下方的小标签：绝对定位避免影响垂直居中 */
+/* 低对比度标签只解释边界语义，不参与居中布局。 */
 .virtual-name {
   position: absolute;
-  top: calc(100% + 9px);
+  top: calc(100% + 7px);
   left: 50%;
   transform: translateX(-50%);
-  margin-left: 0.21em;
+  margin-left: 0.24em;
   white-space: nowrap;
-  font-size: clamp(11px, 0.9vw, 14px);
+  font-size: clamp(9px, 0.72vw, 11px);
   font-weight: 600;
-  letter-spacing: 0.42em;
-  color: rgba(151, 216, 246, 0.78);
-  text-shadow: 0 0 10px rgba(80, 190, 255, 0.35);
+  letter-spacing: 0.28em;
+  color: rgba(var(--cap-color), 0.58);
+  text-shadow: 0 0 9px rgba(var(--cap-color), 0.24);
   pointer-events: none;
-}
-
-.flow-node.is-virtual-end .virtual-name {
-  color: rgba(167, 236, 208, 0.78);
-  text-shadow: 0 0 10px rgba(52, 211, 153, 0.32);
 }
 
 /* 虚拟端点的衔接箭头：弱化冷色，暗示边界 */
@@ -4398,13 +4356,9 @@ function fmtTime(ts: string): string {
   opacity: 0.55;
 }
 
-@keyframes virtual-breathe {
-  0%, 100% { box-shadow: 0 0 14px var(--virtual-glow), inset 0 0 12px var(--virtual-glow); }
-  50% { box-shadow: 0 0 30px var(--virtual-glow), inset 0 0 20px var(--virtual-glow); }
-}
-
-@keyframes virtual-spin {
-  to { transform: rotate(360deg); }
+@keyframes rail-cap-breathe {
+  0%, 100% { opacity: 0.52; filter: brightness(0.82); }
+  50% { opacity: 0.92; filter: brightness(1.18); }
 }
 
 @keyframes arrow-dot-flow {
@@ -4467,9 +4421,7 @@ function fmtTime(ts: string): string {
 @media (prefers-reduced-motion: reduce) {
   .phase-card, .flow-track, .flow-node-wrap { transition: none !important; }
   .label-pulse { animation: none !important; }
-  .virtual-badge,
-  .flow-node.is-virtual-start .virtual-badge::before,
-  .flow-node.is-virtual-end .virtual-badge::before { animation: none !important; }
+  .rail-cap-core { animation: none !important; }
   .header-scanline,
   .command-title::after,
   .title-rail::before,
