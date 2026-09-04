@@ -68,4 +68,10 @@ describe('phase chamber template wiring', () => {
     expect(template).toContain("node.status !== 'running' && node.steps.length > NODE_STEP_LIMIT")
     expect(source).toContain('getVisibleNodeSteps')
   })
+
+  it('reserves bottom breathing room for the scaled running node', () => {
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    const viewportRule = styles.match(/\.flow-viewport\s*\{([^}]*)\}/)?.[1]
+    expect(viewportRule).toContain('clamp(34px, 4.2vh, 52px)')
+  })
 })

@@ -3794,14 +3794,14 @@ function fmtTime(ts: string): string {
 }
 
 /* overflow-x: hidden 会使 overflow-y 的 visible 计算为 auto，故视口实际为双向裁剪容器。
-   顶部内边距需容纳聚焦节点放大 1.3 倍后外溢的齿轮/涟漪（约 tag_h/2×0.3 + 9px×1.3 ≈ 25px）。 */
+   顶部内边距容纳放大后的齿轮/涟漪，底部安全区则完整保留清单圆角与 18px 发光阴影。 */
 .flow-viewport {
   position: relative;
   width: 100%;
   overflow-x: hidden;
   overflow-y: visible;
   margin-top: clamp(4px, 1.4vh, 18px);
-  padding: calc(var(--node-tag-h) * 0.16 + 16px) 0 clamp(18px, 2.8vh, 34px);
+  padding: calc(var(--node-tag-h) * 0.16 + 16px) 0 clamp(34px, 4.2vh, 52px);
   mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
 
