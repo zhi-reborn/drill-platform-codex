@@ -17,7 +17,7 @@ describe('phase chamber template wiring', () => {
     expect(template).toContain('aria-controls="selected-phase-flow"')
     expect(template).toContain('id="selected-phase-flow"')
     expect(source).toContain('treeData.value[selectedPhaseIdx.value] ?? null')
-    expect(source).toContain('getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus)')
+    expect(source).toContain('getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus')
     expect(template).toContain('阶段预览')
     expect(source).toContain("querySelector<HTMLElement>('.phase-card.active')")
     expect(source).not.toContain("querySelector<HTMLElement>('.phase-card.is-running')")

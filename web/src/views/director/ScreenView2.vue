@@ -22,18 +22,10 @@
         <div class="header-scanline" />
         <div class="header-title-shell">
           <span class="title-rail is-left" aria-hidden="true" />
-          <h1 class="command-title">应急处置指挥中心</h1>
+          <h1 class="command-title" data-text="应急指挥中心">应急指挥中心</h1>
           <span class="title-rail is-right" aria-hidden="true" />
         </div>
         <div class="header-meta">
-          <div class="progress-console">
-            <span class="drill-name-tag" :title="instance?.name">{{ instance?.name || '演练中' }}</span>
-            <span class="console-sep" />
-            <span class="progress-metric">
-              <span class="system-label">演练进度</span>
-              <span class="system-time">{{ liveProgressPct }}%</span>
-            </span>
-          </div>
           <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
             <el-icon><FullScreen /></el-icon>
           </button>
@@ -88,7 +80,10 @@
                 </span>
               </button>
               <span v-if="index < phaseCards.length - 1" class="phase-sequence-arrow" :class="'is-' + phase.status" aria-hidden="true">
-                <svg viewBox="0 0 36 16"><path d="M 3 8 H 31 M 25 2 L 31 8 L 25 14" /></svg>
+                <i class="seq-rail" />
+                <i class="seq-flow" />
+                <i class="seq-comet" />
+                <i class="seq-head" />
               </span>
             </template>
           </section>
@@ -100,10 +95,26 @@
                 <span class="label-pulse" aria-hidden="true" />
                 <span>{{ selectedPhaseStatus === 'running' ? '当前环节' : '阶段预览' }}</span>
               </div>
+              <div class="board-signal" :class="{ live: wsConnected }">
+                <span class="signal-bars"><i /><i /><i /></span>
+                <span>{{ wsConnected ? '实时联动' : '轮询同步' }}</span>
+              </div>
             </header>
             <div v-if="!flowNodes.length" class="flow-empty">该阶段暂无环节</div>
             <div v-show="flowNodes.length" ref="flowViewportRef" class="flow-viewport">
               <div ref="flowTrackRef" class="flow-track" :style="trackTransform">
+                <!-- 虚拟开始节点：首个环节聚焦时左侧仍有延伸，保持居中选人效果 -->
+                <div class="flow-node-wrap is-virtual" :style="focusStyle(-1)">
+                  <div class="flow-node is-virtual-start">
+                    <span class="virtual-badge">
+                      <i class="virtual-glyph virtual-glyph-start" />
+                    </span>
+                    <span class="virtual-name">开始</span>
+                  </div>
+                </div>
+                <span class="flow-arrow is-virtual" :style="virtualArrowStyle('start')" aria-hidden="true">
+                  <i class="arrow-port" />
+                </span>
                 <template v-for="(node, index) in flowNodes" :key="node.id">
                   <div class="flow-node-wrap" :style="focusStyle(index)">
                     <div class="flow-node" :class="'is-' + node.status">
@@ -115,10 +126,27 @@
                         <i class="node-gear" />
                         <i class="node-live-dot" />
                       </span>
+                      <ul v-if="node.steps.length" class="node-steps">
+                        <li
+                          v-for="step in node.steps.slice(0, NODE_STEP_LIMIT)"
+                          :key="step.id"
+                          class="node-step"
+                          :class="'is-' + step.status"
+                        >
+                          <i class="step-ico" aria-hidden="true" />
+                          <span class="step-name" :title="step.name">{{ step.name }}</span>
+                          <i v-if="step.status === 'done'" class="step-check" aria-hidden="true">
+                            <svg viewBox="0 0 12 12"><path d="M2.4 6.4 L5 9 L9.6 3.4" /></svg>
+                          </i>
+                        </li>
+                        <li v-if="node.steps.length > NODE_STEP_LIMIT" class="node-step is-more">
+                          <i class="step-ico" aria-hidden="true" />
+                          <span class="step-name">另有 {{ node.steps.length - NODE_STEP_LIMIT }} 个步骤…</span>
+                        </li>
+                      </ul>
                     </div>
                   </div>
                   <span
-                    v-if="index < flowNodes.length - 1"
                     class="flow-arrow"
                     :class="'is-' + node.status"
                     :style="arrowStyle(index)"
@@ -127,61 +155,57 @@
                     <i class="arrow-port" />
                   </span>
                 </template>
+                <!-- 虚拟结束节点：末尾环节聚焦时右侧仍有延伸 -->
+                <div class="flow-node-wrap is-virtual" :style="focusStyle(flowNodes.length)">
+                  <div class="flow-node is-virtual-end">
+                    <span class="virtual-badge">
+                      <i class="virtual-glyph virtual-glyph-end" />
+                    </span>
+                    <span class="virtual-name">结束</span>
+                  </div>
+                </div>
               </div>
             </div>
+
+            <!-- 左下角：演练概览（名称 + 进度） -->
+            <aside class="flow-brief" aria-label="演练概览">
+              <div class="brief-title">
+                <span class="brief-sigil" aria-hidden="true" />
+                <span>演练概览</span>
+              </div>
+              <div class="brief-name" :title="instance?.name">{{ instance?.name || '未命名演练' }}</div>
+              <div class="brief-progress">
+                <div class="brief-ring" :style="{ '--p': liveProgressPct }">
+                  <span class="brief-ring-val">{{ liveProgressPct }}<em>%</em></span>
+                </div>
+                <div class="brief-meta">
+                  <span class="brief-status" :class="'is-' + (instance?.status || 'pending')">{{ statusLabel }}</span>
+                  <span class="brief-count">步骤 <b>{{ completedStepCount }}</b> / {{ totalStepCount }}</span>
+                  <span class="brief-clock">{{ displayTime }}</span>
+                </div>
+              </div>
+              <div class="brief-bar">
+                <div class="brief-bar-fill" :style="{ width: liveProgressPct + '%' }" />
+              </div>
+            </aside>
+
+            <!-- 右下角：执行日志（最新在下，自动贴底滚动） -->
+            <aside class="flow-log-panel" aria-label="执行日志">
+              <header class="log-head">
+                <span class="log-title"><span class="log-dot" aria-hidden="true" />执行日志</span>
+                <span class="log-tail">最新 ↓</span>
+              </header>
+              <div ref="logContainerRef" class="log-body" aria-live="polite">
+                <p v-if="!orderedLogs.length" class="log-empty">暂无执行日志</p>
+                <div v-for="log in orderedLogs" :key="log.id" class="log-row" :class="'is-' + log.type">
+                  <span class="log-time">{{ log.time }}</span>
+                  <span class="log-icon" aria-hidden="true">{{ log.icon }}</span>
+                  <span class="log-msg" :title="log.msg">{{ log.msg }}</span>
+                </div>
+              </div>
+            </aside>
           </section>
 
-        </section>
-
-        <section class="execution-section">
-          <div class="execution-title">
-            <h2>执行中步骤</h2>
-            <div class="execution-signal">
-              <span class="signal-bars"><i /><i /><i /></span>
-              <span :class="{ live: wsConnected }">{{ wsConnected ? '实时' : '轮询' }}</span>
-            </div>
-          </div>
-          <div
-            class="execution-carousel"
-            :class="['running-count-' + Math.min(runningCards.length, 4), { 'hide-pending': hidePendingExecution }]"
-          >
-            <div class="exec-col exec-col-running">
-              <div class="exec-col-label">
-                <span><span class="exec-dot running" />进行中</span>
-                <em>{{ runningTotalCount }}</em>
-                <em v-if="hiddenRunningCount" class="running-hidden-summary">另 {{ hiddenRunningCount }} 个进行中</em>
-              </div>
-              <div class="exec-col-cards">
-                <article v-for="task in runningCards" :key="task.id" class="execution-card is-running">
-                  <div class="card-scan" />
-                  <div class="task-card-head">
-                    <strong>{{ task.name }}</strong>
-                    <span>{{ task.statusText }}</span>
-                  </div>
-                  <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
-                </article>
-                <div v-if="!runningCards.length" class="exec-empty">暂无进行中步骤</div>
-              </div>
-            </div>
-            <div v-if="!hidePendingExecution" class="exec-divider" />
-            <div v-if="!hidePendingExecution" class="exec-col exec-col-pending">
-              <div class="exec-col-label">
-                <span><span class="exec-dot pending" />待执行</span>
-                <em class="pending-summary">还剩 {{ pendingTotalCount }} 个步骤待执行...</em>
-              </div>
-              <div class="exec-col-cards">
-                <article v-for="task in pendingCards" :key="task.id" class="execution-card is-pending">
-                  <div class="card-scan" />
-                  <div class="task-card-head">
-                    <strong>{{ task.name }}</strong>
-                    <span>{{ task.statusText }}</span>
-                  </div>
-                  <div class="task-progress"><div :style="{ width: task.progress + '%' }" /></div>
-                </article>
-                <div v-if="!pendingCards.length" class="exec-empty">暂无待执行步骤</div>
-              </div>
-            </div>
-          </div>
         </section>
       </main>
 
@@ -319,10 +343,6 @@ const displayTime = computed(() => {
   return elapsed.value
 })
 
-const runningSteps = computed(() => {
-  return steps.value.filter(s => s.status === 'running')
-})
-
 const parentStepIds = computed(() => {
   const ids = new Set<number>()
   for (const s of steps.value) {
@@ -394,9 +414,9 @@ const scheduleText = computed(() => {
   return `${fmt(start)} — ${fmt(estEnd)}（预计 ${totalMin} 分钟）`
 })
 
-// 实时日志（最近 8 条）
+// 实时日志（按容器高度自适应条数）
 const maxVisibleLogs = ref(8)
-const LOG_ROW_H = 28
+const LOG_ROW_H = 26
 const logContainerRef = ref<HTMLElement | null>(null)
 
 function updateMaxVisibleLogs() {
@@ -408,6 +428,19 @@ function updateMaxVisibleLogs() {
 }
 
 const displayLogs = computed(() => logs.value.slice(0, maxVisibleLogs.value))
+
+// logs[0] 为最新，展示时倒序排列，使最新日志位于列表底部
+const orderedLogs = computed(() => displayLogs.value.slice().reverse())
+
+// 演练概览：叶子步骤口径的完成统计
+const leafStepsAll = computed(() => {
+  const leaf = steps.value.filter(isLeafStep)
+  return leaf.length > 0 ? leaf : steps.value
+})
+const totalStepCount = computed(() => leafStepsAll.value.length)
+const completedStepCount = computed(
+  () => leafStepsAll.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length,
+)
 
 // ======== 阶段 Tab ========
 
@@ -497,7 +530,22 @@ const phaseCards = computed(() => {
   })
 })
 
-const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus))
+// 环节节点下最多展示的任务步骤数
+const NODE_STEP_LIMIT = 3
+
+function normalizeStepStatus(status: string): string {
+  if (status === 'completed') return 'done'
+  if (status === 'running') return 'running'
+  if (status === 'skipped') return 'skipped'
+  if (status === 'timeout' || status === 'issue') return 'issue'
+  return 'pending'
+}
+
+const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus, link => {
+  const leafSteps = link.stepNodes.filter(isLeafStep)
+  const list = leafSteps.length > 0 ? leafSteps : link.stepNodes
+  return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status) }))
+}))
 
 // 环节轮播：单行横向排列，进行中节点聚焦居中（游戏选人式）
 const flowViewportRef = ref<HTMLElement | null>(null)
@@ -552,6 +600,23 @@ const trackTransform = computed<CSSProperties>(() => ({
   transform: `translateX(${focusShift.value}px)`,
 }))
 
+// 虚拟起止节点：徽章直径占 wrap 宽度比例（与 CSS 中 .virtual-badge 的 width 对应）
+const VIRTUAL_BADGE_RATIO = 0.4
+
+// 虚拟节点与相邻卡片的衔接箭头：徽章远小于 wrap，需按徽章实际视觉边缘收拢负边距
+function virtualArrowStyle(side: 'start' | 'end'): CSSProperties {
+  const w = flowWrapWidth.value
+  const virtualIndex = side === 'start' ? -1 : flowNodes.value.length
+  const nodeIndex = side === 'start' ? 0 : flowNodes.value.length - 1
+  const badgeInset = (w * (1 - VIRTUAL_BADGE_RATIO * focusScale(virtualIndex))) / 2
+  const cardExtend = (w * (1 - focusScale(nodeIndex))) / 2
+  return {
+    marginLeft: `${(-(side === 'start' ? badgeInset : cardExtend)).toFixed(1)}px`,
+    marginRight: `${(-(side === 'start' ? cardExtend : badgeInset)).toFixed(1)}px`,
+    opacity: Math.min(focusOpacity(virtualIndex), focusOpacity(nodeIndex)).toFixed(3),
+  }
+}
+
 // 平移轨道，使进行中节点对准视口中线
 function recomputeFocusShift() {
   const viewport = flowViewportRef.value
@@ -564,11 +629,12 @@ function recomputeFocusShift() {
     nextTick(recomputeFocusShift)
     return
   }
-  if (r < 0 || !items.length || r >= items.length) {
+  // items[0] 是虚拟开始节点，真实节点索引需 +1
+  if (r < 0 || !items.length || r + 1 >= items.length) {
     focusShift.value = 0
     return
   }
-  const target = items[r]
+  const target = items[r + 1]
   const targetCenter = target.offsetLeft + target.offsetWidth / 2
   focusShift.value = Math.round(viewport.clientWidth / 2 - targetCenter)
 }
@@ -629,28 +695,6 @@ function isLeafStep(s: StepInstance): boolean {
   if (isParentStep(s)) return false
   return true
 }
-
-function mapExecCard(step: StepInstance) {
-  const progress = step.status === 'completed' || step.status === 'skipped' ? 100 : step.status === 'running' ? 100 : 0
-  return {
-    id: step.id,
-    name: step.name,
-    status: step.status,
-    statusText: step.status === 'running' ? '进行中' : step.status === 'pending' ? '待执行' : '已完成',
-    progress,
-    timeText: step.timeout_minutes ? `${pad(Math.floor(step.timeout_minutes / 60))}:${pad(step.timeout_minutes % 60)}:00` : '01:00:00',
-    raw: step,
-  }
-}
-
-const runningStepCards = computed(() => runningSteps.value.filter(isLeafStep).map(mapExecCard))
-const runningTotalCount = computed(() => runningStepCards.value.length)
-const runningCards = computed(() => runningStepCards.value.slice(0, 4))
-const hiddenRunningCount = computed(() => Math.max(runningTotalCount.value - runningCards.value.length, 0))
-const hidePendingExecution = computed(() => runningTotalCount.value >= 4)
-const pendingStepCards = computed(() => steps.value.filter(s => s.status === 'pending' && isLeafStep(s)).map(mapExecCard))
-const pendingTotalCount = computed(() => pendingStepCards.value.length)
-const pendingCards = computed(() => pendingStepCards.value.slice(0, 4))
 
 function phaseTimeText(phaseSteps: StepInstance[]): string {
   const starts = phaseSteps.map(s => s.start_time).filter(Boolean) as string[]
@@ -1532,9 +1576,10 @@ function addLog(type: string, icon: string, msg: string) {
   nextTick(scrollLogs)
 }
 
+// 最新日志在底部，故始终贴底滚动
 function scrollLogs() {
   const el = logContainerRef.value
-  if (el) el.scrollTop = 0
+  if (el) el.scrollTop = el.scrollHeight
 }
 
 // ======== 数据加载 ========
@@ -2691,19 +2736,80 @@ function fmtTime(ts: string): string {
 .title-rail.is-left::after { left: -2px; }
 .title-rail.is-right::after { right: -2px; }
 
+/* 沿导轨向标题汇聚的能量光点，两侧对称形成仪式感 */
+.title-rail::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 28%, #7ff0ff 58%, transparent 76%);
+  filter: drop-shadow(0 0 6px rgba(41, 243, 255, 0.9));
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.title-rail.is-left::before {
+  left: -4px;
+  right: auto;
+  animation: rail-run-left 3.6s ease-in-out infinite;
+}
+
+.title-rail.is-right::before {
+  right: -4px;
+  left: auto;
+  animation: rail-run-right 3.6s ease-in-out infinite;
+  animation-delay: 0.25s;
+}
+
 .command-title {
+  position: relative;
   margin: 0;
-  background: linear-gradient(180deg, #ffffff 8%, #d9f7ff 46%, #7fe3f7 88%, #4fd8ef);
+  background: linear-gradient(180deg, #ffffff 6%, #e8fbff 38%, #9bebfc 70%, #46cdea);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   font-size: clamp(25px, 2.6em, 42px);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: 0.14em;
-  padding-left: 0.14em; /* 平衡尾部字距，保持光学居中 */
-  filter: drop-shadow(0 0 10px rgba(21, 183, 255, 0.85)) drop-shadow(0 0 26px rgba(47, 240, 160, 0.28));
+  letter-spacing: 0.2em;
+  padding-left: 0.2em; /* 平衡尾部字距，保持光学居中 */
+  filter: drop-shadow(0 0 10px rgba(21, 183, 255, 0.8)) drop-shadow(0 0 26px rgba(47, 240, 160, 0.24));
   white-space: nowrap;
+}
+
+/* 字面流光：与底层文字同形的高光带，周期性扫过标题 */
+.command-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 36%, rgba(255, 255, 255, 0.95) 47%, rgba(47, 240, 160, 0.65) 53%, transparent 64%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: title-shine 5.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes title-shine {
+  0% { background-position: 190% 0; }
+  58%, 100% { background-position: -70% 0; }
+}
+
+@keyframes rail-run-left {
+  0% { left: -4px; opacity: 0; }
+  16%, 84% { opacity: 1; }
+  100% { left: calc(100% - 7px); opacity: 0; }
+}
+
+@keyframes rail-run-right {
+  0% { right: -4px; opacity: 0; }
+  16%, 84% { opacity: 1; }
+  100% { right: calc(100% - 7px); opacity: 0; }
 }
 
 .header-meta {
@@ -2719,74 +2825,6 @@ function fmtTime(ts: string): string {
   font-size: clamp(15px, 1.5em, 24px);
   font-weight: 700;
   white-space: nowrap;
-}
-
-.progress-console {
-  --console-text-h: clamp(20px, 1.8vw, 28px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(8px, 0.8vw, 14px);
-  min-height: clamp(38px, 3.8vw, 54px);
-  padding: 0 12px;
-  border: 1px solid rgba(103, 232, 249, 0.26);
-  background: rgba(3, 18, 38, 0.48);
-  box-shadow: inset 0 0 18px rgba(0, 217, 255, 0.08);
-}
-
-.progress-metric {
-  display: inline-flex;
-  align-items: center;
-  gap: clamp(8px, 0.7vw, 12px);
-  min-width: 0;
-  line-height: 1;
-}
-
-.drill-name-tag {
-  display: inline-flex;
-  align-items: center;
-  max-width: clamp(80px, 12vw, 200px);
-  height: var(--console-text-h);
-  color: #f5fbff;
-  line-height: var(--console-text-h);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
-}
-
-.console-sep {
-  width: 1px;
-  height: clamp(16px, 1.6vw, 24px);
-  background: linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.5), transparent);
-  flex-shrink: 0;
-}
-
-.system-label,
-.system-time {
-  display: inline-flex;
-  align-items: center;
-  color: #f5fbff;
-  line-height: 1;
-  text-shadow: 0 0 10px rgba(41, 243, 255, 0.55), 0 0 18px rgba(47, 240, 160, 0.24);
-}
-
-.drill-name-tag,
-.system-label {
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: clamp(15px, 1.25vw, 19px);
-  font-weight: 800;
-}
-
-.system-time {
-  min-width: 3.2ch;
-  justify-content: flex-end;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: clamp(15px, 1.25vw, 19px);
-  font-weight: 900;
-  letter-spacing: 0;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .btn-fullscreen {
@@ -2901,7 +2939,7 @@ function fmtTime(ts: string): string {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) clamp(150px, 20vh, 190px);
+  grid-template-rows: minmax(0, 1fr);
   gap: clamp(8px, 1.1vh, 16px);
   padding: clamp(10px, 1.2vh, 18px) clamp(18px, 2vw, 36px) clamp(8px, 1vh, 16px);
   overflow: hidden;
@@ -2912,7 +2950,7 @@ function fmtTime(ts: string): string {
   left: clamp(18px, 2vw, 36px);
   right: clamp(18px, 2vw, 36px);
   top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px) + clamp(8px, 1.1vh, 16px));
-  bottom: calc(clamp(8px, 1vh, 16px) + clamp(150px, 20vh, 190px) + clamp(8px, 1.1vh, 16px));
+  bottom: clamp(8px, 1vh, 16px);
   border-radius: 8px;
   background:
     linear-gradient(90deg, transparent 0%, rgba(41, 243, 255, 0.04) 42%, rgba(47, 240, 160, 0.16) 48%, rgba(255, 213, 106, 0.22) 50%, rgba(47, 240, 160, 0.16) 52%, rgba(41, 243, 255, 0.04) 58%, transparent 100%),
@@ -2953,7 +2991,7 @@ function fmtTime(ts: string): string {
 }
 
 .phase-flow-chamber {
-  --phase-height: clamp(120px, 14vh, 156px);
+  --phase-height: clamp(132px, 15.5vh, 170px);
   --phase-link-color: #52dfff;
   --phase-tab-tint: rgba(35, 167, 200, 0.16);
   position: relative;
@@ -2998,24 +3036,141 @@ function fmtTime(ts: string): string {
   display: none;
 }
 
+/* 阶段之间的方向导管：底线 + 行进虚线 + 流动光点 + 双层箭头，全部指向下一阶段 */
 .phase-sequence-arrow {
+  --seq-c1: #35617c;                              /* 上游端（暗） */
+  --seq-c2: #5f93b3;                              /* 下游端（亮），明暗对比表达方向 */
+  --seq-glow: rgba(103, 232, 249, 0.28);
+  --seq-dur: 2.6s;
+  --seq-rail-l: 6%;
+  --seq-rail-r: 24%;
+  position: relative;
   flex: 0 0 var(--phase-gap);
-  display: grid;
-  place-items: center;
+  align-self: center;
   height: calc(100% - 18px);
-  color: #4c819a;
+  overflow: hidden;
 }
-.phase-sequence-arrow svg {
-  width: 70%;
-  max-width: 36px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+
+/* 导管底线 */
+.seq-rail {
+  position: absolute;
+  top: 50%;
+  left: var(--seq-rail-l);
+  right: var(--seq-rail-r);
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--seq-c1) 16%, var(--seq-c2));
+  box-shadow: 0 0 6px var(--seq-glow);
+  opacity: 0.9;
 }
-.phase-sequence-arrow.is-running { color: #d3ac6b; }
-.phase-sequence-arrow.is-done { color: #51b99a; }
+
+/* 向下一阶段行进的虚线 */
+.seq-flow {
+  position: absolute;
+  top: 50%;
+  left: var(--seq-rail-l);
+  right: var(--seq-rail-r);
+  height: 2px;
+  transform: translateY(-50%);
+  background-image: repeating-linear-gradient(90deg, var(--seq-c2) 0 5px, transparent 5px 13px);
+  background-size: 13px 100%;
+  mask-image: linear-gradient(90deg, transparent, #000 26%, #000 82%, transparent);
+  animation: seq-march var(--seq-dur) linear infinite;
+}
+
+/* 沿导管飞驰的光点 */
+.seq-comet {
+  position: absolute;
+  top: 50%;
+  left: var(--seq-rail-l);
+  width: 11px;
+  height: 11px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 20%, var(--seq-c2) 52%, transparent 72%);
+  filter: drop-shadow(0 0 7px var(--seq-glow));
+  opacity: 0;
+  animation: seq-comet var(--seq-dur) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 双层箭头：前实后虚，形成推进感 */
+.seq-head {
+  position: absolute;
+  top: 50%;
+  right: 5%;
+  width: 14px;
+  height: 12px;
+  transform: translateY(-50%);
+}
+
+.seq-head::before,
+.seq-head::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: -5px;
+  border-top: 2px solid var(--seq-c2);
+  border-right: 2px solid var(--seq-c2);
+  border-radius: 1px;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 0 5px var(--seq-glow));
+}
+
+.seq-head::before {
+  right: 7px;
+  opacity: 0.4;
+  animation: seq-chevron var(--seq-dur) ease-in-out infinite;
+}
+
+.seq-head::after {
+  animation: seq-chevron var(--seq-dur) ease-in-out infinite;
+  animation-delay: calc(var(--seq-dur) / -2);
+}
+
+@keyframes seq-march {
+  to { background-position: 13px 0; }
+}
+
+@keyframes seq-comet {
+  0% { opacity: 0; transform: translateX(0) scale(0.55); }
+  14% { opacity: 1; transform: translateX(0) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(calc(var(--phase-gap) * 0.6)) scale(0.7); }
+}
+
+@keyframes seq-chevron {
+  0%, 100% { opacity: 0.32; transform: translateX(0) rotate(45deg); }
+  50% { opacity: 1; transform: translateX(3px) rotate(45deg); }
+}
+
+/* 已完成：绿色能量稳态输送 */
+.phase-sequence-arrow.is-done {
+  --seq-c1: #2c8f77;
+  --seq-c2: #57e6b6;
+  --seq-glow: rgba(47, 240, 160, 0.5);
+  --seq-dur: 2.4s;
+}
+
+/* 进行中：金色高活跃，节奏最快 */
+.phase-sequence-arrow.is-running {
+  --seq-c1: #b8802f;
+  --seq-c2: #ffd07a;
+  --seq-glow: rgba(255, 177, 61, 0.62);
+  --seq-dur: 1.5s;
+}
+
+.phase-sequence-arrow.is-running .seq-rail { box-shadow: 0 0 10px var(--seq-glow); }
+
+/* 待开始：冷蓝低速，光点更暗 */
+.phase-sequence-arrow.is-pending {
+  --seq-dur: 3.8s;
+}
+
+.phase-sequence-arrow.is-pending .seq-comet { filter: drop-shadow(0 0 4px var(--seq-glow)); opacity: 0.5; }
 
 .phase-card {
   position: relative;
@@ -3218,10 +3373,11 @@ function fmtTime(ts: string): string {
 
 .flow-board {
   --arrow-gap: clamp(40px, 4vw, 68px);
+  --node-tag-h: clamp(60px, 7.2vh, 86px);
   position: relative;
   display: flex;
-  align-items: center;
-  padding: clamp(68px, 8vh, 92px) clamp(24px, 3vw, 60px) 30px;
+  align-items: flex-start;
+  padding: clamp(26px, 3vh, 36px) clamp(24px, 3vw, 60px) clamp(16px, 2vh, 26px);
   min-width: 0;
   min-height: 0;
   border-radius: 0 0 14px 14px;
@@ -3230,14 +3386,334 @@ function fmtTime(ts: string): string {
 
 .flow-board-heading {
   position: absolute;
-  top: 25px;
+  top: 14px;
   left: clamp(22px, 2.5vw, 42px);
   right: clamp(22px, 2.5vw, 42px);
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
   z-index: 4;
+}
+
+/* 板头右侧的实时/轮询信号灯 */
+.board-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: clamp(24px, 2.6vh, 32px);
+  padding: 0 clamp(10px, 1vw, 16px);
+  border: 1px solid rgba(103, 232, 249, 0.3);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(7, 50, 96, 0.72), rgba(3, 18, 38, 0.72));
+  color: #9fc6da;
+  font-size: clamp(11px, 0.86vw, 14px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.board-signal.live {
+  border-color: rgba(33, 246, 158, 0.42);
+  color: #21f69e;
+  text-shadow: 0 0 8px rgba(33, 246, 158, 0.42);
+}
+
+/* ===== 流程板左下角：演练概览（名称 + 进度） ===== */
+.flow-brief {
+  position: absolute;
+  z-index: 5;
+  left: clamp(18px, 2vw, 34px);
+  bottom: clamp(14px, 1.6vh, 24px);
+  width: clamp(206px, 17.5vw, 296px);
+  padding: clamp(11px, 1.1vh, 16px) clamp(13px, 1.1vw, 18px);
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 12px;
+  background:
+    linear-gradient(160deg, rgba(7, 42, 76, 0.9), rgba(3, 16, 34, 0.92)),
+    repeating-linear-gradient(180deg, rgba(103, 232, 249, 0.03) 0 1px, transparent 1px 14px);
+  box-shadow: inset 0 0 22px rgba(0, 150, 220, 0.1), 0 12px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(3px);
+  overflow: hidden;
+}
+
+/* 面板顶部光带 */
+.flow-brief::before,
+.flow-log-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.85), transparent);
+}
+
+.brief-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: clamp(6px, 0.7vh, 10px);
+  color: #9fc6da;
+  font-size: clamp(11px, 0.8vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.brief-sigil {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: #52dfff;
+  box-shadow: 0 0 8px rgba(82, 223, 255, 0.8);
+}
+
+.brief-name {
+  margin-bottom: clamp(8px, 1vh, 12px);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-all;
+  color: #f5fbff;
+  font-size: clamp(15px, 1.24vw, 21px);
+  font-weight: 800;
+  line-height: 1.25;
+  text-shadow: 0 0 10px rgba(41, 243, 255, 0.28);
+}
+
+.brief-progress {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1vw, 16px);
+}
+
+/* 进度环：conic-gradient 由 --p（百分比数值）驱动 */
+.brief-ring {
+  --p: 0;
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(50px, 4.4vw, 68px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(from -90deg, #2ff0a0 0 calc(var(--p) * 1%), rgba(103, 232, 249, 0.12) calc(var(--p) * 1%));
+  filter: drop-shadow(0 0 10px rgba(47, 240, 160, 0.28));
+}
+
+.brief-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 26%, rgba(12, 52, 84, 0.98), rgba(4, 18, 36, 0.96));
+  border: 1px solid rgba(103, 232, 249, 0.2);
+}
+
+.brief-ring-val {
+  position: relative;
+  z-index: 1;
+  color: #f5fbff;
+  font-size: clamp(14px, 1.15vw, 19px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.brief-ring-val em {
+  margin-left: 1px;
+  color: #8fb8cd;
+  font-size: 0.62em;
+  font-style: normal;
+}
+
+.brief-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3px, 0.4vh, 6px);
+  font-size: clamp(11px, 0.85vw, 13.5px);
+}
+
+.brief-status {
+  align-self: flex-start;
+  padding: 2px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: #52dfff;
+  background: rgba(82, 223, 255, 0.12);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.brief-status.is-pending { color: #8fb8cd; background: rgba(143, 184, 205, 0.1); }
+.brief-status.is-running { color: #ffb13d; background: rgba(255, 177, 61, 0.12); }
+.brief-status.is-paused { color: #ffd166; background: rgba(255, 209, 102, 0.12); }
+.brief-status.is-completed { color: #2ff0a0; background: rgba(47, 240, 160, 0.13); }
+.brief-status.is-terminated { color: #ff8f8f; background: rgba(255, 143, 143, 0.12); }
+
+.brief-count,
+.brief-clock {
+  overflow: hidden;
+  color: #cfe6f5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.brief-count b {
+  color: #52dfff;
+  font-size: 1.14em;
+  font-variant-numeric: tabular-nums;
+}
+
+.brief-clock {
+  color: #8fb8cd;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.brief-bar {
+  margin-top: clamp(9px, 1vh, 13px);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(50, 102, 132, 0.45);
+  overflow: hidden;
+}
+
+.brief-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #146f90, #12d7f5 62%, #2ff0a0);
+  box-shadow: 0 0 12px rgba(18, 215, 245, 0.5);
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ===== 流程板右下角：执行日志（最新在下） ===== */
+.flow-log-panel {
+  position: absolute;
+  z-index: 5;
+  right: clamp(18px, 2vw, 34px);
+  bottom: clamp(14px, 1.6vh, 24px);
+  display: flex;
+  flex-direction: column;
+  width: clamp(250px, 22vw, 380px);
+  height: clamp(160px, 21vh, 250px);
+  padding: clamp(9px, 1vh, 14px) clamp(12px, 1vw, 16px) clamp(8px, 0.9vh, 12px);
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(6, 36, 66, 0.9), rgba(3, 14, 30, 0.92));
+  box-shadow: inset 0 0 22px rgba(0, 150, 220, 0.1), 0 12px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(3px);
+  overflow: hidden;
+}
+
+.flow-log-panel::before {
+  background: linear-gradient(90deg, transparent, rgba(47, 240, 160, 0.8), transparent);
+}
+
+.log-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: clamp(6px, 0.7vh, 10px);
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.16);
+}
+
+.log-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #e8fbff;
+  font-size: clamp(12px, 0.9vw, 14.5px);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.log-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ff0a0;
+  box-shadow: 0 0 8px rgba(47, 240, 160, 0.85);
+  animation: log-dot-blink 1.6s ease-in-out infinite;
+}
+
+.log-tail {
+  color: #7fa8bf;
+  font-size: clamp(10px, 0.72vw, 12px);
+  letter-spacing: 0.12em;
+}
+
+.log-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 232, 249, 0.3) transparent;
+  /* 顶部旧日志淡出，底部最新日志最醒目 */
+  mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 100%);
+}
+
+.log-body::-webkit-scrollbar { width: 4px; }
+.log-body::-webkit-scrollbar-track { background: transparent; }
+.log-body::-webkit-scrollbar-thumb { background: rgba(103, 232, 249, 0.28); border-radius: 2px; }
+
+.log-empty {
+  margin: 0;
+  padding: 10px 2px;
+  color: #7fa8bf;
+  font-size: clamp(11px, 0.82vw, 13px);
+  text-align: center;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(103, 232, 249, 0.08);
+  font-size: clamp(11px, 0.82vw, 13.2px);
+  line-height: 1.35;
+  color: #cfe6f5;
+  animation: log-row-in 0.42s ease-out;
+}
+
+.log-row:last-child { border-bottom: none; }
+
+.log-time {
+  color: #6f97ad;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-icon {
+  color: #52dfff;
+  text-shadow: 0 0 8px rgba(82, 223, 255, 0.5);
+}
+
+.log-msg {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.log-row.is-warn .log-icon { color: #ffc861; text-shadow: 0 0 8px rgba(255, 200, 97, 0.5); }
+.log-row.is-warn .log-msg { color: #ffe1a3; }
+.log-row.is-error .log-icon { color: #ff8f8f; text-shadow: 0 0 8px rgba(255, 143, 143, 0.55); }
+.log-row.is-error .log-msg { color: #ffc9c9; }
+
+@keyframes log-dot-blink {
+  0%, 100% { opacity: 0.4; transform: scale(0.82); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes log-row-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .flow-empty { width: 100%; text-align: center; color: #83aabd; font-size: 16px; }
@@ -3328,29 +3804,34 @@ function fmtTime(ts: string): string {
   50% { opacity: 1; transform: scale(1.18); }
 }
 
+/* overflow-x: hidden 会使 overflow-y 的 visible 计算为 auto，故视口实际为双向裁剪容器。
+   顶部内边距需容纳聚焦节点放大 1.3 倍后外溢的齿轮/涟漪（约 tag_h/2×0.3 + 9px×1.3 ≈ 25px）。 */
 .flow-viewport {
   position: relative;
   width: 100%;
   overflow-x: hidden;
   overflow-y: visible;
-  padding-block: clamp(12px, 2.5vh, 26px);
+  margin-top: clamp(4px, 1.4vh, 18px);
+  padding: calc(var(--node-tag-h) * 0.16 + 16px) 0 clamp(18px, 2.8vh, 34px);
   mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
 
 .flow-track {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* 缩放锚点固定在环节标签中线上：任意缩放时标签中心与箭头始终保持同一水平线 */
 .flow-node-wrap {
   position: relative;
   flex: 0 0 auto;
-  width: clamp(150px, 14vw, 210px);
+  width: clamp(176px, 16.5vw, 248px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-width: 0;
+  transform-origin: 50% calc(var(--node-tag-h) / 2);
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.7s ease;
 }
 
@@ -3358,8 +3839,9 @@ function fmtTime(ts: string): string {
   position: relative;
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
 }
 
@@ -3368,9 +3850,11 @@ function fmtTime(ts: string): string {
   z-index: 2;
   display: flex;
   width: 100%;
+  height: var(--node-tag-h);
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
-  padding: clamp(14px, 1.4vh, 22px) clamp(14px, 1.2vw, 24px);
+  padding: clamp(10px, 1.2vh, 16px) clamp(14px, 1.2vw, 24px);
   border-radius: clamp(10px, 1vw, 16px);
   border: 2px solid rgba(0, 210, 255, 0.64);
   color: #12e4ff;
@@ -3390,7 +3874,7 @@ function fmtTime(ts: string): string {
   text-align: center;
   line-height: 1.35;
   word-break: break-all;
-  max-width: 6.2em;
+  max-width: 7.6em;
   min-width: 0;
 }
 
@@ -3476,7 +3960,10 @@ function fmtTime(ts: string): string {
 }
 
 .node-ripple {
-  inset: -9px;
+  top: -9px;
+  left: -9px;
+  right: -9px;
+  height: calc(var(--node-tag-h) + 18px);
   z-index: 1;
   border-radius: clamp(12px, 1.1vw, 18px);
   border: 1px solid rgba(255, 200, 92, 0.66);
@@ -3555,13 +4042,177 @@ function fmtTime(ts: string): string {
   50% { opacity: 1; transform: scale(1); }
 }
 
+/* ===== 环节节点下挂的任务步骤清单 ===== */
+.node-steps {
+  --steps-gap: clamp(12px, 1.6vh, 18px);
+  position: relative;
+  list-style: none;
+  margin: var(--steps-gap) 0 0;
+  padding: clamp(9px, 1.1vh, 13px) clamp(10px, 0.9vw, 14px);
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 0.65vh, 8px);
+  border: 1px solid rgba(78, 119, 157, 0.34);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(10, 34, 60, 0.88), rgba(4, 18, 36, 0.78)),
+    repeating-linear-gradient(0deg, rgba(103, 232, 249, 0.035) 0 1px, transparent 1px 20px);
+  box-shadow: inset 0 0 14px rgba(0, 150, 220, 0.08), 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+/* 标签与步骤清单之间的接口线 */
+.node-steps::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--steps-gap));
+  left: 50%;
+  width: 1px;
+  height: var(--steps-gap);
+  background: linear-gradient(180deg, rgba(103, 232, 249, 0.55), rgba(103, 232, 249, 0.06));
+}
+
+.node-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.step-ico {
+  flex: 0 0 auto;
+  margin-top: 0.45em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4e779d;
+  box-shadow: 0 0 6px rgba(78, 119, 157, 0.55);
+}
+
+/* 步骤名最多两行折行展示，避免长文案被截断遮挡 */
+.step-name {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-all;
+  font-size: clamp(12px, 0.92vw, 15.5px);
+  line-height: 1.32;
+  color: #cfe6f5;
+}
+
+.node-step.is-done .step-ico {
+  background: #4ade80;
+  box-shadow: 0 0 7px rgba(74, 222, 128, 0.6);
+}
+
+.node-step.is-done .step-name { color: #a9d8bd; }
+
+/* 已完成步骤：文字右侧的打勾徽章 */
+.step-check {
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-top: 0.3em;
+  width: clamp(14px, 1.05vw, 18px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(74, 222, 128, 0.55);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(220, 252, 231, 0.3), transparent 56%),
+    linear-gradient(180deg, rgba(22, 101, 52, 0.92), rgba(6, 46, 28, 0.86));
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.38), inset 0 0 6px rgba(74, 222, 128, 0.22);
+  animation: step-check-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.step-check svg {
+  width: 62%;
+  fill: none;
+  stroke: #bbf7d0;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px rgba(74, 222, 128, 0.8));
+}
+
+@keyframes step-check-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.node-step.is-skipped .step-ico {
+  background: #6b8f99;
+  box-shadow: none;
+}
+
+.node-step.is-issue .step-ico {
+  background: #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.65);
+}
+
+.node-step.is-issue .step-name { color: #fecaca; }
+
+.node-step.is-running .step-ico {
+  background: #ffb13d;
+  box-shadow: 0 0 9px rgba(255, 177, 61, 0.8);
+  animation: step-ico-pulse 1.2s ease-in-out infinite;
+}
+
+.node-step.is-running .step-name {
+  color: #ffe1a3;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(255, 177, 61, 0.4);
+}
+
+.node-step.is-more .step-ico {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+  border: 1px dashed rgba(120, 160, 190, 0.6);
+  box-shadow: none;
+}
+
+.node-step.is-more .step-name { color: #8fb3c7; font-weight: 600; }
+
+/* 环节状态对步骤清单的着色 */
+.flow-node.is-done .node-steps {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: linear-gradient(180deg, rgba(10, 46, 34, 0.82), rgba(4, 26, 22, 0.76));
+  box-shadow: inset 0 0 14px rgba(74, 222, 128, 0.1), 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.flow-node.is-done .node-steps::before {
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.5), rgba(74, 222, 128, 0.05));
+}
+
+.flow-node.is-running .node-steps {
+  border-color: rgba(255, 177, 61, 0.42);
+  background: linear-gradient(180deg, rgba(66, 42, 14, 0.82), rgba(30, 22, 12, 0.76));
+  box-shadow: inset 0 0 14px rgba(255, 177, 61, 0.1), 0 0 18px rgba(255, 154, 47, 0.1);
+}
+
+.flow-node.is-running .node-steps::before {
+  background: linear-gradient(180deg, rgba(255, 177, 61, 0.55), rgba(255, 177, 61, 0.06));
+}
+
+@keyframes step-ico-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
 .flow-arrow {
   --arrow-c1: #53c7e6;
   --arrow-c2: #57c7ff;
   --arrow-glow: rgba(80, 200, 255, 0.4);
   position: relative;
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  /* 对齐环节标签中线（track 顶部对齐 + 固定标签高度） */
+  margin-top: calc(var(--node-tag-h) / 2 - 2px);
   width: var(--arrow-gap);
   height: 3px;
   border-radius: 2px;
@@ -3635,6 +4286,127 @@ function fmtTime(ts: string): string {
   --arrow-glow: rgba(90, 170, 210, 0.3);
 }
 
+/* ===== 虚拟起止节点（游戏关卡端点风格） ===== */
+/* 固定占位高度与环节标签一致，保证徽章中心对齐箭头中线 */
+.flow-node.is-virtual-start,
+.flow-node.is-virtual-end {
+  height: var(--node-tag-h);
+  display: grid;
+  place-items: center;
+}
+
+.virtual-badge {
+  --virtual-glow: rgba(0, 209, 255, 0.3);
+  position: relative;
+  width: 40%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  animation: virtual-breathe 3.4s ease-in-out infinite;
+}
+
+/* 开始：青色传送门 */
+.flow-node.is-virtual-start .virtual-badge {
+  border: 2px solid rgba(0, 210, 255, 0.58);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(103, 232, 249, 0.3), transparent 50%),
+    linear-gradient(180deg, rgba(9, 42, 74, 0.92), rgba(3, 20, 40, 0.85));
+}
+
+/* 结束：绿色终点 */
+.flow-node.is-virtual-end .virtual-badge {
+  --virtual-glow: rgba(52, 211, 153, 0.28);
+  border: 2px solid rgba(125, 240, 200, 0.52);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(167, 243, 208, 0.26), transparent 50%),
+    linear-gradient(180deg, rgba(10, 48, 46, 0.92), rgba(4, 26, 30, 0.85));
+  animation-delay: 1.7s;
+}
+
+/* 徽章外旋转虚线环：开始顺时针、结束逆时针，形成首尾呼应 */
+.flow-node.is-virtual-start .virtual-badge::before,
+.flow-node.is-virtual-end .virtual-badge::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dashed rgba(103, 232, 249, 0.4);
+  animation: virtual-spin 16s linear infinite;
+  pointer-events: none;
+}
+
+.flow-node.is-virtual-end .virtual-badge::before {
+  border-color: rgba(125, 240, 200, 0.34);
+  animation-direction: reverse;
+}
+
+.virtual-glyph {
+  display: block;
+}
+
+/* 开始：播放三角 */
+.virtual-glyph-start {
+  width: 0;
+  height: 0;
+  margin-left: 16%;
+  border-top: 11px solid transparent;
+  border-bottom: 11px solid transparent;
+  border-left: 17px solid #7ef0ff;
+  filter: drop-shadow(0 0 8px rgba(126, 240, 255, 0.85));
+}
+
+/* 结束：终点格纹旗 */
+.virtual-glyph-end {
+  width: 48%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: conic-gradient(#e6f7ff 0 25%, #123a54 0 50%, #e6f7ff 0 75%, #123a54 0) 0 0 / 50% 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(148, 233, 255, 0.5), 0 0 10px rgba(103, 232, 249, 0.3);
+}
+
+/* 徽章下方的小标签：绝对定位避免影响垂直居中 */
+.virtual-name {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  margin-left: 0.21em;
+  white-space: nowrap;
+  font-size: clamp(11px, 0.9vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  color: rgba(151, 216, 246, 0.78);
+  text-shadow: 0 0 10px rgba(80, 190, 255, 0.35);
+  pointer-events: none;
+}
+
+.flow-node.is-virtual-end .virtual-name {
+  color: rgba(167, 236, 208, 0.78);
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.32);
+}
+
+/* 虚拟端点的衔接箭头：弱化冷色，暗示边界 */
+.flow-arrow.is-virtual {
+  --arrow-c1: rgba(70, 145, 178, 0.6);
+  --arrow-c2: rgba(94, 176, 210, 0.6);
+  --arrow-glow: rgba(90, 170, 210, 0.22);
+}
+
+.flow-arrow.is-virtual::before {
+  filter: drop-shadow(0 0 4px rgba(120, 200, 235, 0.45));
+  opacity: 0.55;
+}
+
+@keyframes virtual-breathe {
+  0%, 100% { box-shadow: 0 0 14px var(--virtual-glow), inset 0 0 12px var(--virtual-glow); }
+  50% { box-shadow: 0 0 30px var(--virtual-glow), inset 0 0 20px var(--virtual-glow); }
+}
+
+@keyframes virtual-spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes arrow-dot-flow {
   0% { left: 0; opacity: 0; }
   15% { opacity: 1; }
@@ -3642,391 +4414,30 @@ function fmtTime(ts: string): string {
   100% { left: calc(100% - 6px); opacity: 0; }
 }
 
-.execution-section {
-  position: relative;
-  display: grid;
-  grid-template-rows: clamp(34px, 4vh, 44px) minmax(0, 1fr);
-  min-height: 0;
-  border: 1px solid rgba(57, 220, 255, 0.18);
-  background: linear-gradient(180deg, rgba(3, 19, 39, 0.18), rgba(3, 12, 28, 0.08));
-  overflow: hidden;
-}
-
-.execution-section::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(115deg, transparent 0 42%, rgba(103, 232, 249, 0.08) 49%, transparent 56% 100%);
-  transform: translateX(-80%);
-  animation: panel-sweep 8s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.execution-title {
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 clamp(18px, 1.8vw, 34px);
-  border-left: 4px solid #03dfff;
-  border-right: 4px solid #03dfff;
-  background: linear-gradient(90deg, rgba(9, 91, 167, 0.9), rgba(7, 50, 96, 0.72), rgba(4, 22, 45, 0.18));
-  box-shadow: 0 0 24px rgba(0, 193, 255, 0.16);
-}
-
-.execution-title h2 {
-  margin: 0;
-  color: #ffffff;
-  font-size: clamp(17px, 1.6em, 24px);
-  font-weight: 800;
-}
-
-.execution-signal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.execution-title span {
-  color: #f5fbff;
-  font-size: clamp(13px, 1.1em, 18px);
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.36), 0 0 14px rgba(41, 243, 255, 0.28);
-}
-
+/* ===== 信号条（板头实时状态灯） ===== */
 .signal-bars {
   display: inline-grid;
   grid-template-columns: repeat(3, 4px);
   align-items: end;
   gap: 3px;
-  height: 18px;
+  height: 16px;
 }
 
 .signal-bars i {
   display: block;
   width: 4px;
-  height: 7px;
-  background: #2ff0a0;
-  box-shadow: 0 0 8px rgba(47, 240, 160, 0.42);
+  height: 6px;
+  background: #6f9cb4;
+  box-shadow: 0 0 6px rgba(111, 156, 180, 0.4);
   animation: signal-rise 1.4s ease-in-out infinite;
 }
 
-.signal-bars i:nth-child(2) { height: 12px; animation-delay: 0.16s; }
-.signal-bars i:nth-child(3) { height: 17px; animation-delay: 0.32s; }
+.signal-bars i:nth-child(2) { height: 10px; animation-delay: 0.16s; }
+.signal-bars i:nth-child(3) { height: 15px; animation-delay: 0.32s; }
 
-.execution-title span.live {
-  color: #21f69e;
-  text-shadow: 0 0 10px rgba(33, 246, 158, 0.52);
-}
-
-.execution-signal > span:last-child::before {
-  content: "";
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 10px currentColor;
-}
-
-.execution-carousel {
-  display: grid;
-  grid-template-columns: minmax(190px, auto) auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: clamp(10px, 1vw, 16px);
-  overflow: hidden;
-  min-height: 0;
-  padding: clamp(8px, 1vh, 14px) clamp(18px, 1.8vw, 28px) clamp(8px, 1vh, 14px);
-  transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* 根据进行中任务数量自动扩展左侧列宽 */
-.execution-carousel.running-count-1 {
-  grid-template-columns: minmax(190px, 0.58fr) auto minmax(0, 2.9fr);
-}
-.execution-carousel.running-count-2 {
-  grid-template-columns: minmax(380px, 1.16fr) auto minmax(0, 2.3fr);
-}
-.execution-carousel.running-count-3 {
-  grid-template-columns: minmax(540px, 1.74fr) auto minmax(0, 1.7fr);
-}
-.execution-carousel.running-count-4 {
-  grid-template-columns: minmax(680px, 2.2fr) auto minmax(0, 1.2fr);
-}
-
-.execution-carousel.hide-pending {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-}
-
-.exec-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  transition: flex 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.exec-col-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 0 2px 7px;
-  color: #f5fbff;
-  font-size: clamp(12px, 1em, 15px);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.exec-col-label > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  margin-right: auto;
-}
-
-.exec-col-label em {
-  min-width: 24px;
-  padding: 1px 8px;
-  border: 1px solid rgba(103, 232, 249, 0.2);
-  border-radius: 999px;
-  color: #f5fbff;
-  background: rgba(6, 28, 56, 0.72);
-  font-style: normal;
-  font-size: 12px;
-  line-height: 18px;
-  text-align: center;
-  box-shadow: inset 0 0 10px rgba(30, 172, 219, 0.1);
-}
-
-.exec-col-label .running-hidden-summary,
-.exec-col-label .pending-summary {
-  max-width: min(100%, 220px);
-  padding: 2px 10px;
-  border-color: rgba(72, 212, 255, 0.34);
-  color: #f5fbff;
-  background:
-    linear-gradient(90deg, rgba(5, 35, 66, 0.72), rgba(2, 76, 108, 0.46)),
-    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.08) 0 1px, transparent 1px 18px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-shadow: inset 0 0 14px rgba(30, 172, 219, 0.16), 0 0 10px rgba(28, 221, 255, 0.08);
-}
-
-.exec-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.exec-dot.running {
-  background: #ffb13d;
-  box-shadow: 0 0 8px rgba(255, 177, 61, 0.7);
-}
-
-.exec-dot.pending {
-  background: #4e779d;
-  box-shadow: 0 0 6px rgba(78, 119, 157, 0.5);
-}
-
-.exec-col-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  gap: clamp(8px, 0.9vw, 14px);
-  overflow: visible;
-  min-height: 0;
-  height: calc(100% - 6px);
-  padding-bottom: 6px;
-}
-
-.exec-col-running .exec-col-cards {
-  grid-template-columns: 1fr;
-  transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* 多个进行中任务时单行横向扩展 */
-.execution-carousel.running-count-2 .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.execution-carousel.running-count-3 .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.execution-carousel.running-count-4 .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.execution-carousel.hide-pending .exec-col-running .exec-col-cards {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: clamp(12px, 1.2vw, 18px);
-}
-
-.execution-carousel.hide-pending .execution-card {
-  padding: clamp(12px, 1.15vw, 18px);
-}
-
-.execution-carousel.hide-pending .task-card-head {
-  align-items: flex-start;
-}
-
-.execution-carousel.hide-pending .task-card-head strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: clamp(16px, 1.32vw, 22px);
-  line-height: 1.28;
-}
-
-.exec-col-pending .exec-col-cards {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.exec-divider {
-  width: 1px;
-  height: 100%;
-  background:
-    linear-gradient(180deg, transparent, rgba(103, 232, 249, 0.4), transparent),
-    radial-gradient(circle at 50% 50%, rgba(47, 240, 160, 0.34), transparent 48%);
-  opacity: 0.85;
-}
-
-.exec-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 100%;
-  color: #f5fbff;
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px dashed rgba(78, 119, 157, 0.28);
-  background: rgba(5, 20, 42, 0.42);
-}
-
-.execution-card {
-  position: relative;
-  min-width: 0;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: clamp(10px, 1vh, 14px);
-  min-height: clamp(66px, 8.2vh, 96px);
-  height: 100%;
-  padding: clamp(10px, 0.9vw, 14px);
-  border: 1px solid rgba(0, 190, 255, 0.28);
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, rgba(9, 30, 58, 0.96), rgba(3, 13, 31, 0.88)),
-    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.04) 0 1px, transparent 1px 28px);
-  box-shadow: inset 0 0 18px rgba(0, 185, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
-  overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.execution-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(28, 221, 255, 0.82), transparent);
-  opacity: 0.7;
-}
-
-.card-scan {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(47, 240, 160, 0.1), transparent);
-  transform: translateX(-120%);
-  animation: card-scan 4.8s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.execution-card > *:not(.card-scan) {
-  position: relative;
-  z-index: 1;
-}
-
-.task-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  min-height: 28px;
-}
-
-.task-card-head strong {
-  flex: 1;
-  min-width: 0;
-  color: #f5fbff;
-  font-size: clamp(15px, 1.18vw, 20px);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-card-head span {
-  flex-shrink: 0;
-  padding: 3px 10px;
-  border: 1px solid rgba(0, 207, 255, 0.44);
-  border-radius: 2px;
-  color: #0bdfff;
-  background: rgba(0, 207, 255, 0.08);
-  line-height: 20px;
-  white-space: nowrap;
-}
-
-.task-progress {
-  flex: 0 0 9px;
-  height: 9px;
-  margin: 0;
-  border-radius: 12px;
-  background: rgba(50, 102, 132, 0.5);
-  overflow: hidden;
-}
-
-.task-progress div {
-  height: 100%;
-  background: linear-gradient(90deg, #146f90, #12d7f5);
-  box-shadow: 0 0 10px rgba(18, 215, 245, 0.42);
-}
-
-.execution-card.is-running {
-  border-color: rgba(255, 177, 61, 0.5);
-  box-shadow: inset 0 0 18px rgba(255, 154, 47, 0.1), 0 0 14px rgba(255, 154, 47, 0.08);
-}
-
-.execution-card.is-running .task-card-head span {
-  border-color: rgba(255, 177, 61, 0.6);
-  color: #ffd9a0;
-  background: rgba(255, 177, 61, 0.1);
-}
-
-.execution-card.is-running .task-progress div {
-  background: linear-gradient(90deg, #b8740e, #ffb13d);
-  box-shadow: 0 0 10px rgba(255, 177, 61, 0.42);
-}
-
-.execution-card.is-pending {
-  border-color: rgba(78, 119, 157, 0.4);
-}
-
-.execution-card.is-pending .task-card-head span {
-  border-color: rgba(78, 119, 157, 0.5);
-  color: #f5fbff;
-  background: rgba(78, 119, 157, 0.08);
-}
-
-.execution-card.is-pending .task-progress div {
-  background: linear-gradient(90deg, #2a4a66, #4e779d);
-  box-shadow: none;
+.board-signal.live .signal-bars i {
+  background: #2ff0a0;
+  box-shadow: 0 0 8px rgba(47, 240, 160, 0.42);
 }
 
 @keyframes header-scan {
@@ -4048,27 +4459,20 @@ function fmtTime(ts: string): string {
   50% { opacity: 0.9; transform: scaleX(1); }
 }
 
-@keyframes panel-sweep {
-  0%, 32% { transform: translateX(-90%); opacity: 0; }
-  42% { opacity: 0.8; }
-  72%, 100% { transform: translateX(90%); opacity: 0; }
-}
-
 @keyframes signal-rise {
   0%, 100% { opacity: 0.35; transform: scaleY(0.64); }
   50% { opacity: 1; transform: scaleY(1); }
 }
 
-@keyframes card-scan {
-  0%, 38% { transform: translateX(-120%); opacity: 0; }
-  48% { opacity: 0.8; }
-  72%, 100% { transform: translateX(120%); opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .phase-card, .flow-track, .flow-node-wrap { transition: none !important; }
   .label-pulse { animation: none !important; }
+  .virtual-badge,
+  .flow-node.is-virtual-start .virtual-badge::before,
+  .flow-node.is-virtual-end .virtual-badge::before { animation: none !important; }
   .header-scanline,
+  .command-title::after,
+  .title-rail::before,
   .main-rect-sweep,
   .phase-card.is-running .phase-accent,
   .flow-node.is-running .node-tag,
@@ -4077,10 +4481,16 @@ function fmtTime(ts: string): string {
   .node-ripple,
   .node-gear,
   .node-live-dot,
+  .node-step.is-running .step-ico,
+  .step-check,
+  .seq-flow,
+  .seq-comet,
+  .seq-head::before,
+  .seq-head::after,
+  .log-dot,
+  .log-row,
   .flow-arrow::before,
-  .execution-section::before,
-  .signal-bars i,
-  .card-scan {
+  .signal-bars i {
     animation: none !important;
   }
 }
@@ -4091,8 +4501,6 @@ function fmtTime(ts: string): string {
   .title-rail { width: 28px; }
   .title-rail::after { width: 5px; height: 5px; }
   .header-meta { justify-content: flex-end; min-width: 0; }
-  .progress-console { flex: 0 0 auto; min-height: 32px; padding-inline: 8px; gap: 6px; }
-  .drill-name-tag { max-width: clamp(96px, 13vw, 150px); }
   .phase-card-strip {
     --phase-gap: 32px;
   }
@@ -4128,35 +4536,17 @@ function fmtTime(ts: string): string {
     font-size: 0.78em;
   }
   .flow-board { padding-inline: 24px; }
-  .execution-carousel {
-    grid-template-columns: minmax(170px, auto) auto minmax(0, 1fr);
-    padding-inline: 18px;
-    gap: 10px;
-  }
-  .execution-carousel.running-count-1 {
-    grid-template-columns: minmax(170px, 0.62fr) auto minmax(0, 2.45fr);
-  }
-  .execution-carousel.running-count-2 {
-    grid-template-columns: minmax(340px, 1.24fr) auto minmax(0, 1.9fr);
-  }
-  .execution-carousel.running-count-3 {
-    grid-template-columns: minmax(480px, 1.7fr) auto minmax(0, 1.4fr);
-  }
-  .execution-carousel.running-count-4 {
-    grid-template-columns: minmax(600px, 2.1fr) auto minmax(0, 1fr);
-  }
-  .execution-carousel.hide-pending {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .exec-col-pending .exec-col-cards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .execution-card {
-    min-height: clamp(64px, 8vh, 92px);
+  .flow-brief { width: clamp(184px, 22vw, 240px); }
+  .flow-log-panel {
+    width: clamp(224px, 27vw, 320px);
+    height: clamp(138px, 19vh, 200px);
   }
 }
 
 @media (max-width: 1060px) {
+  .flow-brief { width: 172px; padding-inline: 11px; }
+  .flow-brief .brief-clock { display: none; }
+  .flow-log-panel { width: clamp(200px, 26vw, 280px); }
   .phase-card { padding-inline: 8px; }
   .phase-head .phase-name { font-size: 14px; }
   .phase-status {
@@ -4171,37 +4561,6 @@ function fmtTime(ts: string): string {
   .phase-stats em {
     margin-left: 3px;
     font-size: 0.72em;
-  }
-  .execution-carousel {
-    grid-template-columns: minmax(160px, auto) auto minmax(0, 1fr);
-    gap: 8px;
-    padding-inline: 12px;
-  }
-  .execution-carousel.running-count-1 {
-    grid-template-columns: minmax(160px, 0.72fr) auto minmax(0, 2fr);
-  }
-  .execution-carousel.running-count-2 {
-    grid-template-columns: minmax(300px, 1.3fr) auto minmax(0, 1.5fr);
-  }
-  .execution-carousel.running-count-3 {
-    grid-template-columns: minmax(420px, 1.8fr) auto minmax(0, 1fr);
-  }
-  .execution-carousel.running-count-4 {
-    grid-template-columns: minmax(520px, 2.2fr) auto minmax(0, 0.7fr);
-  }
-  .execution-carousel.hide-pending {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .exec-col-cards { gap: 6px; }
-  .exec-col-pending .exec-col-cards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .execution-card { padding: 8px; }
-  .task-card-head strong { font-size: 14px; }
-  .task-card-head span { padding: 2px 6px; font-size: 11px; }
-  .task-progress {
-    flex-basis: 8px;
-    height: 8px;
   }
 }
 

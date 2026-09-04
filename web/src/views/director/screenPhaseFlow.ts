@@ -36,9 +36,16 @@ export function useScreenPhaseSelection(phases: Ref<PhaseSummary[]>, drillId: Re
   return { selectedPhaseIdx }
 }
 
+export interface FlowStepDetail {
+  id: string
+  name: string
+  status: string
+}
+
 export function getPhaseFlowNodes<T extends { name: string }>(
   phase: { name: string; phaseSteps: T[] } | null,
   statusOf: (link: T) => string,
+  stepsOf?: (link: T) => FlowStepDetail[],
 ) {
   if (!phase) return []
   return phase.phaseSteps.filter(link => link.name !== phase.name).map((link, index) => ({
@@ -46,6 +53,7 @@ export function getPhaseFlowNodes<T extends { name: string }>(
     name: link.name,
     index: index + 1,
     status: statusOf(link),
+    steps: stepsOf ? stepsOf(link) : [],
   }))
 }
 
