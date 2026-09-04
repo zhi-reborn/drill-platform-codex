@@ -42,6 +42,10 @@ export interface FlowStepDetail {
   status: string
 }
 
+export function getVisibleNodeSteps<T>(node: { status: string; steps: T[] }, limit: number): T[] {
+  return node.status === 'running' ? node.steps : node.steps.slice(0, limit)
+}
+
 export function getPhaseFlowNodes<T extends { name: string }>(
   phase: { name: string; phaseSteps: T[] } | null,
   statusOf: (link: T) => string,

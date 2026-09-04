@@ -7,6 +7,7 @@ import {
   getPhaseChamberPath,
   getPhaseFlowNodes,
   getPhaseStripScrollLeft,
+  getVisibleNodeSteps,
   useScreenPhaseSelection,
 } from './screenPhaseFlow'
 
@@ -123,6 +124,17 @@ describe('screen phase selection', () => {
 
 describe('selected phase nodes', () => {
   const statusOf = (node: { status: string }) => node.status
+
+  it('shows every step for the running node', () => {
+    const steps = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1) }))
+    expect(getVisibleNodeSteps({ status: 'running', steps }, 3)).toEqual(steps)
+  })
+
+  it('keeps non-running nodes within the compact step limit', () => {
+    const steps = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1) }))
+    expect(getVisibleNodeSteps({ status: 'done', steps }, 3)).toEqual(steps.slice(0, 3))
+    expect(getVisibleNodeSteps({ status: 'pending', steps }, 3)).toEqual(steps.slice(0, 3))
+  })
 
   it('projects only this phase and excludes its header without truncating the thirteenth link', () => {
     const phase = {

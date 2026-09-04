@@ -62,4 +62,10 @@ describe('phase chamber template wiring', () => {
     const styles = descriptor.styles.map(style => style.content).join('\n')
     expect(styles).toMatch(/\.flow-arrow\s*\{[^}]*transition:\s*opacity 0\.7s ease;/)
   })
+
+  it('expands every task for the running node while compacting other nodes', () => {
+    expect(template).toContain('v-for="step in getVisibleNodeSteps(node, NODE_STEP_LIMIT)"')
+    expect(template).toContain("node.status !== 'running' && node.steps.length > NODE_STEP_LIMIT")
+    expect(source).toContain('getVisibleNodeSteps')
+  })
 })

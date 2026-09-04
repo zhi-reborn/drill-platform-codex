@@ -126,7 +126,7 @@
                       </span>
                       <ul v-if="node.steps.length" class="node-steps">
                         <li
-                          v-for="step in node.steps.slice(0, NODE_STEP_LIMIT)"
+                          v-for="step in getVisibleNodeSteps(node, NODE_STEP_LIMIT)"
                           :key="step.id"
                           class="node-step"
                           :class="'is-' + step.status"
@@ -137,7 +137,7 @@
                             <svg viewBox="0 0 12 12"><path d="M2.4 6.4 L5 9 L9.6 3.4" /></svg>
                           </i>
                         </li>
-                        <li v-if="node.steps.length > NODE_STEP_LIMIT" class="node-step is-more">
+                        <li v-if="node.status !== 'running' && node.steps.length > NODE_STEP_LIMIT" class="node-step is-more">
                           <i class="step-ico" aria-hidden="true" />
                           <span class="step-name">另有 {{ node.steps.length - NODE_STEP_LIMIT }} 个步骤…</span>
                         </li>
@@ -234,7 +234,7 @@ import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance, DrillStatus } from '@/types/instance'
 import { DRILL_STATUS_LABELS } from '@/types/instance'
-import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
+import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getVisibleNodeSteps, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
