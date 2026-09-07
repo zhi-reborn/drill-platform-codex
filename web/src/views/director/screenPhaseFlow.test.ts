@@ -7,6 +7,7 @@ import {
   getPhaseChamberPath,
   getPhaseFlowNodes,
   getPhaseStripScrollLeft,
+  getStepCompletionPresentation,
   getVisibleNodeSteps,
   useScreenPhaseSelection,
 } from './screenPhaseFlow'
@@ -125,9 +126,10 @@ describe('screen phase selection', () => {
 describe('selected phase nodes', () => {
   const statusOf = (node: { status: string }) => node.status
 
-  it('shows every step for the running node', () => {
-    const steps = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1) }))
-    expect(getVisibleNodeSteps({ status: 'running', steps }, 3)).toEqual(steps)
+  it('shows five tasks for the focused node before truncating any remainder', () => {
+    const steps = Array.from({ length: 6 }, (_, index) => ({ id: String(index + 1) }))
+    expect(getVisibleNodeSteps({ status: 'done', steps }, 5)).toEqual(steps.slice(0, 5))
+    expect(getVisibleNodeSteps({ status: 'running', steps }, 3)).toEqual(steps.slice(0, 3))
   })
 
   it('keeps non-running nodes within the compact step limit', () => {
@@ -157,10 +159,10 @@ describe('selected phase nodes', () => {
     expect(getPhaseFlowNodes({ name: '空阶段', phaseSteps: [{ name: '空阶段', status: 'pending' }] }, statusOf)).toEqual([])
   })
 
-  it('focuses running, then first pending, then last completed, or no node', () => {
+  it('focuses running, then first pending, then the terminal endpoint when all nodes complete', () => {
     expect(getFlowFocusIndex([{ status: 'pending' }, { status: 'running' }])).toBe(1)
     expect(getFlowFocusIndex([{ status: 'done' }, { status: 'pending' }])).toBe(1)
-    expect(getFlowFocusIndex([{ status: 'done' }, { status: 'done' }])).toBe(1)
+    expect(getFlowFocusIndex([{ status: 'done' }, { status: 'done' }])).toBe(2)
     expect(getFlowFocusIndex([])).toBe(-1)
   })
 
@@ -177,6 +179,37 @@ describe('selected phase nodes', () => {
     expect(getFlowTargetItemIndex(4, 7)).toBe(5)
     expect(getFlowTargetItemIndex(-1, 7)).toBe(-1)
     expect(getFlowTargetItemIndex(6, 7)).toBe(-1)
+  })
+})
+
+describe('step completion presentation', () => {
+  const localSteps = [
+    { id: 7, name: '本地任务', phase_step: '本地环节', phase: '准备阶段' },
+  ]
+
+  it('prefers task and phase names carried by the event', () => {
+    expect(getStepCompletionPresentation({
+      step_id: 7,
+      step_name: '消息任务',
+      phase_step_name: '消息环节',
+    }, localSteps)).toEqual({
+      stepName: '消息任务',
+      phaseName: '消息环节',
+    })
+  })
+
+  it('resolves an auto-completed task from the local step list', () => {
+    expect(getStepCompletionPresentation({ step_id: 7, auto: true }, localSteps)).toEqual({
+      stepName: '本地任务',
+      phaseName: '本地环节',
+    })
+  })
+
+  it('uses a safe task label when the event cannot be matched', () => {
+    expect(getStepCompletionPresentation({ step_id: 99 }, localSteps)).toEqual({
+      stepName: '未命名任务',
+      phaseName: '',
+    })
   })
 })
 

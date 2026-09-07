@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Show every step for the currently running flow node while keeping completed and pending nodes limited to three visible steps plus a remainder summary.
+**Goal:** Keep the running node's steps in one readable column, show up to ten without clipping, and scroll only the list when more steps exist.
 
-**Architecture:** Add one pure display-selection helper beside the existing screen phase-flow helpers, cover it with focused Vitest cases, then use it from `ScreenView2.vue`. The existing flow-node data, status calculation, layout, and styling remain unchanged.
+**Architecture:** Keep the existing running-node data selection and focus transform. Add a scroll-state binding at the SFC boundary, cap only lists longer than ten items, and reserve enough viewport space for the transformed ten-row panel and its glow.
 
 **Tech Stack:** Vue 3, TypeScript, Vitest, Vue SFC compiler, Vite
 
@@ -131,3 +131,48 @@ Reload `http://localhost:5173/admin/screen/90` at a 1159 × 863 viewport and ins
 git add web/src/views/director/screenPhaseFlow.ts web/src/views/director/screenPhaseFlow.test.ts web/src/views/director/ScreenView2.vue web/src/views/director/ScreenView2.test.ts
 git commit -m "fix: expand running screen node steps"
 ```
+
+### Task 2: Constrain the Single-Column Running List
+
+**Files:**
+- Modify: `web/src/views/director/ScreenView2.vue:127,529-530,3796-3805,4035-4052,4181-4189`
+- Modify: `web/src/views/director/ScreenView2.test.ts`
+- Test: `web/src/views/director/ScreenView2.test.ts`
+
+- [x] **Step 1: Write failing SFC regression assertions**
+
+Assert that the template applies `is-scrollable` only when a running node has more than `RUNNING_NODE_VISIBLE_LIMIT` steps, that the limit is ten, and that the scroll-state CSS uses a single column with an internal vertical scroller and a styled scrollbar. Update the existing viewport-clearance assertion to require `clamp(104px, 15.5vh, 132px)`.
+
+- [x] **Step 2: Run the focused test and verify RED**
+
+Run:
+
+```bash
+cd web && npm test -- src/views/director/ScreenView2.test.ts
+```
+
+Expected: FAIL because the limit, class binding, scroll-state styles, and expanded clearance do not exist yet.
+
+- [x] **Step 3: Add the template state and limit**
+
+Add `RUNNING_NODE_VISIBLE_LIMIT = 10` beside `NODE_STEP_LIMIT` and bind `is-scrollable` on `.node-steps` only for a running node whose step count exceeds that limit.
+
+- [x] **Step 4: Add the single-column scrolling treatment**
+
+Keep the natural list height through ten entries. For longer running lists, use a ten-row maximum height, `overflow-y: auto`, `overscroll-behavior: contain`, a stable scrollbar gutter, and a narrow amber scrollbar. Increase `.flow-viewport` bottom padding to `clamp(104px, 15.5vh, 132px)` so the focused list border and glow remain visible after the `1.3` transform.
+
+- [x] **Step 5: Run focused and full frontend verification**
+
+Run:
+
+```bash
+cd web && npm test -- src/views/director/ScreenView2.test.ts src/views/director/screenPhaseFlow.test.ts
+cd web && npm run build
+git diff --check
+```
+
+Expected: both Vitest files pass, the Vue/TypeScript build exits zero, and the diff check is clean.
+
+- [x] **Step 6: Verify Chrome geometry**
+
+Reload `http://localhost:5173/admin/screen/90` in the user's Chrome tab. Confirm the running node's fourth row, bottom border, and glow are visibly inside `.flow-viewport` at the current short viewport; confirm the list stays single-column and does not overlap the side panels.

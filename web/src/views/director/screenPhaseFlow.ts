@@ -43,7 +43,33 @@ export interface FlowStepDetail {
 }
 
 export function getVisibleNodeSteps<T>(node: { status: string; steps: T[] }, limit: number): T[] {
-  return node.status === 'running' ? node.steps : node.steps.slice(0, limit)
+  return node.steps.slice(0, limit)
+}
+
+interface CompletionStepSource {
+  id: number
+  name: string
+  phase_step?: string
+  phase?: string
+}
+
+export function getStepCompletionPresentation(
+  payload: Record<string, unknown>,
+  steps: CompletionStepSource[],
+): { stepName: string; phaseName: string } {
+  const stepId = Number(payload.step_id ?? payload.stepId ?? payload.id ?? payload.step_instance_id)
+  const localStep = stepId ? steps.find(step => step.id === stepId) : undefined
+  const payloadStepName = payload.step_name ?? payload.stepName
+  const payloadPhaseName = payload.phase_step_name ?? payload.phaseStepName ?? payload.phase_name ?? payload.phaseName
+
+  return {
+    stepName: typeof payloadStepName === 'string' && payloadStepName.trim()
+      ? payloadStepName.trim()
+      : localStep?.name?.trim() || '未命名任务',
+    phaseName: typeof payloadPhaseName === 'string' && payloadPhaseName.trim()
+      ? payloadPhaseName.trim()
+      : localStep?.phase_step?.trim() || localStep?.phase?.trim() || '',
+  }
 }
 
 export function getPhaseFlowNodes<T extends { name: string }>(
@@ -65,7 +91,8 @@ export function getFlowFocusIndex(nodes: { status: string }[]): number {
   const running = nodes.findIndex(node => node.status === 'running')
   if (running >= 0) return running
   const pending = nodes.findIndex(node => node.status === 'pending')
-  return pending >= 0 ? pending : nodes.length - 1
+  if (pending >= 0) return pending
+  return nodes.length ? nodes.length : -1
 }
 
 export interface FlowFocusPresentation {

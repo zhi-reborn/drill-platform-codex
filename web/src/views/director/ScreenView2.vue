@@ -107,7 +107,7 @@
                 <div class="flow-node-wrap is-virtual" :style="focusStyle(-1)">
                   <div class="flow-node is-virtual-start">
                     <span class="rail-cap" aria-hidden="true"><i class="rail-cap-core" /></span>
-                    <span class="virtual-name">起点</span>
+                    <span class="virtual-name">开始</span>
                   </div>
                 </div>
                 <span class="flow-arrow is-virtual" :style="virtualArrowStyle('start')" aria-hidden="true">
@@ -126,7 +126,7 @@
                       </span>
                       <ul v-if="node.steps.length" class="node-steps">
                         <li
-                          v-for="step in getVisibleNodeSteps(node, NODE_STEP_LIMIT)"
+                          v-for="step in getVisibleNodeSteps(node, nodeStepLimit(index))"
                           :key="step.id"
                           class="node-step"
                           :class="'is-' + step.status"
@@ -137,9 +137,9 @@
                             <svg viewBox="0 0 12 12"><path d="M2.4 6.4 L5 9 L9.6 3.4" /></svg>
                           </i>
                         </li>
-                        <li v-if="node.status !== 'running' && node.steps.length > NODE_STEP_LIMIT" class="node-step is-more">
+                        <li v-if="node.steps.length > nodeStepLimit(index)" class="node-step is-more">
                           <i class="step-ico" aria-hidden="true" />
-                          <span class="step-name">另有 {{ node.steps.length - NODE_STEP_LIMIT }} 个步骤…</span>
+                          <span class="step-name">另有 {{ node.steps.length - nodeStepLimit(index) }} 个步骤…</span>
                         </li>
                       </ul>
                     </div>
@@ -157,13 +157,14 @@
                 <div class="flow-node-wrap is-virtual" :style="focusStyle(flowNodes.length)">
                   <div class="flow-node is-virtual-end">
                     <span class="rail-cap" aria-hidden="true"><i class="rail-cap-core" /></span>
-                    <span class="virtual-name">终点</span>
+                    <span class="virtual-name">结束</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 左下角：演练概览（名称 + 进度） -->
+            <div class="flow-information">
+            <!-- 演练概览 -->
             <aside class="flow-brief" aria-label="演练概览">
               <div class="brief-title">
                 <span class="brief-sigil" aria-hidden="true" />
@@ -175,17 +176,13 @@
                   <span class="brief-ring-val">{{ liveProgressPct }}<em>%</em></span>
                 </div>
                 <div class="brief-meta">
-                  <span class="brief-status" :class="'is-' + (instance?.status || 'pending')">{{ statusLabel }}</span>
+                  <span class="brief-ring-label">完成率</span>
                   <span class="brief-count">步骤 <b>{{ completedStepCount }}</b> / {{ totalStepCount }}</span>
-                  <span class="brief-clock">{{ displayTime }}</span>
                 </div>
-              </div>
-              <div class="brief-bar">
-                <div class="brief-bar-fill" :style="{ width: liveProgressPct + '%' }" />
               </div>
             </aside>
 
-            <!-- 右下角：执行日志（最新在下，自动贴底滚动） -->
+            <!-- 执行日志（最新在下，自动贴底滚动） -->
             <aside class="flow-log-panel" aria-label="执行日志">
               <header class="log-head">
                 <span class="log-title"><span class="log-dot" aria-hidden="true" />执行日志</span>
@@ -197,9 +194,11 @@
                   <span class="log-time">{{ log.time }}</span>
                   <span class="log-icon" aria-hidden="true">{{ log.icon }}</span>
                   <span class="log-msg" :title="log.msg">{{ log.msg }}</span>
+                  <span v-if="log.status" class="log-status" :class="'is-' + log.tone">{{ log.status }}</span>
                 </div>
               </div>
             </aside>
+            </div>
           </section>
 
         </section>
@@ -208,15 +207,20 @@
       <!-- 任务完成弹窗 -->
       <Transition name="modal">
         <div v-if="completionModal.visible" class="completion-modal" @click="completionModal.visible = false">
-          <div class="completion-modal-content" @click.stop>
-            <div class="completion-icon">✓</div>
+          <div class="completion-modal-content" role="status" aria-live="polite" aria-atomic="true" @click.stop>
+            <div class="completion-icon" aria-hidden="true">✓</div>
             <div class="completion-text">
-              <div class="completion-title">任务完成</div>
-              <div class="completion-step">{{ completionModal.stepName }}</div>
-              <div v-if="completionModal.phaseName" class="completion-phase">{{ completionModal.phaseName }}</div>
+              <div class="completion-title"><i aria-hidden="true" />任务完成</div>
+              <div class="completion-task-plate">
+                <div class="completion-step">{{ completionModal.stepName }}</div>
+              </div>
+              <div v-if="completionModal.phaseName" class="completion-phase">
+                <span>所属环节</span>
+                <strong>{{ completionModal.phaseName }}</strong>
+              </div>
             </div>
             <div class="completion-progress">
-              <div class="completion-progress-bar"></div>
+              <div class="completion-progress-bar" />
             </div>
           </div>
         </div>
@@ -230,11 +234,11 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { FullScreen } from '@element-plus/icons-vue'
+import { getLatestTaskOutcomeLogs, getLogPresentation } from './screenLogs'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
-import type { DrillInstance, StepInstance, DrillStatus } from '@/types/instance'
-import { DRILL_STATUS_LABELS } from '@/types/instance'
-import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getVisibleNodeSteps, useScreenPhaseSelection } from './screenPhaseFlow'
+import type { DrillInstance, StepInstance } from '@/types/instance'
+import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getStepCompletionPresentation, getVisibleNodeSteps, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -273,7 +277,7 @@ const loading = ref(true)
 const error = ref('')
 const instance = ref<DrillInstance | null>(null)
 const steps = ref<StepInstance[]>([])
-const logs = ref<{ id: number; time: string; icon: string; type: string; msg: string }[]>([])
+const logs = ref<{ id: number; time: string; icon: string; type: string; msg: string; status?: string; tone?: string; source?: Record<string, unknown> }[]>([])
 const wsConnected = ref(false)
 
 // 计时器
@@ -283,11 +287,6 @@ let timerInterval: ReturnType<typeof setInterval> | null = null
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 
 // ======== 计算属性 ========
-
-const statusLabel = computed(() => {
-  if (!instance.value) return '加载中'
-  return DRILL_STATUS_LABELS[instance.value.status as DrillStatus] || instance.value.status
-})
 
 // 实时进度：基于叶子步骤计算全局完成率（与 ScreenView 统一口径）
 const liveProgressPct = computed(() => {
@@ -302,41 +301,6 @@ const liveProgressPct = computed(() => {
 const currentSystemTime = computed(() => {
   const d = new Date(now.value)
   return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-})
-
-const elapsed = computed(() => {
-  const inst = instance.value as Record<string, unknown> | null
-  const started = (inst?.start_time || inst?.started_at) as string | undefined
-  if (!started) return '--'
-  const start = new Date(started).getTime()
-  const diff = Math.max(0, now.value - start)
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`
-  return `${pad(m)}:${pad(s)}`
-})
-
-// 左上角时间：已完成=最终耗时，进行中=自走时钟，待启动=提示
-const displayTime = computed(() => {
-  const inst = instance.value as Record<string, unknown> | null
-  if (!inst) return '--'
-  if (inst.status === 'pending') return '待启动'
-  if (inst.status === 'completed' || inst.status === 'terminated') {
-    const started = (inst.start_time || inst.started_at) as string | undefined
-    const ended = (inst.end_time || inst.completed_at) as string | undefined
-    if (started && ended) {
-      const diff = Math.max(0, new Date(ended).getTime() - new Date(started).getTime())
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`
-      return `${pad(m)}:${pad(s)}`
-    }
-    return '--'
-  }
-  // 进行中/暂停：自走时钟
-  return elapsed.value
 })
 
 const parentStepIds = computed(() => {
@@ -412,7 +376,7 @@ const scheduleText = computed(() => {
 
 // 实时日志（按容器高度自适应条数）
 const maxVisibleLogs = ref(8)
-const LOG_ROW_H = 26
+const LOG_ROW_H = 36
 const logContainerRef = ref<HTMLElement | null>(null)
 
 function updateMaxVisibleLogs() {
@@ -423,7 +387,11 @@ function updateMaxVisibleLogs() {
   }
 }
 
-const displayLogs = computed(() => logs.value.slice(0, maxVisibleLogs.value))
+const displayLogs = computed(() => getLatestTaskOutcomeLogs(logs.value).slice(0, maxVisibleLogs.value).map(log => {
+  if (!log.source) return log
+  const presentation = getLogPresentation(log.source, steps.value)
+  return { ...log, msg: presentation.message, status: presentation.status, tone: presentation.tone }
+}))
 
 // logs[0] 为最新，展示时倒序排列，使最新日志位于列表底部
 const orderedLogs = computed(() => displayLogs.value.slice().reverse())
@@ -526,8 +494,13 @@ const phaseCards = computed(() => {
   })
 })
 
-// 环节节点下最多展示的任务步骤数
+// 环节节点下最多展示的任务步骤数（当前聚焦环节放宽到 5 条）
 const NODE_STEP_LIMIT = 3
+const FOCUSED_NODE_STEP_LIMIT = 5
+
+function nodeStepLimit(index: number): number {
+  return index === focusedNodeIndex.value ? FOCUSED_NODE_STEP_LIMIT : NODE_STEP_LIMIT
+}
 
 function normalizeStepStatus(status: string): string {
   if (status === 'completed') return 'done'
@@ -587,7 +560,7 @@ const trackTransform = computed<CSSProperties>(() => ({
 }))
 
 // 虚拟起止节点：端帽可见宽度占 wrap 宽度比例（与 CSS 中 .rail-cap 的 width 对应）
-const VIRTUAL_CAP_RATIO = 0.18
+const VIRTUAL_CAP_RATIO = 0.3
 
 // 虚拟节点与相邻卡片的衔接箭头：端帽远小于 wrap，需按其实际视觉边缘收拢负边距
 function virtualArrowStyle(side: 'start' | 'end'): CSSProperties {
@@ -1458,8 +1431,7 @@ function scheduleReconnect() {
 function handleWSMessage(msg: any) {
   const event = msg.event_type || msg.event || msg.type || ''
   const payload = msg.payload || msg.data || msg
-  const stepName = payload.step_name || payload.stepName || ''
-  const phaseName = payload.phase_name || payload.phaseName || ''
+  const { stepName, phaseName } = getStepCompletionPresentation(payload, steps.value)
 
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return
@@ -1479,11 +1451,11 @@ function handleWSMessage(msg: any) {
     scheduleRefresh('steps', 'drill', 'logs')
     const phasePrefix = phaseName ? `【${phaseName}】` : ''
     if (event === 'step_started') {
-      addLog('info', '●', `${phasePrefix}${stepName} 已开始`)
+      addLog('info', '●', `${phasePrefix}${stepName} 已开始`, { step_instance_id: payload.step_id || payload.stepId || payload.id || payload.step_instance_id, action: event, content: stepName })
     } else if (['step_complete', 'step_completed', 'step_skipped', 'step_issue', 'step_timeout'].includes(event)) {
       const label = logLabel(event)
       const logType = event === 'step_issue' ? 'error' : 'info'
-      addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`)
+      addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`, { step_instance_id: payload.step_id || payload.stepId || payload.id || payload.step_instance_id, action: event, content: stepName })
       if (event === 'step_complete' || event === 'step_completed') {
         showCompletionModal(stepName, phaseName)
       }
@@ -1556,10 +1528,10 @@ function logIcon(event: string): string {
   return '●'
 }
 
-function addLog(type: string, icon: string, msg: string) {
+function addLog(type: string, icon: string, msg: string, source?: Record<string, unknown>) {
   const nowDate = new Date()
   const time = pad(nowDate.getHours()) + ':' + pad(nowDate.getMinutes()) + ':' + pad(nowDate.getSeconds())
-  const entry = { id: Date.now(), time, icon, type, msg }
+  const entry = { id: Date.now(), time, icon, type, msg, source }
   logs.value.unshift(entry)
   if (logs.value.length > 50) logs.value.length = 50
   nextTick(scrollLogs)
@@ -1618,7 +1590,7 @@ async function fetchLogs() {
     const data = await drillApi.getLogs(drillId.value)
     if (requestId !== drillId.value) return
     const logData = (data || [])
-    const items = logData.slice(0, 8).map((l: Record<string, unknown>) => {
+    const items = logData.slice(0, 50).map((l: Record<string, unknown>) => {
       const action = (l.Action || l.action || '') as string
       const content = (l.Content || l.content || '') as string
       const msg = content || action
@@ -1631,6 +1603,7 @@ async function fetchLogs() {
         icon: logType === 'error' ? '⚠' : logType === 'warn' ? '⏸' : action === 'start' ? '▶' : '●',
         type: logType,
         msg,
+        source: l,
       }
     })
     logs.value = items
@@ -2523,69 +2496,156 @@ function fmtTime(ts: string): string {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(34, 197, 94, 0.12), transparent 34%),
+    rgba(1, 8, 20, 0.72);
+  backdrop-filter: blur(6px);
 }
 
 .completion-modal-content {
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(74, 222, 128, 0.3);
-  border-radius: 16px;
-  padding: 32px 48px;
+  position: relative;
+  isolation: isolate;
+  width: min(520px, calc(100vw - 48px));
+  min-width: 0;
+  box-sizing: border-box;
+  padding: clamp(28px, 4vh, 42px) clamp(24px, 3vw, 46px) 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 0 40px rgba(74, 222, 128, 0.2);
-  min-width: 300px;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(74, 222, 128, 0.46);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(34, 197, 94, 0.08), transparent 38%),
+    linear-gradient(180deg, rgba(12, 34, 49, 0.98), rgba(4, 18, 31, 0.98));
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.48),
+    0 0 36px rgba(74, 222, 128, 0.14),
+    inset 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.completion-modal-content::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 8px;
+  pointer-events: none;
+  border: 1px solid rgba(74, 222, 128, 0.1);
+  border-radius: 9px;
+}
+
+.completion-modal-content::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  width: 70%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #4ade80 26%, #67e8f9 74%, transparent);
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.7);
 }
 
 .completion-icon {
-  width: 64px;
-  height: 64px;
+  width: 70px;
+  height: 70px;
+  flex: 0 0 auto;
   border-radius: 50%;
-  background: rgba(74, 222, 128, 0.15);
-  border: 2px solid #4ADE80;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(134, 239, 172, 0.72);
+  background:
+    radial-gradient(circle, rgba(74, 222, 128, 0.2) 0 48%, transparent 50%),
+    conic-gradient(from 45deg, #4ade80, #67e8f9, #4ade80);
+  box-shadow:
+    inset 0 0 0 7px #082436,
+    0 0 26px rgba(74, 222, 128, 0.3);
   font-size: 32px;
-  color: #4ADE80;
+  font-weight: 700;
+  color: #dcfce7;
+  text-shadow: 0 0 10px rgba(134, 239, 172, 0.8);
 }
 
 .completion-text {
+  width: 100%;
   text-align: center;
 }
 
 .completion-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #F8FAFC;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #86efac;
+}
+
+.completion-title i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 10px #4ade80;
+}
+
+.completion-task-plate {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(34, 197, 94, 0.09), rgba(103, 232, 249, 0.035)),
+    rgba(2, 15, 27, 0.7);
+  box-shadow: inset 3px 0 #4ade80, inset -1px 0 rgba(103, 232, 249, 0.28);
 }
 
 .completion-step {
-  font-size: 16px;
-  color: #4ADE80;
+  font-size: clamp(22px, 2.2vw, 34px);
+  line-height: 1.35;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  color: #ecfdf5;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.24);
 }
 
 .completion-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: 13px;
   font-size: 12px;
-  color: #64748B;
-  margin-top: 4px;
+  color: #66849a;
+}
+
+.completion-phase strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 500;
+  color: #b9d9e8;
 }
 
 .completion-progress {
   width: 100%;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  height: 2px;
+  margin-top: 1px;
+  background: rgba(103, 232, 249, 0.09);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .completion-progress-bar {
   height: 100%;
-  background: #4ADE80;
+  background: linear-gradient(90deg, #22c55e, #86efac 58%, #67e8f9);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
   animation: progress-shrink 3s linear forwards;
 }
 
@@ -3364,8 +3424,9 @@ function fmtTime(ts: string): string {
   --arrow-gap: clamp(40px, 4vw, 68px);
   --node-tag-h: clamp(60px, 7.2vh, 86px);
   position: relative;
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) clamp(168px, 22vh, 235px);
+  gap: 20px;
   padding: clamp(26px, 3vh, 36px) clamp(24px, 3vw, 60px) clamp(16px, 2vh, 26px);
   min-width: 0;
   min-height: 0;
@@ -3407,13 +3468,41 @@ function fmtTime(ts: string): string {
   text-shadow: 0 0 8px rgba(33, 246, 158, 0.42);
 }
 
-/* ===== 流程板左下角：演练概览（名称 + 进度） ===== */
-.flow-brief {
-  position: absolute;
+
+.flow-information {
+  position: relative;
   z-index: 5;
-  left: clamp(18px, 2vw, 34px);
-  bottom: clamp(14px, 1.6vh, 24px);
-  width: clamp(206px, 17.5vw, 296px);
+  display: grid;
+  grid-template-columns: minmax(270px, 0.8fr) minmax(0, 1.7fr);
+  gap: 20px;
+  min-height: 0;
+}
+
+.flow-information .flow-brief {
+  display: flex;
+  flex-direction: column;
+  padding: 13px 20px;
+}
+.flow-information .flow-log-panel { padding: 13px 20px; }
+.flow-information .brief-title { margin-bottom: 7px; }
+.flow-information .brief-name { font-size: clamp(18px, 1.6vw, 25px); margin-bottom: 8px; }
+.flow-information .brief-progress { flex: 1; gap: clamp(14px, 1.5vw, 24px); }
+.flow-information .brief-ring { width: clamp(74px, 9.5vh, 106px); }
+.flow-information .brief-ring::before { inset: clamp(5px, 0.8vh, 8px); }
+.flow-information .brief-ring-val { font-size: clamp(22px, 2.9vh, 32px); }
+.flow-information .brief-meta { gap: 7px; font-size: 14px; }
+.flow-information .log-head { padding-bottom: clamp(4px, 0.5vh, 7px); margin-bottom: 2px; }
+.flow-information .log-row { font-size: clamp(13px, 0.9vw, 15px); min-height: 30px; padding: 4px 0; }
+.log-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; color: #8fcee7; background: rgba(82, 223, 255, 0.08); white-space: nowrap; }
+.log-status.is-completed { color: #69e6aa; background: rgba(47, 240, 160, 0.1); }
+.log-status.is-skipped { color: #ffcf7d; background: rgba(255, 177, 61, 0.1); }
+.log-status.is-timeout, .log-status.is-issue { color: #ff9a9a; background: rgba(255, 100, 100, 0.1); }
+
+/* ===== 演练概览 ===== */
+.flow-brief {
+  position: relative;
+  z-index: 5;
+  min-width: 0;
   padding: clamp(11px, 1.1vh, 16px) clamp(13px, 1.1vw, 18px);
   border: 1px solid rgba(103, 232, 249, 0.22);
   border-radius: 12px;
@@ -3499,6 +3588,16 @@ function fmtTime(ts: string): string {
   border: 1px solid rgba(103, 232, 249, 0.2);
 }
 
+/* 外圈虚线装饰环：增加层次与仪表感 */
+.brief-ring::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dashed rgba(103, 232, 249, 0.28);
+  pointer-events: none;
+}
+
 .brief-ring-val {
   position: relative;
   z-index: 1;
@@ -3515,34 +3614,24 @@ function fmtTime(ts: string): string {
   font-style: normal;
 }
 
+.brief-ring-label {
+  color: #9fc6da;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+}
+
 .brief-meta {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(3px, 0.4vh, 6px);
+  align-items: flex-start;
+  gap: clamp(8px, 1.2vh, 14px);
   font-size: clamp(11px, 0.85vw, 13.5px);
 }
 
-.brief-status {
-  align-self: flex-start;
-  padding: 2px 9px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  color: #52dfff;
-  background: rgba(82, 223, 255, 0.12);
-  font-weight: 700;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.brief-status.is-pending { color: #8fb8cd; background: rgba(143, 184, 205, 0.1); }
-.brief-status.is-running { color: #ffb13d; background: rgba(255, 177, 61, 0.12); }
-.brief-status.is-paused { color: #ffd166; background: rgba(255, 209, 102, 0.12); }
-.brief-status.is-completed { color: #2ff0a0; background: rgba(47, 240, 160, 0.13); }
-.brief-status.is-terminated { color: #ff8f8f; background: rgba(255, 143, 143, 0.12); }
-
-.brief-count,
-.brief-clock {
+.brief-count {
   overflow: hidden;
   color: #cfe6f5;
   white-space: nowrap;
@@ -3555,38 +3644,14 @@ function fmtTime(ts: string): string {
   font-variant-numeric: tabular-nums;
 }
 
-.brief-clock {
-  color: #8fb8cd;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-}
-
-.brief-bar {
-  margin-top: clamp(9px, 1vh, 13px);
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(50, 102, 132, 0.45);
-  overflow: hidden;
-}
-
-.brief-bar-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #146f90, #12d7f5 62%, #2ff0a0);
-  box-shadow: 0 0 12px rgba(18, 215, 245, 0.5);
-  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ===== 流程板右下角：执行日志（最新在下） ===== */
+/* ===== 执行日志（最新在下） ===== */
 .flow-log-panel {
-  position: absolute;
+  position: relative;
   z-index: 5;
-  right: clamp(18px, 2vw, 34px);
-  bottom: clamp(14px, 1.6vh, 24px);
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  width: clamp(250px, 22vw, 380px);
-  height: clamp(160px, 21vh, 250px);
+
   padding: clamp(9px, 1vh, 14px) clamp(12px, 1vw, 16px) clamp(8px, 0.9vh, 12px);
   border: 1px solid rgba(103, 232, 249, 0.22);
   border-radius: 12px;
@@ -3643,7 +3708,7 @@ function fmtTime(ts: string): string {
   scrollbar-width: thin;
   scrollbar-color: rgba(103, 232, 249, 0.3) transparent;
   /* 顶部旧日志淡出，底部最新日志最醒目 */
-  mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 100%);
+  mask-image: none;
 }
 
 .log-body::-webkit-scrollbar { width: 4px; }
@@ -3660,10 +3725,13 @@ function fmtTime(ts: string): string {
 
 .log-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: 64px 12px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: baseline;
-  padding: 4px 0;
+  min-height: 36px;
+  box-sizing: border-box;
+  align-items: center;
+  padding: 6px 0;
   border-bottom: 1px dashed rgba(103, 232, 249, 0.08);
   font-size: clamp(11px, 0.82vw, 13.2px);
   line-height: 1.35;
@@ -3723,6 +3791,21 @@ function fmtTime(ts: string): string {
   box-shadow:
     inset 0 0 14px rgba(74, 222, 128, 0.14),
     0 0 18px rgba(74, 222, 128, 0.16);
+}
+
+/* 阶段完成后收起环节层级，把视觉焦点交给终点。 */
+.flow-board.all-done .flow-node-wrap:not(.is-virtual) {
+  filter: saturate(0.45) brightness(0.72);
+}
+
+.flow-board.all-done .flow-node.is-virtual-end .rail-cap-core {
+  filter: brightness(1.24) drop-shadow(0 0 10px rgba(75, 231, 173, 0.72));
+}
+
+.flow-board.all-done .flow-node.is-virtual-end .virtual-name {
+  color: rgb(134, 239, 172);
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(75, 231, 173, 0.8), 0 0 24px rgba(75, 231, 173, 0.42);
 }
 
 .flow-board-grid {
@@ -3794,14 +3877,18 @@ function fmtTime(ts: string): string {
 }
 
 /* overflow-x: hidden 会使 overflow-y 的 visible 计算为 auto，故视口实际为双向裁剪容器。
-   顶部内边距容纳放大后的齿轮/涟漪，底部安全区则完整保留清单圆角与 18px 发光阴影。 */
+   顶部内边距容纳放大后的齿轮/涟漪；底部安全区按十行清单的 1.3 倍聚焦尺寸预留。 */
 .flow-viewport {
   position: relative;
   width: 100%;
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: safe center;
   margin-top: clamp(4px, 1.4vh, 18px);
-  padding: calc(var(--node-tag-h) * 0.16 + 16px) 0 clamp(34px, 4.2vh, 52px);
+  padding: 28px 0 clamp(104px, 15.5vh, 132px);
   mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
 
@@ -4293,39 +4380,122 @@ function fmtTime(ts: string): string {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 18%;
-  height: 68%;
+  width: 30%;
+  height: 74%;
   display: grid;
   place-items: center;
   color: rgb(var(--cap-color));
   transform: translate(-50%, -50%);
 }
 
+/* 端标主体：同心圆徽章（起点=菱形导航标 / 终点=靶心） */
 .rail-cap-core {
-  width: 3px;
-  height: 78%;
-  border-radius: 3px;
-  background: linear-gradient(180deg, transparent, rgba(var(--cap-color), 0.95), transparent);
+  position: relative;
+  width: clamp(24px, 2.2vw, 34px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, rgba(255, 255, 255, 0.92), rgba(var(--cap-color), 0.85) 38%, rgba(var(--cap-color), 0.2) 66%, transparent 72%);
+  border: 2px solid rgba(var(--cap-color), 0.85);
   box-shadow:
-    -8px 0 rgba(var(--cap-color), 0.13),
-    8px 0 rgba(var(--cap-color), 0.13),
-    0 0 14px rgba(var(--cap-color), 0.48);
+    inset 0 0 8px rgba(var(--cap-color), 0.5),
+    0 0 14px rgba(var(--cap-color), 0.55),
+    0 0 32px rgba(var(--cap-color), 0.28);
   animation: rail-cap-breathe 3.2s ease-in-out infinite;
 }
 
-/* 开放折角统一指向轨道内部，形成不闭合的边界而非卡片。 */
-.rail-cap::after {
+/* 外层刻度环：缓慢旋转增强辨识度 */
+.rail-cap-core::before {
   content: "";
   position: absolute;
-  width: 20px;
-  height: 20px;
-  border-top: 1px solid rgba(var(--cap-color), 0.48);
-  border-right: 1px solid rgba(var(--cap-color), 0.48);
-  transform: rotate(45deg);
+  inset: -7px;
+  border-radius: 50%;
+  border: 1px dashed rgba(var(--cap-color), 0.55);
+  animation: rail-cap-spin 14s linear infinite;
+}
+
+/* 内部符号：起点=实心菱形 */
+.rail-cap-core::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(var(--cap-color), 0.95), 0 0 16px rgba(255, 255, 255, 0.55);
+}
+
+/* 终点=大靶心：多层同心环（硬切径向渐变）+ 中心亮点 + 十字准星 */
+.flow-node.is-virtual-end .rail-cap-core {
+  width: clamp(40px, 3.6vw, 56px);
+  border: none;
+  background: radial-gradient(circle,
+    rgba(4, 26, 22, 0.92) 0 11%,
+    rgba(75, 231, 173, 0.95) 11% 23%,
+    rgba(4, 26, 22, 0.92) 23% 29%,
+    rgba(75, 231, 173, 0.62) 29% 41%,
+    rgba(4, 26, 22, 0.92) 41% 47%,
+    rgba(75, 231, 173, 0.34) 47% 59%,
+    rgba(4, 26, 22, 0.9) 59% 68%,
+    rgba(75, 231, 173, 0.14) 68% 100%);
+  box-shadow:
+    0 0 18px rgba(75, 231, 173, 0.5),
+    0 0 44px rgba(75, 231, 173, 0.22),
+    inset 0 0 12px rgba(75, 231, 173, 0.3);
+}
+
+/* 靶心外圈刻度环略微外扩 */
+.flow-node.is-virtual-end .rail-cap-core::before {
+  inset: -9px;
+  border-color: rgba(75, 231, 173, 0.62);
+}
+
+/* 靶心中心亮点 */
+.flow-node.is-virtual-end .rail-cap-core::after {
+  width: 18%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #ffffff 0 55%, rgba(210, 255, 236, 0.9) 100%);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 18px rgba(75, 231, 173, 0.8);
+}
+
+/* 十字准星：不穿过靶心中心，像瞄准镜分划 */
+.flow-node.is-virtual-end .rail-cap::before,
+.flow-node.is-virtual-end .rail-cap::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(90deg,
+    rgba(190, 255, 226, 0.9) 0 20%,
+    transparent 20% 40%,
+    rgba(190, 255, 226, 0.9) 40% 60%,
+    transparent 60% 80%,
+    rgba(190, 255, 226, 0.9) 80% 100%);
+  filter: drop-shadow(0 0 4px rgba(75, 231, 173, 0.65));
+}
+
+.flow-node.is-virtual-end .rail-cap::before {
+  width: calc(clamp(40px, 3.6vw, 56px) * 1.6);
+  height: 2px;
 }
 
 .flow-node.is-virtual-end .rail-cap::after {
-  transform: rotate(-135deg);
+  width: 2px;
+  height: calc(clamp(40px, 3.6vw, 56px) * 1.6);
+  background: linear-gradient(180deg,
+    rgba(190, 255, 226, 0.9) 0 20%,
+    transparent 20% 40%,
+    rgba(190, 255, 226, 0.9) 40% 60%,
+    transparent 60% 80%,
+    rgba(190, 255, 226, 0.9) 80% 100%);
+}
+
+@keyframes rail-cap-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 低对比度标签只解释边界语义，不参与居中布局。 */
@@ -4336,7 +4506,7 @@ function fmtTime(ts: string): string {
   transform: translateX(-50%);
   margin-left: 0.24em;
   white-space: nowrap;
-  font-size: clamp(9px, 0.72vw, 11px);
+  font-size: clamp(16px, 1.2vw, 20px);
   font-weight: 600;
   letter-spacing: 0.28em;
   color: rgba(var(--cap-color), 0.58);
@@ -4421,7 +4591,9 @@ function fmtTime(ts: string): string {
 @media (prefers-reduced-motion: reduce) {
   .phase-card, .flow-track, .flow-node-wrap { transition: none !important; }
   .label-pulse { animation: none !important; }
-  .rail-cap-core { animation: none !important; }
+  .rail-cap-core,
+  .rail-cap-core::before { animation: none !important; }
+  .completion-progress-bar { animation: none !important; }
   .header-scanline,
   .command-title::after,
   .title-rail::before,
@@ -4488,17 +4660,11 @@ function fmtTime(ts: string): string {
     font-size: 0.78em;
   }
   .flow-board { padding-inline: 24px; }
-  .flow-brief { width: clamp(184px, 22vw, 240px); }
-  .flow-log-panel {
-    width: clamp(224px, 27vw, 320px);
-    height: clamp(138px, 19vh, 200px);
-  }
+
 }
 
 @media (max-width: 1060px) {
-  .flow-brief { width: 172px; padding-inline: 11px; }
-  .flow-brief .brief-clock { display: none; }
-  .flow-log-panel { width: clamp(200px, 26vw, 280px); }
+  .flow-information { grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.5fr); }
   .phase-card { padding-inline: 8px; }
   .phase-head .phase-name { font-size: 14px; }
   .phase-status {
@@ -4534,6 +4700,16 @@ function fmtTime(ts: string): string {
   opacity: 0;
   transform: scale(0.95);
 }
+@media (max-height: 760px) {
+  .flow-information .flow-brief,
+  .flow-information .flow-log-panel { padding: 10px 16px; }
+  .flow-information .brief-title { margin-bottom: 4px; }
+  .flow-information .brief-name { margin-bottom: 6px; font-size: 18px; }
+  .flow-information .brief-ring { width: 70px; }
+  .flow-information .brief-ring-val { font-size: 20px; }
+  .flow-information .brief-meta { gap: 5px; font-size: 12px; }
+  .flow-information .log-row { min-height: 26px; padding: 3px 0; }
+}
 </style>
 
 <style>
@@ -4567,4 +4743,14 @@ function fmtTime(ts: string): string {
 /* 彻底移除滚动条轨道 */
 .app-main:has(.screen-root)::-webkit-scrollbar { display: none !important; }
 .app-content:has(.screen-root)::-webkit-scrollbar { display: none !important; }
+@media (max-height: 760px) {
+  .flow-information .flow-brief,
+  .flow-information .flow-log-panel { padding: 10px 16px; }
+  .flow-information .brief-title { margin-bottom: 4px; }
+  .flow-information .brief-name { margin-bottom: 6px; font-size: 18px; }
+  .flow-information .brief-ring { width: 70px; }
+  .flow-information .brief-ring-val { font-size: 20px; }
+  .flow-information .brief-meta { gap: 5px; font-size: 12px; }
+  .flow-information .log-row { min-height: 26px; padding: 3px 0; }
+}
 </style>
