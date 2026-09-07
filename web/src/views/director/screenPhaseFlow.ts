@@ -5,6 +5,35 @@ interface PhaseSummary {
   status: string
 }
 
+interface PhaseSequenceSource {
+  phase?: string
+  phase_step?: string
+  seq: number
+}
+
+export function getOrderedPhaseNames(steps: PhaseSequenceSource[]): string[] {
+  const phases = new Map<string, { firstSeen: number; authoredOrder?: number }>()
+
+  for (const [index, step] of steps.entries()) {
+    const name = step.phase?.trim()
+    if (!name) continue
+    const phase = phases.get(name) ?? { firstSeen: index }
+    if (step.phase_step?.trim() === name) {
+      phase.authoredOrder = Math.min(phase.authoredOrder ?? step.seq, step.seq)
+    }
+    phases.set(name, phase)
+  }
+
+  return [...phases.entries()]
+    .sort(([, a], [, b]) => {
+      if (a.authoredOrder !== undefined && b.authoredOrder !== undefined) return a.authoredOrder - b.authoredOrder
+      if (a.authoredOrder !== undefined) return -1
+      if (b.authoredOrder !== undefined) return 1
+      return a.firstSeen - b.firstSeen
+    })
+    .map(([name]) => name)
+}
+
 export function useScreenPhaseSelection(phases: Ref<PhaseSummary[]>, drillId: Ref<number>) {
   const selectedName = ref<string | null>(null)
   let previousDrillId = drillId.value

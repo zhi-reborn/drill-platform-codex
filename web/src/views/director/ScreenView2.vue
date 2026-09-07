@@ -62,13 +62,13 @@
                 :class="['is-' + phase.status, { active: index === selectedPhaseIdx }]"
                 :aria-pressed="index === selectedPhaseIdx"
                 aria-controls="selected-phase-flow"
-                :title="`查看阶段${index + 1} ${phase.name}`"
+                :title="`查看${phase.name}`"
                 @click="selectPhase(index)"
               >
                 <span class="phase-card-grid" aria-hidden="true" />
                 <span class="phase-accent" aria-hidden="true" />
                 <span class="phase-head">
-                  <span class="phase-name"><span class="phase-number">阶段{{ index + 1 }}</span> {{ phase.name }}</span>
+                  <span class="phase-name">{{ phase.name }}</span>
                   <span class="phase-status">{{ phase.statusText }}</span>
                 </span>
                 <span class="phase-segments" aria-hidden="true">
@@ -126,7 +126,7 @@
                       </span>
                       <ul v-if="node.steps.length" class="node-steps">
                         <li
-                          v-for="step in getVisibleNodeSteps(node, nodeStepLimit(index))"
+                          v-for="step in getVisibleNodeSteps(node, NODE_STEP_LIMIT)"
                           :key="step.id"
                           class="node-step"
                           :class="'is-' + step.status"
@@ -137,9 +137,9 @@
                             <svg viewBox="0 0 12 12"><path d="M2.4 6.4 L5 9 L9.6 3.4" /></svg>
                           </i>
                         </li>
-                        <li v-if="node.steps.length > nodeStepLimit(index)" class="node-step is-more">
+                        <li v-if="node.steps.length > NODE_STEP_LIMIT" class="node-step is-more">
                           <i class="step-ico" aria-hidden="true" />
-                          <span class="step-name">另有 {{ node.steps.length - nodeStepLimit(index) }} 个步骤…</span>
+                          <span class="step-name">另有 {{ node.steps.length - NODE_STEP_LIMIT }} 个步骤…</span>
                         </li>
                       </ul>
                     </div>
@@ -238,7 +238,7 @@ import { getLatestTaskOutcomeLogs, getLogPresentation } from './screenLogs'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance } from '@/types/instance'
-import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getStepCompletionPresentation, getVisibleNodeSteps, useScreenPhaseSelection } from './screenPhaseFlow'
+import { getFlowFocusIndex, getFlowFocusPresentation, getFlowTargetItemIndex, getOrderedPhaseNames, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getStepCompletionPresentation, getVisibleNodeSteps, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -376,7 +376,7 @@ const scheduleText = computed(() => {
 
 // 实时日志（按容器高度自适应条数）
 const maxVisibleLogs = ref(8)
-const LOG_ROW_H = 36
+const LOG_ROW_H = 24
 const logContainerRef = ref<HTMLElement | null>(null)
 
 function updateMaxVisibleLogs() {
@@ -448,7 +448,9 @@ const treeData = computed<TreeNodePhase[]>(() => {
     arr.push(s)
   }
   const result: TreeNodePhase[] = []
-  for (const [phaseName, psMap] of phases) {
+  for (const phaseName of getOrderedPhaseNames(steps.value)) {
+    const psMap = phases.get(phaseName)
+    if (!psMap) continue
     const phaseSteps: TreeNodePhaseStep[] = []
     for (const [psName, stepNodes] of psMap) {
       stepNodes.sort((a, b) => a.seq - b.seq)
@@ -494,13 +496,8 @@ const phaseCards = computed(() => {
   })
 })
 
-// 环节节点下最多展示的任务步骤数（当前聚焦环节放宽到 5 条）
-const NODE_STEP_LIMIT = 3
-const FOCUSED_NODE_STEP_LIMIT = 5
-
-function nodeStepLimit(index: number): number {
-  return index === focusedNodeIndex.value ? FOCUSED_NODE_STEP_LIMIT : NODE_STEP_LIMIT
-}
+// 所有环节节点最多直接展示 6 个任务，更多任务使用省略提示。
+const NODE_STEP_LIMIT = 6
 
 function normalizeStepStatus(status: string): string {
   if (status === 'completed') return 'done'
@@ -1587,10 +1584,10 @@ async function fetchSteps() {
 async function fetchLogs() {
   const requestId = drillId.value
   try {
-    const data = await drillApi.getLogs(drillId.value)
+    const data = await drillApi.getLogs(drillId.value, 200)
     if (requestId !== drillId.value) return
     const logData = (data || [])
-    const items = logData.slice(0, 50).map((l: Record<string, unknown>) => {
+    const items = logData.map((l: Record<string, unknown>) => {
       const action = (l.Action || l.action || '') as string
       const content = (l.Content || l.content || '') as string
       const msg = content || action
@@ -3291,8 +3288,23 @@ function fmtTime(ts: string): string {
   background: linear-gradient(180deg, var(--phase-tab-tint), transparent 95%);
   box-shadow: none;
 }
+.phase-card.is-running.active {
+  border-color: rgba(255, 190, 92, 0.96);
+  border-bottom-color: transparent;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 211, 128, 0.24), transparent 54%),
+    linear-gradient(180deg, rgba(104, 67, 24, 0.9), rgba(53, 40, 25, 0.7) 58%, transparent 96%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 224, 166, 0.18),
+    inset 0 0 30px rgba(255, 171, 52, 0.16),
+    0 -6px 26px rgba(255, 164, 41, 0.18);
+}
 .phase-card.active .phase-card-grid { mask-image: linear-gradient(#000, transparent); }
 .phase-card.active .phase-accent { bottom: auto; top: 0; height: 2px; }
+.phase-card.is-running.active .phase-name {
+  color: #fff8e8;
+  text-shadow: 0 0 12px rgba(255, 190, 92, 0.34);
+}
 
 .phase-accent {
   position: absolute;
@@ -3327,9 +3339,6 @@ function fmtTime(ts: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.phase-number { font-size: 0.78em; font-weight: 500; color: #a0bdcf; }
-.phase-card.active .phase-number { color: var(--phase-link-color); }
 
 .phase-status {
   flex: 0 0 auto;
@@ -3492,7 +3501,7 @@ function fmtTime(ts: string): string {
 .flow-information .brief-ring-val { font-size: clamp(22px, 2.9vh, 32px); }
 .flow-information .brief-meta { gap: 7px; font-size: 14px; }
 .flow-information .log-head { padding-bottom: clamp(4px, 0.5vh, 7px); margin-bottom: 2px; }
-.flow-information .log-row { font-size: clamp(13px, 0.9vw, 15px); min-height: 30px; padding: 4px 0; }
+.flow-information .log-row { font-size: clamp(13px, 0.9vw, 15px); min-height: 24px; padding: 2px 0; }
 .log-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; color: #8fcee7; background: rgba(82, 223, 255, 0.08); white-space: nowrap; }
 .log-status.is-completed { color: #69e6aa; background: rgba(47, 240, 160, 0.1); }
 .log-status.is-skipped { color: #ffcf7d; background: rgba(255, 177, 61, 0.1); }
@@ -3728,10 +3737,10 @@ function fmtTime(ts: string): string {
   grid-template-columns: 64px 12px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: baseline;
-  min-height: 36px;
+  min-height: 24px;
   box-sizing: border-box;
   align-items: center;
-  padding: 6px 0;
+  padding: 2px 0;
   border-bottom: 1px dashed rgba(103, 232, 249, 0.08);
   font-size: clamp(11px, 0.82vw, 13.2px);
   line-height: 1.35;
@@ -3939,10 +3948,13 @@ function fmtTime(ts: string): string {
   background: rgba(4, 31, 55, 0.76);
   box-shadow: 0 0 28px rgba(0, 209, 255, 0.18), inset 0 0 18px rgba(0, 209, 255, 0.12);
   overflow: hidden;
+  isolation: isolate;
   text-shadow: 0 0 10px rgba(0, 211, 255, 0.24);
 }
 
 .node-label {
+  position: relative;
+  z-index: 1;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -4002,7 +4014,6 @@ function fmtTime(ts: string): string {
     linear-gradient(180deg, rgba(114, 67, 12, 0.94), rgba(48, 31, 17, 0.74));
   box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d;
   text-shadow: 0 0 10px rgba(255, 177, 61, 0.55);
-  animation: node-pulse 2s ease-in-out infinite;
 }
 
 .flow-node.is-running .node-tag::before {
@@ -4026,6 +4037,7 @@ function fmtTime(ts: string): string {
   transform: skewX(-18deg);
   opacity: 0;
   pointer-events: none;
+  will-change: transform, opacity;
   animation: node-scan 2.4s ease-in-out infinite;
 }
 
@@ -4085,11 +4097,6 @@ function fmtTime(ts: string): string {
   background: #fff4cf;
   box-shadow: 0 0 0 3px rgba(255, 177, 61, 0.24), 0 0 12px rgba(255, 226, 160, 0.82);
   animation: node-live-blink 1.05s ease-in-out infinite;
-}
-
-@keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 154, 47, 0.26), inset 0 0 24px rgba(255, 177, 61, 0.16), inset 0 -4px 0 #ffb13d; }
-  50% { box-shadow: 0 0 30px rgba(255, 154, 47, 0.42), inset 0 0 28px rgba(255, 177, 61, 0.24), inset 0 -4px 0 #ffb13d; }
 }
 
 @keyframes done-shine {
@@ -4708,7 +4715,7 @@ function fmtTime(ts: string): string {
   .flow-information .brief-ring { width: 70px; }
   .flow-information .brief-ring-val { font-size: 20px; }
   .flow-information .brief-meta { gap: 5px; font-size: 12px; }
-  .flow-information .log-row { min-height: 26px; padding: 3px 0; }
+  .flow-information .log-row { min-height: 24px; padding: 2px 0; }
 }
 </style>
 
@@ -4751,6 +4758,6 @@ function fmtTime(ts: string): string {
   .flow-information .brief-ring { width: 70px; }
   .flow-information .brief-ring-val { font-size: 20px; }
   .flow-information .brief-meta { gap: 5px; font-size: 12px; }
-  .flow-information .log-row { min-height: 26px; padding: 3px 0; }
+  .flow-information .log-row { min-height: 24px; padding: 2px 0; }
 }
 </style>

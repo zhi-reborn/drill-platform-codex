@@ -6,6 +6,7 @@ import {
   getFlowTargetItemIndex,
   getPhaseChamberPath,
   getPhaseFlowNodes,
+  getOrderedPhaseNames,
   getPhaseStripScrollLeft,
   getStepCompletionPresentation,
   getVisibleNodeSteps,
@@ -13,6 +14,21 @@ import {
 } from './screenPhaseFlow'
 
 const scopes: ReturnType<typeof effectScope>[] = []
+
+describe('phase order', () => {
+  it('uses the authored root-stage sequence instead of API insertion order', () => {
+    const steps = [
+      { phase: '恢复阶段', phase_step: '数据恢复', seq: 1 },
+      { phase: '准备阶段', phase_step: '方案评审', seq: 1 },
+      { phase: '验证阶段', phase_step: '验证阶段', seq: 4 },
+      { phase: '恢复阶段', phase_step: '恢复阶段', seq: 3 },
+      { phase: '实施阶段', phase_step: '实施阶段', seq: 2 },
+      { phase: '准备阶段', phase_step: '准备阶段', seq: 1 },
+    ]
+
+    expect(getOrderedPhaseNames(steps)).toEqual(['准备阶段', '实施阶段', '恢复阶段', '验证阶段'])
+  })
+})
 
 describe('continuous phase chamber outline', () => {
   it('raises the board outline around the selected tab without drawing its bottom edge', () => {
@@ -126,16 +142,16 @@ describe('screen phase selection', () => {
 describe('selected phase nodes', () => {
   const statusOf = (node: { status: string }) => node.status
 
-  it('shows five tasks for the focused node before truncating any remainder', () => {
-    const steps = Array.from({ length: 6 }, (_, index) => ({ id: String(index + 1) }))
-    expect(getVisibleNodeSteps({ status: 'done', steps }, 5)).toEqual(steps.slice(0, 5))
-    expect(getVisibleNodeSteps({ status: 'running', steps }, 3)).toEqual(steps.slice(0, 3))
+  it('shows six tasks for every node before truncating any remainder', () => {
+    const steps = Array.from({ length: 7 }, (_, index) => ({ id: String(index + 1) }))
+    expect(getVisibleNodeSteps({ status: 'done', steps }, 6)).toEqual(steps.slice(0, 6))
+    expect(getVisibleNodeSteps({ status: 'running', steps }, 6)).toEqual(steps.slice(0, 6))
   })
 
-  it('keeps non-running nodes within the compact step limit', () => {
-    const steps = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1) }))
-    expect(getVisibleNodeSteps({ status: 'done', steps }, 3)).toEqual(steps.slice(0, 3))
-    expect(getVisibleNodeSteps({ status: 'pending', steps }, 3)).toEqual(steps.slice(0, 3))
+  it('does not add an omission when a node has exactly six tasks', () => {
+    const steps = Array.from({ length: 6 }, (_, index) => ({ id: String(index + 1) }))
+    expect(getVisibleNodeSteps({ status: 'done', steps }, 6)).toEqual(steps)
+    expect(getVisibleNodeSteps({ status: 'pending', steps }, 6)).toEqual(steps)
   })
 
   it('projects only this phase and excludes its header without truncating the thirteenth link', () => {

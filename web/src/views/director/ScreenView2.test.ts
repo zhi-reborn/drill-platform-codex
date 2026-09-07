@@ -23,6 +23,13 @@ describe('phase chamber template wiring', () => {
     expect(source).not.toContain("querySelector<HTMLElement>('.phase-card.is-running')")
   })
 
+  it('uses the business stage name as the card title without a numeric prefix', () => {
+    expect(template).toContain('<span class="phase-name">{{ phase.name }}</span>')
+    expect(template).not.toContain('class="phase-number"')
+    expect(template).not.toContain('阶段{{ index + 1 }}')
+    expect(template).toContain(':title="`查看${phase.name}`"')
+  })
+
   it('reloads for a new drill and guards against stale responses', () => {
     expect(source.includes('watch(drillId,')).toBe(true)
     expect(source.includes('if (requestId !== drillId.value) return')).toBe(true)
@@ -48,6 +55,14 @@ describe('phase chamber template wiring', () => {
 
   it('keeps chamber selection styles separate from individual stage status colors', () => {
     expect(template.includes(':class="\'phase-state-\' + selectedPhaseStatus"')).toBe(true)
+  })
+
+  it('highlights the running stage while keeping the running node label stable', () => {
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    expect(styles).toMatch(/\.phase-card\.is-running\.active\s*\{[^}]*border-color:\s*rgba\(255, 190, 92, 0\.96\)[^}]*box-shadow:/)
+
+    const runningNodeRule = styles.match(/\.flow-node\.is-running \.node-tag\s*\{([^}]*)\}/)?.[1]
+    expect(runningNodeRule).not.toMatch(/animation:/)
   })
 
   it('uses one raised-tab outline and directional links instead of a detached light bridge', () => {
@@ -82,11 +97,22 @@ describe('phase chamber template wiring', () => {
     expect(styles).toMatch(/\.flow-arrow\s*\{[^}]*transition:\s*opacity 0\.7s ease;/)
   })
 
-  it('expands the focused node to five tasks while compacting other nodes', () => {
-    expect(template).toContain('v-for="step in getVisibleNodeSteps(node, nodeStepLimit(index))"')
-    expect(template).toContain('node.steps.length > nodeStepLimit(index)')
+  it('shows up to six tasks in every node', () => {
+    expect(template).toContain('v-for="step in getVisibleNodeSteps(node, NODE_STEP_LIMIT)"')
+    expect(template).toContain('node.steps.length > NODE_STEP_LIMIT')
     expect(source).toContain('getVisibleNodeSteps')
-    expect(source).toContain('const FOCUSED_NODE_STEP_LIMIT = 5')
+    expect(source).toContain('const NODE_STEP_LIMIT = 6')
+    expect(source).not.toContain('nodeStepLimit')
+  })
+
+  it('loads enough history to fill the task outcome log panel', () => {
+    expect(source).toContain('drillApi.getLogs(drillId.value, 200)')
+    expect(source).not.toContain('logData.slice(0, 50)')
+    expect(source).toContain('const LOG_ROW_H = 24')
+
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    expect(styles).toMatch(/\.log-row\s*\{[^}]*min-height:\s*24px[^}]*padding:\s*2px 0/)
+    expect(styles).toMatch(/\.flow-information \.log-row\s*\{[^}]*min-height:\s*24px[^}]*padding:\s*2px 0/)
   })
 
   it('keeps step lists in one column without scroll affordances', () => {
