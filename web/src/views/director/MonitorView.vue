@@ -22,6 +22,10 @@
               <el-icon><DataBoard /></el-icon>
               大屏3
             </el-button>
+            <el-button class="screen-entry-button screen-entry-aqua" @click="viewScreen4">
+              <el-icon><DataBoard /></el-icon>
+              大屏4
+            </el-button>
             <ActionConfirm
               v-if="canStart"
               title="开始演练"
@@ -647,6 +651,11 @@ function viewScreen2() {
 function viewScreen3() {
   if (!isValidDrill.value) return
   window.open(`/screen3/${drillId.value}`, '_blank')
+}
+
+function viewScreen4() {
+  if (!isValidDrill.value) return
+  window.open(`/director/screen4/${drillId.value}`, '_blank')
 }
 
 const sortedSteps = computed(() => {
@@ -1901,6 +1910,27 @@ onUnmounted(() => {
           &:active {
             transform: translateY(0);
             background: #5318AB;
+          }
+        }
+
+        // 大屏4按钮 - 极光青（延续科技感并与前三个入口区分）
+        .screen-entry-aqua {
+          color: #08979C;
+          border: 1px solid rgba(8, 151, 156, 0.42);
+          background: linear-gradient(135deg, rgba(8, 151, 156, 0.07) 0%, rgba(54, 207, 201, 0.04) 100%);
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: #08979C;
+            background: linear-gradient(135deg, #08979C 0%, #13C2C2 100%);
+            box-shadow: 0 4px 14px rgba(8, 151, 156, 0.3);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+            background: #006D75;
           }
         }
 

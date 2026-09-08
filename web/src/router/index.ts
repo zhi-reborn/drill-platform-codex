@@ -114,6 +114,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/director/ScreenView2.vue'),
         meta: { title: '数据大屏', icon: 'DataBoard' },
       },
+      {
+        path: 'screen4/:id(\\d+)',
+        name: 'DirectorScreen4',
+        component: () => import('@/views/director/ScreenView4.vue'),
+        meta: { title: '数据大屏4', icon: 'DataBoard', hidden: true },
+      },
     ],
   },
 
