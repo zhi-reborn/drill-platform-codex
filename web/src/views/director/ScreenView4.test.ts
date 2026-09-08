@@ -10,6 +10,18 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).not.toMatch(/import\s+ScreenView2|<ScreenView2/)
   })
 
+  it('counts only visible business phase steps with its own presentation', () => {
+    expect(screen4Source).toContain('const visiblePhaseSteps = phase.phaseSteps.filter(ps => ps.name !== phase.name)')
+    expect(screen4Source).toContain("visiblePhaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length")
+    expect(screen4Source).toContain('const totalPhaseSteps = visiblePhaseSteps.length')
+    expect(screen4Source).not.toContain('const totalPhaseSteps = phase.phaseSteps.length || 1')
+    expect(screen4Source).toContain('class="stat-divider"')
+    expect(screen4Source).toContain('class="stat-total"')
+    expect(screen4Source).toMatch(/\.phase-stats\s*\{[^}]*font-variant-numeric:\s*tabular-nums/)
+    expect(screen4Source).toContain('.stat-divider')
+    expect(screen4Source).toContain('.stat-total')
+  })
+
   it('renders its own runway instead of the old task-card flow', () => {
     expect(screen4Source).toContain("import Screen4Runway from './Screen4Runway.vue'")
     expect(screen4Source).toContain('<Screen4Runway')
