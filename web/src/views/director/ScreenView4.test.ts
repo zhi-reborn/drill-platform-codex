@@ -32,6 +32,18 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).not.toContain("from '@/components/screen/PhaseRing.vue'")
   })
 
+  it('replaces the overview and log panels with an independent pending task command deck', () => {
+    expect(screen4Source).toContain("from './screen4PendingTasks'")
+    expect(screen4Source).toContain('class="pending-task-panel"')
+    expect(screen4Source).toContain('class="primary-task-card"')
+    expect(screen4Source).toContain('class="task-queue-grid"')
+    expect(screen4Source).toContain('当前阶段待完成任务已清零')
+    expect(screen4Source).toContain('该阶段暂无任务配置')
+    expect(screen4Source).not.toContain('class="flow-brief"')
+    expect(screen4Source).not.toContain('class="flow-log-panel"')
+    expect(screen4Source).not.toContain("from './screenLogs'")
+  })
+
   it('places the screen4 button after screen3 and opens the independent route', () => {
     expect(monitorSource).toMatch(/@click="viewScreen3"[\s\S]*?大屏3[\s\S]*?@click="viewScreen4"[\s\S]*?大屏4/)
     expect(monitorSource).toContain('window.open(`/director/screen4/${drillId.value}`, \'_blank\')')

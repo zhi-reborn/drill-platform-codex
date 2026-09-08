@@ -118,42 +118,84 @@
               :nodes="runwayNodes"
             />
 
-            <div class="flow-information">
-            <!-- 演练概览 -->
-            <aside class="flow-brief" aria-label="演练概览">
-              <div class="brief-title">
-                <span class="brief-sigil" aria-hidden="true" />
-                <span>演练概览</span>
-              </div>
-              <div class="brief-name" :title="instance?.name">{{ instance?.name || '未命名演练' }}</div>
-              <div class="brief-progress">
-                <div class="brief-ring" :style="{ '--p': liveProgressPct }">
-                  <span class="brief-ring-val">{{ liveProgressPct }}<em>%</em></span>
+            <section
+              class="pending-task-panel"
+              :class="'is-' + pendingTaskPanel.state"
+              aria-label="当前环节待完成任务"
+            >
+              <header class="pending-task-head">
+                <div class="pending-task-heading">
+                  <span class="pending-task-sigil" aria-hidden="true"><i /></span>
+                  <span class="pending-task-kicker">当前环节</span>
+                  <strong :title="pendingTaskPanel.phaseStepName">
+                    {{ pendingTaskPanel.phaseStepName || currentPhaseData?.name || '当前阶段' }}
+                  </strong>
                 </div>
-                <div class="brief-meta">
-                  <span class="brief-ring-label">完成率</span>
-                  <span class="brief-count">步骤 <b>{{ completedStepCount }}</b> / {{ totalStepCount }}</span>
+                <div v-if="pendingTaskPanel.state === 'ready'" class="pending-task-count" aria-live="polite">
+                  <b>{{ pendingTaskPanel.tasks.length }}</b>
+                  <span>项待完成</span>
                 </div>
-              </div>
-            </aside>
-
-            <!-- 执行日志（最新在下，自动贴底滚动） -->
-            <aside class="flow-log-panel" aria-label="执行日志">
-              <header class="log-head">
-                <span class="log-title"><span class="log-dot" aria-hidden="true" />执行日志</span>
-                <span class="log-tail">最新 ↓</span>
               </header>
-              <div ref="logContainerRef" class="log-body" aria-live="polite">
-                <p v-if="!orderedLogs.length" class="log-empty">暂无执行日志</p>
-                <div v-for="log in orderedLogs" :key="log.id" class="log-row" :class="'is-' + log.type">
-                  <span class="log-time">{{ log.time }}</span>
-                  <span class="log-icon" aria-hidden="true">{{ log.icon }}</span>
-                  <span class="log-msg" :title="log.msg">{{ log.msg }}</span>
-                  <span v-if="log.status" class="log-status" :class="'is-' + log.tone">{{ log.status }}</span>
+
+              <div
+                v-if="pendingTaskPanel.state === 'ready' && pendingTaskPanel.primaryTask"
+                class="pending-task-layout"
+                aria-live="polite"
+              >
+                <article
+                  class="primary-task-card"
+                  :class="'is-' + pendingTaskPanel.primaryTask.status"
+                  :aria-label="`${taskStatusText(pendingTaskPanel.primaryTask)}：${pendingTaskPanel.primaryTask.name}`"
+                >
+                  <div class="primary-task-topline">
+                    <span class="primary-task-status">
+                      <i aria-hidden="true" />{{ taskStatusText(pendingTaskPanel.primaryTask) }}
+                    </span>
+                    <span class="task-order">01</span>
+                  </div>
+                  <strong class="primary-task-name" :title="pendingTaskPanel.primaryTask.name">
+                    {{ pendingTaskPanel.primaryTask.name }}
+                  </strong>
+                  <div class="primary-task-meta">
+                    <span class="task-owner-mark" aria-hidden="true">◆</span>
+                    <span>{{ taskOwner(pendingTaskPanel.primaryTask) }}</span>
+                  </div>
+                  <div class="primary-task-energy" aria-hidden="true"><i /></div>
+                </article>
+
+                <section class="task-queue" aria-label="候场任务">
+                  <header class="task-queue-head">
+                    <span>候场矩阵</span>
+                    <small>{{ pendingTaskPanel.queuedTasks.length ? '按执行顺序排列' : '当前环节仅剩主任务' }}</small>
+                  </header>
+                  <div v-if="pendingTaskPanel.queuedTasks.length" class="task-queue-grid">
+                    <article
+                      v-for="(task, index) in pendingTaskPanel.queuedTasks"
+                      :key="task.id"
+                      class="queued-task-card"
+                      :class="'is-' + task.status"
+                      :aria-label="`${taskStatusText(task)}：${task.name}`"
+                    >
+                      <span class="queue-task-order">{{ taskOrderLabel(index + 2) }}</span>
+                      <div class="queue-task-copy">
+                        <strong :title="task.name">{{ task.name }}</strong>
+                        <span :title="taskOwner(task)">{{ taskOwner(task) }}</span>
+                      </div>
+                      <span class="queue-task-status"><i aria-hidden="true" />{{ taskStatusText(task) }}</span>
+                    </article>
+                  </div>
+                  <div v-else class="task-queue-empty">等待当前任务完成</div>
+                </section>
+              </div>
+
+              <div v-else class="pending-task-state" role="status" aria-live="polite">
+                <span class="pending-state-orbit" aria-hidden="true"><i /></span>
+                <div>
+                  <strong>{{ pendingTaskPanel.state === 'complete' ? '当前阶段待完成任务已清零' : '该阶段暂无任务配置' }}</strong>
+                  <span>{{ pendingTaskPanel.state === 'complete' ? '全部任务均已结束，可切换阶段查看' : '等待任务编排数据同步' }}</span>
                 </div>
               </div>
-            </aside>
-            </div>
+            </section>
           </section>
 
         </section>
@@ -189,9 +231,9 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { FullScreen } from '@element-plus/icons-vue'
-import { getLatestTaskOutcomeLogs, getLogPresentation } from './screenLogs'
 import Screen4Runway from './Screen4Runway.vue'
 import { getScreen4RunwayProgress, type Screen4RunwayStatus } from './screen4Runway'
+import { buildScreen4PendingTaskPanel } from './screen4PendingTasks'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance } from '@/types/instance'
@@ -234,7 +276,6 @@ const loading = ref(true)
 const error = ref('')
 const instance = ref<DrillInstance | null>(null)
 const steps = ref<StepInstance[]>([])
-const logs = ref<{ id: number; time: string; icon: string; type: string; msg: string; status?: string; tone?: string; source?: Record<string, unknown> }[]>([])
 const wsConnected = ref(false)
 
 // 计时器
@@ -244,16 +285,6 @@ let timerInterval: ReturnType<typeof setInterval> | null = null
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 
 // ======== 计算属性 ========
-
-// 实时进度：基于叶子步骤计算全局完成率（与 ScreenView 统一口径）
-const liveProgressPct = computed(() => {
-  if (!steps.value.length) return instance.value?.progress_pct ?? 0
-  const leafSteps = steps.value.filter(isLeafStep)
-  const list = leafSteps.length > 0 ? leafSteps : steps.value
-  const done = list.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length
-  const total = list.length
-  return total === 0 ? 0 : Math.round((done / total) * 100)
-})
 
 const currentSystemTime = computed(() => {
   const d = new Date(now.value)
@@ -331,38 +362,6 @@ const scheduleText = computed(() => {
   return `${fmt(start)} — ${fmt(estEnd)}（预计 ${totalMin} 分钟）`
 })
 
-// 实时日志（按容器高度自适应条数）
-const maxVisibleLogs = ref(8)
-const LOG_ROW_H = 24
-const logContainerRef = ref<HTMLElement | null>(null)
-
-function updateMaxVisibleLogs() {
-  const el = logContainerRef.value
-  if (el) {
-    const h = el.clientHeight
-    maxVisibleLogs.value = Math.max(3, Math.floor(h / LOG_ROW_H))
-  }
-}
-
-const displayLogs = computed(() => getLatestTaskOutcomeLogs(logs.value).slice(0, maxVisibleLogs.value).map(log => {
-  if (!log.source) return log
-  const presentation = getLogPresentation(log.source, steps.value)
-  return { ...log, msg: presentation.message, status: presentation.status, tone: presentation.tone }
-}))
-
-// logs[0] 为最新，展示时倒序排列，使最新日志位于列表底部
-const orderedLogs = computed(() => displayLogs.value.slice().reverse())
-
-// 演练概览：叶子步骤口径的完成统计
-const leafStepsAll = computed(() => {
-  const leaf = steps.value.filter(isLeafStep)
-  return leaf.length > 0 ? leaf : steps.value
-})
-const totalStepCount = computed(() => leafStepsAll.value.length)
-const completedStepCount = computed(
-  () => leafStepsAll.value.filter(s => ['completed', 'skipped', 'timeout', 'issue'].includes(s.status)).length,
-)
-
 // ======== 阶段 Tab ========
 
 // 阶段整体状态：done / running / pending（仅看叶子步骤，避免父步骤状态滞后）
@@ -422,6 +421,23 @@ const phaseSummaries = computed(() => treeData.value.map(phase => ({ name: phase
 const { selectedPhaseIdx } = useScreenPhaseSelection(phaseSummaries, drillId)
 const currentPhaseData = computed<TreeNodePhase | null>(() => treeData.value[selectedPhaseIdx.value] ?? null)
 const selectedPhaseStatus = computed(() => phaseSummaries.value[selectedPhaseIdx.value]?.status ?? 'pending')
+const pendingTaskPanel = computed(() => buildScreen4PendingTaskPanel(
+  currentPhaseData.value?.name ?? '',
+  currentPhaseData.value?.phaseSteps ?? [],
+  isLeafStep,
+))
+
+function taskOwner(step: StepInstance): string {
+  return step.executor_team || step.assignee_names || '待分配'
+}
+
+function taskStatusText(step: StepInstance): string {
+  return step.status === 'running' ? '执行中' : '待执行'
+}
+
+function taskOrderLabel(index: number): string {
+  return String(index).padStart(2, '0')
+}
 
 function selectPhase(index: number) {
   selectedPhaseIdx.value = index
@@ -1308,28 +1324,15 @@ function handleWSMessage(msg: any) {
   if (event === 'ping' || event === 'pong') return
 
   if (['drill_started', 'drill_paused', 'drill_resumed', 'drill_completed', 'drill_terminated'].includes(event)) {
-    scheduleRefresh('drill', 'steps', 'logs')
-    if (event === 'drill_started') addLog('info', '▶', '演练已开始')
-    else if (event === 'drill_paused') addLog('warn', '⏸', '演练已暂停')
-    else if (event === 'drill_resumed') addLog('info', '▶', '演练已恢复')
-    else if (event === 'drill_completed') addLog('info', '✓', '演练已完成')
-    else if (event === 'drill_terminated') addLog('error', '⏹', '演练已结束')
+    scheduleRefresh('drill', 'steps')
   }
 
   // 步骤事件：增量更新本地数据，不调 API
   if (event.startsWith('step_')) {
     patchLocalStep(event, payload)
-    scheduleRefresh('steps', 'drill', 'logs')
-    const phasePrefix = phaseName ? `【${phaseName}】` : ''
-    if (event === 'step_started') {
-      addLog('info', '●', `${phasePrefix}${stepName} 已开始`, { step_instance_id: payload.step_id || payload.stepId || payload.id || payload.step_instance_id, action: event, content: stepName })
-    } else if (['step_complete', 'step_completed', 'step_skipped', 'step_issue', 'step_timeout'].includes(event)) {
-      const label = logLabel(event)
-      const logType = event === 'step_issue' ? 'error' : 'info'
-      addLog(logType, logIcon(event), `${phasePrefix}${stepName} ${label}`, { step_instance_id: payload.step_id || payload.stepId || payload.id || payload.step_instance_id, action: event, content: stepName })
-      if (event === 'step_complete' || event === 'step_completed') {
-        showCompletionModal(stepName, phaseName)
-      }
+    scheduleRefresh('steps', 'drill')
+    if (event === 'step_complete' || event === 'step_completed') {
+      showCompletionModal(stepName, phaseName)
     }
     return
   }
@@ -1376,50 +1379,12 @@ function mapStepEventToStatus(event: string): string {
   return map[event] || ''
 }
 
-function logLabel(event: string): string {
-  const map: Record<string, string> = {
-    step_started: '已开始',
-    step_complete: '已完成',
-    step_completed: '已完成',
-    step_skipped: '已跳过',
-    step_issue: '异常',
-    step_timeout: '已超时',
-    drill_started: '演练开始',
-    drill_paused: '已暂停',
-    drill_resumed: '已恢复',
-    drill_completed: '已完成',
-    drill_terminated: '已终止',
-  }
-  return map[event] || event
-}
-
-function logIcon(event: string): string {
-  if (event.includes('timeout')) return '⚠'
-  if (event.includes('complete') || event.includes('skipped')) return '✓'
-  return '●'
-}
-
-function addLog(type: string, icon: string, msg: string, source?: Record<string, unknown>) {
-  const nowDate = new Date()
-  const time = pad(nowDate.getHours()) + ':' + pad(nowDate.getMinutes()) + ':' + pad(nowDate.getSeconds())
-  const entry = { id: Date.now(), time, icon, type, msg, source }
-  logs.value.unshift(entry)
-  if (logs.value.length > 50) logs.value.length = 50
-  nextTick(scrollLogs)
-}
-
-// 最新日志在底部，故始终贴底滚动
-function scrollLogs() {
-  const el = logContainerRef.value
-  if (el) el.scrollTop = el.scrollHeight
-}
-
 // ======== 数据加载 ========
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
-let pendingRefresh: Set<'drill' | 'steps' | 'logs'> = new Set()
+let pendingRefresh: Set<'drill' | 'steps'> = new Set()
 
-function scheduleRefresh(...kinds: ('drill' | 'steps' | 'logs')[]) {
+function scheduleRefresh(...kinds: ('drill' | 'steps')[]) {
   for (const k of kinds) pendingRefresh.add(k)
   if (refreshTimer) return
   refreshTimer = setTimeout(async () => {
@@ -1427,7 +1392,6 @@ function scheduleRefresh(...kinds: ('drill' | 'steps' | 'logs')[]) {
     const tasks: Promise<void>[] = []
     if (pendingRefresh.has('drill')) tasks.push(fetchDrillData())
     if (pendingRefresh.has('steps')) tasks.push(fetchSteps())
-    if (pendingRefresh.has('logs')) tasks.push(fetchLogs())
     pendingRefresh.clear()
     await Promise.all(tasks)
   }, 500)
@@ -1455,40 +1419,12 @@ async function fetchSteps() {
   }
 }
 
-async function fetchLogs() {
-  const requestId = drillId.value
-  try {
-    const data = await drillApi.getLogs(drillId.value, 200)
-    if (requestId !== drillId.value) return
-    const logData = (data || [])
-    const items = logData.map((l: Record<string, unknown>) => {
-      const action = (l.Action || l.action || '') as string
-      const content = (l.Content || l.content || '') as string
-      const msg = content || action
-      const logType = action === 'timeout' || action === 'pause' ? 'warn'
-        : action === 'issue' || action === 'terminate' ? 'error'
-        : 'info'
-      return {
-        id: (l.ID || l.id) as number,
-        time: fmtTime((l.CreatedAt || l.created_at) as string),
-        icon: logType === 'error' ? '⚠' : logType === 'warn' ? '⏸' : action === 'start' ? '▶' : '●',
-        type: logType,
-        msg,
-        source: l,
-      }
-    })
-    logs.value = items
-  } catch {
-    // 静默失败
-  }
-}
-
 async function loadAllData() {
   const requestId = drillId.value
   loading.value = true
   error.value = ''
   try {
-    await Promise.all([fetchDrillData(), fetchSteps(), fetchLogs()])
+    await Promise.all([fetchDrillData(), fetchSteps()])
   } catch {
     error.value = '数据加载失败'
   } finally {
@@ -1567,7 +1503,6 @@ watch(drillId, () => {
   pendingRefresh.clear()
   steps.value = []
   instance.value = null
-  logs.value = []
   loadAllData()
   connectWS()
 })
@@ -1583,7 +1518,6 @@ onMounted(() => {
   loadAllData().then(() => {
     initCanvas()
     drawFlowTree()
-    updateMaxVisibleLogs()
     updatePhaseLayout()
   })
   connectWS()
@@ -1592,7 +1526,7 @@ onMounted(() => {
     redrawCanvas()
   }, 1000)
   pollingTimer = setInterval(() => {
-    if (!wsConnected.value) scheduleRefresh('drill', 'steps', 'logs')
+    if (!wsConnected.value) scheduleRefresh('drill', 'steps')
   }, 30000)
   window.addEventListener('resize', onResize)
 
@@ -1618,7 +1552,6 @@ onUnmounted(() => {
 
 function onResize() {
   initCanvas()
-  updateMaxVisibleLogs()
   updatePhaseLayout()
 }
 
@@ -1628,11 +1561,6 @@ watch([steps, () => instance.value?.progress_pct], () => {
     drawFlowTree()
   })
 }, { deep: false })
-
-// 滚动日志
-watch(displayLogs, () => {
-  nextTick(scrollLogs)
-})
 
 // ======== 工具函数 ========
 
@@ -1644,11 +1572,6 @@ function fmt(d: Date): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function fmtTime(ts: string): string {
-  if (!ts) return '--:--:--'
-  const d = new Date(ts)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
 </script>
 
 <style scoped>
@@ -3363,307 +3286,370 @@ function fmtTime(ts: string): string {
 }
 
 
-.flow-information {
+.pending-task-panel {
   position: relative;
   z-index: 5;
-  display: grid;
-  grid-template-columns: minmax(270px, 0.8fr) minmax(0, 1.7fr);
-  gap: 20px;
-  min-height: 0;
-}
-
-.flow-information .flow-brief {
   display: flex;
   flex-direction: column;
-  padding: 13px 20px;
-}
-.flow-information .flow-log-panel { padding: 13px 20px; }
-.flow-information .brief-title { margin-bottom: 7px; }
-.flow-information .brief-name { font-size: clamp(18px, 1.6vw, 25px); margin-bottom: 8px; }
-.flow-information .brief-progress { flex: 1; gap: clamp(14px, 1.5vw, 24px); }
-.flow-information .brief-ring { width: clamp(74px, 9.5vh, 106px); }
-.flow-information .brief-ring::before { inset: clamp(5px, 0.8vh, 8px); }
-.flow-information .brief-ring-val { font-size: clamp(22px, 2.9vh, 32px); }
-.flow-information .brief-meta { gap: 7px; font-size: 14px; }
-.flow-information .log-head { padding-bottom: clamp(4px, 0.5vh, 7px); margin-bottom: 2px; }
-.flow-information .log-row { font-size: clamp(13px, 0.9vw, 15px); min-height: 24px; padding: 2px 0; }
-.log-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; color: #8fcee7; background: rgba(82, 223, 255, 0.08); white-space: nowrap; }
-.log-status.is-completed { color: #69e6aa; background: rgba(47, 240, 160, 0.1); }
-.log-status.is-skipped { color: #ffcf7d; background: rgba(255, 177, 61, 0.1); }
-.log-status.is-timeout, .log-status.is-issue { color: #ff9a9a; background: rgba(255, 100, 100, 0.1); }
-
-/* ===== 演练概览 ===== */
-.flow-brief {
-  position: relative;
-  z-index: 5;
-  min-width: 0;
-  padding: clamp(11px, 1.1vh, 16px) clamp(13px, 1.1vw, 18px);
-  border: 1px solid rgba(103, 232, 249, 0.22);
+  min-height: 0;
+  padding: clamp(11px, 1.2vh, 16px) clamp(14px, 1.4vw, 22px);
+  border: 1px solid rgba(81, 211, 240, 0.32);
   border-radius: 12px;
   background:
-    linear-gradient(160deg, rgba(7, 42, 76, 0.9), rgba(3, 16, 34, 0.92)),
-    repeating-linear-gradient(180deg, rgba(103, 232, 249, 0.03) 0 1px, transparent 1px 14px);
-  box-shadow: inset 0 0 22px rgba(0, 150, 220, 0.1), 0 12px 30px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(3px);
+    linear-gradient(160deg, rgba(7, 39, 68, 0.94), rgba(3, 15, 30, 0.96)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.025) 0 1px, transparent 1px 28px);
+  box-shadow:
+    inset 0 0 30px rgba(0, 162, 220, 0.1),
+    0 16px 34px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
-/* 面板顶部光带 */
-.flow-brief::before,
-.flow-log-panel::before {
+.pending-task-panel::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 12%;
-  right: 12%;
+  left: 6%;
+  right: 6%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.85), transparent);
+  background: linear-gradient(90deg, transparent, rgba(48, 236, 207, 0.2), #52dfff 48%, rgba(48, 236, 207, 0.34), transparent);
+  box-shadow: 0 0 14px rgba(82, 223, 255, 0.42);
 }
 
-.brief-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: clamp(6px, 0.7vh, 10px);
-  color: #9fc6da;
-  font-size: clamp(11px, 0.8vw, 13px);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-}
-
-.brief-sigil {
-  width: 6px;
-  height: 6px;
-  transform: rotate(45deg);
-  background: #52dfff;
-  box-shadow: 0 0 8px rgba(82, 223, 255, 0.8);
-}
-
-.brief-name {
-  margin-bottom: clamp(8px, 1vh, 12px);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  word-break: break-all;
-  color: #f5fbff;
-  font-size: clamp(15px, 1.24vw, 21px);
-  font-weight: 800;
-  line-height: 1.25;
-  text-shadow: 0 0 10px rgba(41, 243, 255, 0.28);
-}
-
-.brief-progress {
-  display: flex;
-  align-items: center;
-  gap: clamp(10px, 1vw, 16px);
-}
-
-/* 进度环：conic-gradient 由 --p（百分比数值）驱动 */
-.brief-ring {
-  --p: 0;
-  position: relative;
-  flex: 0 0 auto;
-  width: clamp(50px, 4.4vw, 68px);
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: conic-gradient(from -90deg, #2ff0a0 0 calc(var(--p) * 1%), rgba(103, 232, 249, 0.12) calc(var(--p) * 1%));
-  filter: drop-shadow(0 0 10px rgba(47, 240, 160, 0.28));
-}
-
-.brief-ring::before {
+.pending-task-panel::after {
   content: "";
   position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 26%, rgba(12, 52, 84, 0.98), rgba(4, 18, 36, 0.96));
-  border: 1px solid rgba(103, 232, 249, 0.2);
-}
-
-/* 外圈虚线装饰环：增加层次与仪表感 */
-.brief-ring::after {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  border: 1px dashed rgba(103, 232, 249, 0.28);
+  inset: 0;
+  opacity: 0.44;
+  background: radial-gradient(circle at 30% 0, rgba(52, 219, 242, 0.1), transparent 42%);
   pointer-events: none;
 }
 
-.brief-ring-val {
+.pending-task-head {
   position: relative;
-  z-index: 1;
-  color: #f5fbff;
-  font-size: clamp(14px, 1.15vw, 19px);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.brief-ring-val em {
-  margin-left: 1px;
-  color: #8fb8cd;
-  font-size: 0.62em;
-  font-style: normal;
-}
-
-.brief-ring-label {
-  color: #9fc6da;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  white-space: nowrap;
-}
-
-.brief-meta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: clamp(8px, 1.2vh, 14px);
-  font-size: clamp(11px, 0.85vw, 13.5px);
-}
-
-.brief-count {
-  overflow: hidden;
-  color: #cfe6f5;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.brief-count b {
-  color: #52dfff;
-  font-size: 1.14em;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ===== 执行日志（最新在下） ===== */
-.flow-log-panel {
-  position: relative;
-  z-index: 5;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-
-  padding: clamp(9px, 1vh, 14px) clamp(12px, 1vw, 16px) clamp(8px, 0.9vh, 12px);
-  border: 1px solid rgba(103, 232, 249, 0.22);
-  border-radius: 12px;
-  background: linear-gradient(160deg, rgba(6, 36, 66, 0.9), rgba(3, 14, 30, 0.92));
-  box-shadow: inset 0 0 22px rgba(0, 150, 220, 0.1), 0 12px 30px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(3px);
-  overflow: hidden;
-}
-
-.flow-log-panel::before {
-  background: linear-gradient(90deg, transparent, rgba(47, 240, 160, 0.8), transparent);
-}
-
-.log-head {
+  z-index: 2;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding-bottom: clamp(6px, 0.7vh, 10px);
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(103, 232, 249, 0.16);
+  gap: 16px;
+  padding-bottom: clamp(7px, 0.8vh, 10px);
+  border-bottom: 1px solid rgba(103, 232, 249, 0.15);
 }
 
-.log-title {
+.pending-task-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pending-task-sigil {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  border: 1px solid rgba(82, 223, 255, 0.6);
+  border-radius: 50%;
+  box-shadow: inset 0 0 7px rgba(82, 223, 255, 0.22), 0 0 9px rgba(82, 223, 255, 0.18);
+}
+
+.pending-task-sigil::before,
+.pending-task-sigil::after {
+  content: "";
+  position: absolute;
+  background: rgba(82, 223, 255, 0.56);
+}
+
+.pending-task-sigil::before { top: 7px; left: -4px; right: -4px; height: 1px; }
+.pending-task-sigil::after { top: -4px; bottom: -4px; left: 7px; width: 1px; }
+.pending-task-sigil i { position: absolute; inset: 5px; border-radius: 50%; background: #52dfff; box-shadow: 0 0 9px #52dfff; }
+
+.pending-task-kicker {
+  color: #75a8be;
+  font-size: clamp(10px, 0.75vw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+}
+
+.pending-task-heading strong {
+  overflow: hidden;
+  color: #ecfbff;
+  font-size: clamp(13px, 1vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 11px rgba(82, 223, 255, 0.28);
+}
+
+.pending-task-kicker::after {
+  content: "/";
+  margin-left: 9px;
+  color: rgba(126, 181, 202, 0.35);
+}
+
+.pending-task-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #8db4c8;
+  font-size: clamp(10px, 0.78vw, 12px);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.pending-task-count b {
+  color: #5ef2d1;
+  font-family: "Courier New", monospace;
+  font-size: clamp(18px, 1.45vw, 24px);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(48, 236, 207, 0.45);
+}
+
+.pending-task-layout {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.8fr);
+  gap: clamp(10px, 1vw, 16px);
+  min-height: 0;
+  padding-top: clamp(8px, 0.9vh, 12px);
+}
+
+.primary-task-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(10px, 1vh, 15px) clamp(14px, 1.3vw, 20px);
+  border: 1px solid rgba(82, 223, 255, 0.4);
+  border-radius: 9px;
+  background:
+    linear-gradient(145deg, rgba(9, 62, 85, 0.86), rgba(4, 29, 47, 0.9)),
+    repeating-linear-gradient(135deg, transparent 0 8px, rgba(82, 223, 255, 0.025) 8px 9px);
+  box-shadow: inset 0 0 22px rgba(82, 223, 255, 0.08);
+  overflow: hidden;
+  animation: task-card-arrive 420ms ease-out both;
+}
+
+.primary-task-card.is-running {
+  border-color: rgba(255, 184, 68, 0.68);
+  background:
+    radial-gradient(circle at 85% 12%, rgba(255, 183, 66, 0.18), transparent 34%),
+    linear-gradient(145deg, rgba(102, 62, 20, 0.84), rgba(39, 31, 25, 0.92));
+  box-shadow: inset 0 0 25px rgba(255, 165, 42, 0.12), 0 0 22px rgba(255, 158, 36, 0.1);
+}
+
+.primary-task-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.primary-task-status,
+.queue-task-status {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: #e8fbff;
-  font-size: clamp(12px, 0.9vw, 14.5px);
+  gap: 6px;
+  color: #72dff3;
+  font-size: clamp(9px, 0.7vw, 11px);
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
 }
 
-.log-dot {
-  width: 7px;
-  height: 7px;
+.primary-task-status i,
+.queue-task-status i {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #2ff0a0;
-  box-shadow: 0 0 8px rgba(47, 240, 160, 0.85);
-  animation: log-dot-blink 1.6s ease-in-out infinite;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
 
-.log-tail {
-  color: #7fa8bf;
-  font-size: clamp(10px, 0.72vw, 12px);
-  letter-spacing: 0.12em;
-}
+.is-running .primary-task-status,
+.queued-task-card.is-running .queue-task-status { color: #ffbf58; }
+.primary-task-card.is-running .primary-task-status i { animation: active-task-pulse 1.5s ease-in-out infinite; }
 
-.log-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(103, 232, 249, 0.3) transparent;
-  /* 顶部旧日志淡出，底部最新日志最醒目 */
-  mask-image: none;
-}
-
-.log-body::-webkit-scrollbar { width: 4px; }
-.log-body::-webkit-scrollbar-track { background: transparent; }
-.log-body::-webkit-scrollbar-thumb { background: rgba(103, 232, 249, 0.28); border-radius: 2px; }
-
-.log-empty {
-  margin: 0;
-  padding: 10px 2px;
-  color: #7fa8bf;
-  font-size: clamp(11px, 0.82vw, 13px);
-  text-align: center;
-}
-
-.log-row {
-  display: grid;
-  grid-template-columns: 64px 12px minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: baseline;
-  min-height: 24px;
-  box-sizing: border-box;
-  align-items: center;
-  padding: 2px 0;
-  border-bottom: 1px dashed rgba(103, 232, 249, 0.08);
-  font-size: clamp(11px, 0.82vw, 13.2px);
-  line-height: 1.35;
-  color: #cfe6f5;
-  animation: log-row-in 0.42s ease-out;
-}
-
-.log-row:last-child { border-bottom: none; }
-
-.log-time {
-  color: #6f97ad;
+.task-order,
+.queue-task-order {
+  color: rgba(139, 198, 219, 0.55);
+  font-family: "Courier New", monospace;
+  font-size: clamp(10px, 0.74vw, 12px);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
 }
 
-.log-icon {
-  color: #52dfff;
-  text-shadow: 0 0 8px rgba(82, 223, 255, 0.5);
-}
-
-.log-msg {
-  min-width: 0;
+.primary-task-name {
+  margin: clamp(6px, 0.8vh, 10px) 0;
   overflow: hidden;
+  color: #f3fcff;
+  font-size: clamp(17px, 1.55vw, 25px);
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 14px rgba(82, 223, 255, 0.24);
+}
+
+.primary-task-card.is-running .primary-task-name {
+  color: #fff2d2;
+  text-shadow: 0 0 16px rgba(255, 183, 66, 0.28);
+}
+
+.primary-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: #8db4c8;
+  font-size: clamp(10px, 0.76vw, 12px);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.log-row.is-warn .log-icon { color: #ffc861; text-shadow: 0 0 8px rgba(255, 200, 97, 0.5); }
-.log-row.is-warn .log-msg { color: #ffe1a3; }
-.log-row.is-error .log-icon { color: #ff8f8f; text-shadow: 0 0 8px rgba(255, 143, 143, 0.55); }
-.log-row.is-error .log-msg { color: #ffc9c9; }
+.task-owner-mark { color: #5edfcf; font-size: 8px; text-shadow: 0 0 7px rgba(94, 223, 207, 0.7); }
 
-@keyframes log-dot-blink {
-  0%, 100% { opacity: 0.4; transform: scale(0.82); }
-  50% { opacity: 1; transform: scale(1); }
+.primary-task-energy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(82, 223, 255, 0.08);
 }
 
-@keyframes log-row-in {
-  from { opacity: 0; transform: translateY(7px); }
+.primary-task-energy i {
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #52dfff, transparent);
+  animation: task-energy-scan 2.4s ease-in-out infinite;
+}
+
+.primary-task-card.is-running .primary-task-energy i { background: linear-gradient(90deg, transparent, #ffb642, #ffe6a0, transparent); }
+
+.task-queue {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+
+.task-queue-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #b9dbe8;
+  font-size: clamp(10px, 0.76vw, 12px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.task-queue-head small { color: #638aa0; font-size: 0.88em; font-weight: 500; letter-spacing: 0.08em; }
+
+.task-queue-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(48px, 1fr);
+  gap: 7px;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(82, 223, 255, 0.28) transparent;
+}
+
+.task-queue-grid::-webkit-scrollbar { width: 4px; }
+.task-queue-grid::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(82, 223, 255, 0.28); }
+
+.queued-task-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(7px, 0.7vw, 11px);
+  padding: 7px clamp(8px, 0.75vw, 12px);
+  border: 1px solid rgba(67, 145, 178, 0.24);
+  border-left: 2px solid rgba(82, 190, 226, 0.58);
+  border-radius: 7px;
+  background: linear-gradient(100deg, rgba(8, 48, 70, 0.82), rgba(5, 31, 50, 0.72));
+  animation: task-card-arrive 420ms ease-out both;
+}
+
+.queued-task-card.is-running {
+  border-color: rgba(255, 184, 68, 0.42);
+  border-left-color: #ffb642;
+  background: linear-gradient(100deg, rgba(91, 57, 21, 0.76), rgba(42, 33, 25, 0.72));
+}
+
+.queue-task-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.queue-task-copy strong { overflow: hidden; color: #dff6fc; font-size: clamp(11px, 0.86vw, 14px); white-space: nowrap; text-overflow: ellipsis; }
+.queue-task-copy > span { overflow: hidden; color: #6f9aae; font-size: clamp(9px, 0.65vw, 11px); white-space: nowrap; text-overflow: ellipsis; }
+.queued-task-card.is-running .queue-task-copy strong { color: #ffe7b7; }
+
+.task-queue-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(82, 223, 255, 0.18);
+  border-radius: 8px;
+  color: #698fa2;
+  font-size: clamp(10px, 0.75vw, 12px);
+  letter-spacing: 0.12em;
+}
+
+.pending-task-state {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: #84adbf;
+}
+
+.pending-state-orbit {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border: 1px dashed rgba(82, 223, 255, 0.44);
+  border-radius: 50%;
+}
+
+.pending-state-orbit::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(82, 223, 255, 0.28); border-radius: 50%; }
+.pending-state-orbit i { position: absolute; inset: 19px; border-radius: 50%; background: #52dfff; box-shadow: 0 0 12px #52dfff; }
+.pending-task-panel.is-complete .pending-state-orbit { border-color: rgba(55, 236, 164, 0.52); }
+.pending-task-panel.is-complete .pending-state-orbit i { background: #37eca4; box-shadow: 0 0 12px #37eca4; }
+
+.pending-task-state > div { display: flex; flex-direction: column; gap: 6px; }
+.pending-task-state strong { color: #dff7fc; font-size: clamp(14px, 1.05vw, 17px); letter-spacing: 0.08em; }
+.pending-task-panel.is-complete .pending-task-state strong { color: #a8f3cf; }
+.pending-task-state span { font-size: clamp(10px, 0.75vw, 12px); letter-spacing: 0.08em; }
+
+@keyframes active-task-pulse {
+  0%, 100% { opacity: 0.52; transform: scale(0.78); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+
+@keyframes task-energy-scan {
+  0% { transform: translateX(-100%); opacity: 0; }
+  18%, 78% { opacity: 1; }
+  100% { transform: translateX(265%); opacity: 0; }
+}
+
+@keyframes task-card-arrive {
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -3818,8 +3804,10 @@ function fmtTime(ts: string): string {
   .seq-comet,
   .seq-head::before,
   .seq-head::after,
-  .log-dot,
-  .log-row,
+  .primary-task-status i,
+  .primary-task-energy i,
+  .primary-task-card,
+  .queued-task-card,
   .signal-bars i {
     animation: none !important;
   }
@@ -3866,11 +3854,12 @@ function fmtTime(ts: string): string {
     font-size: 0.78em;
   }
   .flow-board { padding-inline: 24px; }
+  .task-queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 }
 
 @media (max-width: 1060px) {
-  .flow-information { grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.5fr); }
+  .pending-task-layout { grid-template-columns: minmax(210px, 0.68fr) minmax(0, 1.7fr); }
   .phase-card { padding-inline: 8px; }
   .phase-head .phase-name { font-size: 14px; }
   .phase-status {
@@ -3907,14 +3896,12 @@ function fmtTime(ts: string): string {
   transform: scale(0.95);
 }
 @media (max-height: 760px) {
-  .flow-information .flow-brief,
-  .flow-information .flow-log-panel { padding: 10px 16px; }
-  .flow-information .brief-title { margin-bottom: 4px; }
-  .flow-information .brief-name { margin-bottom: 6px; font-size: 18px; }
-  .flow-information .brief-ring { width: 70px; }
-  .flow-information .brief-ring-val { font-size: 20px; }
-  .flow-information .brief-meta { gap: 5px; font-size: 12px; }
-  .flow-information .log-row { min-height: 24px; padding: 2px 0; }
+  .pending-task-panel { padding-block: 9px; }
+  .pending-task-head { padding-bottom: 6px; }
+  .pending-task-layout { padding-top: 7px; }
+  .primary-task-name { margin-block: 5px; font-size: 17px; }
+  .task-queue-head { margin-bottom: 5px; }
+  .task-queue-grid { grid-auto-rows: minmax(42px, 1fr); }
 }
 </style>
 
@@ -3950,13 +3937,11 @@ function fmtTime(ts: string): string {
 .app-main:has(.screen-root)::-webkit-scrollbar { display: none !important; }
 .app-content:has(.screen-root)::-webkit-scrollbar { display: none !important; }
 @media (max-height: 760px) {
-  .flow-information .flow-brief,
-  .flow-information .flow-log-panel { padding: 10px 16px; }
-  .flow-information .brief-title { margin-bottom: 4px; }
-  .flow-information .brief-name { margin-bottom: 6px; font-size: 18px; }
-  .flow-information .brief-ring { width: 70px; }
-  .flow-information .brief-ring-val { font-size: 20px; }
-  .flow-information .brief-meta { gap: 5px; font-size: 12px; }
-  .flow-information .log-row { min-height: 24px; padding: 2px 0; }
+  .pending-task-panel { padding-block: 9px; }
+  .pending-task-head { padding-bottom: 6px; }
+  .pending-task-layout { padding-top: 7px; }
+  .primary-task-name { margin-block: 5px; font-size: 17px; }
+  .task-queue-head { margin-bottom: 5px; }
+  .task-queue-grid { grid-auto-rows: minmax(42px, 1fr); }
 }
 </style>
