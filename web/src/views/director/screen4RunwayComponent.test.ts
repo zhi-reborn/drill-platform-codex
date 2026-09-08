@@ -33,4 +33,9 @@ describe('screen4 runway component', () => {
     expect(styles).toContain('.runway-node.is-issue')
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
   })
+
+  it('keeps SVG positioning transforms out of group animations', () => {
+    expect(styles).toMatch(/@keyframes node-arrive\s*\{\s*from \{ opacity: 0; \}\s*to \{ opacity: 1; \}\s*\}/)
+    expect(styles).toMatch(/@keyframes baton-hover\s*\{\s*0%, 100% \{ opacity: \.62; \}\s*50% \{ opacity: 1; \}\s*\}/)
+  })
 })

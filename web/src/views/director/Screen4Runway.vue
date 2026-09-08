@@ -641,8 +641,8 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 }
 
 @keyframes node-arrive {
-  from { opacity: 0; transform: scale(.74); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes node-pulse {
@@ -660,8 +660,8 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 }
 
 @keyframes baton-hover {
-  0%, 100% { opacity: .76; transform: translateY(-2px); }
-  50% { opacity: 1; transform: translateY(2px); }
+  0%, 100% { opacity: .62; }
+  50% { opacity: 1; }
 }
 
 @media (max-width: 1280px) {
