@@ -10,6 +10,16 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).not.toMatch(/import\s+ScreenView2|<ScreenView2/)
   })
 
+  it('renders its own runway instead of the old task-card flow', () => {
+    expect(screen4Source).toContain("import Screen4Runway from './Screen4Runway.vue'")
+    expect(screen4Source).toContain('<Screen4Runway')
+    expect(screen4Source).toContain(':phase-name="currentPhaseData?.name || \'当前阶段\'"')
+    expect(screen4Source).toContain(':nodes="runwayNodes"')
+    expect(screen4Source).not.toContain('ref="flowTrackRef"')
+    expect(screen4Source).not.toContain('class="node-steps"')
+    expect(screen4Source).not.toContain("from '@/components/screen/PhaseRing.vue'")
+  })
+
   it('places the screen4 button after screen3 and opens the independent route', () => {
     expect(monitorSource).toMatch(/@click="viewScreen3"[\s\S]*?大屏3[\s\S]*?@click="viewScreen4"[\s\S]*?大屏4/)
     expect(monitorSource).toContain('window.open(`/director/screen4/${drillId.value}`, \'_blank\')')
