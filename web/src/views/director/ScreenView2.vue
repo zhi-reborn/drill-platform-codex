@@ -75,8 +75,18 @@
                   <span v-for="seg in phase.segmentCount" :key="seg" :class="{ filled: seg <= phase.filledSegments }" />
                 </span>
                 <span class="phase-stats">
-                  <span><b>{{ phase.completedPhaseSteps }}</b>/{{ phase.totalPhaseSteps }}<em>环节</em></span>
-                  <span><b>{{ phase.completedSteps }}</b>/{{ phase.totalSteps }}<em>步骤</em></span>
+                  <span class="stat-cell" :aria-label="`${phase.completedPhaseSteps}/${phase.totalPhaseSteps} 环节`">
+                    <b>{{ phase.completedPhaseSteps }}</b>
+                    <span class="stat-divider" aria-hidden="true">/</span>
+                    <span class="stat-total">{{ phase.totalPhaseSteps }}</span>
+                    <em>环节</em>
+                  </span>
+                  <span class="stat-cell" :aria-label="`${phase.completedSteps}/${phase.totalSteps} 步骤`">
+                    <b>{{ phase.completedSteps }}</b>
+                    <span class="stat-divider" aria-hidden="true">/</span>
+                    <span class="stat-total">{{ phase.totalSteps }}</span>
+                    <em>步骤</em>
+                  </span>
                 </span>
               </button>
               <span v-if="index < phaseCards.length - 1" class="phase-sequence-arrow" :class="'is-' + phase.status" aria-hidden="true">
@@ -474,11 +484,12 @@ const phaseCards = computed(() => {
   return treeData.value.map(phase => {
     const allSteps = phase.phaseSteps.flatMap(ps => ps.stepNodes)
     const leafSteps = allSteps.filter(isLeafStep)
+    const visiblePhaseSteps = phase.phaseSteps.filter(ps => ps.name !== phase.name)
     const status = getPhaseStatus(phase)
     const completedSteps = leafSteps.filter(s => s.status === 'completed' || s.status === 'skipped').length
     const totalSteps = leafSteps.length
-    const completedPhaseSteps = phase.phaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length
-    const totalPhaseSteps = phase.phaseSteps.length || 1
+    const completedPhaseSteps = visiblePhaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length
+    const totalPhaseSteps = visiblePhaseSteps.length
     const segmentCount = 20
     const filledSegments = Math.round((completedSteps / (totalSteps || 1)) * segmentCount)
     return {
@@ -3395,11 +3406,14 @@ function fmtTime(ts: string): string {
   font-family: "Courier New", monospace;
   font-size: clamp(12px, 1.08vw, 18px);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   text-shadow: 0 0 10px rgba(28, 222, 255, 0.34);
 }
 
-.phase-stats span {
+.phase-stats > .stat-cell {
+  display: inline-flex;
+  align-items: baseline;
   min-width: 0;
   padding: clamp(1px, 0.22vh, 3px) clamp(5px, 0.55vw, 8px);
   border-radius: 8px;
@@ -3418,6 +3432,18 @@ function fmtTime(ts: string): string {
 .is-done .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(47, 240, 160, 0.48); }
 .is-running .phase-stats b { text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(255, 177, 61, 0.52); }
 .is-pending .phase-stats b { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 18px rgba(138, 207, 255, 0.36); }
+
+.stat-divider {
+  margin: 0 2px;
+  color: rgba(197, 232, 248, 0.48);
+  font-size: 0.86em;
+}
+
+.stat-total {
+  color: rgba(233, 248, 255, 0.82);
+  font-size: 0.94em;
+  font-weight: 700;
+}
 
 .phase-stats em {
   margin-left: 8px;
@@ -4656,7 +4682,7 @@ function fmtTime(ts: string): string {
     gap: 4px;
     font-size: clamp(13px, 1.6vw, 16px);
   }
-  .phase-stats span {
+  .phase-stats > .stat-cell {
     flex: 1 1 0;
     padding: 1px 4px;
     overflow: hidden;

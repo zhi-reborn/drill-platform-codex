@@ -30,6 +30,20 @@ describe('phase chamber template wiring', () => {
     expect(template).toContain(':title="`查看${phase.name}`"')
   })
 
+  it('counts only visible business phase steps and renders stable numeric hierarchy', () => {
+    expect(source).toContain('const visiblePhaseSteps = phase.phaseSteps.filter(ps => ps.name !== phase.name)')
+    expect(source).toContain("visiblePhaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length")
+    expect(source).toContain('const totalPhaseSteps = visiblePhaseSteps.length')
+    expect(source).not.toContain('const totalPhaseSteps = phase.phaseSteps.length || 1')
+    expect(template).toContain('class="stat-divider"')
+    expect(template).toContain('class="stat-total"')
+
+    const styles = descriptor.styles.map(style => style.content).join('\n')
+    expect(styles).toMatch(/\.phase-stats\s*\{[^}]*font-variant-numeric:\s*tabular-nums/)
+    expect(styles).toContain('.stat-divider')
+    expect(styles).toContain('.stat-total')
+  })
+
   it('reloads for a new drill and guards against stale responses', () => {
     expect(source.includes('watch(drillId,')).toBe(true)
     expect(source.includes('if (requestId !== drillId.value) return')).toBe(true)
