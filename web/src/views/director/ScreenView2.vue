@@ -120,8 +120,14 @@
                     <span class="virtual-name">开始</span>
                   </div>
                 </div>
-                <span class="flow-arrow is-virtual" :style="virtualArrowStyle('start')" aria-hidden="true">
+                <span
+                  class="flow-arrow is-virtual"
+                  :class="{ 'is-done': startEdgeActive }"
+                  :style="virtualArrowStyle('start')"
+                  aria-hidden="true"
+                >
                   <i class="arrow-port" />
+                  <i class="arrow-fill" :style="{ width: startEdgeActive ? '100%' : '0%' }" />
                 </span>
                 <template v-for="(node, index) in flowNodes" :key="node.id">
                   <div class="flow-node-wrap" :style="focusStyle(index)">
@@ -161,6 +167,7 @@
                     aria-hidden="true"
                   >
                     <i class="arrow-port" />
+                    <i class="arrow-fill" :style="{ width: arrowFillPct(node) + '%' }" />
                   </span>
                 </template>
                 <!-- 虚拟结束节点：末尾环节聚焦时右侧仍有延伸 -->
@@ -524,6 +531,20 @@ const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPh
   return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status) }))
 }))
 
+// 出边填充宽度：已完成=整段导通，进行中=按环节内步骤完成率向前推进（进度条语义）
+function arrowFillPct(node: { status: string; steps: { status: string }[] }): number {
+  if (node.status === 'done') return 100
+  if (node.status !== 'running' || !node.steps.length) return 0
+  const passed = node.steps.filter(s => s.status === 'done' || s.status === 'skipped').length
+  return Math.round((passed / node.steps.length) * 100)
+}
+
+// 起点边界 → 首个环节：环节启动（进行中/已完成）即视为已导通，绿色连接
+const startEdgeActive = computed(() => {
+  const first = flowNodes.value[0]
+  return !!first && (first.status === 'done' || first.status === 'running')
+})
+
 // 环节轮播：单行横向排列，进行中节点聚焦居中（游戏选人式）
 const flowViewportRef = ref<HTMLElement | null>(null)
 const flowTrackRef = ref<HTMLElement | null>(null)
@@ -560,6 +581,8 @@ function arrowStyle(index: number): CSSProperties {
     marginLeft: `${(-extendL).toFixed(1)}px`,
     marginRight: `${(-extendR).toFixed(1)}px`,
     opacity: Math.min(left.opacity, right.opacity).toFixed(3),
+    // 充电前沿位置（进行中出边的脉冲光斑跟随填充进度）
+    '--fill-w': `${arrowFillPct(flowNodes.value[index])}%`,
   }
 }
 
@@ -579,11 +602,16 @@ function virtualArrowStyle(side: 'start' | 'end'): CSSProperties {
   const node = focusPresentation(nodeIndex)
   const capInset = (w * (1 - VIRTUAL_CAP_RATIO * virtual.scale)) / 2
   const cardExtend = (w * (1 - node.scale)) / 2
-  return {
+  const style: CSSProperties = {
     marginLeft: `${(-(side === 'start' ? capInset : cardExtend)).toFixed(1)}px`,
     marginRight: `${(-(side === 'start' ? cardExtend : capInset)).toFixed(1)}px`,
     opacity: Math.min(virtual.opacity, node.opacity).toFixed(3),
   }
+  if (side === 'end') {
+    // 末环节 → 终点靶心的充电前沿同样跟随其填充进度
+    style['--fill-w'] = `${arrowFillPct(flowNodes.value[nodeIndex])}%`
+  }
+  return style
 }
 
 // 平移轨道，使进行中节点对准视口中线
@@ -4313,25 +4341,31 @@ function fmtTime(ts: string): string {
   50% { opacity: 1; transform: scale(1.15); }
 }
 
+/* ===== 环节间能量轨道：暗槽底轨 + 导通填充 ===== */
 .flow-arrow {
   --arrow-c1: #53c7e6;
   --arrow-c2: #57c7ff;
   --arrow-glow: rgba(80, 200, 255, 0.4);
+  --arrow-head: var(--arrow-c2);
   position: relative;
   flex: 0 0 auto;
   align-self: flex-start;
-  /* 对齐环节标签中线（track 顶部对齐 + 固定标签高度） */
-  margin-top: calc(var(--node-tag-h) / 2 - 2px);
+  /* 底轨中线对齐环节标签中线（高度随状态微调也不偏移） */
+  margin-top: calc(var(--node-tag-h) / 2);
+  transform: translateY(-50%);
   width: var(--arrow-gap);
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--arrow-c1), var(--arrow-c2));
-  box-shadow: 0 0 10px var(--arrow-glow);
+  height: 4px;
+  border-radius: 3px;
+  /* 休眠底轨：暗槽 + 细刻度，读作一条等待推进的跑道 */
+  background:
+    repeating-linear-gradient(90deg, rgba(126, 178, 214, 0.15) 0 1.5px, transparent 1.5px 8px),
+    linear-gradient(180deg, rgba(9, 32, 56, 0.92), rgba(18, 48, 78, 0.6));
+  box-shadow: inset 0 1px 2px rgba(2, 10, 20, 0.9), inset 0 -1px 1px rgba(140, 200, 240, 0.1);
   z-index: 1;
-  transition: opacity 0.7s ease;
+  transition: opacity 0.7s ease, height 0.45s ease;
 }
 
-/* 焊接在左侧卡片边缘的菱形接点：一半压在卡片边框下，视觉上无缝 */
+/* 焊接在左侧卡片边缘的菱形接点：一半压在卡片边框下，随导通状态着色 */
 .arrow-port {
   position: absolute;
   left: -3px;
@@ -4345,21 +4379,20 @@ function fmtTime(ts: string): string {
   pointer-events: none;
 }
 
-/* 箭头三角：尖端没入右侧卡片边框 */
-.flow-arrow::after {
-  content: "";
+/* 导通填充：宽度由脚本按环节步骤完成率推进（进度条语义） */
+.arrow-fill {
   position: absolute;
-  right: -1px;
-  top: 50%;
-  transform: translateY(-50%);
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 9px solid var(--arrow-c2);
-  filter: drop-shadow(0 0 4px var(--arrow-glow));
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--arrow-c1), var(--arrow-c2));
+  filter: drop-shadow(0 0 3px var(--arrow-glow)) drop-shadow(0 0 8px var(--arrow-glow));
+  transition: width 0.9s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.5s ease;
 }
 
-/* 沿箭头全程流动的光点 */
-.flow-arrow::before {
+/* 导通段内的行进光点：只沿点亮部分流动 */
+.arrow-fill::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -4368,31 +4401,75 @@ function fmtTime(ts: string): string {
   height: 6px;
   margin-top: -3px;
   border-radius: 50%;
-  background: radial-gradient(circle, #fff 0 26%, #bff6ff 52%, transparent 74%);
-  filter: drop-shadow(0 0 6px rgba(190, 250, 255, 0.9));
+  background: radial-gradient(circle, #fff 0 26%, var(--arrow-dot, #bff6ff) 52%, transparent 74%);
   animation: arrow-dot-flow 1.7s linear infinite;
   pointer-events: none;
 }
 
-/* 状态着色：已完成节点的出边（绿） */
-.flow-arrow.is-done {
-  --arrow-c1: #4ade80;
-  --arrow-c2: #22c55e;
-  --arrow-glow: rgba(74, 222, 128, 0.6);
+/* 方向箭镞：尖端没入右侧卡片边框，休眠时呈暗色 */
+.flow-arrow::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid var(--arrow-head);
+  filter: drop-shadow(0 0 4px var(--arrow-glow));
 }
 
-/* 进行中节点的出边（金） */
+/* 虚拟端点的衔接轨道：先弱化，随后被具体状态覆盖（末环节完成时终点前也导通） */
+.flow-arrow.is-virtual {
+  --arrow-c2: rgba(94, 176, 210, 0.6);
+  --arrow-glow: rgba(90, 170, 210, 0.22);
+}
+
+/* 待执行节点的出边：仅剩方向感 */
+.flow-arrow.is-pending {
+  --arrow-c2: #4a9ab8;
+  --arrow-glow: rgba(90, 170, 210, 0.3);
+}
+
+/* 进行中节点的出边：金色能量按完成率向前推进，轨道略厚以突出充电中 */
 .flow-arrow.is-running {
   --arrow-c1: #ffd46a;
   --arrow-c2: #ff9a2f;
   --arrow-glow: rgba(255, 177, 61, 0.62);
+  --arrow-dot: #ffe3ad;
+  height: 5px;
 }
 
-/* 待执行节点的出边（冷蓝） */
-.flow-arrow.is-pending {
-  --arrow-c1: #3b7f9f;
-  --arrow-c2: #4a9ab8;
-  --arrow-glow: rgba(90, 170, 210, 0.3);
+/* 充电前沿：跟随填充进度的脉冲光斑，能量正在凿向下一段 */
+.flow-arrow.is-running::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: var(--fill-w, 0%);
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 26%, #ffd98a 46%, rgba(255, 170, 60, 0.4) 64%, transparent 72%);
+  filter: drop-shadow(0 0 5px rgba(255, 205, 120, 0.95));
+  animation: arrow-frontier-pulse 1.15s ease-in-out infinite;
+  transition: left 0.9s cubic-bezier(0.25, 1, 0.5, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 已完成节点的出边：绿色导通，完成环节连成一线 */
+.flow-arrow.is-done {
+  --arrow-c1: #4ade80;
+  --arrow-c2: #2fd96b;
+  --arrow-glow: rgba(74, 222, 128, 0.55);
+  --arrow-dot: #b6ffd9;
+}
+
+/* 未导通段收起填充，避免零宽辉光残影 */
+.flow-arrow.is-pending .arrow-fill,
+.flow-arrow.is-virtual:not(.is-done):not(.is-running) .arrow-fill {
+  opacity: 0;
 }
 
 /* ===== 虚拟起止节点（轨道端帽） ===== */
@@ -4547,17 +4624,7 @@ function fmtTime(ts: string): string {
   pointer-events: none;
 }
 
-/* 虚拟端点的衔接箭头：弱化冷色，暗示边界 */
-.flow-arrow.is-virtual {
-  --arrow-c1: rgba(70, 145, 178, 0.6);
-  --arrow-c2: rgba(94, 176, 210, 0.6);
-  --arrow-glow: rgba(90, 170, 210, 0.22);
-}
-
-.flow-arrow.is-virtual::before {
-  filter: drop-shadow(0 0 4px rgba(120, 200, 235, 0.45));
-  opacity: 0.55;
-}
+/* 虚拟端点的衔接箭头规则已并入上方能量轨道区（先弱化、可被状态覆盖） */
 
 @keyframes rail-cap-breathe {
   0%, 100% { opacity: 0.52; filter: brightness(0.82); }
@@ -4569,6 +4636,12 @@ function fmtTime(ts: string): string {
   15% { opacity: 1; }
   85% { opacity: 1; }
   100% { left: calc(100% - 6px); opacity: 0; }
+}
+
+/* 充电前沿的呼吸脉冲 */
+@keyframes arrow-frontier-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(0.68); opacity: 0.66; }
+  50% { transform: translate(-50%, -50%) scale(1.22); opacity: 1; }
 }
 
 /* ===== 信号条（板头实时状态灯） ===== */
@@ -4622,7 +4695,8 @@ function fmtTime(ts: string): string {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .phase-card, .flow-track, .flow-node-wrap { transition: none !important; }
+  .phase-card, .flow-track, .flow-node-wrap,
+  .flow-arrow, .arrow-fill, .flow-arrow.is-running::before { transition: none !important; }
   .label-pulse { animation: none !important; }
   .rail-cap-core,
   .rail-cap-core::before { animation: none !important; }
@@ -4646,7 +4720,8 @@ function fmtTime(ts: string): string {
   .seq-head::after,
   .log-dot,
   .log-row,
-  .flow-arrow::before,
+  .arrow-fill::before,
+  .flow-arrow.is-running::before,
   .signal-bars i {
     animation: none !important;
   }

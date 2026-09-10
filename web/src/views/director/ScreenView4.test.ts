@@ -25,20 +25,28 @@ describe('independent screen4 entry', () => {
   it('renders its own runway instead of the old task-card flow', () => {
     expect(screen4Source).toContain("import Screen4Runway from './Screen4Runway.vue'")
     expect(screen4Source).toContain('<Screen4Runway')
-    expect(screen4Source).toContain(':phase-name="currentPhaseData?.name || \'当前阶段\'"')
+    expect(screen4Source).not.toContain(':phase-name=')
     expect(screen4Source).toContain(':nodes="runwayNodes"')
+    expect(screen4Source).toContain(':completed-steps="overallStepProgress.completed"')
+    expect(screen4Source).toContain(':total-steps="overallStepProgress.total"')
+    expect(screen4Source).toContain('const overallStepProgress = computed(() =>')
     expect(screen4Source).not.toContain('ref="flowTrackRef"')
     expect(screen4Source).not.toContain('class="node-steps"')
     expect(screen4Source).not.toContain("from '@/components/screen/PhaseRing.vue'")
   })
 
-  it('replaces the overview and log panels with an independent pending task command deck', () => {
-    expect(screen4Source).toContain("from './screen4PendingTasks'")
-    expect(screen4Source).toContain('class="pending-task-panel"')
-    expect(screen4Source).toContain('class="primary-task-card"')
-    expect(screen4Source).toContain('class="task-queue-grid"')
-    expect(screen4Source).toContain('当前阶段待完成任务已清零')
-    expect(screen4Source).toContain('该阶段暂无任务配置')
+  it('gives the runway full visual priority without a redundant board header', () => {
+    expect(screen4Source).not.toContain('<header class="flow-board-heading"')
+    expect(screen4Source).not.toContain('class="board-signal"')
+    expect(screen4Source).not.toContain('.flow-board-heading')
+    expect(screen4Source).toContain('padding: clamp(10px, 1.3vh, 14px) clamp(12px, 1.5vw, 28px) clamp(8px, 1vh, 14px)')
+  })
+
+  it('removes the pending task area so the runway uses the released space', () => {
+    expect(screen4Source).not.toContain("from './screen4PendingTasks'")
+    expect(screen4Source).not.toContain('class="pending-task-panel"')
+    expect(screen4Source).not.toContain('aria-label="当前环节待完成任务"')
+    expect(screen4Source).not.toContain('pendingTaskPanel')
     expect(screen4Source).not.toContain('class="flow-brief"')
     expect(screen4Source).not.toContain('class="flow-log-panel"')
     expect(screen4Source).not.toContain("from './screenLogs'")

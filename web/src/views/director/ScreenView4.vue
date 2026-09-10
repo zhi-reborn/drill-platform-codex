@@ -100,102 +100,15 @@
 
           <section id="selected-phase-flow" class="flow-board" :class="{ 'all-done': selectedPhaseStatus === 'done', 'is-preview': selectedPhaseStatus !== 'running' }">
             <div class="flow-board-grid" />
-            <header class="flow-board-heading" aria-live="polite">
-              <div class="flow-board-label">
-                <span class="label-pulse" aria-hidden="true" />
-                <span>{{ selectedPhaseStatus === 'running' ? '当前环节' : '阶段预览' }}</span>
-              </div>
-              <div class="board-signal" :class="{ live: wsConnected }">
-                <span class="signal-bars"><i /><i /><i /></span>
-                <span>{{ wsConnected ? '实时联动' : '轮询同步' }}</span>
-              </div>
-            </header>
             <div v-if="!flowNodes.length" class="flow-empty">该阶段暂无环节</div>
             <Screen4Runway
               v-show="flowNodes.length"
-              :phase-name="currentPhaseData?.name || '当前阶段'"
               :phase-status="selectedPhaseStatus"
               :nodes="runwayNodes"
+              :completed-steps="overallStepProgress.completed"
+              :total-steps="overallStepProgress.total"
+              :running-steps="runningNodeSteps"
             />
-
-            <section
-              class="pending-task-panel"
-              :class="'is-' + pendingTaskPanel.state"
-              aria-label="当前环节待完成任务"
-            >
-              <header class="pending-task-head">
-                <div class="pending-task-heading">
-                  <span class="pending-task-sigil" aria-hidden="true"><i /></span>
-                  <span class="pending-task-kicker">当前环节</span>
-                  <strong :title="pendingTaskPanel.phaseStepName">
-                    {{ pendingTaskPanel.phaseStepName || currentPhaseData?.name || '当前阶段' }}
-                  </strong>
-                </div>
-                <div v-if="pendingTaskPanel.state === 'ready'" class="pending-task-count" aria-live="polite">
-                  <b>{{ pendingTaskPanel.tasks.length }}</b>
-                  <span>项待完成</span>
-                </div>
-              </header>
-
-              <div
-                v-if="pendingTaskPanel.state === 'ready' && pendingTaskPanel.primaryTask"
-                class="pending-task-layout"
-                aria-live="polite"
-              >
-                <article
-                  class="primary-task-card"
-                  :class="'is-' + pendingTaskPanel.primaryTask.status"
-                  :aria-label="`${taskStatusText(pendingTaskPanel.primaryTask)}：${pendingTaskPanel.primaryTask.name}`"
-                >
-                  <div class="primary-task-topline">
-                    <span class="primary-task-status">
-                      <i aria-hidden="true" />{{ taskStatusText(pendingTaskPanel.primaryTask) }}
-                    </span>
-                    <span class="task-order">01</span>
-                  </div>
-                  <strong class="primary-task-name" :title="pendingTaskPanel.primaryTask.name">
-                    {{ pendingTaskPanel.primaryTask.name }}
-                  </strong>
-                  <div class="primary-task-meta">
-                    <span class="task-owner-mark" aria-hidden="true">◆</span>
-                    <span>{{ taskOwner(pendingTaskPanel.primaryTask) }}</span>
-                  </div>
-                  <div class="primary-task-energy" aria-hidden="true"><i /></div>
-                </article>
-
-                <section class="task-queue" aria-label="候场任务">
-                  <header class="task-queue-head">
-                    <span>候场矩阵</span>
-                    <small>{{ pendingTaskPanel.queuedTasks.length ? '按执行顺序排列' : '当前环节仅剩主任务' }}</small>
-                  </header>
-                  <div v-if="pendingTaskPanel.queuedTasks.length" class="task-queue-grid">
-                    <article
-                      v-for="(task, index) in pendingTaskPanel.queuedTasks"
-                      :key="task.id"
-                      class="queued-task-card"
-                      :class="'is-' + task.status"
-                      :aria-label="`${taskStatusText(task)}：${task.name}`"
-                    >
-                      <span class="queue-task-order">{{ taskOrderLabel(index + 2) }}</span>
-                      <div class="queue-task-copy">
-                        <strong :title="task.name">{{ task.name }}</strong>
-                        <span :title="taskOwner(task)">{{ taskOwner(task) }}</span>
-                      </div>
-                      <span class="queue-task-status"><i aria-hidden="true" />{{ taskStatusText(task) }}</span>
-                    </article>
-                  </div>
-                  <div v-else class="task-queue-empty">等待当前任务完成</div>
-                </section>
-              </div>
-
-              <div v-else class="pending-task-state" role="status" aria-live="polite">
-                <span class="pending-state-orbit" aria-hidden="true"><i /></span>
-                <div>
-                  <strong>{{ pendingTaskPanel.state === 'complete' ? '当前阶段待完成任务已清零' : '该阶段暂无任务配置' }}</strong>
-                  <span>{{ pendingTaskPanel.state === 'complete' ? '全部任务均已结束，可切换阶段查看' : '等待任务编排数据同步' }}</span>
-                </div>
-              </div>
-            </section>
           </section>
 
         </section>
@@ -233,7 +146,6 @@ import { useRoute } from 'vue-router'
 import { FullScreen } from '@element-plus/icons-vue'
 import Screen4Runway from './Screen4Runway.vue'
 import { getScreen4RunwayProgress, type Screen4RunwayStatus } from './screen4Runway'
-import { buildScreen4PendingTaskPanel } from './screen4PendingTasks'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance } from '@/types/instance'
@@ -421,23 +333,13 @@ const phaseSummaries = computed(() => treeData.value.map(phase => ({ name: phase
 const { selectedPhaseIdx } = useScreenPhaseSelection(phaseSummaries, drillId)
 const currentPhaseData = computed<TreeNodePhase | null>(() => treeData.value[selectedPhaseIdx.value] ?? null)
 const selectedPhaseStatus = computed(() => phaseSummaries.value[selectedPhaseIdx.value]?.status ?? 'pending')
-const pendingTaskPanel = computed(() => buildScreen4PendingTaskPanel(
-  currentPhaseData.value?.name ?? '',
-  currentPhaseData.value?.phaseSteps ?? [],
-  isLeafStep,
-))
-
-function taskOwner(step: StepInstance): string {
-  return step.executor_team || step.assignee_names || '待分配'
-}
-
-function taskStatusText(step: StepInstance): string {
-  return step.status === 'running' ? '执行中' : '待执行'
-}
-
-function taskOrderLabel(index: number): string {
-  return String(index).padStart(2, '0')
-}
+const overallStepProgress = computed(() => {
+  const leafSteps = steps.value.filter(isLeafStep)
+  return {
+    completed: leafSteps.filter(step => step.status === 'completed' || step.status === 'skipped').length,
+    total: leafSteps.length,
+  }
+})
 
 function selectPhase(index: number) {
   selectedPhaseIdx.value = index
@@ -494,6 +396,12 @@ const runwayNodes = computed(() => flowNodes.value.map(node => {
     total: progress.total,
   }
 }))
+
+// 当前运行环节的任务列表：驱动跑道底部任务传送带。
+const runningNodeSteps = computed(() => {
+  const running = flowNodes.value.find(node => node.status === 'running')
+  return running ? running.steps : []
+})
 
 // ======== 所选阶段与环节内容的连接 ========
 const phaseFlowRef = ref<HTMLElement | null>(null)
@@ -3025,17 +2933,22 @@ function fmt(d: Date): string {
   height: calc(100% - 18px);
   padding: clamp(7px, 0.72vw, 13px) clamp(10px, 1.15vw, 20px);
   border: 1px solid rgba(72, 124, 177, 0.28);
-  border-radius: 10px;
-  background: linear-gradient(180deg, #102e49, #081d34);
-  box-shadow: inset 0 -3px 0 rgba(65, 120, 170, 0.22);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 82% 0, rgba(89, 207, 239, 0.09), transparent 42%),
+    linear-gradient(180deg, #102e49, #081d34);
+  box-shadow:
+    inset 0 1px 0 rgba(208, 244, 255, 0.05),
+    inset 0 -3px 0 rgba(65, 120, 170, 0.22),
+    0 8px 24px rgba(0, 9, 22, 0.18);
   overflow: hidden;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
-.phase-card:hover { border-color: rgba(105, 219, 248, 0.8); }
+.phase-card:hover { border-color: rgba(105, 219, 248, 0.8); transform: translateY(-2px); }
 .phase-card:focus-visible { outline: 2px solid #ddfbff; outline-offset: 3px; }
 
 .phase-card-grid {
@@ -3079,9 +2992,10 @@ function fmt(d: Date): string {
   height: 100%;
   padding-bottom: 24px;
   border-color: transparent;
-  border-radius: 10px 10px 0 0;
+  border-radius: 12px 12px 0 0;
   background: linear-gradient(180deg, var(--phase-tab-tint), transparent 95%);
   box-shadow: none;
+  transform: none;
 }
 .phase-card.is-running.active {
   border-color: rgba(255, 190, 92, 0.96);
@@ -3130,6 +3044,7 @@ function fmt(d: Date): string {
   font-size: clamp(15px, 1.45vw, 22px);
   font-weight: 800;
   line-height: 1.15;
+  letter-spacing: 0.03em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3139,10 +3054,12 @@ function fmt(d: Date): string {
   flex: 0 0 auto;
   padding: 4px clamp(7px, 0.8vw, 11px);
   border: 1px solid currentColor;
+  border-radius: 3px;
   color: #2ff0a0;
   background: rgba(47, 240, 160, 0.12);
   font-size: clamp(12px, 1.05vw, 15px);
   font-weight: 700;
+  letter-spacing: 0.06em;
   line-height: 1;
 }
 
@@ -3160,6 +3077,7 @@ function fmt(d: Date): string {
 
 .phase-segments span {
   height: clamp(5px, 0.75vh, 9px);
+  border-radius: 999px;
   background: rgba(83, 120, 158, 0.34);
   box-shadow: inset 0 0 6px rgba(8, 30, 62, 0.55);
 }
@@ -3200,6 +3118,7 @@ function fmt(d: Date): string {
   align-items: baseline;
   min-width: 0;
   padding: clamp(1px, 0.22vh, 3px) clamp(5px, 0.55vw, 8px);
+  border: 1px solid rgba(90, 192, 226, 0.1);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(8, 214, 255, 0.1), rgba(5, 45, 90, 0.14));
   box-shadow: inset 0 0 12px rgba(0, 206, 255, 0.1), 0 0 14px rgba(0, 216, 255, 0.06);
@@ -3242,435 +3161,20 @@ function fmt(d: Date): string {
 .flow-board {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) clamp(168px, 22vh, 235px);
-  gap: 20px;
-  padding: clamp(54px, 6vh, 68px) clamp(24px, 3vw, 60px) clamp(16px, 2vh, 26px);
+  grid-template-rows: minmax(0, 1fr);
+  padding: clamp(10px, 1.3vh, 14px) clamp(12px, 1.5vw, 28px) clamp(8px, 1vh, 14px);
   min-width: 0;
   min-height: 0;
   border-radius: 0 0 14px 14px;
   overflow: hidden;
 }
 
-.flow-board-heading {
-  position: absolute;
-  top: 14px;
-  left: clamp(22px, 2.5vw, 42px);
-  right: clamp(22px, 2.5vw, 42px);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  z-index: 4;
-}
-
-/* 板头右侧的实时/轮询信号灯 */
-.board-signal {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  height: clamp(24px, 2.6vh, 32px);
-  padding: 0 clamp(10px, 1vw, 16px);
-  border: 1px solid rgba(103, 232, 249, 0.3);
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(7, 50, 96, 0.72), rgba(3, 18, 38, 0.72));
-  color: #9fc6da;
-  font-size: clamp(11px, 0.86vw, 14px);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.board-signal.live {
-  border-color: rgba(33, 246, 158, 0.42);
-  color: #21f69e;
-  text-shadow: 0 0 8px rgba(33, 246, 158, 0.42);
-}
-
-
-.pending-task-panel {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: clamp(11px, 1.2vh, 16px) clamp(14px, 1.4vw, 22px);
-  border: 1px solid rgba(81, 211, 240, 0.32);
-  border-radius: 12px;
-  background:
-    linear-gradient(160deg, rgba(7, 39, 68, 0.94), rgba(3, 15, 30, 0.96)),
-    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.025) 0 1px, transparent 1px 28px);
-  box-shadow:
-    inset 0 0 30px rgba(0, 162, 220, 0.1),
-    0 16px 34px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
-}
-
-.pending-task-panel::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 6%;
-  right: 6%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(48, 236, 207, 0.2), #52dfff 48%, rgba(48, 236, 207, 0.34), transparent);
-  box-shadow: 0 0 14px rgba(82, 223, 255, 0.42);
-}
-
-.pending-task-panel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.44;
-  background: radial-gradient(circle at 30% 0, rgba(52, 219, 242, 0.1), transparent 42%);
-  pointer-events: none;
-}
-
-.pending-task-head {
-  position: relative;
-  z-index: 2;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: clamp(7px, 0.8vh, 10px);
-  border-bottom: 1px solid rgba(103, 232, 249, 0.15);
-}
-
-.pending-task-heading {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.pending-task-sigil {
-  position: relative;
-  width: 17px;
-  height: 17px;
-  border: 1px solid rgba(82, 223, 255, 0.6);
-  border-radius: 50%;
-  box-shadow: inset 0 0 7px rgba(82, 223, 255, 0.22), 0 0 9px rgba(82, 223, 255, 0.18);
-}
-
-.pending-task-sigil::before,
-.pending-task-sigil::after {
-  content: "";
-  position: absolute;
-  background: rgba(82, 223, 255, 0.56);
-}
-
-.pending-task-sigil::before { top: 7px; left: -4px; right: -4px; height: 1px; }
-.pending-task-sigil::after { top: -4px; bottom: -4px; left: 7px; width: 1px; }
-.pending-task-sigil i { position: absolute; inset: 5px; border-radius: 50%; background: #52dfff; box-shadow: 0 0 9px #52dfff; }
-
-.pending-task-kicker {
-  color: #75a8be;
-  font-size: clamp(10px, 0.75vw, 12px);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  white-space: nowrap;
-}
-
-.pending-task-heading strong {
-  overflow: hidden;
-  color: #ecfbff;
-  font-size: clamp(13px, 1vw, 16px);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 11px rgba(82, 223, 255, 0.28);
-}
-
-.pending-task-kicker::after {
-  content: "/";
-  margin-left: 9px;
-  color: rgba(126, 181, 202, 0.35);
-}
-
-.pending-task-count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: #8db4c8;
-  font-size: clamp(10px, 0.78vw, 12px);
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
-.pending-task-count b {
-  color: #5ef2d1;
-  font-family: "Courier New", monospace;
-  font-size: clamp(18px, 1.45vw, 24px);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 12px rgba(48, 236, 207, 0.45);
-}
-
-.pending-task-layout {
-  position: relative;
-  z-index: 2;
-  flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.8fr);
-  gap: clamp(10px, 1vw, 16px);
-  min-height: 0;
-  padding-top: clamp(8px, 0.9vh, 12px);
-}
-
-.primary-task-card {
-  position: relative;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: clamp(10px, 1vh, 15px) clamp(14px, 1.3vw, 20px);
-  border: 1px solid rgba(82, 223, 255, 0.4);
-  border-radius: 9px;
-  background:
-    linear-gradient(145deg, rgba(9, 62, 85, 0.86), rgba(4, 29, 47, 0.9)),
-    repeating-linear-gradient(135deg, transparent 0 8px, rgba(82, 223, 255, 0.025) 8px 9px);
-  box-shadow: inset 0 0 22px rgba(82, 223, 255, 0.08);
-  overflow: hidden;
-  animation: task-card-arrive 420ms ease-out both;
-}
-
-.primary-task-card.is-running {
-  border-color: rgba(255, 184, 68, 0.68);
-  background:
-    radial-gradient(circle at 85% 12%, rgba(255, 183, 66, 0.18), transparent 34%),
-    linear-gradient(145deg, rgba(102, 62, 20, 0.84), rgba(39, 31, 25, 0.92));
-  box-shadow: inset 0 0 25px rgba(255, 165, 42, 0.12), 0 0 22px rgba(255, 158, 36, 0.1);
-}
-
-.primary-task-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.primary-task-status,
-.queue-task-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #72dff3;
-  font-size: clamp(9px, 0.7vw, 11px);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  white-space: nowrap;
-}
-
-.primary-task-status i,
-.queue-task-status i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-}
-
-.is-running .primary-task-status,
-.queued-task-card.is-running .queue-task-status { color: #ffbf58; }
-.primary-task-card.is-running .primary-task-status i { animation: active-task-pulse 1.5s ease-in-out infinite; }
-
-.task-order,
-.queue-task-order {
-  color: rgba(139, 198, 219, 0.55);
-  font-family: "Courier New", monospace;
-  font-size: clamp(10px, 0.74vw, 12px);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.1em;
-}
-
-.primary-task-name {
-  margin: clamp(6px, 0.8vh, 10px) 0;
-  overflow: hidden;
-  color: #f3fcff;
-  font-size: clamp(17px, 1.55vw, 25px);
-  font-weight: 800;
-  line-height: 1.15;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 14px rgba(82, 223, 255, 0.24);
-}
-
-.primary-task-card.is-running .primary-task-name {
-  color: #fff2d2;
-  text-shadow: 0 0 16px rgba(255, 183, 66, 0.28);
-}
-
-.primary-task-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  overflow: hidden;
-  color: #8db4c8;
-  font-size: clamp(10px, 0.76vw, 12px);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.task-owner-mark { color: #5edfcf; font-size: 8px; text-shadow: 0 0 7px rgba(94, 223, 207, 0.7); }
-
-.primary-task-energy {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  overflow: hidden;
-  background: rgba(82, 223, 255, 0.08);
-}
-
-.primary-task-energy i {
-  display: block;
-  width: 38%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, #52dfff, transparent);
-  animation: task-energy-scan 2.4s ease-in-out infinite;
-}
-
-.primary-task-card.is-running .primary-task-energy i { background: linear-gradient(90deg, transparent, #ffb642, #ffe6a0, transparent); }
-
-.task-queue {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 2px 0;
-}
-
-.task-queue-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 7px;
-  color: #b9dbe8;
-  font-size: clamp(10px, 0.76vw, 12px);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.task-queue-head small { color: #638aa0; font-size: 0.88em; font-weight: 500; letter-spacing: 0.08em; }
-
-.task-queue-grid {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: minmax(48px, 1fr);
-  gap: 7px;
-  overflow-y: auto;
-  padding-right: 3px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(82, 223, 255, 0.28) transparent;
-}
-
-.task-queue-grid::-webkit-scrollbar { width: 4px; }
-.task-queue-grid::-webkit-scrollbar-thumb { border-radius: 2px; background: rgba(82, 223, 255, 0.28); }
-
-.queued-task-card {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: clamp(7px, 0.7vw, 11px);
-  padding: 7px clamp(8px, 0.75vw, 12px);
-  border: 1px solid rgba(67, 145, 178, 0.24);
-  border-left: 2px solid rgba(82, 190, 226, 0.58);
-  border-radius: 7px;
-  background: linear-gradient(100deg, rgba(8, 48, 70, 0.82), rgba(5, 31, 50, 0.72));
-  animation: task-card-arrive 420ms ease-out both;
-}
-
-.queued-task-card.is-running {
-  border-color: rgba(255, 184, 68, 0.42);
-  border-left-color: #ffb642;
-  background: linear-gradient(100deg, rgba(91, 57, 21, 0.76), rgba(42, 33, 25, 0.72));
-}
-
-.queue-task-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.queue-task-copy strong { overflow: hidden; color: #dff6fc; font-size: clamp(11px, 0.86vw, 14px); white-space: nowrap; text-overflow: ellipsis; }
-.queue-task-copy > span { overflow: hidden; color: #6f9aae; font-size: clamp(9px, 0.65vw, 11px); white-space: nowrap; text-overflow: ellipsis; }
-.queued-task-card.is-running .queue-task-copy strong { color: #ffe7b7; }
-
-.task-queue-empty {
-  flex: 1 1 auto;
-  display: grid;
-  place-items: center;
-  border: 1px dashed rgba(82, 223, 255, 0.18);
-  border-radius: 8px;
-  color: #698fa2;
-  font-size: clamp(10px, 0.75vw, 12px);
-  letter-spacing: 0.12em;
-}
-
-.pending-task-state {
-  position: relative;
-  z-index: 2;
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  color: #84adbf;
-}
-
-.pending-state-orbit {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border: 1px dashed rgba(82, 223, 255, 0.44);
-  border-radius: 50%;
-}
-
-.pending-state-orbit::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(82, 223, 255, 0.28); border-radius: 50%; }
-.pending-state-orbit i { position: absolute; inset: 19px; border-radius: 50%; background: #52dfff; box-shadow: 0 0 12px #52dfff; }
-.pending-task-panel.is-complete .pending-state-orbit { border-color: rgba(55, 236, 164, 0.52); }
-.pending-task-panel.is-complete .pending-state-orbit i { background: #37eca4; box-shadow: 0 0 12px #37eca4; }
-
-.pending-task-state > div { display: flex; flex-direction: column; gap: 6px; }
-.pending-task-state strong { color: #dff7fc; font-size: clamp(14px, 1.05vw, 17px); letter-spacing: 0.08em; }
-.pending-task-panel.is-complete .pending-task-state strong { color: #a8f3cf; }
-.pending-task-state span { font-size: clamp(10px, 0.75vw, 12px); letter-spacing: 0.08em; }
-
-@keyframes active-task-pulse {
-  0%, 100% { opacity: 0.52; transform: scale(0.78); }
-  50% { opacity: 1; transform: scale(1.18); }
-}
-
-@keyframes task-energy-scan {
-  0% { transform: translateX(-100%); opacity: 0; }
-  18%, 78% { opacity: 1; }
-  100% { transform: translateX(265%); opacity: 0; }
-}
-
-@keyframes task-card-arrive {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .flow-empty { width: 100%; text-align: center; color: #83aabd; font-size: 16px; }
-.flow-board.is-preview .label-pulse { background: var(--phase-link-color); animation: none; box-shadow: 0 0 8px rgba(82, 223, 255, 0.3); }
-.flow-board.is-preview .flow-board-label { color: #b2dceb; }
 
 .flow-board.all-done .flow-board-grid {
   background-image:
     linear-gradient(rgba(74, 222, 128, 0.085) 1px, transparent 1px),
     linear-gradient(90deg, rgba(74, 222, 128, 0.07) 1px, transparent 1px);
-}
-
-.flow-board.all-done .flow-board-label {
-  border-color: rgba(134, 239, 172, 0.52);
-  background:
-    linear-gradient(90deg, rgba(20, 83, 45, 0.88), rgba(5, 30, 32, 0.72)),
-    rgba(5, 30, 32, 0.72);
-  box-shadow:
-    inset 0 0 14px rgba(74, 222, 128, 0.14),
-    0 0 18px rgba(74, 222, 128, 0.16);
 }
 
 .flow-board-grid {
@@ -3683,88 +3187,6 @@ function fmt(d: Date): string {
   background-position: -1px -1px;
   mask-image: radial-gradient(circle at center, black 0 62%, transparent 90%);
   pointer-events: none;
-}
-
-.flow-board-label {
-  position: relative;
-  z-index: 8;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-  height: clamp(26px, 2.8vh, 36px);
-  padding: 0 clamp(12px, 1.2vw, 20px);
-  border: 1px solid rgba(103, 232, 249, 0.44);
-  border-radius: 999px;
-  background:
-    linear-gradient(90deg, rgba(7, 50, 96, 0.88), rgba(3, 18, 38, 0.72)),
-    rgba(3, 18, 38, 0.72);
-  color: #e8fbff;
-  font-size: clamp(13px, 1.08vw, 17px);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.08em;
-}
-
-.flow-board-label::before,
-.flow-board-label::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 18px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.78));
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
-.flow-board-label::before {
-  right: calc(100% + 6px);
-}
-
-.flow-board-label::after {
-  left: calc(100% + 6px);
-  background: linear-gradient(90deg, rgba(103, 232, 249, 0.78), transparent);
-}
-
-.label-pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffd9a0, #ffb75e 62%, #f08c2e);
-  box-shadow: 0 0 8px rgba(255, 183, 94, 0.9), 0 0 18px rgba(255, 152, 66, 0.45);
-  animation: label-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes label-pulse {
-  0%, 100% { opacity: 0.58; transform: scale(0.86); }
-  50% { opacity: 1; transform: scale(1.18); }
-}
-
-/* ===== 信号条（板头实时状态灯） ===== */
-.signal-bars {
-  display: inline-grid;
-  grid-template-columns: repeat(3, 4px);
-  align-items: end;
-  gap: 3px;
-  height: 16px;
-}
-
-.signal-bars i {
-  display: block;
-  width: 4px;
-  height: 6px;
-  background: #6f9cb4;
-  box-shadow: 0 0 6px rgba(111, 156, 180, 0.4);
-  animation: signal-rise 1.4s ease-in-out infinite;
-}
-
-.signal-bars i:nth-child(2) { height: 10px; animation-delay: 0.16s; }
-.signal-bars i:nth-child(3) { height: 15px; animation-delay: 0.32s; }
-
-.board-signal.live .signal-bars i {
-  background: #2ff0a0;
-  box-shadow: 0 0 8px rgba(47, 240, 160, 0.42);
 }
 
 @keyframes header-scan {
@@ -3786,14 +3208,8 @@ function fmt(d: Date): string {
   50% { opacity: 0.9; transform: scaleX(1); }
 }
 
-@keyframes signal-rise {
-  0%, 100% { opacity: 0.35; transform: scaleY(0.64); }
-  50% { opacity: 1; transform: scaleY(1); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .phase-card { transition: none !important; }
-  .label-pulse { animation: none !important; }
   .completion-progress-bar { animation: none !important; }
   .header-scanline,
   .command-title::after,
@@ -3803,12 +3219,7 @@ function fmt(d: Date): string {
   .seq-flow,
   .seq-comet,
   .seq-head::before,
-  .seq-head::after,
-  .primary-task-status i,
-  .primary-task-energy i,
-  .primary-task-card,
-  .queued-task-card,
-  .signal-bars i {
+  .seq-head::after {
     animation: none !important;
   }
 }
@@ -3823,6 +3234,7 @@ function fmt(d: Date): string {
     --phase-gap: 32px;
   }
   .phase-card {
+    min-width: 184px;
     padding: 7px 9px 6px;
   }
   .phase-head { gap: 5px; }
@@ -3853,13 +3265,11 @@ function fmt(d: Date): string {
     margin-left: 4px;
     font-size: 0.78em;
   }
-  .flow-board { padding-inline: 24px; }
-  .task-queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow-board { padding-inline: 14px; }
 
 }
 
 @media (max-width: 1060px) {
-  .pending-task-layout { grid-template-columns: minmax(210px, 0.68fr) minmax(0, 1.7fr); }
   .phase-card { padding-inline: 8px; }
   .phase-head .phase-name { font-size: 14px; }
   .phase-status {
@@ -3895,14 +3305,6 @@ function fmt(d: Date): string {
   opacity: 0;
   transform: scale(0.95);
 }
-@media (max-height: 760px) {
-  .pending-task-panel { padding-block: 9px; }
-  .pending-task-head { padding-bottom: 6px; }
-  .pending-task-layout { padding-top: 7px; }
-  .primary-task-name { margin-block: 5px; font-size: 17px; }
-  .task-queue-head { margin-bottom: 5px; }
-  .task-queue-grid { grid-auto-rows: minmax(42px, 1fr); }
-}
 </style>
 
 <style>
@@ -3936,12 +3338,4 @@ function fmt(d: Date): string {
 /* 彻底移除滚动条轨道 */
 .app-main:has(.screen-root)::-webkit-scrollbar { display: none !important; }
 .app-content:has(.screen-root)::-webkit-scrollbar { display: none !important; }
-@media (max-height: 760px) {
-  .pending-task-panel { padding-block: 9px; }
-  .pending-task-head { padding-bottom: 6px; }
-  .pending-task-layout { padding-top: 7px; }
-  .primary-task-name { margin-block: 5px; font-size: 17px; }
-  .task-queue-head { margin-bottom: 5px; }
-  .task-queue-grid { grid-auto-rows: minmax(42px, 1fr); }
-}
 </style>

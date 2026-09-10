@@ -1,14 +1,22 @@
 <template>
-  <div class="screen4-runway" :class="{ 'is-complete': phaseComplete }">
+  <div ref="rootRef" class="screen4-runway" :class="{ 'is-complete': phaseComplete }">
     <div class="runway-ambient" aria-hidden="true"></div>
-    <div class="runway-summary">
+
+    <div class="runway-legend" aria-label="跑道状态图例">
+      <span class="legend-kicker" aria-hidden="true">状态</span>
+      <span class="legend-item is-done"><i></i>已完成</span>
+      <span class="legend-item is-running"><i></i>进行中</span>
+      <span class="legend-item is-pending"><i></i>待执行</span>
+    </div>
+
+    <div class="deck-cell deck-summary runway-summary" :aria-label="`整体进度，${completedSteps}/${totalSteps} 步骤`">
       <span class="summary-kicker">
         <i></i>
-        {{ phaseName }}
+        <span>整体进度</span>
       </span>
       <span class="summary-progress">
-        <strong>{{ progress.completed }}</strong>
-        <span>/ {{ progress.total }} 环节</span>
+        <strong>{{ completedSteps }}</strong>
+        <span>/ {{ totalSteps }} 步骤</span>
       </span>
     </div>
 
@@ -26,19 +34,44 @@
           <stop offset="1" stop-color="#163e61" stop-opacity=".52" />
         </linearGradient>
         <linearGradient id="s4-lane-complete" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#2af0aa" />
-          <stop offset=".55" stop-color="#5df7bd" />
-          <stop offset="1" stop-color="#20d991" />
+          <stop offset="0" stop-color="#0aaa69" />
+          <stop offset=".5" stop-color="#24dc8d" />
+          <stop offset="1" stop-color="#12bd76" />
         </linearGradient>
         <linearGradient id="s4-lane-active" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stop-color="#ffb539" stop-opacity=".25" />
           <stop offset=".48" stop-color="#ffd273" />
           <stop offset="1" stop-color="#ff9f1a" stop-opacity=".2" />
         </linearGradient>
+        <linearGradient id="s4-lane-progress" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffc55f" />
+          <stop offset=".62" stop-color="#ffd273" />
+          <stop offset="1" stop-color="#ffe9ad" />
+        </linearGradient>
+        <radialGradient id="s4-node-lit-core" cx=".5" cy=".42" r=".62">
+          <stop offset="0" stop-color="#e8fff5" />
+          <stop offset=".42" stop-color="#54f0b2" />
+          <stop offset="1" stop-color="#0fa06c" />
+        </radialGradient>
         <radialGradient id="s4-milestone-core">
           <stop offset="0" stop-color="#f8ffff" />
           <stop offset=".35" stop-color="#61f5ff" />
           <stop offset="1" stop-color="#1277bd" />
+        </radialGradient>
+        <linearGradient id="s4-hub-arc" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7ceaff" />
+          <stop offset=".52" stop-color="#3fd0f7" />
+          <stop offset="1" stop-color="#a4f6ff" />
+        </linearGradient>
+        <linearGradient id="s4-hub-arc-complete" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2af0aa" />
+          <stop offset=".55" stop-color="#5df7bd" />
+          <stop offset="1" stop-color="#8dffcf" />
+        </linearGradient>
+        <radialGradient id="s4-hub-plate" cx=".5" cy=".36" r=".68">
+          <stop offset="0" stop-color="#0e3d63" />
+          <stop offset=".58" stop-color="#062b47" />
+          <stop offset="1" stop-color="#031724" />
         </radialGradient>
         <filter id="s4-soft-glow" x="-80%" y="-80%" width="260%" height="260%">
           <feGaussianBlur stdDeviation="5" result="blur" />
@@ -63,128 +96,278 @@
       <path class="runway-shadow" :d="layout.trackPath" />
       <path class="runway-rail" :d="layout.trackPath" />
       <path class="runway-dashes" :d="layout.trackPath" />
-      <path v-if="completedPath" class="runway-complete-path" :d="completedPath" />
+      <path v-if="completedPath" ref="completePathRef" class="runway-complete-path" :d="completedPath" />
+      <path v-if="completedPath" ref="completeCoreRef" class="runway-complete-core" :d="completedPath" />
+      <path v-if="completedPath" class="runway-complete-flow" :d="completedPath" />
       <path v-if="activePath" class="runway-active-path" :d="activePath" />
+      <path
+        v-if="activeHop && activeHop.strokeLength > 0.5"
+        :key="activeIndex"
+        class="runway-active-progress"
+        :d="activePath"
+        :style="{ strokeDasharray: `${activeHop.strokeLength} 99999` }"
+      />
+      <path
+        v-if="activeHop && activeHop.strokeLength > 0.5"
+        :key="`${activeIndex}-core`"
+        class="runway-active-progress-core"
+        :d="activePath"
+        :style="{ strokeDasharray: `${activeHop.strokeLength} 99999` }"
+      />
+      <g
+        v-if="activeHop && activeHop.strokeLength > 0.5"
+        class="runway-progress-head-anchor"
+        :style="{ transform: `translate(${activeHop.cursor.x}px, ${activeHop.cursor.y}px)` }"
+        aria-hidden="true"
+      >
+        <g class="runway-progress-head">
+          <circle class="progress-head-halo" r="11" />
+          <circle class="progress-head-core" r="4.5" />
+        </g>
+      </g>
 
       <g
         v-for="indicator in turnIndicators"
         :key="`turn-${indicator.row}`"
         class="turn-indicator"
+        :class="{ 'is-energized': indicator.energized }"
         :transform="`translate(${indicator.x} ${indicator.y})`"
         aria-hidden="true"
       >
         <circle r="18" />
-        <path :d="indicator.direction === 'right' ? 'M -7 -6 L 2 0 L -7 6 M 1 -6 L 10 0 L 1 6' : 'M 7 -6 L -2 0 L 7 6 M -1 -6 L -10 0 L -1 6'" />
+        <path class="turn-indicator-arrow" d="M -7 -9 L 0 -2 L 7 -9 M -7 1 L 0 8 L 7 1" />
       </g>
 
       <g
-        v-for="item in visualItems"
+        v-for="item in nodeItems"
         :key="item.key"
         :class="item.className"
         :transform="`translate(${item.point.x} ${item.point.y})`"
       >
-        <template v-if="item.kind === 'node'">
-          <circle class="node-orbit node-orbit-outer" r="38" />
-          <circle class="node-orbit node-orbit-inner" r="29" />
-          <circle class="node-halo" r="25" />
-          <circle class="node-core" r="17" />
-          <path v-if="item.node.status === 'done' || item.node.status === 'skipped'" class="node-check" d="M -7 0 L -2 6 L 9 -7" />
-          <path v-else-if="item.node.status === 'issue'" class="node-issue-mark" d="M 0 -8 L 0 3 M 0 9 L 0 10" />
-          <g v-else-if="item.node.status === 'running'" class="node-energy" aria-hidden="true">
-            <rect v-for="bar in 3" :key="bar" :x="-10 + (bar - 1) * 8" :y="3 - bar * 4" width="5" :height="bar * 5" rx="2" />
-          </g>
-          <text class="runway-node-index" y="-48">{{ String(item.index + 1).padStart(2, '0') }}</text>
-          <text class="runway-node-name" y="49">
+        <circle class="node-orbit node-orbit-outer" r="38" />
+        <circle class="node-orbit node-orbit-inner" r="29" />
+        <circle class="node-halo" r="25" />
+        <circle class="node-core" r="17" />
+        <path v-if="item.isCompleted" class="node-check" d="M -7 0 L -2 6 L 9 -7" />
+        <path v-else-if="item.node.status === 'issue'" class="node-issue-mark" d="M 0 -8 L 0 3 M 0 9 L 0 10" />
+        <g v-else-if="item.node.status === 'running'" class="node-energy" aria-hidden="true">
+          <rect v-for="bar in 3" :key="bar" :x="-10 + (bar - 1) * 8" :y="3 - bar * 4" width="5" :height="bar * 5" rx="2" />
+        </g>
+        <g class="runway-node-label" :transform="`translate(0 ${item.labelLines.length > 1 ? -73 : -51})`">
+          <text class="runway-node-name" y="0">
             <tspan
               v-for="(line, lineIndex) in item.labelLines"
               :key="line"
               x="0"
-              :dy="lineIndex === 0 ? 0 : 20"
+              :dy="lineIndex === 0 ? 0 : 19"
             >{{ line }}</tspan>
           </text>
-          <g class="runway-node-count" :transform="`translate(0 ${item.labelLines.length > 1 ? 91 : 72})`">
-            <rect x="-39" y="-13" width="78" height="26" rx="13" />
-            <text y="5">{{ item.node.completed }}/{{ item.node.total }}</text>
-          </g>
-        </template>
-
-        <template v-else>
-          <circle class="milestone-scan" r="43" />
-          <circle class="milestone-ring milestone-ring-outer" r="34" />
-          <circle class="milestone-ring milestone-ring-inner" r="23" />
-          <circle class="milestone-core" r="10" />
-          <path class="milestone-cross" d="M -34 0 L 34 0 M 0 -34 L 0 34" />
-          <text class="milestone-title" y="57">里程碑</text>
-          <text class="milestone-status" y="79">{{ phaseComplete ? '阶段达成' : '等待到达' }}</text>
-        </template>
+          <path
+            class="runway-node-label-rule"
+            :d="item.labelLines.length > 1 ? 'M -24 29 L 24 29' : 'M -24 10 L 24 10'"
+          />
+        </g>
+        <g class="runway-node-count" transform="translate(0 58)">
+          <rect x="-39" y="-14" width="78" height="28" rx="14" />
+          <text y="6">{{ item.node.completed }}<tspan class="count-divider">/</tspan>{{ item.node.total }}</text>
+        </g>
       </g>
 
       <g
-        v-if="activePoint"
-        class="runway-baton"
-        :transform="`translate(${activePoint.x} ${activePoint.y}) rotate(${activePoint.direction === 'right' ? 0 : 180})`"
+        class="runway-milestone"
+        :class="phaseComplete ? 'is-completed' : 'is-pending'"
+        :transform="`translate(${milestonePoint.x} ${milestonePoint.y})`"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="phaseProgressPercent"
+        :aria-label="`当前阶段进度 ${phaseProgressPercent}%`"
+      >
+        <g class="milestone-dial" :class="{ 'is-absorbing': dialAbsorbing }">
+          <circle class="milestone-scan" r="64" />
+          <g class="milestone-ticks" aria-hidden="true">
+            <line
+              v-for="tick in milestoneTicks"
+              :key="`milestone-tick-${tick.angle}`"
+              :class="{ 'is-major': tick.major }"
+              :transform="`rotate(${tick.angle})`"
+              x1="0"
+              :y1="tick.major ? -52 : -54.5"
+              x2="0"
+              :y2="tick.major ? -61 : -58"
+            />
+          </g>
+          <circle class="milestone-track" r="46" />
+          <circle
+            class="milestone-progress"
+            r="46"
+            :style="{ strokeDasharray: `${milestoneArcLength} ${MILESTONE_CIRCUMFERENCE}` }"
+          />
+          <circle class="milestone-plate" r="36" />
+          <circle class="milestone-plate-edge" r="30" />
+          <circle
+            class="milestone-spark"
+            cy="-46"
+            r="4"
+            :style="{ transform: `rotate(${phaseProgressPercent * 3.6}deg)` }"
+          />
+          <text class="milestone-value" y="12"><tspan>{{ phaseProgressPercent }}</tspan><tspan class="milestone-value-unit" dy="6">%</tspan></text>
+        </g>
+        <path class="milestone-title-rule" d="M -88 77 L -62 77 M 62 77 L 88 77" />
+        <text class="milestone-title" y="82">里程碑</text>
+        <text v-if="phaseComplete" class="milestone-status" y="104">阶段达成</text>
+      </g>
+
+      <g
+        v-if="activeHop && activePoint && activeHop.strokeLength > 0.5"
+        class="runway-baton-anchor"
+        :style="{ transform: `translate(${activeHop.cursor.x}px, ${activeHop.cursor.y}px) rotate(${activePoint.direction === 'right' ? 0 : 180}deg)` }"
         aria-hidden="true"
       >
-        <path class="baton-beam" d="M 31 0 L 67 0" />
-        <circle class="baton-tail" cx="33" cy="0" r="4" />
-        <path class="baton-body" d="M 43 -7 L 68 -7 L 79 0 L 68 7 L 43 7 Z" />
-        <circle class="baton-spark" cx="78" cy="0" r="5" />
+        <g class="runway-baton">
+          <path class="baton-beam" d="M -42 0 L -14 0" />
+          <circle class="baton-tail" cx="-40" cy="0" r="3.5" />
+          <path class="baton-body" d="M -30 -7 L -9 -7 L 0 0 L -9 7 L -30 7 Z" />
+          <circle class="baton-spark" cx="0" cy="0" r="4.5" />
+        </g>
       </g>
     </svg>
 
-    <div class="runway-legend" aria-label="跑道状态图例">
-      <span><i class="is-done"></i>已完成</span>
-      <span><i class="is-running"></i>进行中</span>
-      <span><i class="is-pending"></i>待执行</span>
-      <span><i class="is-issue"></i>异常</span>
+    <div class="runway-deck" aria-label="跑道信息栏">
+      <div class="deck-cell deck-ticker" aria-label="当前环节任务滚动列表">
+        <div class="ticker-head" aria-hidden="true">
+          <span class="ticker-node">
+            <i></i>
+            <span>{{ activeNode?.name ?? '环节任务' }}</span>
+          </span>
+          <span class="ticker-count">{{ tickerDoneCount }}/{{ runningSteps.length }}</span>
+        </div>
+        <div v-if="visibleSteps.length" ref="tickerViewportRef" class="ticker-viewport">
+          <div
+            class="ticker-track"
+            :class="{ 'is-scrolling': tickerScrolling }"
+            :style="{ '--ticker-duration': `${tickerDuration}s` }"
+          >
+            <div ref="tickerSequenceRef" class="ticker-sequence">
+              <span
+                v-for="step in visibleSteps"
+                :key="step.id"
+                class="ticker-chip"
+                :class="`is-${step.status}`"
+                :data-step-id="step.id"
+              >
+                <i class="chip-dot" aria-hidden="true"></i>
+                <span class="chip-name">{{ step.name }}</span>
+                <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
+              </span>
+            </div>
+            <div v-if="tickerScrolling" class="ticker-sequence" aria-hidden="true">
+              <span
+                v-for="step in visibleSteps"
+                :key="`ticker-repeat-${step.id}`"
+                class="ticker-chip"
+                :class="`is-${step.status}`"
+                aria-hidden="true"
+              >
+                <i class="chip-dot"></i>
+                <span class="chip-name">{{ step.name }}</span>
+                <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="ticker-empty">{{ runningSteps.length ? '本环节任务已全部完成' : '暂无进行中环节任务' }}</div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   buildScreen4RunwayLayout,
+  getScreen4PhaseStepProgress,
+  getScreen4RunwayCompletedPathEnd,
+  getScreen4RunwayHopProgress,
   getScreen4RunwayPath,
-  getScreen4RunwayProgress,
+  isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
   type Screen4RunwayNode,
   type Screen4RunwayPoint,
 } from './screen4Runway'
 
+interface Screen4RunwayStep {
+  id: string
+  name: string
+  status: string
+}
+
 const props = defineProps<{
-  phaseName: string
   phaseStatus: string
   nodes: Screen4RunwayNode[]
+  completedSteps: number
+  totalSteps: number
+  runningSteps?: Screen4RunwayStep[]
 }>()
 
-const terminalStatuses = new Set(['done', 'skipped', 'issue'])
+const rootRef = ref<HTMLElement | null>(null)
 
 const layout = computed(() => buildScreen4RunwayLayout(props.nodes.length))
-const progress = computed(() => getScreen4RunwayProgress(props.nodes.map(node => node.status)))
+const phaseProgressPercent = computed(() => getScreen4PhaseStepProgress(props.nodes).percent)
 const phaseComplete = computed(() => {
   const normalizedStatus = props.phaseStatus.toLowerCase()
   return normalizedStatus === 'completed'
     || normalizedStatus === 'done'
-    || (props.nodes.length > 0 && progress.value.completed === progress.value.total)
+    || (props.nodes.length > 0 && props.nodes.every(isScreen4RunwayNodeCompleted))
 })
 
-const completedEndIndex = computed(() => {
-  let endIndex = -1
-  for (const [index, node] of props.nodes.entries()) {
-    if (!terminalStatuses.has(node.status)) break
-    endIndex = index
-  }
-  return endIndex
-})
-
-const completedPath = computed(() => (
-  completedEndIndex.value > 0
-    ? getScreen4RunwayPath(layout.value.points, 0, completedEndIndex.value)
+const completedPathEnd = computed(() => getScreen4RunwayCompletedPathEnd(props.nodes))
+const completedPath = computed(() => {
+  const end = completedPathEnd.value
+  return end !== null && end > 0
+    ? getScreen4RunwayPath(layout.value.points, 0, end)
     : ''
-))
+})
 
-const activeIndex = computed(() => props.nodes.findIndex(node => node.status === 'running'))
+// 完成段描入：同一推进序列新增一段时只描入增量（旧段保持原位），首现/换阶段整段从起点描入。
+const completePathRef = ref<SVGPathElement | null>(null)
+const completeCoreRef = ref<SVGPathElement | null>(null)
+let prevCompletedEnd: number | null = null
+let prevCompletedLength = 0
+
+watch(completedPath, () => {
+  // 灯芯与导轨共用同一条路径，描入动画必须逐帧同步。
+  const elements = [completePathRef.value, completeCoreRef.value]
+    .filter((el): el is SVGPathElement => Boolean(el))
+  if (!elements.length) {
+    prevCompletedEnd = null
+    prevCompletedLength = 0
+    return
+  }
+  const end = completedPathEnd.value
+  const total = elements[0].getTotalLength()
+  const isExtension = prevCompletedEnd !== null && end === prevCompletedEnd + 1 && total > prevCompletedLength
+  const startOffset = isExtension ? total - prevCompletedLength : total
+  prevCompletedEnd = end
+  prevCompletedLength = total
+  if (total <= 0) return
+  elements.forEach((el) => {
+    el.style.transition = 'none'
+    el.style.strokeDasharray = `${total} ${total}`
+    el.style.strokeDashoffset = `${startOffset}`
+  })
+  // 强制回流后再恢复过渡，令描入段平滑推进到位。
+  elements.forEach((el) => {
+    el.getBoundingClientRect()
+    el.style.transition = ''
+    el.style.strokeDashoffset = '0'
+  })
+}, { flush: 'post' })
+
+const activeIndex = computed(() => props.nodes.findIndex(node => (
+  !isScreen4RunwayNodeCompleted(node)
+  && (node.status === 'running' || node.completed > 0)
+)))
 const activePoint = computed<Screen4RunwayPoint | null>(() => (
   activeIndex.value >= 0 ? layout.value.points[activeIndex.value] || null : null
 ))
@@ -193,46 +376,201 @@ const activePath = computed(() => {
   return getScreen4RunwayPath(layout.value.points, activeIndex.value, activeIndex.value + 1)
 })
 
-const visualItems = computed(() => {
-  const nodeItems = props.nodes.map((node, index) => ({
-    key: node.id,
-    kind: 'node' as const,
-    node,
-    index,
-    point: layout.value.points[index],
-    labelLines: splitScreen4RunwayName(node.name),
-    className: [
-      'runway-node',
-      terminalStatuses.has(node.status) && node.status !== 'issue' ? 'is-completed' : '',
-      node.status === 'running' ? 'is-running' : '',
-      node.status === 'issue' ? 'is-issue' : '',
-      node.status === 'pending' ? 'is-pending' : '',
-    ],
-  }))
-  const milestonePoint = layout.value.points[props.nodes.length]
-
-  return [
-    ...nodeItems,
-    {
-      key: 'screen4-runway-milestone',
-      kind: 'milestone' as const,
-      point: milestonePoint,
-      className: ['runway-milestone', phaseComplete.value ? 'is-completed' : 'is-pending'],
-    },
-  ]
+const activeNode = computed(() => (activeIndex.value >= 0 ? props.nodes[activeIndex.value] ?? null : null))
+const activeRatio = computed(() => {
+  const node = activeNode.value
+  if (!node || node.total <= 0) return 0
+  return Math.min(1, Math.max(0, node.completed / node.total))
 })
+const activeHop = computed(() => {
+  if (activeIndex.value < 0 || activeIndex.value >= layout.value.points.length - 1) return null
+  // 环节间跑道按当前运行环节的步骤完成比例推进。
+  return getScreen4RunwayHopProgress(layout.value.points, activeIndex.value, activeIndex.value + 1, activeRatio.value)
+})
+
+// 终点仪表盘：进度环半径与周长，弧长按阶段步骤比例推进。
+const MILESTONE_RING_RADIUS = 46
+const MILESTONE_CIRCUMFERENCE = 2 * Math.PI * MILESTONE_RING_RADIUS
+// 每 6° 一格刻度，每 30° 一个主刻度。
+const milestoneTicks = Array.from({ length: 60 }, (_, index) => ({
+  angle: index * 6,
+  major: index % 5 === 0,
+}))
+
+const milestonePoint = computed<Screen4RunwayPoint>(() => (
+  layout.value.points[props.nodes.length] ?? layout.value.points[layout.value.points.length - 1]
+))
+const milestoneArcLength = computed(() => (
+  MILESTONE_CIRCUMFERENCE * Math.min(1, Math.max(0, phaseProgressPercent.value / 100))
+))
+
+const nodeItems = computed(() => props.nodes.map((node, index) => ({
+  key: node.id,
+  node,
+  point: layout.value.points[index],
+  labelLines: splitScreen4RunwayName(node.name),
+  isCompleted: isScreen4RunwayNodeCompleted(node),
+  className: [
+    'runway-node',
+    isScreen4RunwayNodeCompleted(node) ? 'is-completed' : '',
+    index === activeIndex.value ? 'is-running' : '',
+    node.status === 'issue' ? 'is-issue' : '',
+    node.status === 'pending' && index !== activeIndex.value ? 'is-pending' : '',
+  ],
+})))
 
 const turnIndicators = computed(() => layout.value.points.flatMap((point, index, points) => {
   const nextPoint = points[index + 1]
   if (!nextPoint || nextPoint.row === point.row) return []
 
+  // 完成段已越过该折返点（路径覆盖到 index+1）时，折返点随之导通。
+  const end = completedPathEnd.value
   return [{
     row: point.row,
     x: point.direction === 'right' ? 998 : 42,
     y: (point.y + nextPoint.y) / 2,
-    direction: nextPoint.direction,
+    energized: end !== null && end >= index + 1,
   }]
 }))
+
+// ===== 底部任务传送带 =====
+
+const runningSteps = computed<Screen4RunwayStep[]>(() => props.runningSteps ?? [])
+
+// 传送带只展示未完成任务，完成的任务以飘入动画离开。
+const visibleSteps = computed(() => runningSteps.value.filter(
+  step => !isAbsorbedStatus(step.status),
+))
+
+const tickerStatusLabels: Record<string, string> = {
+  done: '已完成',
+  skipped: '已跳过',
+  running: '执行中',
+  issue: '异常',
+  pending: '待执行',
+}
+
+function tickerStatusText(status: string) {
+  return tickerStatusLabels[status] ?? '待执行'
+}
+
+const tickerViewportRef = ref<HTMLElement | null>(null)
+const tickerSequenceRef = ref<HTMLElement | null>(null)
+const tickerScrolling = ref(false)
+const tickerDuration = ref(28)
+const tickerDoneCount = computed(() => runningSteps.value.filter(
+  step => step.status === 'done' || step.status === 'skipped',
+).length)
+
+// 任务宽度超出视口才启动无缝滚动，速度按内容长度自适应。
+function measureTicker() {
+  const viewport = tickerViewportRef.value
+  const sequence = tickerSequenceRef.value
+  if (!viewport || !sequence) {
+    tickerScrolling.value = false
+    return
+  }
+  tickerScrolling.value = sequence.scrollWidth - viewport.clientWidth > 8
+  if (tickerScrolling.value) {
+    tickerDuration.value = Math.max(16, Math.min(120, Math.round(sequence.scrollWidth / 55)))
+  }
+}
+
+watch(() => props.runningSteps, () => {
+  nextTick(measureTicker)
+})
+onMounted(measureTicker)
+
+// ===== 任务完成 → 飘入终点百分数环 =====
+
+const dialAbsorbing = ref(false)
+let dialAbsorbTimer: ReturnType<typeof setTimeout> | null = null
+const absorbedStepIds = new Set<string>()
+let absorbedReady = false
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+}
+
+function isAbsorbedStatus(status: string) {
+  return status === 'done' || status === 'skipped'
+}
+
+watch(() => props.runningSteps, steps => {
+  const list = steps ?? []
+  // 首次拿到非空任务列表时，仅登记已完成的任务，不回放飘入动画。
+  if (!absorbedReady) {
+    if (!list.length) return
+    list.forEach(step => {
+      if (isAbsorbedStatus(step.status)) absorbedStepIds.add(step.id)
+    })
+    absorbedReady = true
+    return
+  }
+  const finished = list.filter(step => isAbsorbedStatus(step.status) && !absorbedStepIds.has(step.id))
+  finished.forEach(step => absorbedStepIds.add(step.id))
+  if (finished.length) launchAbsorbFlyers(finished)
+}, { immediate: true })
+
+function launchAbsorbFlyers(steps: Screen4RunwayStep[]) {
+  const root = rootRef.value
+  const dial = root?.querySelector('.milestone-dial')
+  if (!root || !dial || prefersReducedMotion()) return
+  const dialRect = dial.getBoundingClientRect()
+  // 完成的任务即将从未完成列表移除，需在 DOM 重渲染前同步记录胶囊位置。
+  const launches = steps.map(step => ({
+    step,
+    from: root.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(step.id)}"]`)?.getBoundingClientRect()
+      ?? root.getBoundingClientRect(),
+  }))
+  launches.forEach((launch, index) => {
+    window.setTimeout(() => spawnAbsorbFlyer(root, launch.step, launch.from, dialRect), index * 170)
+  })
+}
+
+function spawnAbsorbFlyer(root: HTMLElement, step: Screen4RunwayStep, from: DOMRect, dialRect: DOMRect) {
+  const flyer = document.createElement('div')
+  flyer.className = 'runway-flyer'
+  flyer.textContent = step.name
+  root.appendChild(flyer)
+
+  const startX = from.left + from.width / 2
+  const startY = from.top + from.height / 2
+  const endX = dialRect.left + dialRect.width / 2
+  const endY = dialRect.top + dialRect.height / 2
+  flyer.style.left = `${startX}px`
+  flyer.style.top = `${startY}px`
+
+  const dx = endX - startX
+  const dy = endY - startY
+  const base = 'translate(-50%, -50%)'
+  const animation = flyer.animate([
+    { transform: `${base} translate(0, 0) scale(1)`, opacity: 1 },
+    { transform: `${base} translate(${dx * 0.5}px, ${dy * 0.5 - 46}px) scale(0.82)`, opacity: 1, offset: 0.55 },
+    { transform: `${base} translate(${dx}px, ${dy}px) scale(0.24)`, opacity: 0 },
+  ], { duration: 920, easing: 'cubic-bezier(.5, .05, .6, .95)' })
+  animation.onfinish = () => {
+    flyer.remove()
+    pulseMilestoneDial()
+  }
+  animation.oncancel = () => flyer.remove()
+}
+
+// 环体吸收脉冲：缩放 + 辉光闪烁，与进度弧推进同步。
+function pulseMilestoneDial() {
+  dialAbsorbing.value = false
+  if (dialAbsorbTimer) clearTimeout(dialAbsorbTimer)
+  requestAnimationFrame(() => {
+    dialAbsorbing.value = true
+  })
+  dialAbsorbTimer = setTimeout(() => {
+    dialAbsorbing.value = false
+  }, 700)
+}
+
+onUnmounted(() => {
+  if (dialAbsorbTimer) clearTimeout(dialAbsorbTimer)
+})
 </script>
 
 <style scoped lang="scss">
@@ -261,39 +599,142 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
 }
 
-.runway-summary {
+// 状态图例：左上角 HUD 状态铭牌，与底部信息栏同一套玻璃质感。
+.runway-legend {
   position: absolute;
-  z-index: 2;
-  top: 14px;
-  right: 18px;
+  z-index: 4;
+  top: 10px;
+  left: 12px;
   display: flex;
   align-items: center;
   gap: 14px;
-  min-width: 220px;
-  height: 42px;
-  padding: 0 14px;
-  border: 1px solid rgba(67, 212, 255, 0.28);
-  border-radius: 8px;
-  color: #bfeaff;
-  background: linear-gradient(110deg, rgba(4, 37, 61, 0.9), rgba(3, 26, 47, 0.64));
-  box-shadow: inset 3px 0 0 #30ddb2, 0 10px 30px rgba(0, 7, 18, 0.28);
+  padding: 8px 18px 8px 15px;
+  border: 1px solid rgba(65, 188, 238, 0.26);
+  border-radius: 10px;
+  background: linear-gradient(105deg, rgba(4, 26, 45, 0.85), rgba(6, 34, 52, 0.58));
+  box-shadow:
+    inset 0 1px 0 rgba(140, 224, 255, 0.12),
+    inset 0 0 18px rgba(38, 196, 242, 0.05),
+    0 10px 26px rgba(0, 7, 18, 0.38);
   backdrop-filter: blur(8px);
+  animation: legend-arrive .55s cubic-bezier(.2, .8, .25, 1) both;
+
+  // 左缘能量栏：青→绿渐变锚定"状态"语义。
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #37ecb0, #3fd0f7);
+    box-shadow: 0 0 10px rgba(56, 231, 167, 0.55);
+  }
+}
+
+.legend-kicker {
+  padding-right: 13px;
+  border-right: 1px solid rgba(65, 188, 238, 0.18);
+  color: #9dd9e8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .3em;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #8fb6cc;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  white-space: nowrap;
+
+  i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+  }
+
+  &.is-done i { color: #38e7a7; background: currentColor; }
+
+  &.is-running i {
+    color: #ffb43d;
+    background: currentColor;
+    animation: ticker-blink 1.4s ease-in-out infinite;
+  }
+
+  &.is-pending i { color: #4e98c8; background: currentColor; }
+}
+
+.runway-deck {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  height: 46px;
+}
+
+.deck-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid rgba(67, 212, 255, 0.26);
+  border-radius: 8px;
+  background: linear-gradient(110deg, rgba(4, 37, 61, 0.92), rgba(3, 26, 47, 0.66));
+  box-shadow: inset 3px 0 0 rgba(48, 221, 178, 0.7), inset 0 0 18px rgba(38, 196, 242, 0.05), 0 10px 30px rgba(0, 7, 18, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.deck-summary {
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+// 整体进度独立悬浮在右上角，与左侧状态铭牌构成平衡的 HUD 双锚点。
+.runway-summary {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 8px;
+  box-sizing: border-box;
+  width: min(210px, calc(100% - 360px));
+  height: 32px;
+  justify-content: flex-end;
+  padding: 0 11px;
+  border-radius: 8px;
+  box-shadow:
+    inset -3px 0 0 rgba(48, 221, 178, .82),
+    inset 0 1px 0 rgba(140, 224, 255, .12),
+    inset 0 0 18px rgba(38, 196, 242, .05),
+    0 10px 26px rgba(0, 7, 18, .38);
+  animation: legend-arrive .55s cubic-bezier(.2, .8, .25, 1) both;
 }
 
 .summary-kicker {
   display: flex;
   align-items: center;
-  gap: 7px;
-  max-width: 130px;
+  gap: 6px;
+  min-width: 0;
   overflow: hidden;
-  font-size: 14px;
+  color: #9dd9e8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
   white-space: nowrap;
-  text-overflow: ellipsis;
 
   i {
     flex: 0 0 auto;
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #37ecb0;
     box-shadow: 0 0 10px #37ecb0;
@@ -304,27 +745,194 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   display: flex;
   align-items: baseline;
   gap: 4px;
-  padding-left: 13px;
-  border-left: 1px solid rgba(83, 210, 255, 0.18);
+  white-space: nowrap;
   font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
 
   strong {
     color: #f4fcff;
-    font-size: 22px;
+    font-size: 18px;
     line-height: 1;
   }
 
   span {
     color: #75aac4;
-    font-size: 12px;
+    font-size: 11px;
   }
+}
+
+.deck-ticker {
+  position: relative;
+  flex: 1 1 auto;
+  gap: 12px;
+  padding-right: 0;
+}
+
+.ticker-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(67, 212, 255, 0.18);
+}
+
+.ticker-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 150px;
+  overflow: hidden;
+  color: #ffd273;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  i {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+    animation: ticker-blink 1.4s ease-in-out infinite;
+  }
+}
+
+.ticker-count {
+  color: #75aac4;
+  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ticker-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+}
+
+.ticker-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+
+  &.is-scrolling {
+    animation: ticker-scroll var(--ticker-duration, 30s) linear infinite;
+  }
+}
+
+.ticker-sequence {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.ticker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 240px;
+  padding: 4px 11px;
+  border: 1px solid rgba(88, 148, 186, 0.25);
+  border-radius: 999px;
+  color: #a8cbe0;
+  background: rgba(6, 30, 50, 0.6);
+  font-size: 12.5px;
+  white-space: nowrap;
+
+  .chip-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4e98c8;
+  }
+
+  .chip-name {
+    min-width: 0;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-tag {
+    flex: 0 0 auto;
+    color: #6f93a8;
+    font-size: 10.5px;
+    letter-spacing: .5px;
+  }
+
+  &.is-done {
+    border-color: rgba(43, 224, 159, 0.32);
+    color: #9fe8cd;
+
+    .chip-dot { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6); }
+    .chip-tag { color: #58c9a4; }
+  }
+
+  &.is-skipped {
+    opacity: .68;
+
+    .chip-dot { background: #6d93ab; }
+  }
+
+  &.is-issue {
+    border-color: rgba(255, 98, 110, 0.45);
+    color: #ffb3ba;
+
+    .chip-dot { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.6); }
+    .chip-tag { color: #ff8b95; }
+  }
+
+  &.is-running {
+    border-color: rgba(255, 180, 61, 0.55);
+    color: #ffe3ad;
+    background: rgba(66, 45, 12, 0.5);
+    box-shadow: 0 0 14px rgba(255, 171, 45, 0.18);
+
+    .chip-dot {
+      background: #ffb43d;
+      box-shadow: 0 0 9px rgba(255, 180, 61, 0.8);
+      animation: ticker-blink 1.2s ease-in-out infinite;
+    }
+
+    .chip-tag {
+      color: #ffca70;
+      font-weight: 700;
+    }
+  }
+}
+
+.ticker-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 18px;
+  color: #5f87a0;
+  font-size: 12px;
+  letter-spacing: 1px;
 }
 
 .runway-svg {
   position: absolute;
-  inset: 8px 10px 20px;
-  width: calc(100% - 20px);
-  height: calc(100% - 28px);
+  inset: 2px 4px 60px;
+  width: calc(100% - 8px);
+  height: calc(100% - 62px);
+  // 图形重心偏下（里程碑标题/计数延伸至底部车道下方），整体上移使其在信息栏上方视觉居中。
+  transform: translateY(-4px) scale(1.02);
+  transform-origin: center;
   overflow: visible;
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
@@ -338,7 +946,11 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 .runway-rail,
 .runway-dashes,
 .runway-complete-path,
-.runway-active-path {
+.runway-complete-core,
+.runway-complete-flow,
+.runway-active-path,
+.runway-active-progress,
+.runway-active-progress-core {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -364,17 +976,76 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 
 .runway-complete-path {
   stroke: url('#s4-lane-complete');
-  stroke-width: 9;
-  filter: url('#s4-soft-glow');
-  animation: path-arrive .8s ease both;
+  // 完整覆盖 15px 蓝轨，完成区间读作一条连续绿色链路。
+  stroke-width: 15;
+  filter: drop-shadow(0 0 8px rgba(29, 236, 147, .72)) drop-shadow(0 0 16px rgba(15, 189, 115, .38));
+  // 新增段由脚本 FLIP 描入（旧段保持原位），无需整体淡入。
+  transition: stroke-dashoffset .75s cubic-bezier(.3, .75, .3, 1);
+}
+
+.runway-complete-core {
+  // 饱和绿灯芯保持导通感，避免近白高光把完成轨冲成青白色。
+  stroke: #42f0a4;
+  stroke-width: 3;
+  opacity: .96;
+  filter: drop-shadow(0 0 5px rgba(66, 240, 164, .8));
+  transition: stroke-dashoffset .75s cubic-bezier(.3, .75, .3, 1);
+}
+
+.runway-complete-flow {
+  // 沿导通链巡游的能量光珠：0.1 长度 + 圆头端帽 = 圆点，周期 52.1 与 keyframe 严格一致保证无缝循环。
+  stroke: #42f0a4;
+  stroke-width: 5.5;
+  stroke-dasharray: 0.1 52;
+  filter: drop-shadow(0 0 6px rgba(66, 240, 164, .86));
+  animation: completed-energy-flow 1.5s linear infinite;
 }
 
 .runway-active-path {
   stroke: url('#s4-lane-active');
-  stroke-width: 9;
-  stroke-dasharray: 26 16;
+  // 前方路径用细虚线，与实心推进条拉开粗细层级（实线=已推进，细虚=去路）。
+  stroke-width: 4;
+  stroke-dasharray: 4 15;
+  opacity: .24;
+  filter: url('#s4-soft-glow');
+  animation: active-energy 1.8s linear infinite;
+}
+
+.runway-active-progress {
+  stroke: url('#s4-lane-progress');
+  stroke-width: 13;
+  filter: drop-shadow(0 0 7px rgba(255, 176, 54, .82)) drop-shadow(0 0 15px rgba(255, 143, 25, .42));
+  // 每完成一步，能量条平滑推进到新的比例位置。
+  transition: stroke-dasharray .55s cubic-bezier(.3, .75, .3, 1);
+}
+
+.runway-active-progress-core {
+  // 与外层填充共用同一比例裁剪，形成清晰连续的橙金灯芯。
+  stroke: #ffe29a;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 5px rgba(255, 218, 128, .9));
+  transition: stroke-dasharray .55s cubic-bezier(.3, .75, .3, 1);
+}
+
+.runway-progress-head-anchor {
+  transition: transform .55s cubic-bezier(.3, .75, .3, 1);
+}
+
+.runway-progress-head {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: progress-head-pulse 1.6s ease-in-out infinite;
+}
+
+.progress-head-halo {
+  fill: rgba(255, 187, 71, .14);
+  stroke: rgba(255, 214, 130, .5);
+  stroke-width: 1;
+}
+
+.progress-head-core {
+  fill: #ffe9ad;
   filter: url('#s4-strong-glow');
-  animation: active-energy 1.15s linear infinite;
 }
 
 .turn-indicator {
@@ -387,7 +1058,21 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
     fill: none;
     stroke: #72dfff;
     stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     filter: url('#s4-soft-glow');
+  }
+}
+
+// 完成链越过折返点：半透明绿罩让导轨与光珠透出，读作链路穿针而过。
+.turn-indicator.is-energized {
+  circle {
+    fill: rgba(7, 34, 26, 0.55);
+    stroke: rgba(61, 240, 174, 0.72);
+  }
+
+  path {
+    stroke: #a9ffd6;
   }
 }
 
@@ -401,6 +1086,28 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 .runway-node.is-completed {
   --node-color: #38e7a7;
   --node-soft: rgba(43, 224, 159, 0.25);
+}
+
+// 完成节点核心点亮：与绿色导轨连成一条完整能量链，节点读作链上导通的灯。
+.runway-node.is-completed .node-core {
+  fill: url('#s4-node-lit-core');
+  stroke: #a4ffd9;
+  stroke-width: 1.5;
+}
+
+// 亮核心上的对勾压深色，读作盖印确认。
+.runway-node.is-completed .node-check {
+  stroke: #04301f;
+}
+
+.runway-node.is-completed .node-orbit-inner {
+  stroke-width: 2;
+  opacity: .9;
+}
+
+// 外层虚线轨道环缓慢旋转，表达“持续带电”。
+.runway-node.is-completed .node-orbit-outer {
+  animation: node-orbit-spin 12s linear infinite;
 }
 
 .runway-node.is-running {
@@ -480,14 +1187,12 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   rect:nth-child(3) { animation-delay: -.5s; }
 }
 
-.runway-node-index {
-  fill: currentColor;
-  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-anchor: middle;
-  opacity: .84;
+.runway-node-label-rule {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: .28;
 }
 
 .runway-node-name {
@@ -509,55 +1214,96 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   text {
     fill: currentColor;
     font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: 1px;
     text-anchor: middle;
+  }
+
+  .count-divider {
+    opacity: .42;
   }
 }
 
 .runway-milestone {
   color: #49dff5;
-
-  &.is-completed {
-    color: #39e8aa;
-
-    .milestone-scan {
-      fill: rgba(50, 228, 166, .16);
-    }
-  }
 }
 
 .milestone-scan {
-  fill: rgba(52, 198, 238, .12);
-  stroke: currentColor;
+  fill: none;
+  stroke: rgba(73, 217, 249, .5);
   stroke-width: 1;
-  stroke-dasharray: 5 5;
-  filter: url('#s4-soft-glow');
-  animation: milestone-scan 6s linear infinite;
-  transform-box: fill-box;
-  transform-origin: center;
+  stroke-dasharray: 2 9;
+  animation: milestone-scan-spin 16s linear infinite;
 }
 
-.milestone-ring {
-  fill: rgba(2, 22, 40, .88);
-  stroke: currentColor;
-  filter: url('#s4-soft-glow');
+.milestone-ticks line {
+  stroke: rgba(103, 213, 245, .3);
+  stroke-width: 1;
+  stroke-linecap: round;
+
+  &.is-major {
+    stroke: rgba(147, 235, 255, .58);
+    stroke-width: 1.5;
+  }
 }
 
-.milestone-ring-outer { stroke-width: 2; }
-.milestone-ring-inner { stroke-width: 1; opacity: .65; }
+.milestone-track {
+  fill: none;
+  stroke: rgba(62, 152, 199, .26);
+  stroke-width: 7;
+}
 
-.milestone-core {
+.milestone-progress {
+  fill: none;
+  stroke: url('#s4-hub-arc');
+  stroke-width: 7;
+  stroke-linecap: round;
+  filter: url('#s4-soft-glow');
+  transform: rotate(-90deg);
+  animation: path-arrive .8s ease both;
+  // 每完成一步，终点进度环平滑伸展。
+  transition: stroke-dasharray .6s cubic-bezier(.3, .75, .3, 1);
+}
+
+.milestone-plate {
+  fill: url('#s4-hub-plate');
+  stroke: rgba(73, 221, 255, .48);
+  stroke-width: 1;
+}
+
+.milestone-plate-edge {
+  fill: none;
+  stroke: rgba(214, 249, 255, .1);
+  stroke-width: 1;
+}
+
+.milestone-spark {
   fill: url('#s4-milestone-core');
   filter: url('#s4-strong-glow');
+  // 光点沿进度环随比例移动。
+  transition: transform .6s cubic-bezier(.3, .75, .3, 1);
 }
 
-.milestone-cross {
+.milestone-value {
+  fill: #58e8ff;
+  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  text-anchor: middle;
+  filter: url('#s4-soft-glow');
+}
+
+.milestone-value-unit {
+  font-size: 13px;
+}
+
+.milestone-title-rule {
   fill: none;
   stroke: currentColor;
+  stroke-opacity: .32;
   stroke-width: 1;
-  opacity: .5;
+  stroke-linecap: round;
 }
 
 .milestone-title,
@@ -578,10 +1324,49 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   letter-spacing: 1px;
 }
 
+.runway-milestone.is-completed {
+  color: #39e8aa;
+
+  .milestone-scan {
+    stroke: rgba(72, 235, 186, .42);
+  }
+
+  .milestone-ticks line {
+    stroke: rgba(88, 235, 195, .3);
+
+    &.is-major {
+      stroke: rgba(150, 248, 214, .6);
+    }
+  }
+
+  .milestone-progress {
+    stroke: url('#s4-hub-arc-complete');
+  }
+
+  .milestone-plate {
+    stroke: rgba(69, 237, 178, .55);
+  }
+
+  .milestone-value {
+    fill: #65f2bd;
+  }
+}
+
+.runway-baton-anchor {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  transition: transform .55s cubic-bezier(.3, .75, .3, 1);
+}
+
 .runway-baton {
   color: #ffc55f;
   filter: url('#s4-strong-glow');
   animation: baton-hover 1.5s ease-in-out infinite;
+}
+
+// 环体内层组：吸收脉冲以局部原点（环节圆心）缩放。
+.milestone-dial.is-absorbing {
+  animation: milestone-absorb .66s cubic-bezier(.2, .85, .3, 1);
 }
 
 .baton-beam {
@@ -596,43 +1381,22 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 .baton-spark { fill: #fff0bc; }
 .baton-body { fill: currentColor; }
 
-.runway-legend {
-  position: absolute;
-  left: 20px;
-  bottom: 12px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 17px;
-  color: #6390a8;
-  font-size: 11px;
-  letter-spacing: .5px;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  i {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    box-shadow: 0 0 7px currentColor;
-  }
-
-  .is-done { color: #38e7a7; background: currentColor; }
-  .is-running { color: #ffb43d; background: currentColor; }
-  .is-pending { color: #4e98c8; background: currentColor; }
-  .is-issue { color: #ff626e; background: currentColor; }
-}
-
 @keyframes runway-drift {
   to { stroke-dashoffset: -30; }
 }
 
 @keyframes active-energy {
   to { stroke-dashoffset: -42; }
+}
+
+@keyframes completed-energy-flow {
+  // -52.1 = 光珠 dash 周期(0.1+52)，保证循环无缝。
+  to { stroke-dashoffset: -52.1; }
+}
+
+@keyframes progress-head-pulse {
+  0%, 100% { opacity: .58; transform: scale(.86); }
+  50% { opacity: 1; transform: scale(1.12); }
 }
 
 @keyframes path-arrive {
@@ -650,13 +1414,14 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   50% { opacity: 1; transform: scale(1.12); }
 }
 
+// -64 = 轨道环虚线周期(2+6) 的 8 倍，保证旋转无缝。
+@keyframes node-orbit-spin {
+  to { stroke-dashoffset: -64; }
+}
+
 @keyframes energy-bar {
   from { transform: scaleY(.48); opacity: .58; }
   to { transform: scaleY(1); opacity: 1; }
-}
-
-@keyframes milestone-scan {
-  to { transform: rotate(360deg); }
 }
 
 @keyframes baton-hover {
@@ -664,30 +1429,106 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
   50% { opacity: 1; }
 }
 
+@keyframes milestone-scan-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ticker-scroll {
+  to { transform: translateX(-50%); }
+}
+
+@keyframes ticker-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+@keyframes legend-arrive {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes milestone-absorb {
+  0% { transform: scale(1); }
+  38% {
+    transform: scale(1.14);
+    filter: drop-shadow(0 0 16px rgba(103, 232, 249, .85)) drop-shadow(0 0 26px rgba(47, 240, 160, .5));
+  }
+  100% { transform: scale(1); }
+}
+
 @media (max-width: 1280px) {
-  .runway-summary {
-    min-width: 190px;
-    transform: scale(.9);
-    transform-origin: top right;
+  .runway-deck {
+    gap: 8px;
+    height: 44px;
   }
 
+  // 窄屏下图例收窄而非隐藏：字号与桌面端保持一致，仅收紧留白。
   .runway-legend {
-    gap: 11px;
-    transform: scale(.9);
-    transform-origin: bottom left;
+    gap: 10px;
+    padding: 6px 13px 6px 12px;
+  }
+
+  .legend-kicker {
+    padding-right: 9px;
+  }
+
+  .ticker-node {
+    max-width: 110px;
+  }
+
+  .runway-svg {
+    inset: 0 2px 56px;
+    width: calc(100% - 4px);
+    height: calc(100% - 56px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .runway-complete-path,
+  .runway-complete-core,
+  .runway-baton-anchor {
+    transition: none !important;
+  }
+
+  .runway-legend,
+  .legend-item.is-running i,
   .runway-dashes,
+  .runway-complete-flow,
   .runway-active-path,
+  .runway-progress-head,
   .runway-node,
   .node-orbit-outer,
   .node-energy rect,
   .milestone-scan,
+  .milestone-dial.is-absorbing,
+  .ticker-track.is-scrolling,
+  .ticker-node i,
+  .ticker-chip.is-running .chip-dot,
   .runway-baton,
   .baton-beam {
     animation: none !important;
   }
+}
+</style>
+
+<style lang="scss">
+// 飘入元素由脚本动态创建（不携带 scoped 标记），使用全局样式。
+.runway-flyer {
+  position: absolute;
+  z-index: 30;
+  max-width: 200px;
+  padding: 5px 14px;
+  border: 1px solid rgba(69, 237, 178, 0.65);
+  border-radius: 999px;
+  color: #eafff5;
+  background: linear-gradient(110deg, rgba(13, 66, 51, 0.95), rgba(6, 34, 40, 0.9));
+  box-shadow: 0 0 18px rgba(47, 240, 160, 0.45), inset 0 0 12px rgba(47, 240, 160, 0.22);
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 </style>
