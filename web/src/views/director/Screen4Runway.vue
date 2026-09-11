@@ -631,13 +631,14 @@ onUnmounted(() => {
   }
 }
 
+// 图例字号与跑道环节节点名称（18px）同规格，铭牌信息与跑道主体信息同级可读。
 .legend-kicker {
   padding-right: 13px;
   border-right: 1px solid rgba(65, 188, 238, 0.18);
   color: #9dd9e8;
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: .3em;
+  letter-spacing: .2em;
 }
 
 .legend-item {
@@ -645,14 +646,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   color: #8fb6cc;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: .5px;
   white-space: nowrap;
 
   i {
-    width: 9px;
-    height: 9px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
     box-shadow: 0 0 10px currentColor;
   }
@@ -704,7 +705,7 @@ onUnmounted(() => {
   top: 12px;
   right: 12px;
   box-sizing: border-box;
-  width: min(176px, calc(100% - 364px));
+  width: min(216px, calc(100% - 430px));
   height: 38px;
   justify-content: flex-end;
   border-color: rgba(65, 188, 238, 0.26);
@@ -730,6 +731,7 @@ onUnmounted(() => {
   }
 }
 
+// “整体进度”主标与跑道节点名称（18px）同级；数字同规格、单位层级降一档保持节奏。
 .summary-kicker {
   display: flex;
   align-items: center;
@@ -737,15 +739,15 @@ onUnmounted(() => {
   min-width: 0;
   overflow: hidden;
   color: #9dd9e8;
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: .08em;
   white-space: nowrap;
 
   i {
     flex: 0 0 auto;
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #37ecb0;
     box-shadow: 0 0 10px #37ecb0;
@@ -761,14 +763,14 @@ onUnmounted(() => {
 
   strong {
     color: #f4fcff;
-    font-size: 12px;
+    font-size: 18px;
     font-weight: 800;
     line-height: 1;
   }
 
   span {
     color: #75aac4;
-    font-size: 12px;
+    font-size: 13px;
   }
 }
 
@@ -788,14 +790,15 @@ onUnmounted(() => {
   border-right: 1px solid rgba(67, 212, 255, 0.18);
 }
 
+// 任务栏头部主标与跑道节点名称（18px）同规格，栏首信息与跑道主体信息同级可读。
 .ticker-node {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 160px;
+  max-width: 200px;
   overflow: hidden;
   color: #ffd273;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
   white-space: nowrap;
 
@@ -807,8 +810,8 @@ onUnmounted(() => {
 
   i {
     flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: currentColor;
     box-shadow: 0 0 8px currentColor;
@@ -827,7 +830,7 @@ onUnmounted(() => {
 
   strong {
     color: #9be8ff;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 800;
     line-height: 1;
     text-shadow: 0 0 8px rgba(71, 211, 255, .38);
@@ -836,7 +839,7 @@ onUnmounted(() => {
   em {
     color: #648fa7;
     font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-    font-size: 10px;
+    font-size: 11px;
     font-style: normal;
   }
 }
@@ -980,7 +983,7 @@ onUnmounted(() => {
   gap: 9px;
   padding-left: 6px;
   color: #9fe8cd;
-  font-size: 12.5px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 1px;
   white-space: nowrap;
@@ -991,8 +994,8 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 15px;
-    height: 15px;
+    width: 17px;
+    height: 17px;
     border: 1px solid rgba(66, 240, 164, .55);
     border-radius: 50%;
     background: rgba(13, 66, 51, .45);

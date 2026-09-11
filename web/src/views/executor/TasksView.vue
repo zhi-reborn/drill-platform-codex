@@ -72,19 +72,15 @@
                 <div class="drill-actions">
                   <div class="screen-actions">
                     <el-button class="drill-action-button" type="success" size="small" @click.stop="viewScreen(drill.id)">
-                      <el-icon><Monitor /></el-icon>
                       大屏
                     </el-button>
                     <el-button class="drill-action-button" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
-                      <el-icon><DataBoard /></el-icon>
                       大屏2
                     </el-button>
                     <el-button class="drill-action-button drill-action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
-                      <el-icon><DataBoard /></el-icon>
                       大屏3
                     </el-button>
                     <el-button class="drill-action-button drill-action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
-                      <el-icon><DataBoard /></el-icon>
                       大屏4
                     </el-button>
                   </div>
@@ -1639,8 +1635,8 @@ onBeforeUnmount(() => {
         }
 
         :deep(.el-button) {
-          min-width: 72px;
           height: 32px;
+          padding: 5px 10px;
           border-radius: $radius-md;
           font-weight: $font-weight-semibold;
           font-size: $font-size-xs;

@@ -65,24 +65,18 @@
                 <el-button class="drill-action-button action-detail" type="primary" size="small" @click="viewDrill(drill.id)">
                   详情
                 </el-button>
-                <div class="screen-actions">
-                  <el-button class="drill-action-button action-screen" type="success" size="small" @click="viewScreen(drill.id)">
-                    <el-icon><Monitor /></el-icon>
-                    大屏
-                  </el-button>
-                  <el-button class="drill-action-button action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
-                    <el-icon><DataBoard /></el-icon>
-                    大屏2
-                  </el-button>
-                  <el-button class="drill-action-button action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
-                    <el-icon><DataBoard /></el-icon>
-                    大屏3
-                  </el-button>
-                  <el-button class="drill-action-button action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
-                    <el-icon><DataBoard /></el-icon>
-                    大屏4
-                  </el-button>
-                </div>
+                <el-button class="drill-action-button action-screen" type="success" size="small" @click="viewScreen(drill.id)">
+                  大屏
+                </el-button>
+                <el-button class="drill-action-button action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                  大屏2
+                </el-button>
+                <el-button class="drill-action-button action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
+                  大屏3
+                </el-button>
+                <el-button class="drill-action-button action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
+                  大屏4
+                </el-button>
               </div>
             </el-card>
           </el-col>
@@ -369,36 +363,29 @@ onMounted(() => {
           }
         }
 
-        // 操作行两端锚定：详情（管理主操作）居左，大屏入口组居右，窄卡自动换行不裁切。
+        // 操作行：5 枚按钮单排均布；屏幕按钮去掉冗余同形图标并收紧内距，
+        // 整行 ~266px，任何 lg=8 卡宽下都单行放下（极窄屏换行兜底）。
         .drill-actions {
           display: flex;
-          justify-content: space-between;
           flex-wrap: wrap;
           align-items: center;
-          gap: 8px;
+          justify-content: space-between;
+          gap: 6px;
 
           :deep(.el-button + .el-button) {
             margin-left: 0;
           }
 
           .drill-action-button {
-            min-width: 64px;
             border-radius: 6px;
             font-weight: $font-weight-medium;
-          }
-
-          // 大屏入口组：紧凑成组，单行放下或整组换行。
-          .screen-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
           }
 
           .action-screen,
           .action-screen2,
           .action-screen3,
           .action-screen4 {
-            padding-inline: 10px;
+            padding: 5px 8px;
           }
 
           .action-screen3 {

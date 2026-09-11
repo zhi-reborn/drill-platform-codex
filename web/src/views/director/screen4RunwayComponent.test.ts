@@ -154,10 +154,11 @@ describe('screen4 runway component', () => {
     expect(template.slice(deckIndex)).not.toContain('deck-summary')
     expect(styles).toContain('.runway-deck')
     expect(styles).toMatch(/\.runway-summary\s*\{[^}]*position: absolute;[^}]*top: 12px;[^}]*right: 12px;/s)
-    expect(styles).toMatch(/\.runway-summary\s*\{[^}]*width: min\(176px,[^}]*height: 38px;/s)
-    expect(styles).toMatch(/\.summary-kicker\s*\{[^}]*font-size: 12px;/s)
-    expect(styles).toMatch(/\.summary-progress[\s\S]*?strong\s*\{[^}]*font-size: 12px;/)
-    expect(styles).toMatch(/\.summary-progress[\s\S]*?span\s*\{[^}]*font-size: 12px;/)
+    expect(styles).toMatch(/\.runway-summary\s*\{[^}]*width: min\(216px,[^}]*height: 38px;/s)
+    // 摘要主标与数字与跑道节点名称（18px）同规格。
+    expect(styles).toMatch(/\.summary-kicker\s*\{[^}]*font-size: 18px;/s)
+    expect(styles).toMatch(/\.summary-progress[\s\S]*?strong\s*\{[^}]*font-size: 18px;/)
+    expect(styles).toMatch(/\.summary-progress[\s\S]*?span\s*\{[^}]*font-size: 13px;/)
     expect(styles).toMatch(/\.runway-svg\s*\{[^}]*inset: 2px 4px 60px;/s)
     expect(styles).toMatch(/\.runway-svg\s*\{[^}]*transform: translateY\(clamp\(-40px, -4vh, -24px\)\) scale\(1\.08\);/s)
     expect(template).not.toContain('runway-node-index')
@@ -199,8 +200,9 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.runway-legend\s*\{[^}]*top: 12px;[^}]*left: 12px;/s)
     // 图例与右上整体进度同高，保证两个 HUD 锚点严格处于同一水平线。
     expect(styles).toMatch(/\.runway-legend\s*\{[^}]*height: 38px;/s)
-    expect(styles).toMatch(/\.legend-item[\s\S]*?i\s*\{[\s\S]*?width: 9px;[\s\S]*?height: 9px;/)
-    expect(styles).toMatch(/\.legend-item\s*\{[^}]*font-size: 13px;/)
+    // 图例文字与跑道节点名称（18px）同规格，圆点随之放大保持光学平衡。
+    expect(styles).toMatch(/\.legend-item[\s\S]*?i\s*\{[\s\S]*?width: 11px;[\s\S]*?height: 11px;/)
+    expect(styles).toMatch(/\.legend-item\s*\{[^}]*font-size: 18px;/)
     expect(styles).toContain('&.is-done i { color: #38e7a7; background: currentColor; }')
     expect(styles).toContain('@keyframes legend-arrive')
     expect(template).not.toContain('<span><i class="is-issue"></i>异常</span>')
@@ -249,7 +251,10 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.chip-name\s*\{[^}]*white-space: nowrap;/s)
     expect(styles).toContain('.ticker-standby')
     expect(styles).toMatch(/\.ticker-count\s*\{[^}]*display: inline-flex;/s)
-    expect(styles).toMatch(/\.ticker-count[\s\S]*?strong\s*\{[^}]*font-size: 15px;/)
+    // 头部主标与计数与跑道节点名称（18px）同规格。
+    expect(styles).toMatch(/\.ticker-node\s*\{[^}]*font-size: 18px;/s)
+    expect(styles).toMatch(/\.ticker-count[\s\S]*?strong\s*\{[^}]*font-size: 18px;/)
+    expect(styles).toMatch(/\.ticker-complete\s*\{[^}]*font-size: 18px;/s)
     expect(styles).toContain('@keyframes standby-drift')
     expect(styles).toContain('@keyframes standby-bead')
     // 完成宣告：分隔线右侧的绿色对勾徽记，与完成链路同色系。
