@@ -10,6 +10,24 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).not.toMatch(/import\s+ScreenView2|<ScreenView2/)
   })
 
+  it('matches the primary screen header and runtime branding', () => {
+    expect(screen4Source).toContain('class="screen-header"')
+    expect(screen4Source).toContain('class="header-frame" viewBox="0 0 1200 82"')
+    expect(screen4Source).toContain('class="header-title-block"')
+    expect(screen4Source).toContain('class="drill-title">应急指挥中心</h1>')
+    expect(screen4Source).toContain('class="btn-icon btn-fullscreen-mark"')
+    expect(screen4Source).toContain('{{ screenBrand.fullscreenIconText }}')
+    expect(screen4Source).toContain('{{ screenBrand.companyName }}')
+    expect(screen4Source).toContain("fetch('/screen-brand.json', { cache: 'no-store' })")
+    expect(screen4Source).not.toContain('class="command-header"')
+    expect(screen4Source).not.toContain('class="header-title-shell"')
+    expect(screen4Source).not.toContain('<FullScreen />')
+    expect(screen4Source).toMatch(/\.screen-header\s*\{[\s\S]*?height:\s*74px;/)
+    expect(screen4Source).toMatch(/\.screen-header\s*\{[\s\S]*?margin:\s*12px 18px 0;/)
+    expect(screen4Source).toContain('grid-template-rows: 86px minmax(0, 1fr);')
+    expect(screen4Source).toContain('@keyframes header-flow-to-center')
+  })
+
   it('counts only visible business phase steps with its own presentation', () => {
     expect(screen4Source).toContain('const visiblePhaseSteps = phase.phaseSteps.filter(ps => ps.name !== phase.name)')
     expect(screen4Source).toContain("visiblePhaseSteps.filter(ps => getPhaseStepStatus(ps) === 'done').length")

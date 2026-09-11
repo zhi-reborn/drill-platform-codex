@@ -18,22 +18,79 @@
       <div class="cyber-bg cyber-bg-beams" />
       <div class="cyber-bg cyber-bg-scan" />
 
-      <header class="command-header">
-        <div class="header-scanline" />
-        <div class="header-title-shell">
-          <span class="title-rail is-left" aria-hidden="true" />
-          <h1 class="command-title" data-text="应急指挥中心">应急指挥中心</h1>
-          <span class="title-rail is-right" aria-hidden="true" />
+      <header class="screen-header">
+        <svg class="header-frame" viewBox="0 0 1200 82" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="screen4-header-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#148cff" stop-opacity="0" />
+              <stop offset="12%" stop-color="#24d7ff" stop-opacity="0.9" />
+              <stop offset="34%" stop-color="#42efff" stop-opacity="1" />
+              <stop offset="50%" stop-color="#d7fbff" stop-opacity="1" />
+              <stop offset="66%" stop-color="#42efff" stop-opacity="1" />
+              <stop offset="88%" stop-color="#24d7ff" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#148cff" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="screen4-header-flow-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+              <stop offset="42%" stop-color="#9bf8ff" stop-opacity="0.1" />
+              <stop offset="50%" stop-color="#ffffff" stop-opacity="1" />
+              <stop offset="58%" stop-color="#9bf8ff" stop-opacity="0.1" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </linearGradient>
+            <filter id="screen4-header-line-glow" x="-8%" y="-130%" width="116%" height="360%">
+              <feGaussianBlur stdDeviation="4.2" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <path class="header-frame-line header-frame-line-shadow" d="M26 18 H156 L178 36 H402 L422 70 H462" />
+          <path class="header-frame-line header-frame-line-shadow" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
+          <path class="header-frame-line" d="M26 18 H156 L178 36 H402 L422 70 H462" />
+          <path class="header-frame-line" d="M738 70 H778 L798 36 H1018 L1040 18 H1174" />
+          <path class="header-frame-tray" d="M462 70 H738" />
+          <path class="header-frame-lower-tray header-frame-lower-tray-glow" d="M400 34 L417 64 H783 L800 34" />
+          <path class="header-frame-lower-tray" d="M410 34 L426 62 H774 L790 34" />
+          <path class="header-frame-tip header-frame-tip-glow" d="M422 70 H462" />
+          <path class="header-frame-tip header-frame-tip-glow" d="M738 70 H778" />
+          <path class="header-frame-tip-soft header-frame-tip-soft-glow" d="M410 34 L426 62" />
+          <path class="header-frame-tip-soft header-frame-tip-soft-glow" d="M774 62 L790 34" />
+          <path class="header-frame-tip" d="M422 70 H462" />
+          <path class="header-frame-tip" d="M738 70 H778" />
+          <path class="header-frame-tip-soft" d="M410 34 L426 62" />
+          <path class="header-frame-tip-soft" d="M774 62 L790 34" />
+          <path class="header-flow header-flow-left header-flow-delay-1" d="M410 34 L426 62 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-1" d="M790 34 L774 62 H600" />
+          <path class="header-flow header-flow-left header-flow-delay-2" d="M422 70 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-2" d="M778 70 H600" />
+          <path class="header-flow header-flow-left header-flow-delay-3" d="M462 70 H600" />
+          <path class="header-flow header-flow-right header-flow-delay-3" d="M738 70 H600" />
+        </svg>
+        <div class="header-title-block">
+          <h1 class="drill-title">应急指挥中心</h1>
         </div>
         <div class="header-meta">
-          <button class="btn-fullscreen" @click="toggleFullscreen" title="全屏模式">
-            <el-icon><FullScreen /></el-icon>
-          </button>
         </div>
-        <div v-if="canControl" class="control-strip">
-          <button v-if="instance?.status === 'pending'" class="control-btn good" @click="handleStart">开始</button>
-
-        </div>
+        <button
+          class="btn-icon btn-fullscreen-mark"
+          :class="{ active: isFullscreenLike }"
+          @click="toggleFullscreen"
+          :title="isFullscreenLike ? '退出全屏' : '全屏切换'"
+          :aria-label="isFullscreenLike ? '退出全屏' : '进入全屏'"
+        >
+          <img
+            v-if="screenBrand.fullscreenIconImage"
+            class="fullscreen-mark fullscreen-mark-image"
+            :src="screenBrand.fullscreenIconImage"
+            alt=""
+            aria-hidden="true"
+            @error="handleBrandIconError"
+          />
+          <span v-else class="fullscreen-mark" aria-hidden="true">{{ screenBrand.fullscreenIconText }}</span>
+        </button>
+        <div class="header-pulse-line" />
+        <span class="header-brand">{{ screenBrand.companyName }}</span>
       </header>
 
       <main class="command-main">
@@ -143,7 +200,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { FullScreen } from '@element-plus/icons-vue'
 import Screen4Runway from './Screen4Runway.vue'
 import { getScreen4RunwayProgress, type Screen4RunwayStatus } from './screen4Runway'
 import { drillApi } from '@/api/modules/drill'
@@ -157,10 +213,24 @@ const role = computed(() => authStore.role)
 const userDept = computed(() => authStore.user?.department ?? '')
 const isDirector = computed(() => role.value === 'director' || role.value === 'admin')
 const isExecutor = computed(() => role.value === 'executor')
-const isViewer = computed(() => role.value === 'viewer')
-const canControl = computed(() => isDirector.value)
 const canOperateTask = computed(() => isDirector.value || isExecutor.value)
 const drillId = computed(() => Number(route.params.id))
+const isNativeFullscreen = ref(false)
+const isFullscreenLike = computed(() => isNativeFullscreen.value)
+
+type ScreenBrandConfig = {
+  companyName?: string
+  fullscreenIconText?: string
+  fullscreenIconImage?: string
+}
+
+const DEFAULT_SCREEN_BRAND = {
+  companyName: '东风科技有限公司',
+  fullscreenIconText: 'N',
+  fullscreenIconImage: '',
+}
+
+const screenBrand = ref({ ...DEFAULT_SCREEN_BRAND })
 
 // 任务完成弹窗
 const completionModal = ref({
@@ -1345,27 +1415,44 @@ function handleRetry() {
   loadAllData()
 }
 
-function toggleFullscreen() {
+async function toggleFullscreen() {
   const el = document.querySelector('.screen-root') as HTMLElement
   if (!el) return
   if (document.fullscreenElement) {
-    document.exitFullscreen()
+    await document.exitFullscreen()
   } else {
-    el.requestFullscreen()
+    await el.requestFullscreen()
   }
 }
 
-async function handleStart() {
-  try { await drillApi.start(drillId.value); scheduleRefresh('drill', 'steps') } catch { /* */ }
+function handleFullscreenChange() {
+  isNativeFullscreen.value = Boolean(document.fullscreenElement)
 }
-async function handlePause() {
-  try { await drillApi.pause(drillId.value); scheduleRefresh('drill') } catch { /* */ }
+
+function cleanBrandValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
-async function handleResume() {
-  try { await drillApi.resume(drillId.value); scheduleRefresh('drill') } catch { /* */ }
+
+async function loadScreenBrand() {
+  try {
+    const response = await fetch('/screen-brand.json', { cache: 'no-store' })
+    if (!response.ok) return
+    const config = await response.json() as ScreenBrandConfig
+    screenBrand.value = {
+      companyName: cleanBrandValue(config.companyName) || DEFAULT_SCREEN_BRAND.companyName,
+      fullscreenIconText: cleanBrandValue(config.fullscreenIconText) || DEFAULT_SCREEN_BRAND.fullscreenIconText,
+      fullscreenIconImage: cleanBrandValue(config.fullscreenIconImage),
+    }
+  } catch (err) {
+    console.warn('load screen brand config failed:', err)
+  }
 }
-async function handleTerminate() {
-  try { await drillApi.terminate(drillId.value); scheduleRefresh('drill') } catch { /* */ }
+
+function handleBrandIconError() {
+  screenBrand.value = {
+    ...screenBrand.value,
+    fullscreenIconImage: '',
+  }
 }
 
 function canActOn(step: StepInstance): boolean {
@@ -1423,6 +1510,7 @@ onMounted(() => {
   html.style.overflow = 'hidden'
   body.style.overflow = 'hidden'
 
+  loadScreenBrand()
   loadAllData().then(() => {
     initCanvas()
     drawFlowTree()
@@ -1437,6 +1525,7 @@ onMounted(() => {
     if (!wsConnected.value) scheduleRefresh('drill', 'steps')
   }, 30000)
   window.addEventListener('resize', onResize)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
 
   // Canvas 点击：展开/折叠环节
   const canvasEl = flowCanvasRef.value
@@ -1453,6 +1542,7 @@ onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
   if (pollingTimer) clearInterval(pollingTimer)
   window.removeEventListener('resize', onResize)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   chamberResizeObserver?.disconnect()
   const canvasEl = flowCanvasRef.value
   if (canvasEl) canvasEl.removeEventListener('click', handleCanvasClick)
@@ -2360,7 +2450,7 @@ function fmt(d: Date): string {
   position: relative;
   margin: 0;
   height: 100vh;
-  grid-template-rows: clamp(76px, 8vh, 96px) minmax(0, 1fr);
+  grid-template-rows: 86px minmax(0, 1fr);
   background:
     radial-gradient(circle at 50% 45%, rgba(12, 70, 132, 0.44), transparent 34%),
     radial-gradient(circle at 78% 70%, rgba(79, 36, 36, 0.22), transparent 28%),
@@ -2683,6 +2773,284 @@ function fmt(d: Date): string {
 .control-btn.good { color: #25f3a2; border-color: rgba(37, 243, 162, 0.45); }
 .control-btn.warn { color: #ffd166; border-color: rgba(255, 209, 102, 0.45); }
 .control-btn.danger { color: #ff4d7d; border-color: rgba(255, 77, 125, 0.55); }
+
+/* 与主大屏共用同一套页眉视觉语言。 */
+.screen-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 74px;
+  margin: 12px 18px 0;
+  padding: 0 64px;
+  overflow: hidden;
+  border: 0;
+  background:
+    radial-gradient(ellipse at 50% 12%, rgba(37, 132, 255, 0.34), transparent 32%),
+    linear-gradient(180deg, rgba(21, 66, 127, 0.34), rgba(6, 24, 57, 0.12) 68%, rgba(0, 212, 255, 0.04)),
+    linear-gradient(90deg, rgba(13, 58, 124, 0.28), rgba(4, 18, 44, 0.08) 36%, rgba(4, 18, 44, 0.08) 64%, rgba(13, 58, 124, 0.28));
+  box-shadow:
+    inset 0 1px 0 rgba(115, 191, 255, 0.36),
+    inset 0 -1px 0 rgba(44, 144, 255, 0.38),
+    0 8px 28px rgba(0, 56, 120, 0.18);
+}
+
+.screen-header::before {
+  content: '';
+  position: absolute;
+  inset: 2px 0 auto;
+  height: 54px;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(0, 136, 255, 0.3), transparent 38%),
+    linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.08) 24%, rgba(45, 130, 255, 0.18) 50%, rgba(0, 212, 255, 0.08) 76%, transparent);
+  pointer-events: none;
+}
+
+.screen-header::after {
+  content: '';
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.18) 16%, rgba(78, 166, 255, 0.5) 50%, rgba(0, 212, 255, 0.18) 84%, transparent);
+  pointer-events: none;
+}
+
+.screen-header .header-frame {
+  position: absolute;
+  inset: 0 24px;
+  z-index: 1;
+  width: calc(100% - 48px);
+  height: 100%;
+  pointer-events: none;
+}
+
+.screen-header .header-frame-line,
+.screen-header .header-frame-tray,
+.screen-header .header-frame-lower-tray,
+.screen-header .header-frame-tip,
+.screen-header .header-frame-tip-soft,
+.screen-header .header-flow {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.screen-header .header-frame-line {
+  stroke: url(#screen4-header-line-grad);
+  stroke-width: 2.4;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  filter: url(#screen4-header-line-glow);
+}
+
+.screen-header .header-frame-line-shadow {
+  stroke-width: 8;
+  opacity: 0.14;
+}
+
+.screen-header .header-frame-tray {
+  stroke: url(#screen4-header-line-grad);
+  stroke-width: 2.6;
+  stroke-linecap: square;
+  filter: url(#screen4-header-line-glow);
+}
+
+.screen-header .header-frame-lower-tray,
+.screen-header .header-frame-tip-soft {
+  stroke: url(#screen4-header-line-grad);
+  stroke-width: 2.2;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  filter: url(#screen4-header-line-glow);
+  opacity: 0.92;
+}
+
+.screen-header .header-frame-lower-tray-glow,
+.screen-header .header-frame-tip-soft-glow {
+  stroke-width: 5.2;
+  opacity: 0.26;
+}
+
+.screen-header .header-frame-tip {
+  stroke: #d4f9ff;
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  filter: url(#screen4-header-line-glow);
+  opacity: 0.96;
+}
+
+.screen-header .header-frame-tip-glow {
+  stroke-width: 7;
+  opacity: 0.22;
+}
+
+.screen-header .header-flow {
+  stroke: url(#screen4-header-flow-grad);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  stroke-dasharray: 16 292;
+  animation: header-flow-to-center 4.8s cubic-bezier(0.42, 0, 0.22, 1) infinite;
+}
+
+.screen-header .header-flow-delay-1 { animation-delay: 0s; }
+.screen-header .header-flow-delay-2 { animation-delay: 0.34s; }
+.screen-header .header-flow-delay-3 { animation-delay: 0.68s; }
+
+.screen-header .header-title-block {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(430px, 42vw);
+  min-width: 300px;
+  height: 52px;
+  transform: translateX(-50%);
+  text-align: center;
+  background:
+    radial-gradient(ellipse at 50% 58%, rgba(0, 218, 255, 0.16), transparent 66%),
+    linear-gradient(90deg, transparent, rgba(0, 192, 255, 0.12) 22%, rgba(83, 215, 255, 0.22) 50%, rgba(0, 192, 255, 0.12) 78%, transparent);
+  box-shadow: 0 0 28px rgba(0, 128, 255, 0.16), inset 0 0 22px rgba(0, 114, 255, 0.12);
+}
+
+.screen-header .drill-title {
+  margin: 0;
+  padding-left: 6px;
+  overflow: hidden;
+  color: #ffffff;
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+  font-size: clamp(38px, 3vw, 42px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 5px;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 10px rgba(64, 170, 255, 0.8);
+  white-space: nowrap;
+}
+
+.screen-header .header-meta {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.screen-header .btn-icon {
+  position: absolute;
+  right: 34px;
+  top: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 2px;
+  background: transparent;
+  color: #00d4ff;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: all 0.2s;
+}
+
+.screen-header .btn-icon:hover,
+.screen-header .btn-icon.active {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.15);
+}
+
+.screen-header .btn-fullscreen-mark {
+  top: auto;
+  right: 22px;
+  bottom: 11px;
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.screen-header .btn-fullscreen-mark:hover,
+.screen-header .btn-fullscreen-mark.active {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen-header .fullscreen-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 28px;
+  color: rgba(255, 255, 255, 0.98);
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', Arial, sans-serif;
+  font-size: 31px;
+  font-style: italic;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.58), 0 0 9px rgba(46, 225, 255, 0.5);
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5)) drop-shadow(0 0 7px rgba(46, 225, 255, 0.38));
+}
+
+.screen-header .fullscreen-mark-image {
+  display: block;
+  object-fit: contain;
+}
+
+.screen-header .header-pulse-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+  transform: scaleX(0);
+  animation: header-pulse 4.8s ease-in-out infinite;
+}
+
+.screen-header .header-brand {
+  position: absolute;
+  right: 68px;
+  bottom: 12px;
+  z-index: 4;
+  color: #f0f7ff;
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(240, 247, 255, 0.42), 0 0 14px rgba(0, 212, 255, 0.28);
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes header-pulse {
+  0% { transform: scaleX(0); opacity: 0; }
+  50% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0); opacity: 0; }
+}
+
+@keyframes header-flow-to-center {
+  0% { opacity: 0; stroke-dashoffset: 260; }
+  16% { opacity: 0.78; }
+  54% { opacity: 0.86; stroke-dashoffset: 0; }
+  72% { opacity: 0; }
+  100% { opacity: 0; stroke-dashoffset: -54; }
+}
 
 .command-main {
   position: relative;
@@ -3211,6 +3579,12 @@ function fmt(d: Date): string {
 @media (prefers-reduced-motion: reduce) {
   .phase-card { transition: none !important; }
   .completion-progress-bar { animation: none !important; }
+  .header-flow {
+    animation: none !important;
+    opacity: 0.18;
+    stroke-dashoffset: 0;
+  }
+  .header-pulse-line,
   .header-scanline,
   .command-title::after,
   .title-rail::before,

@@ -153,7 +153,7 @@
         <g v-else-if="item.node.status === 'running'" class="node-energy" aria-hidden="true">
           <rect v-for="bar in 3" :key="bar" :x="-10 + (bar - 1) * 8" :y="3 - bar * 4" width="5" :height="bar * 5" rx="2" />
         </g>
-        <g class="runway-node-label" :transform="`translate(0 ${item.labelLines.length > 1 ? -73 : -51})`">
+        <g class="runway-node-label" :transform="`translate(0 ${item.labelLines.length > 1 ? -66 : -51})`">
           <text class="runway-node-name" y="0">
             <tspan
               v-for="(line, lineIndex) in item.labelLines"
@@ -164,10 +164,10 @@
           </text>
           <path
             class="runway-node-label-rule"
-            :d="item.labelLines.length > 1 ? 'M -24 29 L 24 29' : 'M -24 10 L 24 10'"
+            :d="item.labelLines.length > 1 ? 'M -24 27 L 24 27' : 'M -24 10 L 24 10'"
           />
         </g>
-        <g class="runway-node-count" transform="translate(0 58)">
+        <g class="runway-node-count" transform="translate(0 54)">
           <rect x="-39" y="-14" width="78" height="28" rx="14" />
           <text y="6">{{ item.node.completed }}<tspan class="count-divider">/</tspan>{{ item.node.total }}</text>
         </g>
@@ -234,21 +234,20 @@
     </svg>
 
     <div class="runway-deck" aria-label="跑道信息栏">
-      <div class="deck-cell deck-ticker" aria-label="当前环节任务滚动列表">
+      <div class="deck-cell deck-ticker" aria-label="当前环节任务列表">
         <div class="ticker-head" aria-hidden="true">
           <span class="ticker-node">
             <i></i>
-            <span>{{ activeNode?.name ?? '环节任务' }}</span>
+            <span>当前环节待完成任务</span>
           </span>
-          <span class="ticker-count">{{ tickerDoneCount }}/{{ runningSteps.length }}</span>
+          <span class="ticker-count">
+            <strong>{{ visibleSteps.length }}</strong>
+            <em>项</em>
+          </span>
         </div>
-        <div v-if="visibleSteps.length" ref="tickerViewportRef" class="ticker-viewport">
-          <div
-            class="ticker-track"
-            :class="{ 'is-scrolling': tickerScrolling }"
-            :style="{ '--ticker-duration': `${tickerDuration}s` }"
-          >
-            <div ref="tickerSequenceRef" class="ticker-sequence">
+        <div v-if="visibleSteps.length" class="ticker-viewport">
+          <div class="ticker-track">
+            <div class="ticker-sequence">
               <span
                 v-for="step in visibleSteps"
                 :key="step.id"
@@ -261,29 +260,20 @@
                 <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
               </span>
             </div>
-            <div v-if="tickerScrolling" class="ticker-sequence" aria-hidden="true">
-              <span
-                v-for="step in visibleSteps"
-                :key="`ticker-repeat-${step.id}`"
-                class="ticker-chip"
-                :class="`is-${step.status}`"
-                aria-hidden="true"
-              >
-                <i class="chip-dot"></i>
-                <span class="chip-name">{{ step.name }}</span>
-                <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
-              </span>
-            </div>
           </div>
         </div>
-        <div v-else class="ticker-empty">{{ runningSteps.length ? '本环节任务已全部完成' : '暂无进行中环节任务' }}</div>
+        <div v-else-if="allTasksCompleted" class="ticker-complete" aria-hidden="true">
+          <i></i>
+          <span>当前环节所有任务已完成</span>
+        </div>
+        <div v-else class="ticker-standby" aria-hidden="true"></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import {
   buildScreen4RunwayLayout,
   getScreen4PhaseStepProgress,
@@ -437,10 +427,21 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 
 const runningSteps = computed<Screen4RunwayStep[]>(() => props.runningSteps ?? [])
 
-// 传送带只展示未完成任务，完成的任务以飘入动画离开。
-const visibleSteps = computed(() => runningSteps.value.filter(
-  step => !isAbsorbedStatus(step.status),
-))
+const tickerStatusPriority: Record<string, number> = {
+  running: 0,
+  issue: 1,
+  pending: 2,
+}
+
+// 静态任务队列：执行中优先，异常其次，待执行任务保持原业务顺序紧随其后。
+const visibleSteps = computed(() => runningSteps.value
+  .filter(step => !isAbsorbedStatus(step.status))
+  .sort((left, right) => (
+    (tickerStatusPriority[left.status] ?? 3) - (tickerStatusPriority[right.status] ?? 3)
+  )))
+
+// 当前环节任务全部收束（存在任务但已无可见项）时，头部转绿宣告完成。
+const allTasksCompleted = computed(() => runningSteps.value.length > 0 && visibleSteps.value.length === 0)
 
 const tickerStatusLabels: Record<string, string> = {
   done: '已完成',
@@ -453,33 +454,6 @@ const tickerStatusLabels: Record<string, string> = {
 function tickerStatusText(status: string) {
   return tickerStatusLabels[status] ?? '待执行'
 }
-
-const tickerViewportRef = ref<HTMLElement | null>(null)
-const tickerSequenceRef = ref<HTMLElement | null>(null)
-const tickerScrolling = ref(false)
-const tickerDuration = ref(28)
-const tickerDoneCount = computed(() => runningSteps.value.filter(
-  step => step.status === 'done' || step.status === 'skipped',
-).length)
-
-// 任务宽度超出视口才启动无缝滚动，速度按内容长度自适应。
-function measureTicker() {
-  const viewport = tickerViewportRef.value
-  const sequence = tickerSequenceRef.value
-  if (!viewport || !sequence) {
-    tickerScrolling.value = false
-    return
-  }
-  tickerScrolling.value = sequence.scrollWidth - viewport.clientWidth > 8
-  if (tickerScrolling.value) {
-    tickerDuration.value = Math.max(16, Math.min(120, Math.round(sequence.scrollWidth / 55)))
-  }
-}
-
-watch(() => props.runningSteps, () => {
-  nextTick(measureTicker)
-})
-onMounted(measureTicker)
 
 // ===== 任务完成 → 飘入终点百分数环 =====
 
@@ -600,15 +574,18 @@ onUnmounted(() => {
 }
 
 // 状态图例：左上角 HUD 状态铭牌，与底部信息栏同一套玻璃质感。
+// 与右上整体进度同 top、同高，构成严格同一水平线上的镜像双锚点。
 .runway-legend {
   position: absolute;
   z-index: 4;
-  top: 10px;
+  top: 12px;
   left: 12px;
+  box-sizing: border-box;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 18px 8px 15px;
+  padding: 0 20px 0 17px;
   border: 1px solid rgba(65, 188, 238, 0.26);
   border-radius: 10px;
   background: linear-gradient(105deg, rgba(4, 26, 45, 0.85), rgba(6, 34, 52, 0.58));
@@ -624,8 +601,8 @@ onUnmounted(() => {
     content: '';
     position: absolute;
     left: 0;
-    top: 8px;
-    bottom: 8px;
+    top: 10px;
+    bottom: 10px;
     width: 3px;
     border-radius: 999px;
     background: linear-gradient(180deg, #37ecb0, #3fd0f7);
@@ -696,33 +673,46 @@ onUnmounted(() => {
 
 .deck-summary {
   flex: 0 0 auto;
-  gap: 10px;
+  gap: 8px;
 }
 
-// 整体进度独立悬浮在右上角，与左侧状态铭牌构成平衡的 HUD 双锚点。
+// 整体进度独立悬浮在右上角：与左侧状态铭牌同线同高，左缘/右缘能量条镜像呼应。
 .runway-summary {
   position: absolute;
   z-index: 4;
-  top: 8px;
-  right: 8px;
+  top: 12px;
+  right: 12px;
   box-sizing: border-box;
-  width: min(210px, calc(100% - 360px));
-  height: 32px;
+  width: min(176px, calc(100% - 364px));
+  height: 38px;
   justify-content: flex-end;
-  padding: 0 11px;
-  border-radius: 8px;
+  border-color: rgba(65, 188, 238, 0.26);
+  border-radius: 10px;
+  background: linear-gradient(255deg, rgba(4, 26, 45, 0.85), rgba(6, 34, 52, 0.58));
   box-shadow:
-    inset -3px 0 0 rgba(48, 221, 178, .82),
     inset 0 1px 0 rgba(140, 224, 255, .12),
     inset 0 0 18px rgba(38, 196, 242, .05),
     0 10px 26px rgba(0, 7, 18, .38);
   animation: legend-arrive .55s cubic-bezier(.2, .8, .25, 1) both;
+
+  // 右缘能量栏：与图例左栏镜像，绿→青渐变回扣"进度"语义。
+  &::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #3fd0f7, #37ecb0);
+    box-shadow: 0 0 10px rgba(56, 231, 167, 0.55);
+  }
 }
 
 .summary-kicker {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   overflow: hidden;
   color: #9dd9e8;
@@ -733,8 +723,8 @@ onUnmounted(() => {
 
   i {
     flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: #37ecb0;
     box-shadow: 0 0 10px #37ecb0;
@@ -750,13 +740,14 @@ onUnmounted(() => {
 
   strong {
     color: #f4fcff;
-    font-size: 18px;
+    font-size: 12px;
+    font-weight: 800;
     line-height: 1;
   }
 
   span {
     color: #75aac4;
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
@@ -780,7 +771,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 150px;
+  max-width: 160px;
   overflow: hidden;
   color: #ffd273;
   font-size: 13px;
@@ -805,10 +796,28 @@ onUnmounted(() => {
 }
 
 .ticker-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 28px;
   color: #75aac4;
   font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
-  font-size: 12px;
   white-space: nowrap;
+
+  strong {
+    color: #9be8ff;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow: 0 0 8px rgba(71, 211, 255, .38);
+  }
+
+  em {
+    color: #648fa7;
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    font-size: 10px;
+    font-style: normal;
+  }
 }
 
 .ticker-viewport {
@@ -816,32 +825,31 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
 }
 
 .ticker-track {
   display: flex;
   align-items: center;
-  width: max-content;
+  width: 100%;
+  min-width: 0;
   height: 100%;
-
-  &.is-scrolling {
-    animation: ticker-scroll var(--ticker-duration, 30s) linear infinite;
-  }
 }
 
 .ticker-sequence {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
-  gap: 12px;
-  padding-right: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .ticker-chip {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 220px;
   gap: 7px;
+  min-width: 0;
   max-width: 240px;
   padding: 4px 11px;
   border: 1px solid rgba(88, 148, 186, 0.25);
@@ -860,6 +868,7 @@ onUnmounted(() => {
   }
 
   .chip-name {
+    flex: 0 1 auto;
     min-width: 0;
     max-width: 160px;
     overflow: hidden;
@@ -914,15 +923,68 @@ onUnmounted(() => {
   }
 }
 
-.ticker-empty {
-  position: absolute;
-  inset: 0;
+// 传送带空载待机：以缓慢漂移的虚线车道替代文字占位，静默表达"待命中"。
+.ticker-standby {
+  position: relative;
+  flex: 1 1 auto;
+  height: 3px;
+  margin: 0 22px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, rgba(112, 178, 208, .32) 0 7px, transparent 7px 20px);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  animation: standby-drift 2.8s linear infinite;
+
+  // 待命光珠：沿空载车道巡游的微光，保持系统"心跳"。
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 26px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(140, 225, 255, .9), transparent);
+    box-shadow: 0 0 8px rgba(120, 215, 255, .45);
+    opacity: 0;
+    animation: standby-bead 3.6s cubic-bezier(.45, .05, .55, .95) infinite;
+  }
+}
+
+// 全部完成：在分隔线右侧以导通的对勾徽记宣告环节收束，与完成链路同色系。
+.ticker-complete {
   display: flex;
   align-items: center;
-  padding-left: 18px;
-  color: #5f87a0;
-  font-size: 12px;
+  gap: 9px;
+  padding-left: 6px;
+  color: #9fe8cd;
+  font-size: 12.5px;
+  font-weight: 700;
   letter-spacing: 1px;
+  white-space: nowrap;
+  animation: legend-arrive .45s cubic-bezier(.2, .8, .25, 1) both;
+
+  i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    border: 1px solid rgba(66, 240, 164, .55);
+    border-radius: 50%;
+    background: rgba(13, 66, 51, .45);
+    box-shadow: 0 0 10px rgba(56, 231, 167, .35);
+
+    // 纯 CSS 对勾，与节点上的完成盖印同语义。
+    &::after {
+      content: '';
+      width: 6px;
+      height: 3.5px;
+      border-left: 1.5px solid #42f0a4;
+      border-bottom: 1.5px solid #42f0a4;
+      transform: rotate(-45deg) translateY(-.5px);
+    }
+  }
 }
 
 .runway-svg {
@@ -931,7 +993,7 @@ onUnmounted(() => {
   width: calc(100% - 8px);
   height: calc(100% - 62px);
   // 图形重心偏下（里程碑标题/计数延伸至底部车道下方），整体上移使其在信息栏上方视觉居中。
-  transform: translateY(-4px) scale(1.02);
+  transform: translateY(clamp(-40px, -4vh, -24px)) scale(1.08);
   transform-origin: center;
   overflow: visible;
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
@@ -1197,7 +1259,7 @@ onUnmounted(() => {
 
 .runway-node-name {
   fill: #d8f3ff;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: .8px;
   text-anchor: middle;
@@ -1433,13 +1495,20 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-@keyframes ticker-scroll {
-  to { transform: translateX(-50%); }
-}
-
 @keyframes ticker-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: .35; }
+}
+
+// -20px = 待机车道虚线周期(7+13)，保证漂移无缝循环。
+@keyframes standby-drift {
+  to { background-position: -20px 0; }
+}
+
+@keyframes standby-bead {
+  from { left: -30px; opacity: 0; }
+  18%, 82% { opacity: 1; }
+  to { left: 100%; opacity: 0; }
 }
 
 @keyframes legend-arrive {
@@ -1462,18 +1531,14 @@ onUnmounted(() => {
     height: 44px;
   }
 
-  // 窄屏下图例收窄而非隐藏：字号与桌面端保持一致，仅收紧留白。
+  // 窄屏下图例收窄而非隐藏：字号与桌面端保持一致，仅收紧留白（高度不变以维持双锚点同线）。
   .runway-legend {
     gap: 10px;
-    padding: 6px 13px 6px 12px;
+    padding: 0 14px 0 13px;
   }
 
   .legend-kicker {
     padding-right: 9px;
-  }
-
-  .ticker-node {
-    max-width: 110px;
   }
 
   .runway-svg {
@@ -1501,9 +1566,11 @@ onUnmounted(() => {
   .node-energy rect,
   .milestone-scan,
   .milestone-dial.is-absorbing,
-  .ticker-track.is-scrolling,
   .ticker-node i,
   .ticker-chip.is-running .chip-dot,
+  .ticker-standby,
+  .ticker-standby::after,
+  .ticker-complete,
   .runway-baton,
   .baton-beam {
     animation: none !important;
