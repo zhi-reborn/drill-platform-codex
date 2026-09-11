@@ -220,9 +220,9 @@
       </g>
 
       <g
-        v-if="activeHop && activePoint && activeHop.strokeLength > 0.5"
+        v-if="activeHop && activeHop.strokeLength > 0.5"
         class="runway-baton-anchor"
-        :style="{ transform: `translate(${activeHop.cursor.x}px, ${activeHop.cursor.y}px) rotate(${activePoint.direction === 'right' ? 0 : 180}deg)` }"
+        :style="{ transform: `translate(${activeHop.cursor.x}px, ${activeHop.cursor.y}px) rotate(${activeHop.angle}deg)` }"
         aria-hidden="true"
       >
         <g class="runway-baton">
@@ -373,9 +373,6 @@ const activeIndex = computed(() => props.nodes.findIndex(node => (
   !isScreen4RunwayNodeCompleted(node)
   && (node.status === 'running' || node.completed > 0)
 )))
-const activePoint = computed<Screen4RunwayPoint | null>(() => (
-  activeIndex.value >= 0 ? layout.value.points[activeIndex.value] || null : null
-))
 const activePath = computed(() => {
   if (activeIndex.value < 0 || activeIndex.value >= layout.value.points.length - 1) return ''
   return getScreen4RunwayPath(layout.value.points, activeIndex.value, activeIndex.value + 1)

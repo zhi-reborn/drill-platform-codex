@@ -62,6 +62,8 @@ describe('screen4 runway component', () => {
   it('moves the running arrow with the progress frontier', () => {
     expect(template).toContain('class="runway-baton-anchor"')
     expect(template).toContain('translate(${activeHop.cursor.x}px, ${activeHop.cursor.y}px)')
+    expect(template).toContain('rotate(${activeHop.angle}deg)')
+    expect(template).not.toContain("activePoint.direction === 'right' ? 0 : 180")
     expect(template).not.toContain('translate(${activePoint.x} ${activePoint.y})')
     expect(template).toContain('d="M -30 -7 L -9 -7 L 0 0 L -9 7 L -30 7 Z"')
     expect(styles).toMatch(/\.runway-baton-anchor\s*\{[^}]*transition: transform \.55s/s)

@@ -96,10 +96,12 @@ describe('screen4 runway geometry', () => {
     expect(getScreen4RunwayHopProgress(layout.points, 0, 1, 0.25)).toEqual({
       strokeLength: 60,
       cursor: { x: 220, y: 240 },
+      angle: 0,
     })
     expect(getScreen4RunwayHopProgress(layout.points, 2, 3, 2 / 3)).toEqual({
       strokeLength: 160,
       cursor: { x: 800, y: 240 },
+      angle: 0,
     })
   })
 
@@ -109,6 +111,7 @@ describe('screen4 runway geometry', () => {
     expect(getScreen4RunwayHopProgress(layout.points, 0, 1, 0)).toEqual({
       strokeLength: 0,
       cursor: { x: 160, y: 240 },
+      angle: 0,
     })
     expect(getScreen4RunwayHopProgress(layout.points, 0, 1, 1)?.cursor).toEqual({ x: 400, y: 240 })
     expect(getScreen4RunwayHopProgress(layout.points, 0, 1, 3)?.strokeLength).toBe(240)
@@ -121,8 +124,10 @@ describe('screen4 runway geometry', () => {
 
     const mid = getScreen4RunwayHopProgress(layout.points, 3, 4, 0.5)
     expect(mid?.cursor).toEqual({ x: 998, y: 320 })
+    expect(mid?.angle).toBe(90)
     const done = getScreen4RunwayHopProgress(layout.points, 3, 4, 1)
     expect(done?.cursor).toEqual({ x: 880, y: 400 })
+    expect(done?.angle).toBe(180)
     expect(done?.strokeLength).toBeGreaterThan(370)
     expect(done?.strokeLength).toBeLessThan(380)
   })

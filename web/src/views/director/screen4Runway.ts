@@ -153,6 +153,7 @@ export interface Screen4RunwayHopCursor {
 export interface Screen4RunwayHopProgress {
   strokeLength: number
   cursor: Screen4RunwayHopCursor
+  angle: number
 }
 
 interface Screen4RunwaySegment {
@@ -242,6 +243,10 @@ export function getScreen4RunwayHopProgress(
 
   let walked = 0
   let cursor = { x: points[startIndex].x, y: points[startIndex].y }
+  let angle = Math.atan2(
+    segments[0].y2 - segments[0].y1,
+    segments[0].x2 - segments[0].x1,
+  ) * 180 / Math.PI
   for (const segment of segments) {
     if (walked + segment.length >= targetLength) {
       const ratioInSegment = (targetLength - walked) / segment.length
@@ -249,6 +254,7 @@ export function getScreen4RunwayHopProgress(
         x: segment.x1 + (segment.x2 - segment.x1) * ratioInSegment,
         y: segment.y1 + (segment.y2 - segment.y1) * ratioInSegment,
       }
+      angle = Math.atan2(segment.y2 - segment.y1, segment.x2 - segment.x1) * 180 / Math.PI
       break
     }
     walked += segment.length
@@ -260,6 +266,7 @@ export function getScreen4RunwayHopProgress(
       x: Math.round(cursor.x * 100) / 100,
       y: Math.round(cursor.y * 100) / 100,
     },
+    angle: Math.round(angle * 100) / 100,
   }
 }
 
