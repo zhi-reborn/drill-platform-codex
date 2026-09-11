@@ -453,7 +453,7 @@ function normalizeStepStatus(status: string): string {
 const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus, link => {
   const leafSteps = link.stepNodes.filter(isLeafStep)
   const list = leafSteps.length > 0 ? leafSteps : link.stepNodes
-  return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status) }))
+  return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status), assignee: s.assignee_names || '' }))
 }))
 
 const runwayNodes = computed(() => flowNodes.value.map(node => {

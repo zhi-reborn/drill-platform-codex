@@ -132,8 +132,10 @@ describe('screen4 runway geometry', () => {
     expect(splitScreen4RunwayName('非常非常长的环节节点名称需要截断')).toEqual(['非常非常长的', '环节节点名称…'])
   })
 
-  it('truncates display text only after twelve characters', () => {
+  it('truncates display text only after the configured limit', () => {
     expect(truncateScreen4RunwayText('123456789012')).toBe('123456789012')
     expect(truncateScreen4RunwayText('1234567890123')).toBe('123456789012…')
+    expect(truncateScreen4RunwayText('一'.repeat(25), 25)).toBe('一'.repeat(25))
+    expect(truncateScreen4RunwayText('一'.repeat(26), 25)).toBe(`${'一'.repeat(25)}…`)
   })
 })

@@ -258,8 +258,13 @@
                 :title="step.name"
               >
                 <i class="chip-dot" aria-hidden="true"></i>
-                <span class="chip-name">{{ truncateScreen4RunwayText(step.name) }}</span>
-                <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
+                <span class="chip-body">
+                  <span class="chip-name">{{ truncateScreen4RunwayText(step.name, 25) }}</span>
+                  <span class="chip-meta">
+                    <span class="chip-operator"><i class="chip-operator-glyph" aria-hidden="true"></i>{{ tickerOperatorText(step) }}</span>
+                    <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
+                  </span>
+                </span>
               </span>
             </div>
           </div>
@@ -293,6 +298,7 @@ interface Screen4RunwayStep {
   id: string
   name: string
   status: string
+  assignee?: string
 }
 
 const props = defineProps<{
@@ -469,6 +475,11 @@ const tickerStatusLabels: Record<string, string> = {
 
 function tickerStatusText(status: string) {
   return tickerStatusLabels[status] ?? '待执行'
+}
+
+// 操作人行：未指派时静默降级，不打断卡片节奏。
+function tickerOperatorText(step: Screen4RunwayStep) {
+  return step.assignee?.trim() || '未指派'
 }
 
 // ===== 任务完成 → 飘入终点百分数环 =====
@@ -678,7 +689,8 @@ onUnmounted(() => {
   display: flex;
   align-items: stretch;
   gap: 10px;
-  height: 46px;
+  // 两行任务卡片需要更高的舞台：传送带整体加高，跑道图形相应上移让位。
+  height: 68px;
 }
 
 .deck-cell {
@@ -865,76 +877,152 @@ onUnmounted(() => {
   align-items: center;
   flex: 1 1 auto;
   min-width: 0;
-  gap: 8px;
+  gap: 10px;
   overflow: hidden;
 }
 
+// 任务卡片：两行"任务铭牌"——上行任务名，下行操作人 + 状态徽章。
+// 左缘状态能量轨与图例/进度栏的能量栏同一设计语言，卡片按状态换色。
 .ticker-chip {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  flex: 0 1 220px;
-  gap: 7px;
+  align-items: flex-start;
+  flex: 0 1 auto;
+  gap: 9px;
   min-width: 0;
-  max-width: 240px;
-  padding: 4px 11px;
-  border: 1px solid rgba(88, 148, 186, 0.25);
-  border-radius: 999px;
+  max-width: 430px;
+  padding: 9px 14px 8px 16px;
+  border: 1px solid rgba(88, 148, 186, 0.28);
+  border-radius: 12px;
   color: #a8cbe0;
-  background: rgba(6, 30, 50, 0.6);
-  font-size: 12.5px;
+  background: linear-gradient(163deg, rgba(9, 38, 62, 0.92), rgba(4, 21, 38, 0.8));
+  box-shadow:
+    inset 0 1px 0 rgba(140, 224, 255, 0.08),
+    0 8px 22px rgba(0, 7, 18, 0.35);
   white-space: nowrap;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 999px;
+    background: #4e98c8;
+    box-shadow: 0 0 8px rgba(78, 152, 200, 0.5);
+  }
 
   .chip-dot {
     flex: 0 0 auto;
-    width: 7px;
-    height: 7px;
+    margin-top: 5px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #4e98c8;
+  }
+
+  .chip-body {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
   }
 
   .chip-name {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 160px;
+    max-width: 348px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: #d7ecf7;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 18px;
+    letter-spacing: .02em;
+  }
+
+  .chip-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    line-height: 14px;
+  }
+
+  .chip-operator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #8fb9d0;
+    font-size: 12px;
+
+    .chip-operator-glyph {
+      flex: 0 0 auto;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 32%, #bfe8fa, #3f7ea6 78%);
+      box-shadow: 0 0 6px rgba(80, 200, 240, 0.4);
+    }
   }
 
   .chip-tag {
     flex: 0 0 auto;
-    color: #6f93a8;
-    font-size: 10.5px;
-    letter-spacing: .5px;
+    padding: 1px 8px;
+    border: 1px solid rgba(111, 147, 168, 0.42);
+    border-radius: 999px;
+    color: #7fb2cf;
+    font-size: 11px;
+    letter-spacing: .06em;
   }
 
   &.is-done {
     border-color: rgba(43, 224, 159, 0.32);
-    color: #9fe8cd;
+
+    &::before { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6); }
 
     .chip-dot { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6); }
-    .chip-tag { color: #58c9a4; }
+    .chip-tag { color: #58c9a4; border-color: rgba(88, 201, 164, 0.42); }
   }
 
   &.is-skipped {
     opacity: .68;
 
+    &::before { background: #6d93ab; box-shadow: none; }
     .chip-dot { background: #6d93ab; }
   }
 
   &.is-issue {
     border-color: rgba(255, 98, 110, 0.45);
-    color: #ffb3ba;
+
+    &::before { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.55); }
 
     .chip-dot { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.6); }
-    .chip-tag { color: #ff8b95; }
+    .chip-tag { color: #ff8b95; border-color: rgba(255, 139, 149, 0.45); }
   }
 
   &.is-running {
     border-color: rgba(255, 180, 61, 0.55);
-    color: #ffe3ad;
-    background: rgba(66, 45, 12, 0.5);
-    box-shadow: 0 0 14px rgba(255, 171, 45, 0.18);
+    background: linear-gradient(163deg, rgba(66, 45, 12, 0.55), rgba(26, 19, 8, 0.78));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 226, 173, 0.14),
+      0 0 18px rgba(255, 171, 45, 0.16),
+      0 8px 22px rgba(0, 7, 18, 0.35);
+
+    &::before {
+      background: linear-gradient(180deg, #ffd273, #ff9f1a);
+      box-shadow: 0 0 10px rgba(255, 180, 61, 0.65);
+    }
+
+    .chip-name { color: #ffe3ad; }
 
     .chip-dot {
       background: #ffb43d;
@@ -944,6 +1032,8 @@ onUnmounted(() => {
 
     .chip-tag {
       color: #ffca70;
+      border-color: rgba(255, 202, 112, 0.5);
+      background: rgba(255, 180, 61, 0.12);
       font-weight: 700;
     }
   }
@@ -1015,11 +1105,12 @@ onUnmounted(() => {
 
 .runway-svg {
   position: absolute;
-  inset: 2px 4px 60px;
+  inset: 2px 4px 82px;
   width: calc(100% - 8px);
-  height: calc(100% - 62px);
-  // 图形重心偏下（里程碑标题/计数延伸至底部车道下方），整体上移使其在信息栏上方视觉居中。
-  transform: translateY(clamp(-40px, -4vh, -24px)) scale(1.08);
+  height: calc(100% - 84px);
+  // 图形重心偏下（里程碑标题/计数延伸至底部车道下方），整体上移使其在信息栏上方视觉居中；
+  // 底部传送带加高后同步抬高跑道，保留呼吸间距。
+  transform: translateY(clamp(-54px, -5.5vh, -34px)) scale(1.08);
   transform-origin: center;
   overflow: visible;
   contain: paint;
@@ -1559,7 +1650,7 @@ onUnmounted(() => {
 @media (max-width: 1280px) {
   .runway-deck {
     gap: 8px;
-    height: 44px;
+    height: 64px;
   }
 
   // 窄屏下图例收窄而非隐藏：字号与桌面端保持一致，仅收紧留白（高度不变以维持双锚点同线）。
@@ -1573,9 +1664,9 @@ onUnmounted(() => {
   }
 
   .runway-svg {
-    inset: 0 2px 56px;
+    inset: 0 2px 78px;
     width: calc(100% - 4px);
-    height: calc(100% - 56px);
+    height: calc(100% - 78px);
   }
 
   .runway-dashes { animation-duration: 4.8s; }
