@@ -7,6 +7,7 @@ import {
   getScreen4RunwayProgress,
   isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
+  truncateScreen4RunwayText,
 } from './screen4Runway'
 
 describe('screen4 runway geometry', () => {
@@ -128,6 +129,11 @@ describe('screen4 runway geometry', () => {
 
   it('keeps runway labels to two concise lines', () => {
     expect(splitScreen4RunwayName('缓存与消息队列切换')).toEqual(['缓存与消息', '队列切换'])
-    expect(splitScreen4RunwayName('非常非常长的环节节点名称需要截断')).toEqual(['非常非常长的', '环节节点名…'])
+    expect(splitScreen4RunwayName('非常非常长的环节节点名称需要截断')).toEqual(['非常非常长的', '环节节点名称…'])
+  })
+
+  it('truncates display text only after twelve characters', () => {
+    expect(truncateScreen4RunwayText('123456789012')).toBe('123456789012')
+    expect(truncateScreen4RunwayText('1234567890123')).toBe('123456789012…')
   })
 })

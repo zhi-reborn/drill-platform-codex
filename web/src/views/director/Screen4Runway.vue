@@ -144,6 +144,7 @@
         :class="item.className"
         :transform="`translate(${item.point.x} ${item.point.y})`"
       >
+        <title>{{ item.node.name }}</title>
         <circle class="node-orbit node-orbit-outer" r="38" />
         <circle class="node-orbit node-orbit-inner" r="29" />
         <circle class="node-halo" r="25" />
@@ -254,9 +255,10 @@
                 class="ticker-chip"
                 :class="`is-${step.status}`"
                 :data-step-id="step.id"
+                :title="step.name"
               >
                 <i class="chip-dot" aria-hidden="true"></i>
-                <span class="chip-name">{{ step.name }}</span>
+                <span class="chip-name">{{ truncateScreen4RunwayText(step.name) }}</span>
                 <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
               </span>
             </div>
@@ -282,6 +284,7 @@ import {
   getScreen4RunwayPath,
   isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
+  truncateScreen4RunwayText,
   type Screen4RunwayNode,
   type Screen4RunwayPoint,
 } from './screen4Runway'
@@ -873,6 +876,7 @@ onUnmounted(() => {
     max-width: 160px;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .chip-tag {

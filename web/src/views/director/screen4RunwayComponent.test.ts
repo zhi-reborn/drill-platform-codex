@@ -25,7 +25,7 @@ describe('screen4 runway component', () => {
     expect(source).not.toContain('ScreenView2')
     expect(template).not.toContain('node-steps')
     expect(template).toContain('class="ticker-chip"')
-    expect(template).toContain('{{ step.name }}')
+    expect(template).toContain('{{ truncateScreen4RunwayText(step.name) }}')
   })
 
   it('advances inter-node progress with the running node step ratio', () => {
@@ -101,6 +101,7 @@ describe('screen4 runway component', () => {
     expect(template).not.toContain('class="runway-node-name" y="49"')
     expect(template).not.toContain("item.labelLines.length > 1 ? 91 : 72")
     expect(styles).toMatch(/\.runway-node-name\s*\{[^}]*font-size: 18px;/s)
+    expect(template).toContain('<title>{{ item.node.name }}</title>')
   })
 
   it('floats the overall summary at the upper right and leaves the ticker in the bottom deck', () => {
@@ -173,6 +174,10 @@ describe('screen4 runway component', () => {
     expect(template).toContain('class="ticker-chip"')
     expect(template).toContain('v-for="step in visibleSteps"')
     expect(template).toContain(':data-step-id="step.id"')
+    expect(template).toContain(':title="step.name"')
+    expect(template).toContain('{{ truncateScreen4RunwayText(step.name) }}')
+    expect(source).toContain('truncateScreen4RunwayText,')
+    expect(template).not.toContain('class="chip-copy"')
     expect(template).toContain('class="ticker-sequence"')
     // 头部固定为"当前环节待完成任务"；全部收束后，分隔线右侧以对勾徽记宣告"当前环节所有任务已完成"。
     expect(template).toContain('class="ticker-standby"')
@@ -201,6 +206,8 @@ describe('screen4 runway component', () => {
     expect(styles).not.toContain('@keyframes ticker-scroll')
     expect(styles).toMatch(/\.ticker-track\s*\{[^}]*width: 100%;/s)
     expect(styles).toMatch(/\.ticker-sequence\s*\{[^}]*flex: 1 1 auto;/s)
+    expect(styles).toMatch(/\.ticker-chip\s*\{[^}]*display: inline-flex;[^}]*border-radius: 999px;/s)
+    expect(styles).toMatch(/\.chip-name\s*\{[^}]*white-space: nowrap;/s)
     expect(styles).toContain('.ticker-standby')
     expect(styles).toMatch(/\.ticker-count\s*\{[^}]*display: inline-flex;/s)
     expect(styles).toMatch(/\.ticker-count[\s\S]*?strong\s*\{[^}]*font-size: 15px;/)

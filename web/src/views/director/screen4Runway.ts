@@ -293,18 +293,22 @@ export function getScreen4PhaseStepProgress(
   }
 }
 
+export function truncateScreen4RunwayText(text: string, maxLength = 12): string {
+  const characters = Array.from(text.trim())
+  return characters.length > maxLength
+    ? `${characters.slice(0, maxLength).join('')}…`
+    : characters.join('')
+}
+
 export function splitScreen4RunwayName(name: string): string[] {
   const normalizedName = name.trim() || '未命名环节'
-  const characters = Array.from(normalizedName)
+  const characters = Array.from(truncateScreen4RunwayText(normalizedName))
 
   if (characters.length <= 6) return [normalizedName]
 
   const firstLineLength = characters.length <= 12 ? Math.ceil(characters.length / 2) : 6
   const firstLine = characters.slice(0, firstLineLength).join('')
-  const remaining = characters.slice(firstLineLength)
-  const secondLine = remaining.length > 5
-    ? `${remaining.slice(0, 5).join('')}…`
-    : remaining.join('')
+  const secondLine = characters.slice(firstLineLength).join('')
 
   return [firstLine, secondLine]
 }
