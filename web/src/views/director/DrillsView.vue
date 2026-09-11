@@ -70,6 +70,10 @@
                 <el-icon><DataBoard /></el-icon>
                 大屏3
               </el-button>
+              <el-button class="row-action row-action-screen4" text type="primary" size="small" @click="viewScreen4(row as DrillInstance)">
+                <el-icon><DataBoard /></el-icon>
+                大屏4
+              </el-button>
               <el-button class="row-action" text type="danger" size="small" @click="handleDelete(row as DrillInstance)">
                 删除
               </el-button>
@@ -197,6 +201,10 @@ function viewScreen3(row: DrillInstance) {
   window.open(`/screen3/${row.id}`, '_blank')
 }
 
+function viewScreen4(row: DrillInstance) {
+  window.open(`/director/screen4/${row.id}`, '_blank')
+}
+
 function handleDelete(row: DrillInstance) {
   deleteTarget.value = row
   deleteVisible.value = true
@@ -282,6 +290,16 @@ onMounted(() => {
         &:hover,
         &:focus {
           color: #9254DE;
+        }
+      }
+
+      // 大屏4：极光青，与大屏3 的紫色明确区分。
+      .row-action-screen4 {
+        color: #13c2c2;
+
+        &:hover,
+        &:focus {
+          color: #36cfc9;
         }
       }
     }

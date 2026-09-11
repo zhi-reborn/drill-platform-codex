@@ -449,8 +449,15 @@ const visibleSteps = computed(() => runningSteps.value
     (tickerStatusPriority[left.status] ?? 3) - (tickerStatusPriority[right.status] ?? 3)
   )))
 
-// 当前环节任务全部收束（存在任务但已无可见项）时，头部转绿宣告完成。
-const allTasksCompleted = computed(() => runningSteps.value.length > 0 && visibleSteps.value.length === 0)
+// 当前环节任务收束判定：
+// 1. 运行环节的任务全部完成（收束瞬间）；
+// 2. 无运行环节但已有环节收束（环节推进间隙 / 阶段末尾）——
+//    环节状态切换后 runningSteps 会立即指向下一环节或清空，仅靠条件 1 宣告会一闪而过甚至不出现。
+const allTasksCompleted = computed(() => {
+  if (visibleSteps.value.length > 0) return false
+  if (runningSteps.value.length > 0) return true
+  return props.nodes.some(isScreen4RunwayNodeCompleted)
+})
 
 const tickerStatusLabels: Record<string, string> = {
   done: '已完成',

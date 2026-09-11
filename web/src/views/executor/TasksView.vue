@@ -70,18 +70,24 @@
                   </div>
                 </div>
                 <div class="drill-actions">
-                  <el-button class="drill-action-button" type="success" size="small" @click.stop="viewScreen(drill.id)">
-                    <el-icon><Monitor /></el-icon>
-                    大屏
-                  </el-button>
-                  <el-button class="drill-action-button" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
-                    <el-icon><DataBoard /></el-icon>
-                    大屏2
-                  </el-button>
-                  <el-button class="drill-action-button drill-action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
-                    <el-icon><DataBoard /></el-icon>
-                    大屏3
-                  </el-button>
+                  <div class="screen-actions">
+                    <el-button class="drill-action-button" type="success" size="small" @click.stop="viewScreen(drill.id)">
+                      <el-icon><Monitor /></el-icon>
+                      大屏
+                    </el-button>
+                    <el-button class="drill-action-button" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                      <el-icon><DataBoard /></el-icon>
+                      大屏2
+                    </el-button>
+                    <el-button class="drill-action-button drill-action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
+                      <el-icon><DataBoard /></el-icon>
+                      大屏3
+                    </el-button>
+                    <el-button class="drill-action-button drill-action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
+                      <el-icon><DataBoard /></el-icon>
+                      大屏4
+                    </el-button>
+                  </div>
                   <el-button class="drill-action-button" type="primary" size="small" @click.stop.prevent="goToDrillTasks(drill.id)">
                     <el-icon><ArrowRight /></el-icon>
                     查看任务
@@ -856,6 +862,11 @@ function viewScreen3(drillId: number | null) {
   if (drillId) window.open(`/screen3/${drillId}`, '_blank')
 }
 
+// 查看大屏4
+function viewScreen4(drillId: number | null) {
+  if (drillId) window.open(`/director/screen4/${drillId}`, '_blank')
+}
+
 // 加载数据
 async function loadTasks(options: { silent?: boolean; lightweight?: boolean } = {}): Promise<void> {
   if (!options.silent) loading.value = true
@@ -1291,6 +1302,20 @@ onBeforeUnmount(() => {
           transform: translateY(-3px);
         }
       }
+
+      // 大屏4按钮（极光青 - 与能量跑道主题呼应）
+      .screen4-entry {
+        background: linear-gradient(135deg, #13c2c2 0%, #36cfc9 100%);
+        border-color: #13c2c2;
+        color: #ffffff;
+        box-shadow: 0 4px 16px rgba(19, 194, 194, 0.3);
+
+        &:hover {
+          background: linear-gradient(135deg, #36cfc9 0%, #5adbe8 100%);
+          box-shadow: 0 8px 24px rgba(19, 194, 194, 0.4);
+          transform: translateY(-3px);
+        }
+      }
     }
 
     .task-overview {
@@ -1577,11 +1602,24 @@ onBeforeUnmount(() => {
         display: flex;
         gap: $spacing-xs;
         justify-content: space-between;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
+        align-items: center;
         margin-top: $spacing-base;
         padding-top: $spacing-base;
         border-top: 1px solid rgba(24, 144, 255, 0.1);
         position: relative;
+
+        // el-button 相邻兄弟自带 12px 左外距，与 gap 叠加会把按钮挤出卡片，统一交给 gap 控制。
+        :deep(.el-button + .el-button) {
+          margin-left: 0;
+        }
+
+        // 大屏入口组：紧凑成组居左，查看任务作为右侧主 CTA，窄卡整组换行不裁切。
+        .screen-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: $spacing-xs;
+        }
 
         // 按钮组的背景装饰
         &::before {
@@ -1676,8 +1714,25 @@ onBeforeUnmount(() => {
           }
         }
 
+        // 大屏4按钮（极光青渐变 - 与能量跑道主题呼应）
+        .drill-action-screen4 {
+          background: linear-gradient(135deg, #13c2c2 0%, #36cfc9 100%);
+          border-color: #13c2c2;
+          color: #ffffff;
+          box-shadow: 0 4px 12px rgba(19, 194, 194, 0.25);
+
+          &:hover,
+          &:focus {
+            background: linear-gradient(135deg, #36cfc9 0%, #5adbe8 100%);
+            border-color: #36cfc9;
+            color: #ffffff;
+            box-shadow: 0 6px 18px rgba(19, 194, 194, 0.4);
+            transform: translateY(-3px);
+          }
+        }
+
         // 查看任务按钮（蓝色渐变）
-        .drill-action-button.el-button--primary:not(.drill-action-screen3) {
+        .drill-action-button.el-button--primary:not(.drill-action-screen3):not(.drill-action-screen4) {
           background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
           border-color: #1890ff;
           color: #fff;

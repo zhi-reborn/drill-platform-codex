@@ -227,7 +227,8 @@ describe('screen4 runway component', () => {
     expect(template).toContain('v-else-if="allTasksCompleted"')
     expect(template).toContain('当前环节所有任务已完成')
     expect(source).toContain('allTasksCompleted')
-    expect(source).toContain('runningSteps.value.length > 0 && visibleSteps.value.length === 0')
+    // 无运行环节但已有环节收束时同样宣告完成，避免收束宣告一闪而过。
+    expect(source).toContain('props.nodes.some(isScreen4RunwayNodeCompleted)')
     expect(template).not.toContain('暂无进行中环节任务')
     expect(template).not.toContain('本环节任务已全部完成')
     expect(template).not.toContain('activeNode?.name')

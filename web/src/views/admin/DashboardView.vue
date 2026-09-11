@@ -99,18 +99,24 @@
                 <el-button type="primary" size="small" @click="viewMonitor(drill.id)">
                   详情
                 </el-button>
-                <el-button type="success" size="small" @click="viewScreen(drill.id)">
-                  <el-icon><Monitor /></el-icon>
-                  大屏
-                </el-button>
-                <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
-                  <el-icon><DataBoard /></el-icon>
-                  大屏2
-                </el-button>
-                <el-button class="action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
-                  <el-icon><DataBoard /></el-icon>
-                  大屏3
-                </el-button>
+                <div class="screen-actions">
+                  <el-button type="success" size="small" @click="viewScreen(drill.id)">
+                    <el-icon><Monitor /></el-icon>
+                    大屏
+                  </el-button>
+                  <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏2
+                  </el-button>
+                  <el-button class="action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏3
+                  </el-button>
+                  <el-button class="action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏4
+                  </el-button>
+                </div>
               </div>
             </el-card>
           </el-col>
@@ -253,6 +259,10 @@ function viewScreen2(drillId: number) {
 
 function viewScreen3(drillId: number) {
   window.open(`/screen3/${drillId}`, '_blank')
+}
+
+function viewScreen4(drillId: number) {
+  window.open(`/director/screen4/${drillId}`, '_blank')
 }
 
 async function loadDashboard(refreshMetric = true) {
@@ -431,10 +441,29 @@ onMounted(() => {
           }
         }
 
+        // 操作行两端锚定：详情（管理主操作）居左，大屏入口组居右，窄卡自动换行不裁切。
         .drill-actions {
           display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
           gap: $spacing-xs;
-          justify-content: flex-end;
+
+          // el-button 相邻兄弟自带 12px 左外距，与 gap 叠加会把按钮挤出卡片，统一交给 gap 控制。
+          :deep(.el-button + .el-button) {
+            margin-left: 0;
+          }
+
+          // 大屏入口组：紧凑内距保证 lg 三列卡片内单行放下。
+          .screen-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: $spacing-xs;
+
+            :deep(.el-button) {
+              padding: 5px 9px;
+            }
+          }
 
           .action-screen3 {
             border-color: rgba(114, 46, 209, 0.45);
@@ -447,6 +476,21 @@ onMounted(() => {
               border-color: #722ED1;
               background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
               box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
+            }
+          }
+
+          // 大屏4：极光青，悬停渐变呼应大屏4 的能量跑道主题。
+          .action-screen4 {
+            border-color: rgba(19, 194, 194, 0.45);
+            background: rgba(19, 194, 194, 0.08);
+            color: #13c2c2;
+
+            &:hover,
+            &:focus {
+              color: #ffffff;
+              border-color: #13c2c2;
+              background: linear-gradient(135deg, #13c2c2 0%, #36cfc9 100%);
+              box-shadow: 0 3px 10px rgba(19, 194, 194, 0.3);
             }
           }
         }

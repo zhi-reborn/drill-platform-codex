@@ -65,18 +65,24 @@
                 <el-button class="drill-action-button action-detail" type="primary" size="small" @click="viewDrill(drill.id)">
                   详情
                 </el-button>
-                <el-button class="drill-action-button action-screen" type="success" size="small" @click="viewScreen(drill.id)">
-                  <el-icon><Monitor /></el-icon>
-                  大屏
-                </el-button>
-                <el-button class="drill-action-button action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
-                  <el-icon><DataBoard /></el-icon>
-                  大屏2
-                </el-button>
-                <el-button class="drill-action-button action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
-                  <el-icon><DataBoard /></el-icon>
-                  大屏3
-                </el-button>
+                <div class="screen-actions">
+                  <el-button class="drill-action-button action-screen" type="success" size="small" @click="viewScreen(drill.id)">
+                    <el-icon><Monitor /></el-icon>
+                    大屏
+                  </el-button>
+                  <el-button class="drill-action-button action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏2
+                  </el-button>
+                  <el-button class="drill-action-button action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏3
+                  </el-button>
+                  <el-button class="drill-action-button action-screen4" type="primary" size="small" @click.stop="viewScreen4(drill.id)">
+                    <el-icon><DataBoard /></el-icon>
+                    大屏4
+                  </el-button>
+                </div>
               </div>
             </el-card>
           </el-col>
@@ -268,6 +274,10 @@ function viewScreen3(drillId: number) {
   window.open(`/screen3/${drillId}`, '_blank')
 }
 
+function viewScreen4(drillId: number) {
+  window.open(`/director/screen4/${drillId}`, '_blank')
+}
+
 onMounted(() => {
   loadDashboard(false)
 })
@@ -359,10 +369,12 @@ onMounted(() => {
           }
         }
 
+        // 操作行两端锚定：详情（管理主操作）居左，大屏入口组居右，窄卡自动换行不裁切。
         .drill-actions {
           display: flex;
-          justify-content: flex-end;
+          justify-content: space-between;
           flex-wrap: wrap;
+          align-items: center;
           gap: 8px;
 
           :deep(.el-button + .el-button) {
@@ -375,9 +387,17 @@ onMounted(() => {
             font-weight: $font-weight-medium;
           }
 
+          // 大屏入口组：紧凑成组，单行放下或整组换行。
+          .screen-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
           .action-screen,
           .action-screen2,
-          .action-screen3 {
+          .action-screen3,
+          .action-screen4 {
             padding-inline: 10px;
           }
 
@@ -392,6 +412,21 @@ onMounted(() => {
               border-color: #722ED1;
               background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
               box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
+            }
+          }
+
+          // 大屏4：极光青，悬停渐变呼应大屏4 的能量跑道主题。
+          .action-screen4 {
+            border-color: rgba(19, 194, 194, 0.45);
+            background: rgba(19, 194, 194, 0.08);
+            color: #13c2c2;
+
+            &:hover,
+            &:focus {
+              color: #ffffff;
+              border-color: #13c2c2;
+              background: linear-gradient(135deg, #13c2c2 0%, #36cfc9 100%);
+              box-shadow: 0 3px 10px rgba(19, 194, 194, 0.3);
             }
           }
         }
