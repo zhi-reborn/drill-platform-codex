@@ -53,6 +53,15 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).not.toContain("from '@/components/screen/PhaseRing.vue'")
   })
 
+  it('sends completed task cards into the runway milestone without opening a modal', () => {
+    expect(screen4Source).toContain('ref="runwayRef"')
+    expect(screen4Source).toContain('runwayRef.value?.playTaskCompletions(completed)')
+    expect(screen4Source).toContain("previous.status === 'completed' || step.status !== 'completed'")
+    expect(screen4Source).toContain("{ flush: 'sync' }")
+    expect(screen4Source).not.toContain('completionModal')
+    expect(screen4Source).not.toContain('class="completion-modal"')
+  })
+
   it('gives the runway full visual priority without a redundant board header', () => {
     expect(screen4Source).not.toContain('<header class="flow-board-heading"')
     expect(screen4Source).not.toContain('class="board-signal"')

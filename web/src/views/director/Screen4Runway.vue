@@ -474,6 +474,10 @@ function tickerStatusText(status: string) {
   return tickerStatusLabels[status] ?? '待执行'
 }
 
+function isAbsorbedStatus(status: string) {
+  return status === 'done' || status === 'skipped'
+}
+
 // 操作人行：未指派时静默降级，不打断卡片节奏。
 function tickerOperatorText(step: Screen4RunwayStep) {
   return step.assignee?.trim() || '未指派'
@@ -483,79 +487,190 @@ function tickerOperatorText(step: Screen4RunwayStep) {
 
 const dialAbsorbing = ref(false)
 let dialAbsorbTimer: ReturnType<typeof setTimeout> | null = null
-const absorbedStepIds = new Set<string>()
-let absorbedReady = false
 
 function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
-function isAbsorbedStatus(status: string) {
-  return status === 'done' || status === 'skipped'
-}
-
-watch(() => props.runningSteps, steps => {
-  const list = steps ?? []
-  // 首次拿到非空任务列表时，仅登记已完成的任务，不回放飘入动画。
-  if (!absorbedReady) {
-    if (!list.length) return
-    list.forEach(step => {
-      if (isAbsorbedStatus(step.status)) absorbedStepIds.add(step.id)
-    })
-    absorbedReady = true
-    return
-  }
-  const finished = list.filter(step => isAbsorbedStatus(step.status) && !absorbedStepIds.has(step.id))
-  finished.forEach(step => absorbedStepIds.add(step.id))
-  if (finished.length) launchAbsorbFlyers(finished)
-}, { immediate: true })
-
-function launchAbsorbFlyers(steps: Screen4RunwayStep[]) {
+function playTaskCompletions(steps: Screen4RunwayStep[]) {
   const root = rootRef.value
   const dial = root?.querySelector('.milestone-dial')
   if (!root || !dial || motionPaused.value || prefersReducedMotion()) return
+  const rootRect = root.getBoundingClientRect()
   const dialRect = dial.getBoundingClientRect()
-  // 完成的任务即将从未完成列表移除，需在 DOM 重渲染前同步记录胶囊位置。
-  const launches = steps.map(step => ({
-    step,
-    from: root.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(step.id)}"]`)?.getBoundingClientRect()
-      ?? root.getBoundingClientRect(),
-  }))
+  // 父组件在状态写入的同步时刻调用，卡片尚未从任务栏移除，可准确记录起飞位置。
+  const launches = steps.flatMap(step => {
+    const card = root.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(step.id)}"]`)
+    return card ? [{ step, card, from: card.getBoundingClientRect() }] : []
+  })
   launches.forEach((launch, index) => {
     window.setTimeout(() => {
       if (motionPaused.value || rootRef.value !== root) return
-      spawnAbsorbFlyer(root, launch.step, launch.from, dialRect)
-    }, index * 170)
+      spawnAbsorbFlyer(root, launch.step, launch.card, launch.from, rootRect, dialRect)
+    }, index * 190)
   })
 }
 
-function spawnAbsorbFlyer(root: HTMLElement, step: Screen4RunwayStep, from: DOMRect, dialRect: DOMRect) {
+function spawnAbsorbFlyer(
+  root: HTMLElement,
+  step: Screen4RunwayStep,
+  card: HTMLElement,
+  from: DOMRect,
+  rootRect: DOMRect,
+  dialRect: DOMRect,
+) {
   const flyer = document.createElement('div')
   flyer.className = 'runway-flyer'
-  flyer.textContent = step.name
+
+  const signal = document.createElement('span')
+  signal.className = 'runway-flyer-signal'
+  signal.textContent = '✓'
+  const copy = document.createElement('span')
+  copy.className = 'runway-flyer-copy'
+  const title = document.createElement('strong')
+  title.textContent = step.name
+  const meta = document.createElement('small')
+  meta.textContent = tickerOperatorText(step)
+  copy.append(title, meta)
+  const tag = document.createElement('span')
+  tag.className = 'runway-flyer-tag'
+  tag.textContent = '已完成'
+  flyer.append(signal, copy, tag)
   root.appendChild(flyer)
 
-  const startX = from.left + from.width / 2
-  const startY = from.top + from.height / 2
-  const endX = dialRect.left + dialRect.width / 2
-  const endY = dialRect.top + dialRect.height / 2
-  flyer.style.left = `${startX}px`
-  flyer.style.top = `${startY}px`
+  const startX = from.left + from.width / 2 - rootRect.left
+  const startY = from.top + from.height / 2 - rootRect.top
+  const hubX = dialRect.left + dialRect.width / 2 - rootRect.left
+  const hubY = dialRect.top + dialRect.height / 2 - rootRect.top
+  const showOnRight = hubX + 230 < rootRect.width
+  const showX = hubX + (showOnRight ? 126 : -126)
+  const showY = hubY
+  const controlX = (startX + showX) / 2
+  const controlY = Math.min(startY, showY) - 72
+  const startTransform = `translate(${startX}px, ${startY}px) translate(-50%, -50%) scale(.96) rotate(-3deg)`
+  flyer.style.transform = startTransform
+  flyer.style.width = `${Math.min(228, Math.max(176, from.width))}px`
 
-  const dx = endX - startX
-  const dy = endY - startY
-  const base = 'translate(-50%, -50%)'
-  const animation = flyer.animate([
-    { transform: `${base} translate(0, 0) scale(1)`, opacity: 1 },
-    { transform: `${base} translate(${dx * 0.5}px, ${dy * 0.5 - 46}px) scale(0.82)`, opacity: 1, offset: 0.55 },
-    { transform: `${base} translate(${dx}px, ${dy}px) scale(0.24)`, opacity: 0 },
-  ], { duration: 920, easing: 'cubic-bezier(.5, .05, .6, .95)' })
-  animation.onfinish = () => {
-    flyer.remove()
-    pulseMilestoneDial()
+  card.animate([
+    { opacity: 1, transform: 'translateY(0) scale(1)' },
+    { opacity: 0, transform: 'translateY(5px) scale(.94)' },
+  ], { duration: 280, easing: 'ease-in', fill: 'forwards' })
+
+  const flightFrames: Keyframe[] = []
+  for (let index = 0; index <= 20; index += 1) {
+    const progress = index / 20
+    const rest = 1 - progress
+    const x = rest * rest * startX + 2 * rest * progress * controlX + progress * progress * showX
+    const y = rest * rest * startY + 2 * rest * progress * controlY + progress * progress * showY
+    flightFrames.push({
+      transform: `translate(${x}px, ${y}px) translate(-50%, -50%) scale(${.96 - progress * .14}) rotate(${-3 * rest}deg)`,
+      offset: progress,
+    })
   }
-  animation.oncancel = () => flyer.remove()
+  const flight = flyer.animate(flightFrames, {
+    duration: 760,
+    easing: 'cubic-bezier(.12, .62, .24, 1)',
+    fill: 'forwards',
+  })
+  const trailTimer = window.setInterval(() => spawnRunwayTrail(root, flyer, rootRect), 48)
+
+  flight.onfinish = () => {
+    clearInterval(trailTimer)
+    flyer.classList.add('is-highlight')
+    const done = spawnRunwayDoneBanner(root, step.name, showX, showY + 43)
+    const parked = `translate(${showX}px, ${showY}px) translate(-50%, -50%) scale(.82)`
+    flyer.animate([
+      { transform: parked },
+      { transform: `translate(${showX}px, ${showY}px) translate(-50%, -50%) scale(.87)`, offset: .5 },
+      { transform: parked },
+    ], { duration: 1050, easing: 'ease-in-out', fill: 'forwards' })
+
+    window.setTimeout(() => {
+      done.animate([
+        { opacity: 1, transform: 'translate(-50%, 0)' },
+        { opacity: 0, transform: 'translate(-50%, -8px)' },
+      ], { duration: 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => done.remove()
+      flyer.animate([
+        { transform: parked, opacity: 1, filter: 'blur(0)' },
+        { transform: `translate(${hubX}px, ${hubY}px) translate(-50%, -50%) scale(.12)`, opacity: .05, filter: 'blur(4px)' },
+      ], { duration: 440, easing: 'cubic-bezier(.55, 0, .85, .4)', fill: 'forwards' }).onfinish = () => {
+        flyer.remove()
+        triggerRunwayAbsorption(root, hubX, hubY)
+        pulseMilestoneDial()
+      }
+    }, 1050)
+  }
+  flight.oncancel = () => {
+    clearInterval(trailTimer)
+    flyer.remove()
+  }
 }
+
+function spawnRunwayDoneBanner(root: HTMLElement, taskName: string, x: number, y: number) {
+  const done = document.createElement('div')
+  done.className = 'runway-fly-done'
+  const icon = document.createElement('i')
+  icon.textContent = '✓'
+  const text = document.createElement('span')
+  text.textContent = `「${taskName}」已完成`
+  done.append(icon, text)
+  done.style.left = `${x}px`
+  done.style.top = `${y}px`
+  root.appendChild(done)
+  done.animate([
+    { opacity: 0, transform: 'translate(-50%, -10px) scale(.9)' },
+    { opacity: 1, transform: 'translate(-50%, 0) scale(1)' },
+  ], { duration: 340, easing: 'cubic-bezier(.2, 1.4, .4, 1)', fill: 'forwards' })
+  return done
+}
+
+function spawnRunwayTrail(root: HTMLElement, flyer: HTMLElement, rootRect: DOMRect) {
+  const rect = flyer.getBoundingClientRect()
+  const dot = document.createElement('i')
+  dot.className = 'runway-fly-trail'
+  const size = 3 + Math.random() * 3
+  dot.style.width = `${size}px`
+  dot.style.height = `${size}px`
+  dot.style.left = `${rect.left + rect.width / 2 - rootRect.left}px`
+  dot.style.top = `${rect.top + rect.height / 2 - rootRect.top}px`
+  root.appendChild(dot)
+  const driftX = (Math.random() - .5) * 18
+  const driftY = 5 + Math.random() * 12
+  dot.animate([
+    { opacity: .95, transform: 'translate(-50%, -50%) scale(1)' },
+    { opacity: 0, transform: `translate(calc(-50% + ${driftX}px), calc(-50% + ${driftY}px)) scale(.18)` },
+  ], { duration: 680, easing: 'ease-out' }).onfinish = () => dot.remove()
+}
+
+function triggerRunwayAbsorption(root: HTMLElement, x: number, y: number) {
+  for (const [index, size] of [250, 170].entries()) {
+    const ring = document.createElement('i')
+    ring.className = 'runway-hub-shockwave'
+    ring.style.left = `${x}px`
+    ring.style.top = `${y}px`
+    root.appendChild(ring)
+    ring.animate([
+      { width: '34px', height: '34px', opacity: .9, borderWidth: '3px' },
+      { width: `${size}px`, height: `${size}px`, opacity: 0, borderWidth: '1px' },
+    ], { duration: 620 + index * 160, easing: 'cubic-bezier(.2, .8, .3, 1)' }).onfinish = () => ring.remove()
+  }
+
+  for (let index = 0; index < 14; index += 1) {
+    const angle = index / 14 * Math.PI * 2 + Math.random() * .2
+    const distance = 34 + Math.random() * 48
+    const particle = document.createElement('i')
+    particle.className = 'runway-burst-particle'
+    particle.style.left = `${x}px`
+    particle.style.top = `${y}px`
+    root.appendChild(particle)
+    particle.animate([
+      { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance}px)) scale(.12)`, opacity: 0 },
+    ], { duration: 520 + Math.random() * 220, easing: 'ease-out' }).onfinish = () => particle.remove()
+  }
+}
+
+defineExpose({ playTaskCompletions })
 
 // 环体吸收脉冲：缩放 + 辉光闪烁，与进度弧推进同步。
 function pulseMilestoneDial() {
@@ -1715,20 +1830,187 @@ onUnmounted(() => {
 // 飘入元素由脚本动态创建（不携带 scoped 标记），使用全局样式。
 .runway-flyer {
   position: absolute;
-  z-index: 30;
-  max-width: 200px;
-  padding: 5px 14px;
-  border: 1px solid rgba(69, 237, 178, 0.65);
-  border-radius: 999px;
-  color: #eafff5;
-  background: linear-gradient(110deg, rgba(13, 66, 51, 0.95), rgba(6, 34, 40, 0.9));
-  box-shadow: 0 0 18px rgba(47, 240, 160, 0.45), inset 0 0 12px rgba(47, 240, 160, 0.22);
+  top: 0;
+  left: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid rgba(73, 221, 255, .68);
+  border-radius: 10px;
+  color: #dffbff;
+  background:
+    linear-gradient(110deg, rgba(13, 66, 73, .96), rgba(5, 27, 43, .97)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, .05) 0 1px, transparent 1px 18px);
+  box-shadow:
+    0 0 0 1px rgba(73, 221, 255, .12),
+    0 0 22px rgba(48, 215, 242, .44),
+    0 12px 30px rgba(0, 7, 18, .52),
+    inset 3px 0 #2ee8e0,
+    inset 0 0 18px rgba(32, 190, 203, .14);
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
+  will-change: transform, opacity, filter;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 28%, rgba(198, 252, 255, .22) 48%, transparent 68%);
+    transform: translateX(-120%);
+    animation: runway-flyer-scan 1.1s ease-in-out infinite;
+  }
+
+  &.is-highlight {
+    border-color: rgba(66, 240, 164, .85);
+    box-shadow:
+      0 0 0 1px rgba(66, 240, 164, .24),
+      0 0 28px rgba(47, 240, 160, .58),
+      0 0 56px rgba(47, 240, 160, .25),
+      inset 3px 0 #42f0a4,
+      inset 0 0 20px rgba(47, 240, 160, .18);
+  }
+}
+
+.runway-flyer-signal {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid rgba(125, 255, 211, .7);
+  border-radius: 50%;
+  color: #063326;
+  background: radial-gradient(circle at 35% 30%, #dffff3, #42f0a4 56%, #13a875);
+  box-shadow: 0 0 12px rgba(66, 240, 164, .7);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.runway-flyer-copy {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+
+  strong,
+  small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: #edfffa;
+    font-size: 14px;
+    line-height: 1.25;
+    text-shadow: 0 0 8px rgba(66, 240, 164, .34);
+  }
+
+  small {
+    margin-top: 3px;
+    color: #85bdd0;
+    font-size: 10px;
+  }
+}
+
+.runway-flyer-tag {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid rgba(66, 240, 164, .5);
+  border-radius: 999px;
+  color: #aaffda;
+  background: rgba(34, 197, 94, .13);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.runway-fly-done {
+  position: absolute;
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 7px;
+  border: 1px solid rgba(66, 240, 164, .56);
+  border-radius: 999px;
+  color: #caffea;
+  background: linear-gradient(135deg, rgba(9, 55, 43, .96), rgba(4, 24, 37, .96));
+  box-shadow: 0 0 18px rgba(47, 240, 160, .36);
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+
+  i {
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    color: #073324;
+    background: #42f0a4;
+    box-shadow: 0 0 9px rgba(66, 240, 164, .7);
+    font-size: 10px;
+    font-style: normal;
+  }
+}
+
+.runway-fly-trail,
+.runway-burst-particle,
+.runway-hub-shockwave {
+  position: absolute;
+  z-index: 39;
+  pointer-events: none;
+}
+
+.runway-fly-trail {
+  border-radius: 50%;
+  background: radial-gradient(circle, #efffff 0 18%, #58e8ff 42%, transparent 74%);
+  box-shadow: 0 0 7px rgba(73, 221, 255, .78);
+  transform: translate(-50%, -50%);
+}
+
+.runway-hub-shockwave {
+  box-sizing: border-box;
+  border-style: solid;
+  border-color: rgba(73, 221, 255, .72);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(73, 221, 255, .5), inset 0 0 18px rgba(47, 240, 160, .3);
+  transform: translate(-50%, -50%);
+}
+
+.runway-burst-particle {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff4c9, #ffc55f 42%, #42f0a4 76%);
+  box-shadow: 0 0 9px rgba(255, 197, 95, .74), 0 0 15px rgba(66, 240, 164, .36);
+  transform: translate(-50%, -50%);
+}
+
+@keyframes runway-flyer-scan {
+  to { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runway-flyer,
+  .runway-fly-done,
+  .runway-fly-trail,
+  .runway-hub-shockwave,
+  .runway-burst-particle {
+    display: none !important;
+  }
 }
 </style>

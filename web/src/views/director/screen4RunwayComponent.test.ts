@@ -69,6 +69,20 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.runway-baton-anchor\s*\{[^}]*transition: transform \.55s/s)
   })
 
+  it('animates completed task cards through a staged milestone absorption', () => {
+    expect(source).toContain('defineExpose({ playTaskCompletions })')
+    expect(source).toContain("flyer.className = 'runway-flyer'")
+    expect(source).toContain("done.className = 'runway-fly-done'")
+    expect(source).toContain("dot.className = 'runway-fly-trail'")
+    expect(source).toContain("ring.className = 'runway-hub-shockwave'")
+    expect(source).toContain("particle.className = 'runway-burst-particle'")
+    expect(source).toContain('spawnRunwayDoneBanner')
+    expect(source).toContain('triggerRunwayAbsorption')
+    expect(styles).toContain('.runway-fly-done')
+    expect(styles).toContain('.runway-hub-shockwave')
+    expect(styles).toContain('.runway-burst-particle')
+  })
+
   it('connects completed nodes with a continuous green energy rail', () => {
     expect(template).toContain('class="runway-complete-flow"')
     expect(source).toContain('getScreen4RunwayCompletedPathEnd')
@@ -271,8 +285,8 @@ describe('screen4 runway component', () => {
 
   it('flies finished tasks into the milestone dial with an absorb pulse', () => {
     expect(template).toContain('class="milestone-dial"')
-    expect(source).toContain('absorbedStepIds')
-    expect(source).toContain('launchAbsorbFlyers')
+    expect(source).toContain('playTaskCompletions')
+    expect(source).toContain('triggerRunwayAbsorption')
     expect(source).toContain('flyer.animate')
     expect(source).toContain('pulseMilestoneDial')
     expect(styles).toContain('.milestone-dial.is-absorbing')

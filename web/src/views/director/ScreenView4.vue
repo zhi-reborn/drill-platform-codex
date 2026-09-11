@@ -159,6 +159,7 @@
             <div class="flow-board-grid" />
             <div v-if="!flowNodes.length" class="flow-empty">该阶段暂无环节</div>
             <Screen4Runway
+              ref="runwayRef"
               v-show="flowNodes.length"
               :phase-status="selectedPhaseStatus"
               :nodes="runwayNodes"
@@ -170,28 +171,6 @@
 
         </section>
       </main>
-
-      <!-- 任务完成弹窗 -->
-      <Transition name="modal">
-        <div v-if="completionModal.visible" class="completion-modal" @click="completionModal.visible = false">
-          <div class="completion-modal-content" role="status" aria-live="polite" aria-atomic="true" @click.stop>
-            <div class="completion-icon" aria-hidden="true">✓</div>
-            <div class="completion-text">
-              <div class="completion-title"><i aria-hidden="true" />任务完成</div>
-              <div class="completion-task-plate">
-                <div class="completion-step">{{ completionModal.stepName }}</div>
-              </div>
-              <div v-if="completionModal.phaseName" class="completion-phase">
-                <span>所属环节</span>
-                <strong>{{ completionModal.phaseName }}</strong>
-              </div>
-            </div>
-            <div class="completion-progress">
-              <div class="completion-progress-bar" />
-            </div>
-          </div>
-        </div>
-      </Transition>
 
     </template>
   </div>
@@ -205,7 +184,7 @@ import { getScreen4RunwayProgress, type Screen4RunwayStatus } from './screen4Run
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance } from '@/types/instance'
-import { getOrderedPhaseNames, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, getStepCompletionPresentation, useScreenPhaseSelection } from './screenPhaseFlow'
+import { getOrderedPhaseNames, getPhaseChamberPath, getPhaseFlowNodes, getPhaseStripScrollLeft, useScreenPhaseSelection } from './screenPhaseFlow'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -231,26 +210,7 @@ const DEFAULT_SCREEN_BRAND = {
 }
 
 const screenBrand = ref({ ...DEFAULT_SCREEN_BRAND })
-
-// 任务完成弹窗
-const completionModal = ref({
-  visible: false,
-  stepName: '',
-  phaseName: '',
-  timer: null as ReturnType<typeof setTimeout> | null
-})
-
-function showCompletionModal(stepName: string, phaseName: string) {
-  if (completionModal.value.timer) {
-    clearTimeout(completionModal.value.timer)
-  }
-  completionModal.value.visible = true
-  completionModal.value.stepName = stepName
-  completionModal.value.phaseName = phaseName
-  completionModal.value.timer = setTimeout(() => {
-    completionModal.value.visible = false
-  }, 3000)
-}
+const runwayRef = ref<InstanceType<typeof Screen4Runway> | null>(null)
 
 // ======== 数据状态 ========
 
@@ -472,6 +432,23 @@ const runningNodeSteps = computed(() => {
   const running = flowNodes.value.find(node => node.status === 'running')
   return running ? running.steps : []
 })
+
+// 同步捕获完成前仍在 DOM 中的任务卡片，兼容 WebSocket 增量更新与断线轮询校准。
+watch(steps, (nextSteps, previousSteps) => {
+  if (!previousSteps.length) return
+  const previousById = new Map(previousSteps.map(step => [step.id, step]))
+  const completed = nextSteps.flatMap(step => {
+    const previous = previousById.get(step.id)
+    if (!previous || previous.status === 'completed' || step.status !== 'completed') return []
+    return [{
+      id: String(step.id),
+      name: step.name,
+      status: 'done',
+      assignee: step.assignee_names || '',
+    }]
+  })
+  if (completed.length) runwayRef.value?.playTaskCompletions(completed)
+}, { flush: 'sync' })
 
 // ======== 所选阶段与环节内容的连接 ========
 const phaseFlowRef = ref<HTMLElement | null>(null)
@@ -1296,7 +1273,6 @@ function scheduleReconnect() {
 function handleWSMessage(msg: any) {
   const event = msg.event_type || msg.event || msg.type || ''
   const payload = msg.payload || msg.data || msg
-  const { stepName, phaseName } = getStepCompletionPresentation(payload, steps.value)
 
   // 心跳忽略
   if (event === 'ping' || event === 'pong') return
@@ -1309,9 +1285,6 @@ function handleWSMessage(msg: any) {
   if (event.startsWith('step_')) {
     patchLocalStep(event, payload)
     scheduleRefresh('steps', 'drill')
-    if (event === 'step_complete' || event === 'step_completed') {
-      showCompletionModal(stepName, phaseName)
-    }
     return
   }
 
@@ -2274,174 +2247,6 @@ function fmt(d: Date): string {
 .bb-val {
   color: #7B93AB;
   white-space: nowrap;
-}
-
-/* 任务弹框 */
-
-/* 完成弹窗 */
-.completion-modal {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-  background:
-    radial-gradient(circle at 50% 44%, rgba(34, 197, 94, 0.12), transparent 34%),
-    rgba(1, 8, 20, 0.72);
-  backdrop-filter: blur(6px);
-}
-
-.completion-modal-content {
-  position: relative;
-  isolation: isolate;
-  width: min(520px, calc(100vw - 48px));
-  min-width: 0;
-  box-sizing: border-box;
-  padding: clamp(28px, 4vh, 42px) clamp(24px, 3vw, 46px) 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  overflow: hidden;
-  border: 1px solid rgba(74, 222, 128, 0.46);
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(34, 197, 94, 0.08), transparent 38%),
-    linear-gradient(180deg, rgba(12, 34, 49, 0.98), rgba(4, 18, 31, 0.98));
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.48),
-    0 0 36px rgba(74, 222, 128, 0.14),
-    inset 0 1px rgba(255, 255, 255, 0.07);
-}
-
-.completion-modal-content::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 8px;
-  pointer-events: none;
-  border: 1px solid rgba(74, 222, 128, 0.1);
-  border-radius: 9px;
-}
-
-.completion-modal-content::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 15%;
-  width: 70%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #4ade80 26%, #67e8f9 74%, transparent);
-  box-shadow: 0 0 14px rgba(74, 222, 128, 0.7);
-}
-
-.completion-icon {
-  width: 70px;
-  height: 70px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(134, 239, 172, 0.72);
-  background:
-    radial-gradient(circle, rgba(74, 222, 128, 0.2) 0 48%, transparent 50%),
-    conic-gradient(from 45deg, #4ade80, #67e8f9, #4ade80);
-  box-shadow:
-    inset 0 0 0 7px #082436,
-    0 0 26px rgba(74, 222, 128, 0.3);
-  font-size: 32px;
-  font-weight: 700;
-  color: #dcfce7;
-  text-shadow: 0 0 10px rgba(134, 239, 172, 0.8);
-}
-
-.completion-text {
-  width: 100%;
-  text-align: center;
-}
-
-.completion-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  margin-bottom: 14px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: #86efac;
-}
-
-.completion-title i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #4ade80;
-  box-shadow: 0 0 10px #4ade80;
-}
-
-.completion-task-plate {
-  position: relative;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 20px;
-  border: 1px solid rgba(74, 222, 128, 0.22);
-  border-radius: 10px;
-  background:
-    linear-gradient(90deg, rgba(34, 197, 94, 0.09), rgba(103, 232, 249, 0.035)),
-    rgba(2, 15, 27, 0.7);
-  box-shadow: inset 3px 0 #4ade80, inset -1px 0 rgba(103, 232, 249, 0.28);
-}
-
-.completion-step {
-  font-size: clamp(22px, 2.2vw, 34px);
-  line-height: 1.35;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-  color: #ecfdf5;
-  text-shadow: 0 0 18px rgba(74, 222, 128, 0.24);
-}
-
-.completion-phase {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 100%;
-  margin-top: 13px;
-  font-size: 12px;
-  color: #66849a;
-}
-
-.completion-phase strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-  font-weight: 500;
-  color: #b9d9e8;
-}
-
-.completion-progress {
-  width: 100%;
-  height: 2px;
-  margin-top: 1px;
-  background: rgba(103, 232, 249, 0.09);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.completion-progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #86efac 58%, #67e8f9);
-  box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
-  animation: progress-shrink 3s linear forwards;
-}
-
-@keyframes progress-shrink {
-  from { width: 100%; }
-  to { width: 0%; }
 }
 
 /* ===== 参考图样式：大屏2 ===== */
@@ -3578,7 +3383,6 @@ function fmt(d: Date): string {
 
 @media (prefers-reduced-motion: reduce) {
   .phase-card { transition: none !important; }
-  .completion-progress-bar { animation: none !important; }
   .header-flow {
     animation: none !important;
     opacity: 0.18;
@@ -3661,24 +3465,6 @@ function fmt(d: Date): string {
   }
 }
 
-/* 弹窗动画 */
-.modal-enter-active {
-  transition: all 0.3s ease-out;
-}
-
-.modal-leave-active {
-  transition: all 0.2s ease-in;
-}
-
-.modal-enter-from {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
-.modal-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
-}
 </style>
 
 <style>
