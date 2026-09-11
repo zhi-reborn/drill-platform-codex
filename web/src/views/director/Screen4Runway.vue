@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" class="screen4-runway" :class="{ 'is-complete': phaseComplete }">
+  <div ref="rootRef" class="screen4-runway" :class="{ 'is-complete': phaseComplete, 'is-motion-paused': motionPaused }">
     <div class="runway-ambient" aria-hidden="true"></div>
 
     <div class="runway-legend" aria-label="跑道状态图例">
@@ -275,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   buildScreen4RunwayLayout,
   getScreen4PhaseStepProgress,
@@ -304,6 +304,12 @@ const props = defineProps<{
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
+const motionPaused = ref(typeof document !== 'undefined' && document.hidden)
+function syncMotionVisibility() { motionPaused.value = document.hidden }
+onMounted(() => {
+  syncMotionVisibility()
+  document.addEventListener('visibilitychange', syncMotionVisibility)
+})
 
 const layout = computed(() => buildScreen4RunwayLayout(props.nodes.length))
 const phaseProgressPercent = computed(() => getScreen4PhaseStepProgress(props.nodes).percent)
@@ -492,7 +498,7 @@ watch(() => props.runningSteps, steps => {
 function launchAbsorbFlyers(steps: Screen4RunwayStep[]) {
   const root = rootRef.value
   const dial = root?.querySelector('.milestone-dial')
-  if (!root || !dial || prefersReducedMotion()) return
+  if (!root || !dial || motionPaused.value || prefersReducedMotion()) return
   const dialRect = dial.getBoundingClientRect()
   // 完成的任务即将从未完成列表移除，需在 DOM 重渲染前同步记录胶囊位置。
   const launches = steps.map(step => ({
@@ -501,7 +507,10 @@ function launchAbsorbFlyers(steps: Screen4RunwayStep[]) {
       ?? root.getBoundingClientRect(),
   }))
   launches.forEach((launch, index) => {
-    window.setTimeout(() => spawnAbsorbFlyer(root, launch.step, launch.from, dialRect), index * 170)
+    window.setTimeout(() => {
+      if (motionPaused.value || rootRef.value !== root) return
+      spawnAbsorbFlyer(root, launch.step, launch.from, dialRect)
+    }, index * 170)
   })
 }
 
@@ -546,6 +555,7 @@ function pulseMilestoneDial() {
 }
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', syncMotionVisibility)
   if (dialAbsorbTimer) clearTimeout(dialAbsorbTimer)
 })
 </script>
@@ -557,6 +567,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
+  contain: paint style;
   border-radius: 18px;
   border: 1px solid rgba(65, 188, 238, 0.22);
   background:
@@ -836,6 +847,7 @@ onUnmounted(() => {
   width: 100%;
   min-width: 0;
   height: 100%;
+  contain: paint;
 }
 
 .ticker-sequence {
@@ -1000,6 +1012,7 @@ onUnmounted(() => {
   transform: translateY(clamp(-40px, -4vh, -24px)) scale(1.08);
   transform-origin: center;
   overflow: visible;
+  contain: paint;
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
 
@@ -1063,7 +1076,7 @@ onUnmounted(() => {
   stroke: #42f0a4;
   stroke-width: 5.5;
   stroke-dasharray: 0.1 52;
-  filter: drop-shadow(0 0 6px rgba(66, 240, 164, .86));
+  filter: none;
   animation: completed-energy-flow 1.5s linear infinite;
 }
 
@@ -1073,7 +1086,7 @@ onUnmounted(() => {
   stroke-width: 4;
   stroke-dasharray: 4 15;
   opacity: .24;
-  filter: url('#s4-soft-glow');
+  filter: none;
   animation: active-energy 1.8s linear infinite;
 }
 
@@ -1100,6 +1113,7 @@ onUnmounted(() => {
 .runway-progress-head {
   transform-box: fill-box;
   transform-origin: center;
+  will-change: transform, opacity;
   animation: progress-head-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1111,7 +1125,7 @@ onUnmounted(() => {
 
 .progress-head-core {
   fill: #ffe9ad;
-  filter: url('#s4-strong-glow');
+  filter: none;
 }
 
 .turn-indicator {
@@ -1300,6 +1314,9 @@ onUnmounted(() => {
   stroke: rgba(73, 217, 249, .5);
   stroke-width: 1;
   stroke-dasharray: 2 9;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
   animation: milestone-scan-spin 16s linear infinite;
 }
 
@@ -1426,7 +1443,7 @@ onUnmounted(() => {
 
 .runway-baton {
   color: #ffc55f;
-  filter: url('#s4-strong-glow');
+  filter: none;
   animation: baton-hover 1.5s ease-in-out infinite;
 }
 
@@ -1550,6 +1567,19 @@ onUnmounted(() => {
     width: calc(100% - 4px);
     height: calc(100% - 56px);
   }
+
+  .runway-dashes { animation-duration: 4.8s; }
+  .runway-complete-flow { animation-duration: 2.4s; }
+  .runway-active-path { animation-duration: 2.6s; }
+  .runway-node.is-completed .node-orbit-outer { animation-duration: 18s; }
+  .ticker-standby { animation-duration: 4.2s; }
+  .ticker-standby::after { animation-duration: 5.2s; }
+}
+
+.screen4-runway.is-motion-paused *,
+.screen4-runway.is-motion-paused *::before,
+.screen4-runway.is-motion-paused *::after {
+  animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1580,6 +1610,7 @@ onUnmounted(() => {
     animation: none !important;
   }
 }
+
 </style>
 
 <style lang="scss">

@@ -6,6 +6,22 @@ const { descriptor } = parse(source)
 const template = descriptor.template!.content
 const styles = descriptor.styles.map(style => style.content).join('\n')
 
+function extractCssBlock(source: string, atRule: string) {
+  const start = source.indexOf(atRule)
+  if (start === -1) return ''
+  const openBrace = source.indexOf('{', start)
+  if (openBrace === -1) return ''
+
+  let depth = 0
+  for (let index = openBrace; index < source.length; index++) {
+    if (source[index] === '{') depth++
+    if (source[index] === '}') depth--
+    if (depth === 0) return source.slice(start, index + 1)
+  }
+
+  return ''
+}
+
 describe('screen4 runway component', () => {
   it('compiles an accessible serpentine energy runway', () => {
     expect(compileTemplate({
@@ -85,6 +101,28 @@ describe('screen4 runway component', () => {
     expect(styles).toContain('.runway-node.is-running')
     expect(styles).toContain('.runway-node.is-issue')
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it('pauses decorative motion while the document is hidden', () => {
+    expect(template).toContain("'is-motion-paused': motionPaused")
+    expect(source).toContain("document.addEventListener('visibilitychange', syncMotionVisibility)")
+    expect(source).toContain("document.removeEventListener('visibilitychange', syncMotionVisibility)")
+    expect(source).toContain('if (!root || !dial || motionPaused.value || prefersReducedMotion()) return')
+    expect(styles).toMatch(/\.screen4-runway\.is-motion-paused[\s\S]*\*::after[\s\S]*animation-play-state: paused !important;/)
+  })
+
+  it('keeps motion visible with bounded low-cost paint layers', () => {
+    expect(styles).toMatch(/\.screen4-runway\s*\{[^}]*contain: paint style;/s)
+    expect(styles).toMatch(/\.runway-svg\s*\{[^}]*contain: paint;/s)
+    expect(styles).toMatch(/\.ticker-track\s*\{[^}]*contain: paint;/s)
+    expect(styles).not.toMatch(/\.runway-deck\s*\{[^}]*contain: paint;/s)
+    expect(styles).toMatch(/\.runway-complete-flow\s*\{[^}]*filter: none;/s)
+    expect(styles).toMatch(/\.runway-active-path\s*\{[^}]*filter: none;/s)
+    expect(styles).toMatch(/\.progress-head-core\s*\{[^}]*filter: none;/s)
+    expect(styles).toMatch(/\.runway-baton\s*\{[^}]*filter: none;/s)
+    expect(styles).toMatch(/\.runway-progress-head\s*\{[^}]*will-change: transform, opacity;/s)
+    expect(styles).toMatch(/\.milestone-scan\s*\{[^}]*will-change: transform;/s)
+    expect(extractCssBlock(styles, '@media (max-width: 1280px)')).not.toContain('animation: none !important')
   })
 
   it('shows row turns as a downward continuation', () => {
@@ -227,6 +265,10 @@ describe('screen4 runway component', () => {
     expect(source).toContain('pulseMilestoneDial')
     expect(styles).toContain('.milestone-dial.is-absorbing')
     expect(styles).toContain('@keyframes milestone-absorb')
+  })
+
+  it('guards queued absorb flyers against hidden or stale roots', () => {
+    expect(source).toContain('if (motionPaused.value || rootRef.value !== root) return')
   })
 
   it('spins the milestone scan ring and hides the pending helper text', () => {
