@@ -1855,9 +1855,10 @@ $text: #d6e8ff;
 $text-dim: #a9c7ec;
 $text-mute: #7f9fc7;
 
-$font-display: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', Arial, sans-serif;
-$font-mono: Consolas, Menlo, Monaco, 'Courier New', monospace;
-$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+$font-ui: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', SimHei, sans-serif;
+$font-display: $font-ui;
+$font-mono: $font-ui;
+$font-cn: $font-ui;
 
 .screen-root {
   position: relative;
@@ -4051,8 +4052,9 @@ $font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-seri
      不携带 scoped 的 data-v 属性，scoped 选择器无法命中 -->
 <style lang="scss">
 // 字体变量（scoped 块内同名定义的副本，动态元素样式需全局作用域）
-$font-mono: Consolas, Menlo, Monaco, 'Courier New', monospace;
-$font-cn: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+$font-ui: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', SimHei, sans-serif;
+$font-mono: $font-ui;
+$font-cn: $font-ui;
 
 // ===== 任务完成流式动画 =====
 // 全屏覆盖层：承载飞行 ghost、尾迹粒子、圆环吸收特效

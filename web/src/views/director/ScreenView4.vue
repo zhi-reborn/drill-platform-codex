@@ -1549,11 +1549,12 @@ function fmt(d: Date): string {
 /* ===== 全局 ===== */
 
 .screen-root {
+  --screen4-font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "SimHei", sans-serif;
   margin: -24px;
   height: calc(100vh - 56px);
   background: #0B1121;
   color: #C0CDE0;
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  font-family: var(--screen4-font-family);
   /* 统一缩放基准：所有 vw 字号基于此，保持比例一致 */
   font-size: clamp(14px, 0.92vw, 17px);
   display: grid;
@@ -1689,7 +1690,7 @@ function fmt(d: Date): string {
   font-size: 24px;
   font-weight: 700;
   color: #67E8F9;
-  font-family: 'Courier New', monospace;
+  font-family: var(--screen4-font-family);
   letter-spacing: 2px;
 }
 
@@ -2140,7 +2141,7 @@ function fmt(d: Date): string {
   font-size: 32px;
   font-weight: 700;
   color: #67E8F9;
-  font-family: 'Courier New', monospace;
+  font-family: var(--screen4-font-family);
   letter-spacing: 3px;
 }
 
@@ -2261,7 +2262,7 @@ function fmt(d: Date): string {
     radial-gradient(circle at 78% 70%, rgba(79, 36, 36, 0.22), transparent 28%),
     linear-gradient(180deg, #071a35 0%, #041024 52%, #020916 100%);
   color: #dce9ff;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: var(--screen4-font-family);
   letter-spacing: 0;
   border: 1px solid rgba(39, 165, 230, 0.45);
   box-shadow: inset 0 0 40px rgba(0, 180, 255, 0.16);
@@ -2465,7 +2466,7 @@ function fmt(d: Date): string {
   align-items: center;
   gap: clamp(14px, 1.5em, 28px);
   color: #ebf5ff;
-  font-family: "Courier New", monospace;
+  font-family: var(--screen4-font-family);
   font-size: clamp(15px, 1.5em, 24px);
   font-weight: 700;
   white-space: nowrap;
@@ -2730,7 +2731,7 @@ function fmt(d: Date): string {
   padding-left: 6px;
   overflow: hidden;
   color: #ffffff;
-  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+  font-family: var(--screen4-font-family);
   font-size: clamp(38px, 3vw, 42px);
   font-weight: 900;
   line-height: 1;
@@ -2802,7 +2803,7 @@ function fmt(d: Date): string {
   width: 42px;
   height: 28px;
   color: rgba(255, 255, 255, 0.98);
-  font-family: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', Arial, sans-serif;
+  font-family: var(--screen4-font-family);
   font-size: 31px;
   font-style: italic;
   font-weight: 900;
@@ -2834,7 +2835,7 @@ function fmt(d: Date): string {
   bottom: 12px;
   z-index: 4;
   color: #f0f7ff;
-  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+  font-family: var(--screen4-font-family);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -3278,7 +3279,7 @@ function fmt(d: Date): string {
   gap: clamp(6px, 0.75vw, 12px);
   min-height: 0;
   color: #f5fbff;
-  font-family: "Courier New", monospace;
+  font-family: var(--screen4-font-family);
   font-size: clamp(12px, 1.08vw, 18px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -3325,7 +3326,7 @@ function fmt(d: Date): string {
   margin-left: 8px;
   color: #ffffff;
   font-style: normal;
-  font-family: "Microsoft YaHei", sans-serif;
+  font-family: var(--screen4-font-family);
   font-size: 0.88em;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.64), 0 0 18px rgba(16, 224, 255, 0.52);

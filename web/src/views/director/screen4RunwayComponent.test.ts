@@ -170,15 +170,23 @@ describe('screen4 runway component', () => {
     expect(template.slice(deckIndex)).not.toContain('deck-summary')
     expect(styles).toContain('.runway-deck')
     expect(styles).toMatch(/\.runway-summary\s*\{[^}]*position: absolute;[^}]*top: 12px;[^}]*right: 12px;/s)
-    expect(styles).toMatch(/\.runway-summary\s*\{[^}]*width: min\(216px,[^}]*height: 38px;/s)
+    expect(styles).toMatch(/\.runway-summary\s*\{[^}]*width: fit-content;[^}]*max-width: calc\(100% - 430px\);[^}]*height: 38px;[^}]*justify-content: flex-start;/s)
     // 摘要主标与数字与跑道节点名称（18px）同规格。
     expect(styles).toMatch(/\.summary-kicker\s*\{[^}]*font-size: 18px;/s)
+    expect(styles).toMatch(/\.summary-kicker\s*\{[^}]*flex: 0 0 auto;/s)
     expect(styles).toMatch(/\.summary-progress[\s\S]*?strong\s*\{[^}]*font-size: 18px;/)
-    expect(styles).toMatch(/\.summary-progress[\s\S]*?span\s*\{[^}]*font-size: 13px;/)
+    expect(styles).toMatch(/\.summary-progress[\s\S]*?strong\s*\{[^}]*color: #58f0b6;[^}]*text-shadow: 0 0 10px rgba\(56, 231, 167, \.42\);/)
+    expect(styles).toMatch(/\.summary-progress[\s\S]*?span\s*\{[^}]*font-size: 18px;/)
     expect(styles).toMatch(/\.runway-svg\s*\{[^}]*inset: 2px 4px 82px;/s)
     expect(styles).toMatch(/\.runway-svg\s*\{[^}]*transform: translateY\(clamp\(-54px, -5\.5vh, -34px\)\) scale\(1\.08\);/s)
     expect(template).not.toContain('runway-node-index')
     expect(template).not.toContain('String(item.index + 1)')
+  })
+
+  it('uses the inherited intranet-safe font stack for all runway text', () => {
+    expect(styles).not.toMatch(/DIN Alternate|Arial Narrow|Courier New/)
+    expect(styles).toMatch(/\.screen4-runway\s*\{[^}]*font-family: inherit;/s)
+    expect(styles).toMatch(/\.summary-progress\s*\{[^}]*font-variant-numeric: tabular-nums;/s)
   })
 
   it('presents the overall progress without a redundant meter', () => {
@@ -291,6 +299,20 @@ describe('screen4 runway component', () => {
     expect(source).toContain('pulseMilestoneDial')
     expect(styles).toContain('.milestone-dial.is-absorbing')
     expect(styles).toContain('@keyframes milestone-absorb')
+  })
+
+  it('advances the milestone progress only after a finished card is absorbed', () => {
+    expect(source).toContain('const sourcePhaseProgress = computed')
+    expect(source).toContain('const displayedPhaseCompleted = ref(sourcePhaseProgress.value.completed)')
+    expect(source).toContain('pendingCompletionAnimations += launches.length')
+    expect(source).toContain('if (pendingCompletionAnimations === 0) displayedPhaseCompleted.value = next.completed')
+
+    const absorptionIndex = source.indexOf('triggerRunwayAbsorption(root, hubX, hubY)')
+    const progressIndex = source.indexOf('commitMilestoneProgress()', absorptionIndex)
+    const pulseIndex = source.indexOf('pulseMilestoneDial()', absorptionIndex)
+    expect(absorptionIndex).toBeGreaterThan(-1)
+    expect(progressIndex).toBeGreaterThan(absorptionIndex)
+    expect(pulseIndex).toBeGreaterThan(progressIndex)
   })
 
   it('guards queued absorb flyers against hidden or stale roots', () => {

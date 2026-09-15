@@ -318,7 +318,27 @@ onMounted(() => {
 })
 
 const layout = computed(() => buildScreen4RunwayLayout(props.nodes.length))
-const phaseProgressPercent = computed(() => getScreen4PhaseStepProgress(props.nodes).percent)
+const sourcePhaseProgress = computed(() => getScreen4PhaseStepProgress(props.nodes))
+const displayedPhaseCompleted = ref(sourcePhaseProgress.value.completed)
+let pendingCompletionAnimations = 0
+const phaseProgressPercent = computed(() => {
+  const total = sourcePhaseProgress.value.total
+  return total ? Math.round((Math.min(displayedPhaseCompleted.value, total) / total) * 100) : 0
+})
+
+watch(sourcePhaseProgress, (next, previous) => {
+  if (next.total !== previous.total || next.completed < previous.completed) {
+    pendingCompletionAnimations = 0
+    displayedPhaseCompleted.value = next.completed
+    return
+  }
+  if (pendingCompletionAnimations === 0) displayedPhaseCompleted.value = next.completed
+})
+
+watch(() => props.nodes.map(node => node.id).join('|'), () => {
+  pendingCompletionAnimations = 0
+  displayedPhaseCompleted.value = sourcePhaseProgress.value.completed
+})
 const phaseComplete = computed(() => {
   const normalizedStatus = props.phaseStatus.toLowerCase()
   return normalizedStatus === 'completed'
@@ -503,9 +523,10 @@ function playTaskCompletions(steps: Screen4RunwayStep[]) {
     const card = root.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(step.id)}"]`)
     return card ? [{ step, card, from: card.getBoundingClientRect() }] : []
   })
+  pendingCompletionAnimations += launches.length
   launches.forEach((launch, index) => {
     window.setTimeout(() => {
-      if (motionPaused.value || rootRef.value !== root) return
+      if (motionPaused.value || rootRef.value !== root) return releasePendingMilestoneProgress()
       spawnAbsorbFlyer(root, launch.step, launch.card, launch.from, rootRect, dialRect)
     }, index * 190)
   })
@@ -596,6 +617,7 @@ function spawnAbsorbFlyer(
       ], { duration: 440, easing: 'cubic-bezier(.55, 0, .85, .4)', fill: 'forwards' }).onfinish = () => {
         flyer.remove()
         triggerRunwayAbsorption(root, hubX, hubY)
+        commitMilestoneProgress()
         pulseMilestoneDial()
       }
     }, 1050)
@@ -603,6 +625,20 @@ function spawnAbsorbFlyer(
   flight.oncancel = () => {
     clearInterval(trailTimer)
     flyer.remove()
+    releasePendingMilestoneProgress()
+  }
+}
+
+function commitMilestoneProgress() {
+  const target = sourcePhaseProgress.value.completed
+  displayedPhaseCompleted.value = Math.min(target, displayedPhaseCompleted.value + 1)
+  releasePendingMilestoneProgress()
+}
+
+function releasePendingMilestoneProgress() {
+  pendingCompletionAnimations = Math.max(0, pendingCompletionAnimations - 1)
+  if (pendingCompletionAnimations === 0) {
+    displayedPhaseCompleted.value = sourcePhaseProgress.value.completed
   }
 }
 
@@ -693,6 +729,7 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .screen4-runway {
   position: relative;
+  font-family: inherit;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -829,9 +866,10 @@ onUnmounted(() => {
   top: 12px;
   right: 12px;
   box-sizing: border-box;
-  width: min(216px, calc(100% - 430px));
+  width: fit-content;
+  max-width: calc(100% - 430px);
   height: 38px;
-  justify-content: flex-end;
+  justify-content: flex-start;
   border-color: rgba(65, 188, 238, 0.26);
   border-radius: 10px;
   background: linear-gradient(255deg, rgba(4, 26, 45, 0.85), rgba(6, 34, 52, 0.58));
@@ -858,10 +896,11 @@ onUnmounted(() => {
 // “整体进度”主标与跑道节点名称（18px）同级；数字同规格、单位层级降一档保持节奏。
 .summary-kicker {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: #9dd9e8;
   font-size: 18px;
   font-weight: 700;
@@ -883,18 +922,22 @@ onUnmounted(() => {
   align-items: baseline;
   gap: 4px;
   white-space: nowrap;
-  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
 
   strong {
-    color: #f4fcff;
+    color: #58f0b6;
     font-size: 18px;
     font-weight: 800;
     line-height: 1;
+    text-shadow: 0 0 10px rgba(56, 231, 167, .42);
   }
 
   span {
-    color: #75aac4;
-    font-size: 13px;
+    color: #d9f3ff;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
   }
 }
 
@@ -949,7 +992,8 @@ onUnmounted(() => {
   gap: 3px;
   min-width: 28px;
   color: #75aac4;
-  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 
   strong {
@@ -962,7 +1006,7 @@ onUnmounted(() => {
 
   em {
     color: #648fa7;
-    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    font-family: inherit;
     font-size: 11px;
     font-style: normal;
   }
@@ -1226,7 +1270,7 @@ onUnmounted(() => {
   transform-origin: center;
   overflow: visible;
   contain: paint;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: inherit;
 }
 
 .runway-grid {
@@ -1506,7 +1550,8 @@ onUnmounted(() => {
 
   text {
     fill: currentColor;
-    font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
     font-size: 17px;
     font-weight: 700;
     letter-spacing: 1px;
@@ -1583,7 +1628,8 @@ onUnmounted(() => {
 
 .milestone-value {
   fill: #58e8ff;
-  font-family: 'DIN Alternate', 'Arial Narrow', sans-serif;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   font-size: 34px;
   font-weight: 700;
   text-anchor: middle;
@@ -1851,7 +1897,7 @@ onUnmounted(() => {
     0 12px 30px rgba(0, 7, 18, .52),
     inset 3px 0 #2ee8e0,
     inset 0 0 18px rgba(32, 190, 203, .14);
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: inherit;
   pointer-events: none;
   will-change: transform, opacity, filter;
   overflow: hidden;
@@ -1947,7 +1993,7 @@ onUnmounted(() => {
   color: #caffea;
   background: linear-gradient(135deg, rgba(9, 55, 43, .96), rgba(4, 24, 37, .96));
   box-shadow: 0 0 18px rgba(47, 240, 160, .36);
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;

@@ -40,6 +40,14 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).toContain('.stat-total')
   })
 
+  it('uses a common local font stack without display-only numeric fonts', () => {
+    expect(screen4Source).toContain('--screen4-font-family:')
+    expect(screen4Source).toContain('"Microsoft YaHei"')
+    expect(screen4Source).toContain('"PingFang SC"')
+    expect(screen4Source).toContain('"SimHei"')
+    expect(screen4Source).not.toMatch(/Courier New|DIN Alternate|Arial Narrow/)
+  })
+
   it('renders its own runway instead of the old task-card flow', () => {
     expect(screen4Source).toContain("import Screen4Runway from './Screen4Runway.vue'")
     expect(screen4Source).toContain('<Screen4Runway')

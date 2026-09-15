@@ -184,7 +184,7 @@
           class="lane-active-path"
         />
 
-        <g font-family="Microsoft YaHei, PingFang SC, sans-serif" text-anchor="middle">
+        <g font-family="inherit" text-anchor="middle">
           <g
             v-for="node in visibleNodes"
             :key="node.index"
@@ -740,7 +740,7 @@ function splitName(name: string): string[] {
   justify-content: center;
   max-width: 100%;
   min-height: 0;
-  font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+  font-family: inherit;
 }
 
 .phase-ring::before {
@@ -881,7 +881,7 @@ function splitName(name: string): string[] {
   font-weight: 900;
   letter-spacing: 4px;
   line-height: 1.15;
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: inherit;
   background: linear-gradient(180deg, #ffffff 35%, #a5ecff 90%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -935,7 +935,7 @@ function splitName(name: string): string[] {
 }
 
 .head-stats .stats-num {
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   font-size: clamp(18px, 1.6em, 26px);
   font-weight: 900;
   color: #eaf8ff;
@@ -959,7 +959,7 @@ function splitName(name: string): string[] {
 }
 
 .head-stats .stats-sep {
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   font-size: clamp(16px, 1.4em, 22px);
   color: rgba(45, 228, 255, 0.55);
   font-weight: 600;
@@ -1085,7 +1085,7 @@ function splitName(name: string): string[] {
 .hub-num {
   position: relative;
   z-index: 1;
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   font-size: 45px;
   font-weight: 900;
   color: #2de4ff;
@@ -1101,7 +1101,7 @@ function splitName(name: string): string[] {
 .hub-unit {
   position: relative;
   z-index: 1;
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   align-self: baseline;
   margin-left: 3px;
   font-size: 22px;
@@ -1279,7 +1279,7 @@ function splitName(name: string): string[] {
 
 .progress-num {
   color: #ffe0a4;
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   font-size: clamp(14px, 1.2em, 20px);
   font-weight: 900;
   letter-spacing: 1px;
@@ -1292,7 +1292,7 @@ function splitName(name: string): string[] {
 
 .progress-unit {
   color: rgba(255, 224, 162, 0.9);
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  font-family: inherit;
   font-size: clamp(14px, 1.2em, 20px);
   font-weight: 900;
 }
@@ -1670,8 +1670,8 @@ function splitName(name: string): string[] {
 }
 
 .node-count-text {
-  // 等宽字体 + 数字层级：完成数为主数字放大加粗，斜杠/总数略小弱化
-  font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+  // 等宽数字 + 数字层级：完成数为主数字放大加粗，斜杠/总数略小弱化
+  font-family: inherit;
   font-weight: 800;
   letter-spacing: 0.5px;
   font-variant-numeric: tabular-nums;
