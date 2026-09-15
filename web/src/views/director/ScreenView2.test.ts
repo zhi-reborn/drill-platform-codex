@@ -108,7 +108,10 @@ describe('phase chamber template wiring', () => {
 
   it('keeps arrow layout geometry stable while focus transitions', () => {
     const styles = descriptor.styles.map(style => style.content).join('\n')
-    expect(styles).toMatch(/\.flow-arrow\s*\{[^}]*transition:\s*opacity 0\.7s ease;/)
+    expect(styles).toMatch(
+      /\.flow-arrow\s*\{[^}]*height:\s*4px;[^}]*transition:\s*opacity 0\.7s ease,\s*height 0\.45s ease;/,
+    )
+    expect(styles).toMatch(/\.flow-arrow\.is-running\s*\{[^}]*height:\s*5px;/)
   })
 
   it('shows up to six tasks in every node', () => {
