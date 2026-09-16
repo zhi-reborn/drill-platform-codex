@@ -14,10 +14,6 @@
 
     <!-- 主屏 -->
     <template v-else>
-      <div class="cyber-bg cyber-bg-grid" />
-      <div class="cyber-bg cyber-bg-beams" />
-      <div class="cyber-bg cyber-bg-scan" />
-
       <header class="screen-header">
         <svg class="header-frame" viewBox="0 0 1200 82" preserveAspectRatio="none" aria-hidden="true">
           <defs>
@@ -99,9 +95,9 @@
           <svg class="phase-chamber-surface" aria-hidden="true">
             <defs>
               <linearGradient id="phaseSurface" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#0a304b" />
-                <stop offset="0.6" stop-color="#04192e" />
-                <stop offset="1" stop-color="#07283d" />
+                <stop offset="0" stop-color="#0a304b" stop-opacity="0.12" />
+                <stop offset="0.6" stop-color="#04192e" stop-opacity="0.18" />
+                <stop offset="1" stop-color="#07283d" stop-opacity="0.24" />
               </linearGradient>
               <linearGradient id="phaseOutline" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stop-color="var(--phase-link-color)" />
@@ -2250,45 +2246,19 @@ function fmt(d: Date): string {
   white-space: nowrap;
 }
 
-/* ===== 参考图样式：大屏2 ===== */
+/* ===== 深蓝世界地图背景 ===== */
 
 .cyber-command-screen {
   position: relative;
   margin: 0;
   height: 100vh;
   grid-template-rows: 86px minmax(0, 1fr);
-  background:
-    radial-gradient(circle at 50% 45%, rgba(12, 70, 132, 0.44), transparent 34%),
-    radial-gradient(circle at 78% 70%, rgba(79, 36, 36, 0.22), transparent 28%),
-    linear-gradient(180deg, #071a35 0%, #041024 52%, #020916 100%);
+  background: #061b33 url('/images/screen4-world-map.jpg') center / cover no-repeat;
   color: #dce9ff;
   font-family: var(--screen4-font-family);
   letter-spacing: 0;
-  border: 1px solid rgba(39, 165, 230, 0.45);
-  box-shadow: inset 0 0 40px rgba(0, 180, 255, 0.16);
-}
-
-.cyber-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.cyber-bg-grid {
-  background-image: linear-gradient(rgba(65, 167, 244, 0.035) 1px, transparent 1px);
-  background-size: 100% 5px;
-  opacity: 0.72;
-}
-
-.cyber-bg-beams {
-  background:
-    linear-gradient(90deg, rgba(0, 217, 255, 0.16), transparent 18%, transparent 82%, rgba(0, 217, 255, 0.14)),
-    radial-gradient(ellipse at 50% 42%, rgba(0, 183, 255, 0.14), transparent 42%);
-}
-
-.cyber-bg-scan {
-  background: repeating-linear-gradient(180deg, transparent 0 3px, rgba(28, 112, 182, 0.06) 3px 5px);
-  mix-blend-mode: screen;
+  border: 1px solid rgba(54, 113, 160, 0.22);
+  box-shadow: inset 0 0 80px rgba(2, 12, 28, 0.22);
 }
 
 .command-header {
@@ -3354,6 +3324,7 @@ function fmt(d: Date): string {
 .flow-board-grid {
   position: absolute;
   inset: 0;
+  opacity: 0.12;
   background-image:
     linear-gradient(rgba(103, 232, 249, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(103, 232, 249, 0.045) 1px, transparent 1px);

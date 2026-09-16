@@ -236,14 +236,16 @@
 
     <div class="runway-deck" aria-label="跑道信息栏">
       <div class="deck-cell deck-ticker" aria-label="当前环节任务列表">
-        <div class="ticker-head" aria-hidden="true">
+        <div class="ticker-head">
           <span class="ticker-node">
             <i></i>
-            <span>当前环节待完成任务</span>
+            <span>任务详情</span>
           </span>
-          <span class="ticker-count">
-            <strong>{{ visibleSteps.length }}</strong>
-            <em>项</em>
+          <span class="ticker-count" :aria-label="runningSteps.length ? `当前环节已完成 ${tickerDoneCount} 项，共 ${runningSteps.length} 项` : '暂无当前运行环节'" title="当前环节已完成 / 总任务数">
+            <em>已完成</em>
+            <strong>{{ runningSteps.length ? tickerDoneCount : '—' }}</strong>
+            <span class="ticker-count-divider">/</span>
+            <span class="ticker-count-total">{{ runningSteps.length || '—' }}</span>
           </span>
         </div>
         <div v-if="visibleSteps.length" class="ticker-viewport">
@@ -458,6 +460,7 @@ const turnIndicators = computed(() => layout.value.points.flatMap((point, index,
 // ===== 底部任务传送带 =====
 
 const runningSteps = computed<Screen4RunwayStep[]>(() => props.runningSteps ?? [])
+const tickerDoneCount = computed(() => runningSteps.value.filter(step => isAbsorbedStatus(step.status)).length)
 
 const tickerStatusPriority: Record<string, number> = {
   running: 0,
@@ -738,20 +741,16 @@ onUnmounted(() => {
   border-radius: 18px;
   border: 1px solid rgba(65, 188, 238, 0.22);
   background:
-    radial-gradient(circle at 50% 46%, rgba(15, 111, 157, 0.16), transparent 42%),
-    linear-gradient(180deg, rgba(1, 18, 34, 0.2), rgba(0, 13, 27, 0.52));
-  box-shadow: inset 0 0 42px rgba(0, 6, 18, 0.42);
+    radial-gradient(ellipse at 50% 46%, rgba(15, 85, 141, 0.06), transparent 68%),
+    linear-gradient(180deg, rgba(3, 20, 40, 0.06), rgba(2, 15, 32, 0.18));
+  box-shadow: inset 0 0 42px rgba(0, 6, 18, 0.16);
 }
 
 .runway-ambient {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(90deg, transparent 49.8%, rgba(83, 218, 255, 0.05) 50%, transparent 50.2%),
-    linear-gradient(0deg, transparent 49.8%, rgba(83, 218, 255, 0.04) 50%, transparent 50.2%);
-  background-size: 56px 56px;
-  mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+  background: radial-gradient(ellipse at 50% 60%, rgba(27, 94, 150, 0.05), transparent 72%);
 }
 
 // 状态图例：左上角 HUD 状态铭牌，与底部信息栏同一套玻璃质感。
@@ -964,7 +963,7 @@ onUnmounted(() => {
   gap: 6px;
   max-width: 200px;
   overflow: hidden;
-  color: #ffd273;
+  color: #d7f4ff;
   font-size: 18px;
   font-weight: 700;
   white-space: nowrap;
@@ -989,27 +988,42 @@ onUnmounted(() => {
 .ticker-count {
   display: inline-flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 6px;
   min-width: 28px;
+  padding: 6px 10px;
+  border: 1px solid rgba(79, 204, 218, .22);
+  border-radius: 7px;
+  background: linear-gradient(120deg, rgba(24, 113, 125, .18), rgba(5, 30, 49, .5));
   color: #75aac4;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 
   strong {
-    color: #9be8ff;
+    color: #58f0b6;
     font-size: 18px;
     font-weight: 800;
     line-height: 1;
-    text-shadow: 0 0 8px rgba(71, 211, 255, .38);
+    text-shadow: 0 0 8px rgba(56, 231, 167, .24);
   }
 
   em {
-    color: #648fa7;
+    color: #8cb6c7;
     font-family: inherit;
     font-size: 11px;
     font-style: normal;
   }
+}
+
+.ticker-count-divider {
+  color: #527d94;
+  font-size: 14px;
+}
+
+.ticker-count-total {
+  color: #bdd8e5;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .ticker-viewport {
@@ -1276,6 +1290,7 @@ onUnmounted(() => {
 .runway-grid {
   fill: url('#s4-runway-grid');
   stroke: rgba(68, 195, 239, 0.08);
+  opacity: 0.14;
 }
 
 .runway-shadow,
