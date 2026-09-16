@@ -5,6 +5,7 @@ import {
   getScreen4RunwayCompletedPathEnd,
   getScreen4RunwayHopProgress,
   getScreen4RunwayProgress,
+  getScreen4TickerVisibleLimit,
   isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
   truncateScreen4RunwayText,
@@ -142,5 +143,14 @@ describe('screen4 runway geometry', () => {
     expect(truncateScreen4RunwayText('1234567890123')).toBe('123456789012…')
     expect(truncateScreen4RunwayText('一'.repeat(25), 25)).toBe('一'.repeat(25))
     expect(truncateScreen4RunwayText('一'.repeat(26), 25)).toBe(`${'一'.repeat(25)}…`)
+  })
+
+  it('adapts the ticker card count to the available width', () => {
+    expect(getScreen4TickerVisibleLimit(0, 4)).toBe(1)
+    expect(getScreen4TickerVisibleLimit(860, 2)).toBe(2)
+    expect(getScreen4TickerVisibleLimit(860, 4)).toBe(2)
+    expect(getScreen4TickerVisibleLimit(1160, 5)).toBe(3)
+    expect(getScreen4TickerVisibleLimit(1600, 6)).toBe(5)
+    expect(getScreen4TickerVisibleLimit(1600, 0)).toBe(0)
   })
 })

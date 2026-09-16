@@ -434,14 +434,13 @@ onMounted(() => {
           }
         }
 
-        // 操作行：5 枚按钮单排均布；屏幕按钮去掉冗余同形图标并收紧内距，
-        // 整行 ~260px，任何 lg=8 卡宽下都单行放下（极窄屏换行兜底）。
+        // 按钮紧凑左对齐，宽度不足时自然换行。
         .drill-actions {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          justify-content: space-between;
-          gap: $spacing-xs;
+          justify-content: flex-start;
+          gap: $spacing-sm;
 
           // el-button 相邻兄弟自带 12px 左外距，与 gap 叠加会把按钮挤出卡片，统一交给 gap 控制。
           :deep(.el-button + .el-button) {

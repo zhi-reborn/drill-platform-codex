@@ -248,11 +248,11 @@
             <span class="ticker-count-total">{{ runningSteps.length || '—' }}</span>
           </span>
         </div>
-        <div v-if="visibleSteps.length" class="ticker-viewport">
+        <div v-if="visibleSteps.length" ref="tickerViewportRef" class="ticker-viewport">
           <div class="ticker-track">
             <div class="ticker-sequence">
               <span
-                v-for="step in visibleSteps"
+                v-for="step in displayedSteps"
                 :key="step.id"
                 class="ticker-chip"
                 :class="`is-${step.status}`"
@@ -268,6 +268,17 @@
                   </span>
                 </span>
               </span>
+              <span
+                v-if="tickerHiddenCount"
+                class="ticker-more"
+                :title="tickerHiddenTitle"
+                :aria-label="`另有 ${tickerHiddenCount} 项待处理任务`"
+              >
+                <i aria-hidden="true">•••</i>
+                <span>另有</span>
+                <strong>{{ tickerHiddenCount }}</strong>
+                <span>项</span>
+              </span>
             </div>
           </div>
         </div>
@@ -282,13 +293,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   buildScreen4RunwayLayout,
   getScreen4PhaseStepProgress,
   getScreen4RunwayCompletedPathEnd,
   getScreen4RunwayHopProgress,
   getScreen4RunwayPath,
+  getScreen4TickerVisibleLimit,
   isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
   truncateScreen4RunwayText,
@@ -312,11 +324,16 @@ const props = defineProps<{
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
+const tickerViewportRef = ref<HTMLElement | null>(null)
+const tickerVisibleLimit = ref(1)
+let tickerResizeObserver: ResizeObserver | null = null
 const motionPaused = ref(typeof document !== 'undefined' && document.hidden)
 function syncMotionVisibility() { motionPaused.value = document.hidden }
 onMounted(() => {
   syncMotionVisibility()
   document.addEventListener('visibilitychange', syncMotionVisibility)
+  tickerResizeObserver = new ResizeObserver(updateTickerVisibleLimit)
+  nextTick(syncTickerViewportObserver)
 })
 
 const layout = computed(() => buildScreen4RunwayLayout(props.nodes.length))
@@ -474,6 +491,27 @@ const visibleSteps = computed(() => runningSteps.value
   .sort((left, right) => (
     (tickerStatusPriority[left.status] ?? 3) - (tickerStatusPriority[right.status] ?? 3)
   )))
+const displayedSteps = computed(() => visibleSteps.value.slice(0, tickerVisibleLimit.value))
+const tickerHiddenCount = computed(() => Math.max(0, visibleSteps.value.length - displayedSteps.value.length))
+const tickerHiddenTitle = computed(() => visibleSteps.value
+  .slice(tickerVisibleLimit.value)
+  .map(step => step.name)
+  .join('、'))
+
+function updateTickerVisibleLimit() {
+  tickerVisibleLimit.value = getScreen4TickerVisibleLimit(
+    tickerViewportRef.value?.clientWidth ?? 0,
+    visibleSteps.value.length,
+  )
+}
+
+function syncTickerViewportObserver() {
+  tickerResizeObserver?.disconnect()
+  updateTickerVisibleLimit()
+  if (tickerViewportRef.value) tickerResizeObserver?.observe(tickerViewportRef.value)
+}
+
+watch(() => visibleSteps.value.length, () => nextTick(syncTickerViewportObserver), { flush: 'post' })
 
 // 当前环节任务收束判定：
 // 1. 运行环节的任务全部完成（收束瞬间）；
@@ -720,6 +758,7 @@ function pulseMilestoneDial() {
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', syncMotionVisibility)
+  tickerResizeObserver?.disconnect()
   if (dialAbsorbTimer) clearTimeout(dialAbsorbTimer)
 })
 </script>
@@ -1044,7 +1083,7 @@ onUnmounted(() => {
   align-items: center;
   flex: 1 1 auto;
   min-width: 0;
-  gap: 10px;
+  gap: 8px;
   overflow: hidden;
 }
 
@@ -1054,10 +1093,10 @@ onUnmounted(() => {
   position: relative;
   display: inline-flex;
   align-items: flex-start;
-  flex: 0 1 auto;
+  flex: 1 1 320px;
   gap: 9px;
   min-width: 0;
-  max-width: 430px;
+  max-width: 440px;
   padding: 9px 14px 8px 16px;
   border: 1px solid rgba(88, 148, 186, 0.28);
   border-radius: 12px;
@@ -1092,7 +1131,7 @@ onUnmounted(() => {
 
   .chip-body {
     display: flex;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 3px;
     min-width: 0;
@@ -1101,7 +1140,7 @@ onUnmounted(() => {
   .chip-name {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 348px;
+    max-width: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1203,6 +1242,35 @@ onUnmounted(() => {
       background: rgba(255, 180, 61, 0.12);
       font-weight: 700;
     }
+  }
+}
+
+.ticker-more {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(89, 177, 219, 0.32);
+  border-radius: 999px;
+  color: #8fb9d0;
+  background: linear-gradient(135deg, rgba(10, 48, 75, 0.88), rgba(4, 25, 43, 0.82));
+  box-shadow: inset 0 1px 0 rgba(164, 231, 255, 0.08);
+  font-size: 12px;
+  white-space: nowrap;
+
+  i {
+    color: #58c9ed;
+    font-size: 10px;
+    font-style: normal;
+    letter-spacing: 1px;
+  }
+
+  strong {
+    color: #d8f6ff;
+    font-size: 15px;
+    font-weight: 800;
   }
 }
 

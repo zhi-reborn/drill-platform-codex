@@ -307,6 +307,21 @@ export function truncateScreen4RunwayText(text: string, maxLength = 12): string 
     : characters.join('')
 }
 
+export function getScreen4TickerVisibleLimit(viewportWidth: number, taskCount: number): number {
+  if (taskCount <= 0) return 0
+  const cardMinWidth = 280
+  const itemGap = 8
+  const moreBadgeWidth = 88
+  const width = Math.max(0, viewportWidth)
+  const fullCapacity = Math.max(1, Math.floor((width + itemGap) / (cardMinWidth + itemGap)))
+  if (taskCount <= fullCapacity) return taskCount
+  const capacityWithMoreBadge = Math.max(
+    1,
+    Math.floor((width - moreBadgeWidth + itemGap) / (cardMinWidth + itemGap)),
+  )
+  return Math.min(taskCount, capacityWithMoreBadge)
+}
+
 export function splitScreen4RunwayName(name: string): string[] {
   const normalizedName = name.trim() || '未命名环节'
   const characters = Array.from(truncateScreen4RunwayText(normalizedName))

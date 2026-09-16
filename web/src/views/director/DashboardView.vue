@@ -363,29 +363,25 @@ onMounted(() => {
           }
         }
 
-        // 操作行：5 枚按钮单排均布；屏幕按钮去掉冗余同形图标并收紧内距，
-        // 整行 ~266px，任何 lg=8 卡宽下都单行放下（极窄屏换行兜底）。
+        // 操作行：紧凑左对齐，避免剩余宽度被分摊成过大的按钮间隔。
         .drill-actions {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          justify-content: space-between;
-          gap: 6px;
+          justify-content: flex-start;
+          column-gap: 8px;
+          row-gap: 6px;
 
           :deep(.el-button + .el-button) {
             margin-left: 0;
           }
 
           .drill-action-button {
+            height: 28px;
+            margin: 0;
+            padding: 5px 9px;
             border-radius: 6px;
             font-weight: $font-weight-medium;
-          }
-
-          .action-screen,
-          .action-screen2,
-          .action-screen3,
-          .action-screen4 {
-            padding: 5px 8px;
           }
 
           .action-screen3 {
