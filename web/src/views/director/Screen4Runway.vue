@@ -552,7 +552,8 @@ function spawnAbsorbFlyer(
   const copy = document.createElement('span')
   copy.className = 'runway-flyer-copy'
   const title = document.createElement('strong')
-  title.textContent = step.name
+  title.textContent = truncateScreen4RunwayText(step.name, 25)
+  title.title = step.name
   const meta = document.createElement('small')
   meta.textContent = tickerOperatorText(step)
   copy.append(title, meta)
@@ -661,7 +662,8 @@ function spawnRunwayDoneBanner(root: HTMLElement, taskName: string, x: number, y
   const icon = document.createElement('i')
   icon.textContent = '✓'
   const text = document.createElement('span')
-  text.textContent = `「${taskName}」已完成`
+  text.textContent = `「${truncateScreen4RunwayText(taskName, 25)}」已完成`
+  text.title = taskName
   done.append(icon, text)
   done.style.left = `${x}px`
   done.style.top = `${y}px`

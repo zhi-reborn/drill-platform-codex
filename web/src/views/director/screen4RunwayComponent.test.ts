@@ -78,6 +78,8 @@ describe('screen4 runway component', () => {
     expect(source).toContain("particle.className = 'runway-burst-particle'")
     expect(source).toContain('spawnRunwayDoneBanner')
     expect(source).toContain('triggerRunwayAbsorption')
+    expect(source).toContain('title.textContent = truncateScreen4RunwayText(step.name, 25)')
+    expect(source).toContain('text.textContent = `「${truncateScreen4RunwayText(taskName, 25)}」已完成`')
     expect(styles).toContain('.runway-fly-done')
     expect(styles).toContain('.runway-hub-shockwave')
     expect(styles).toContain('.runway-burst-particle')

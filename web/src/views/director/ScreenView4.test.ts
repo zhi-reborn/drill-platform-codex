@@ -77,6 +77,16 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).toContain('padding: clamp(10px, 1.3vh, 14px) clamp(12px, 1.5vw, 28px) clamp(8px, 1vh, 14px)')
   })
 
+  it('keeps the ambient scan narrow and compositor-friendly for software rendering', () => {
+    const sweepStyles = screen4Source.match(/\.main-rect-sweep\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+    expect(sweepStyles).toContain('width: 28px')
+    expect(sweepStyles).toContain('contain: strict')
+    expect(sweepStyles).toContain('translate3d(')
+    expect(sweepStyles).toContain('10s linear infinite')
+    expect(sweepStyles).not.toContain('box-shadow')
+    expect(sweepStyles).not.toContain('repeating-linear-gradient')
+  })
+
   it('removes the pending task area so the runway uses the released space', () => {
     expect(screen4Source).not.toContain("from './screen4PendingTasks'")
     expect(screen4Source).not.toContain('class="pending-task-panel"')

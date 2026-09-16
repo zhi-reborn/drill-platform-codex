@@ -2836,28 +2836,36 @@ function fmt(d: Date): string {
   top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px));
   bottom: clamp(8px, 1vh, 16px);
   left: clamp(18px, 2vw, 36px);
-  width: clamp(110px, 12vw, 180px);
-  border-inline: 1px solid rgba(108, 241, 238, 0.2);
-  background:
-    linear-gradient(90deg, transparent, rgba(41, 243, 255, 0.045) 34%, rgba(47, 240, 160, 0.13) 48%, rgba(255, 213, 106, 0.16) 52%, rgba(41, 243, 255, 0.045) 66%, transparent),
-    repeating-linear-gradient(180deg, rgba(126, 241, 255, 0.055) 0 1px, transparent 1px 13px);
-  box-shadow: 0 0 18px rgba(47, 240, 160, 0.09);
+  width: 28px;
+  contain: strict;
+  background: linear-gradient(90deg, transparent, rgba(55, 225, 235, 0.08) 72%, rgba(255, 217, 126, 0.18));
   opacity: 0;
   pointer-events: none;
-  transform: translate3d(-220%, 0, 0);
+  transform: translate3d(-64px, 0, 0);
+  backface-visibility: hidden;
   will-change: transform, opacity;
-  animation: rect-sweep-lite 8.6s ease-in-out infinite;
+  animation: rect-sweep-lite 10s linear infinite;
 }
 
+.main-rect-sweep::before,
 .main-rect-sweep::after {
   content: "";
   position: absolute;
-  top: 7%;
-  bottom: 7%;
-  left: 50%;
-  width: 2px;
+  top: 5%;
+  bottom: 5%;
+  right: 0;
+  width: 1px;
+}
+
+.main-rect-sweep::before {
   background: linear-gradient(180deg, transparent, rgba(255, 226, 160, 0.82), transparent);
-  box-shadow: 0 0 12px rgba(255, 213, 106, 0.48);
+  box-shadow: 0 0 6px rgba(255, 213, 106, 0.48);
+}
+
+.main-rect-sweep::after {
+  right: 5px;
+  background: repeating-linear-gradient(180deg, rgba(90, 233, 245, 0.52) 0 3px, transparent 3px 11px);
+  opacity: 0.5;
 }
 
 .phase-flow-chamber {
@@ -3323,9 +3331,9 @@ function fmt(d: Date): string {
 }
 
 @keyframes rect-sweep-lite {
-  0%, 7% { opacity: 0; transform: translate3d(-220%, 0, 0); }
-  16%, 82% { opacity: 0.72; }
-  93%, 100% { opacity: 0; transform: translate3d(calc(100vw + 220px), 0, 0); }
+  0%, 8% { opacity: 0; transform: translate3d(-64px, 0, 0); }
+  10%, 90% { opacity: 0.78; }
+  92%, 100% { opacity: 0; transform: translate3d(calc(100vw + 64px), 0, 0); }
 }
 
 @keyframes accent-flow {
