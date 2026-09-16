@@ -1,8 +1,6 @@
 <template>
   <div ref="screenRootRef" class="screen-root">
     <!-- Background layers -->
-    <div class="bg-grid" />
-    <div class="bg-scan" />
     <div class="bg-vignette" />
 
     <!-- 漂浮微光粒子 -->
@@ -1867,10 +1865,7 @@ $font-cn: $font-ui;
   overflow: hidden;
   /* 统一缩放基准：所有 vw 字号基于此，保持比例一致 */
   font-size: clamp(14px, 0.92vw, 17px);
-  background:
-    radial-gradient(circle at 50% 48%, rgba(0, 96, 205, 0.18), transparent 34%),
-    radial-gradient(circle at 74% 68%, rgba(255, 122, 0, 0.08), transparent 18%),
-    linear-gradient(180deg, #061229 0%, #020815 100%);
+  background: #061b33 url('/images/screen4-world-map.jpg') center / cover no-repeat;
   color: $text;
   font-family: $font-cn;
   user-select: none;
@@ -1891,49 +1886,12 @@ $font-cn: $font-ui;
     content: '';
     position: absolute;
     inset: 0;
-    background-image:
-      linear-gradient(30deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
-      linear-gradient(150deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
-      linear-gradient(30deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
-      linear-gradient(150deg, rgba(93, 151, 240, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(93, 151, 240, 0.08) 87.5%, rgba(93, 151, 240, 0.08)),
-      linear-gradient(60deg, rgba(40, 99, 180, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(40, 99, 180, 0.08) 75%, rgba(40, 99, 180, 0.08)),
-      linear-gradient(60deg, rgba(40, 99, 180, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(40, 99, 180, 0.08) 75%, rgba(40, 99, 180, 0.08));
-    background-position: 0 0, 0 0, 18px 32px, 18px 32px, 0 0, 18px 32px;
-    background-size: 36px 64px;
-    opacity: 0.14;
-    mask-image: radial-gradient(circle at center, #000 0%, transparent 82%);
+    box-shadow: inset 0 0 80px rgba(2, 12, 28, 0.22);
     pointer-events: none;
   }
 }
 
 // ===== 背景层 =====
-.bg-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(64, 141, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(64, 141, 255, 0.08) 1px, transparent 1px);
-  background-size: 64px 64px;
-  transform: perspective(560px) rotateX(58deg) translateY(-120px) scale(1.2);
-  transform-origin: 50% 0;
-  mask-image: linear-gradient(180deg, transparent, #000 18%, transparent 92%);
-  pointer-events: none;
-  z-index: 0;
-}
-.bg-scan {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0,
-    transparent 2px,
-    rgba(0, 212, 255, 0.02) 3px,
-    transparent 4px
-  );
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.72;
-}
 .bg-vignette {
   position: absolute;
   inset: 0;
@@ -3048,8 +3006,7 @@ $font-cn: $font-ui;
 
 // ===== Center phase ring =====
 .panel-center {
-  background:
-    radial-gradient(circle at center, rgba(4, 18, 49, 0.38), transparent 74%);
+  background: transparent;
   position: relative;
   overflow: hidden;
   &::before, &::after {
@@ -3073,10 +3030,6 @@ $font-cn: $font-ui;
     inset: 10px 14px;
     pointer-events: none;
     border: 1px solid rgba(0, 212, 255, 0.08);
-    background:
-      linear-gradient(rgba(0, 212, 255, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 212, 255, 0.045) 1px, transparent 1px);
-    background-size: 44px 44px;
   }
   &.center-stage-0::after,
   &.center-stage-1::after {
@@ -3090,6 +3043,19 @@ $font-cn: $font-ui;
 
 
 // ===== Right column =====
+// 仅调整大屏1的跑道底板，让世界地图透过深蓝遮罩呈现。
+.center-stage :deep(.relay-runway) {
+  background: linear-gradient(180deg, rgba(4, 24, 56, 0.12), rgba(2, 10, 28, 0.24));
+  box-shadow:
+    inset 0 0 36px rgba(0, 212, 255, 0.05),
+    inset 0 -46px 90px rgba(0, 10, 26, 0.14),
+    0 18px 46px rgba(0, 0, 0, 0.12);
+}
+
+.center-stage :deep(.relay-runway::before) {
+  opacity: 0.08;
+}
+
 .panel-right {
   display: flex; flex-direction: column;
   background: transparent; border: none; padding: 0;
