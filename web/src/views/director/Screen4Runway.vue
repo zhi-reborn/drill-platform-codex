@@ -596,10 +596,20 @@ function spawnAbsorbFlyer(
     easing: 'cubic-bezier(.12, .62, .24, 1)',
     fill: 'forwards',
   })
-  const trailTimer = window.setInterval(() => spawnRunwayTrail(root, flyer, rootRect), 48)
+  // 复用已计算的轨迹，避免飞行期间反复读取布局；固定五颗尾光控制开销。
+  const trails = Array.from({ length: 5 }, (_, index) => {
+    const dot = document.createElement('i')
+    dot.className = 'runway-fly-trail'
+    dot.style.width = dot.style.height = `${5 - index * .5}px`
+    root.appendChild(dot)
+    const animation = dot.animate(flightFrames.map(frame => ({
+      ...frame, opacity: .65 * (1 - Number(frame.offset)),
+    })), { duration: 760, delay: (index + 1) * 35, easing: 'cubic-bezier(.12, .62, .24, 1)', fill: 'both' })
+    animation.onfinish = () => dot.remove()
+    return { dot, animation }
+  })
 
   flight.onfinish = () => {
-    clearInterval(trailTimer)
     flyer.classList.add('is-highlight')
     const done = spawnRunwayDoneBanner(root, step.name, showX, showY + 43)
     const parked = `translate(${showX}px, ${showY}px) translate(-50%, -50%) scale(.82)`
@@ -615,8 +625,8 @@ function spawnAbsorbFlyer(
         { opacity: 0, transform: 'translate(-50%, -8px)' },
       ], { duration: 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => done.remove()
       flyer.animate([
-        { transform: parked, opacity: 1, filter: 'blur(0)' },
-        { transform: `translate(${hubX}px, ${hubY}px) translate(-50%, -50%) scale(.12)`, opacity: .05, filter: 'blur(4px)' },
+        { transform: parked, opacity: 1 },
+        { transform: `translate(${hubX}px, ${hubY}px) translate(-50%, -50%) scale(.12)`, opacity: .05 },
       ], { duration: 440, easing: 'cubic-bezier(.55, 0, .85, .4)', fill: 'forwards' }).onfinish = () => {
         flyer.remove()
         triggerRunwayAbsorption(root, hubX, hubY)
@@ -626,7 +636,7 @@ function spawnAbsorbFlyer(
     }, 1050)
   }
   flight.oncancel = () => {
-    clearInterval(trailTimer)
+    trails.forEach(({ dot, animation }) => { animation.cancel(); dot.remove() })
     flyer.remove()
     releasePendingMilestoneProgress()
   }
@@ -663,34 +673,17 @@ function spawnRunwayDoneBanner(root: HTMLElement, taskName: string, x: number, y
   return done
 }
 
-function spawnRunwayTrail(root: HTMLElement, flyer: HTMLElement, rootRect: DOMRect) {
-  const rect = flyer.getBoundingClientRect()
-  const dot = document.createElement('i')
-  dot.className = 'runway-fly-trail'
-  const size = 3 + Math.random() * 3
-  dot.style.width = `${size}px`
-  dot.style.height = `${size}px`
-  dot.style.left = `${rect.left + rect.width / 2 - rootRect.left}px`
-  dot.style.top = `${rect.top + rect.height / 2 - rootRect.top}px`
-  root.appendChild(dot)
-  const driftX = (Math.random() - .5) * 18
-  const driftY = 5 + Math.random() * 12
-  dot.animate([
-    { opacity: .95, transform: 'translate(-50%, -50%) scale(1)' },
-    { opacity: 0, transform: `translate(calc(-50% + ${driftX}px), calc(-50% + ${driftY}px)) scale(.18)` },
-  ], { duration: 680, easing: 'ease-out' }).onfinish = () => dot.remove()
-}
-
 function triggerRunwayAbsorption(root: HTMLElement, x: number, y: number) {
   for (const [index, size] of [250, 170].entries()) {
     const ring = document.createElement('i')
     ring.className = 'runway-hub-shockwave'
     ring.style.left = `${x}px`
     ring.style.top = `${y}px`
+    ring.style.width = ring.style.height = `${size}px`
     root.appendChild(ring)
     ring.animate([
-      { width: '34px', height: '34px', opacity: .9, borderWidth: '3px' },
-      { width: `${size}px`, height: `${size}px`, opacity: 0, borderWidth: '1px' },
+      { transform: `translate(-50%, -50%) scale(${34 / size})`, opacity: .9 },
+      { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 },
     ], { duration: 620 + index * 160, easing: 'cubic-bezier(.2, .8, .3, 1)' }).onfinish = () => ring.remove()
   }
 
@@ -773,7 +766,8 @@ onUnmounted(() => {
     inset 0 1px 0 rgba(140, 224, 255, 0.12),
     inset 0 0 18px rgba(38, 196, 242, 0.05),
     0 10px 26px rgba(0, 7, 18, 0.38);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   animation: legend-arrive .55s cubic-bezier(.2, .8, .25, 1) both;
 
   // 左缘能量栏：青→绿渐变锚定"状态"语义。
@@ -850,7 +844,8 @@ onUnmounted(() => {
   border-radius: 8px;
   background: linear-gradient(110deg, rgba(4, 37, 61, 0.92), rgba(3, 26, 47, 0.66));
   box-shadow: inset 3px 0 0 rgba(48, 221, 178, 0.7), inset 0 0 18px rgba(38, 196, 242, 0.05), 0 10px 30px rgba(0, 7, 18, 0.3);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .deck-summary {
@@ -1322,14 +1317,14 @@ onUnmounted(() => {
   stroke: rgba(146, 221, 247, 0.42);
   stroke-width: 2;
   stroke-dasharray: 2 13;
-  animation: runway-drift 3.2s linear infinite;
+  animation: runway-drift 4.8s linear infinite;
 }
 
 .runway-complete-path {
   stroke: url('#s4-lane-complete');
   // 完整覆盖 15px 蓝轨，完成区间读作一条连续绿色链路。
   stroke-width: 15;
-  filter: drop-shadow(0 0 8px rgba(29, 236, 147, .72)) drop-shadow(0 0 16px rgba(15, 189, 115, .38));
+  filter: drop-shadow(0 0 7px rgba(29, 236, 147, .58));
   // 新增段由脚本 FLIP 描入（旧段保持原位），无需整体淡入。
   transition: stroke-dashoffset .75s cubic-bezier(.3, .75, .3, 1);
 }
@@ -1339,7 +1334,6 @@ onUnmounted(() => {
   stroke: #42f0a4;
   stroke-width: 3;
   opacity: .96;
-  filter: drop-shadow(0 0 5px rgba(66, 240, 164, .8));
   transition: stroke-dashoffset .75s cubic-bezier(.3, .75, .3, 1);
 }
 
@@ -1365,7 +1359,7 @@ onUnmounted(() => {
 .runway-active-progress {
   stroke: url('#s4-lane-progress');
   stroke-width: 13;
-  filter: drop-shadow(0 0 7px rgba(255, 176, 54, .82)) drop-shadow(0 0 15px rgba(255, 143, 25, .42));
+  filter: drop-shadow(0 0 7px rgba(255, 176, 54, .66));
   // 每完成一步，能量条平滑推进到新的比例位置。
   transition: stroke-dasharray .55s cubic-bezier(.3, .75, .3, 1);
 }
@@ -1374,7 +1368,6 @@ onUnmounted(() => {
   // 与外层填充共用同一比例裁剪，形成清晰连续的橙金灯芯。
   stroke: #ffe29a;
   stroke-width: 3;
-  filter: drop-shadow(0 0 5px rgba(255, 218, 128, .9));
   transition: stroke-dasharray .55s cubic-bezier(.3, .75, .3, 1);
 }
 
@@ -1459,7 +1452,7 @@ onUnmounted(() => {
 
 // 外层虚线轨道环缓慢旋转，表达“持续带电”。
 .runway-node.is-completed .node-orbit-outer {
-  animation: node-orbit-spin 12s linear infinite;
+  animation: node-orbit-spin 12s steps(96) infinite;
 }
 
 .runway-node.is-running {
@@ -1815,7 +1808,6 @@ onUnmounted(() => {
   0% { transform: scale(1); }
   38% {
     transform: scale(1.14);
-    filter: drop-shadow(0 0 16px rgba(103, 232, 249, .85)) drop-shadow(0 0 26px rgba(47, 240, 160, .5));
   }
   100% { transform: scale(1); }
 }
@@ -1914,7 +1906,7 @@ onUnmounted(() => {
     inset 0 0 18px rgba(32, 190, 203, .14);
   font-family: inherit;
   pointer-events: none;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
   overflow: hidden;
 
   &::after {
@@ -2037,6 +2029,8 @@ onUnmounted(() => {
 }
 
 .runway-fly-trail {
+  left: 0;
+  top: 0;
   border-radius: 50%;
   background: radial-gradient(circle, #efffff 0 18%, #58e8ff 42%, transparent 74%);
   box-shadow: 0 0 7px rgba(73, 221, 255, .78);
@@ -2045,6 +2039,7 @@ onUnmounted(() => {
 
 .runway-hub-shockwave {
   box-sizing: border-box;
+  border-width: 2px;
   border-style: solid;
   border-color: rgba(73, 221, 255, .72);
   border-radius: 50%;

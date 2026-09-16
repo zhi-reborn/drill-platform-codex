@@ -88,7 +88,7 @@ describe('screen4 runway component', () => {
     expect(source).toContain('getScreen4RunwayCompletedPathEnd')
     expect(source).toContain('isScreen4RunwayNodeCompleted')
     expect(styles).toContain('.runway-complete-flow')
-    expect(styles).toMatch(/\.runway-complete-path\s*\{[^}]*stroke-width: 15;[^}]*drop-shadow\(0 0 8px rgba\(29, 236, 147, \.72\)\)/s)
+    expect(styles).toMatch(/\.runway-complete-path\s*\{[^}]*stroke-width: 15;[^}]*drop-shadow\(0 0 7px rgba\(29, 236, 147, \.58\)\)/s)
     expect(styles).toMatch(/\.runway-complete-core\s*\{[^}]*stroke: #42f0a4;/s)
     expect(styles).toMatch(/\.runway-complete-flow\s*\{[^}]*stroke: #42f0a4;/s)
     expect(styles).toContain('@keyframes completed-energy-flow')

@@ -90,7 +90,7 @@
       </header>
 
       <main class="command-main">
-        <div class="main-rect-sweep" />
+        <div class="main-rect-sweep" aria-hidden="true" />
         <section ref="phaseFlowRef" class="phase-flow-chamber" :class="'phase-state-' + selectedPhaseStatus" aria-label="阶段与环节流程">
           <svg class="phase-chamber-surface" aria-hidden="true">
             <defs>
@@ -105,6 +105,7 @@
                 <stop offset="1" stop-color="#246880" />
               </linearGradient>
             </defs>
+            <path class="phase-chamber-glow" :d="chamberPath" fill="none" stroke="var(--phase-link-color)" stroke-width="5" />
             <path :d="chamberPath" fill="url(#phaseSurface)" stroke="url(#phaseOutline)" stroke-width="1.5" />
           </svg>
           <section class="phase-card-strip" aria-label="选择预览阶段" @scroll.passive="updateChamberOutline">
@@ -393,7 +394,6 @@ const phaseCards = computed(() => {
       totalPhaseSteps,
       segmentCount,
       filledSegments,
-      timeText: phaseTimeText(allSteps),
     }
   })
 })
@@ -496,14 +496,6 @@ function isLeafStep(s: StepInstance): boolean {
   return true
 }
 
-function phaseTimeText(phaseSteps: StepInstance[]): string {
-  const starts = phaseSteps.map(s => s.start_time).filter(Boolean) as string[]
-  const ends = phaseSteps.map(s => s.end_time).filter(Boolean) as string[]
-  if (!starts.length) return '--:-- / 21:19'
-  const start = new Date(Math.min(...starts.map(t => new Date(t).getTime())))
-  const end = ends.length ? new Date(Math.max(...ends.map(t => new Date(t).getTime()))) : new Date(now.value)
-  return `${pad(start.getHours())}:${pad(start.getMinutes())} / ${pad(end.getHours())}:${pad(end.getMinutes())}`
-}
 
 // ======== Canvas 流程树 ========
 
@@ -2840,47 +2832,32 @@ function fmt(d: Date): string {
 
 .main-rect-sweep {
   position: absolute;
-  left: clamp(18px, 2vw, 36px);
-  right: clamp(18px, 2vw, 36px);
-  top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px) + clamp(8px, 1.1vh, 16px));
+  z-index: 0;
+  top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px));
   bottom: clamp(8px, 1vh, 16px);
-  border-radius: 8px;
+  left: clamp(18px, 2vw, 36px);
+  width: clamp(110px, 12vw, 180px);
+  border-inline: 1px solid rgba(108, 241, 238, 0.2);
   background:
-    linear-gradient(90deg, transparent 0%, rgba(41, 243, 255, 0.04) 42%, rgba(47, 240, 160, 0.16) 48%, rgba(255, 213, 106, 0.22) 50%, rgba(47, 240, 160, 0.16) 52%, rgba(41, 243, 255, 0.04) 58%, transparent 100%),
-    linear-gradient(180deg, transparent 0%, rgba(41, 243, 255, 0.08) 48%, rgba(255, 213, 106, 0.1) 50%, rgba(41, 243, 255, 0.08) 52%, transparent 100%);
-  border-left: 1px solid rgba(255, 213, 106, 0.22);
-  border-right: 1px solid rgba(47, 240, 160, 0.18);
-  box-shadow: inset 0 0 26px rgba(41, 243, 255, 0.08), 0 0 26px rgba(47, 240, 160, 0.08);
-  opacity: 0.62;
-  animation: rect-sweep 7.2s linear infinite;
+    linear-gradient(90deg, transparent, rgba(41, 243, 255, 0.045) 34%, rgba(47, 240, 160, 0.13) 48%, rgba(255, 213, 106, 0.16) 52%, rgba(41, 243, 255, 0.045) 66%, transparent),
+    repeating-linear-gradient(180deg, rgba(126, 241, 255, 0.055) 0 1px, transparent 1px 13px);
+  box-shadow: 0 0 18px rgba(47, 240, 160, 0.09);
+  opacity: 0;
   pointer-events: none;
-  transform: translateX(-112%);
+  transform: translate3d(-220%, 0, 0);
   will-change: transform, opacity;
+  animation: rect-sweep-lite 8.6s ease-in-out infinite;
 }
 
-.main-rect-sweep::before,
 .main-rect-sweep::after {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-.main-rect-sweep::before {
-  background:
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 12px),
-    repeating-linear-gradient(90deg, rgba(47, 240, 160, 0.1) 0 1px, transparent 1px 72px);
-  mix-blend-mode: screen;
-  opacity: 0.46;
-}
-
-.main-rect-sweep::after {
-  width: 10px;
+  top: 7%;
+  bottom: 7%;
   left: 50%;
-  right: auto;
-  background: linear-gradient(180deg, transparent, rgba(255, 226, 160, 0.8), transparent);
-  box-shadow: 0 0 18px rgba(255, 213, 106, 0.62), 0 0 36px rgba(47, 240, 160, 0.32);
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(255, 226, 160, 0.82), transparent);
+  box-shadow: 0 0 12px rgba(255, 213, 106, 0.48);
 }
 
 .phase-flow-chamber {
@@ -2905,8 +2882,12 @@ function fmt(d: Date): string {
   width: 100%;
   height: 100%;
   overflow: visible;
-  filter: drop-shadow(0 4px 12px rgba(0, 8, 20, 0.28));
   pointer-events: none;
+}
+
+.phase-chamber-glow {
+  opacity: 0.12;
+  vector-effect: non-scaling-stroke;
 }
 
 .phase-card-strip {
@@ -3341,11 +3322,10 @@ function fmt(d: Date): string {
   100% { transform: translateX(420%); opacity: 0; }
 }
 
-@keyframes rect-sweep {
-  0% { opacity: 0; transform: translateX(-112%); }
-  9% { opacity: 0.62; }
-  82% { opacity: 0.62; }
-  100% { opacity: 0; transform: translateX(112%); }
+@keyframes rect-sweep-lite {
+  0%, 7% { opacity: 0; transform: translate3d(-220%, 0, 0); }
+  16%, 82% { opacity: 0.72; }
+  93%, 100% { opacity: 0; transform: translate3d(calc(100vw + 220px), 0, 0); }
 }
 
 @keyframes accent-flow {
