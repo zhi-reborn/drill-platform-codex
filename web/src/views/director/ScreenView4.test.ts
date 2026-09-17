@@ -77,6 +77,12 @@ describe('independent screen4 entry', () => {
     expect(screen4Source).toContain('padding: clamp(10px, 1.3vh, 14px) clamp(12px, 1.5vw, 28px) clamp(8px, 1vh, 14px)')
   })
 
+  it('shows the configured operator name in runway task cards', () => {
+    expect(screen4Source).toContain('operator: getScreen4StepOperatorName(s)')
+    expect(screen4Source).toContain('step.operator_name = payload.executor')
+    expect(screen4Source).not.toContain('if (payload.executor) step.assignee_names = payload.executor')
+  })
+
   it('keeps the ambient scan narrow and compositor-friendly for software rendering', () => {
     const sweepStyles = screen4Source.match(/\.main-rect-sweep\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
     const sweepKeyframes = screen4Source.match(/@keyframes rect-sweep-lite\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''

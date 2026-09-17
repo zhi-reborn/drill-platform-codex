@@ -5,6 +5,7 @@ import {
   getScreen4RunwayCompletedPathEnd,
   getScreen4RunwayHopProgress,
   getScreen4RunwayProgress,
+  getScreen4StepOperatorName,
   getScreen4TickerVisibleLimit,
   isScreen4RunwayNodeCompleted,
   splitScreen4RunwayName,
@@ -145,6 +146,14 @@ describe('screen4 runway geometry', () => {
     expect(truncateScreen4RunwayText('一'.repeat(26), 25)).toBe(`${'一'.repeat(25)}…`)
   })
 
+  it('uses the configured operator name before the assignee fallback', () => {
+    expect(getScreen4StepOperatorName({ attributes: { operator: '张三' }, assignee_names: '李四' })).toBe('张三')
+    expect(getScreen4StepOperatorName({ attributes: '{"operator":"王五"}' })).toBe('王五')
+    expect(getScreen4StepOperatorName({ operator_name: '赵六', attributes: { operator: '张三' } })).toBe('赵六')
+    expect(getScreen4StepOperatorName({ assignee_names: '李四' })).toBe('李四')
+    expect(getScreen4StepOperatorName({ attributes: '{invalid' })).toBe('')
+  })
+
   it('fits ticker cards by their measured content width', () => {
     const shortTask = { name: '临时权限申请' }
     const longTask = { name: '一'.repeat(25) }
@@ -161,7 +170,7 @@ describe('screen4 runway geometry', () => {
 
   it('counts operator metadata toward the ticker card width', () => {
     const shortTask = { name: '临时权限申请' }
-    const wideOperatorTask = { name: '短', assignee: '一'.repeat(30) }
+    const wideOperatorTask = { name: '短', operator: '一'.repeat(30) }
 
     expect(getScreen4TickerVisibleLimit(700, [shortTask, shortTask, shortTask])).toBe(3)
     expect(getScreen4TickerVisibleLimit(700, [wideOperatorTask, shortTask, shortTask])).toBe(2)

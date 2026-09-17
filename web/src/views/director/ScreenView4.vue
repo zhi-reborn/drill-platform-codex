@@ -177,7 +177,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Screen4Runway from './Screen4Runway.vue'
-import { getScreen4RunwayProgress, type Screen4RunwayStatus } from './screen4Runway'
+import { getScreen4RunwayProgress, getScreen4StepOperatorName, type Screen4RunwayStatus } from './screen4Runway'
 import { drillApi } from '@/api/modules/drill'
 import { useAuthStore } from '@/stores/auth'
 import type { DrillInstance, StepInstance } from '@/types/instance'
@@ -409,7 +409,7 @@ function normalizeStepStatus(status: string): string {
 const flowNodes = computed(() => getPhaseFlowNodes(currentPhaseData.value, getPhaseStepStatus, link => {
   const leafSteps = link.stepNodes.filter(isLeafStep)
   const list = leafSteps.length > 0 ? leafSteps : link.stepNodes
-  return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status), assignee: s.assignee_names || '' }))
+  return list.map(s => ({ id: String(s.id), name: s.name, status: normalizeStepStatus(s.status), operator: getScreen4StepOperatorName(s) }))
 }))
 
 const runwayNodes = computed(() => flowNodes.value.map(node => {
@@ -440,7 +440,7 @@ watch(steps, (nextSteps, previousSteps) => {
       id: String(step.id),
       name: step.name,
       status: 'done',
-      assignee: step.assignee_names || '',
+      operator: getScreen4StepOperatorName(step),
     }]
   })
   if (completed.length) runwayRef.value?.playTaskCompletions(completed)
@@ -1298,7 +1298,7 @@ function patchLocalStep(event: string, payload: any) {
   step.status = newStatus
   if (payload.start_time) step.start_time = payload.start_time
   if (payload.end_time) step.end_time = payload.end_time
-  if (payload.executor) step.assignee_names = payload.executor
+  if (payload.executor) step.operator_name = payload.executor
   if (payload.comment) step.remark = payload.comment
 
   const newSteps = [...steps.value]

@@ -266,7 +266,9 @@
                     <span class="chip-index" aria-hidden="true">{{ formatTickerChipIndex(index) }}</span>
                   </span>
                   <span class="chip-meta">
-                    <span class="chip-operator" :class="{ 'is-unassigned': !step.assignee?.trim() }"><i class="chip-operator-glyph" aria-hidden="true"></i>{{ tickerOperatorText(step) }}</span>
+                    <span class="chip-operator" :class="{ 'is-unassigned': !step.operator?.trim() }" :title="`操作人：${tickerOperatorText(step)}`">
+                      <span class="chip-operator-name">{{ tickerOperatorText(step) }}</span>
+                    </span>
                     <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
                   </span>
                 </span>
@@ -315,7 +317,7 @@ interface Screen4RunwayStep {
   id: string
   name: string
   status: string
-  assignee?: string
+  operator?: string
 }
 
 const props = defineProps<{
@@ -516,7 +518,7 @@ function syncTickerViewportObserver() {
 
 // 卡片宽度取决于任务名与操作人：内容变化（含数量增减）都要重新测算装填。
 const tickerSizeKey = computed(() => visibleSteps.value
-  .map(step => `${step.name}·${step.assignee ?? ''}`)
+  .map(step => `${step.name}·${step.operator ?? ''}`)
   .join('|'))
 
 watch(tickerSizeKey, () => nextTick(syncTickerViewportObserver), { flush: 'post' })
@@ -547,9 +549,9 @@ function isAbsorbedStatus(status: string) {
   return status === 'done' || status === 'skipped'
 }
 
-// 操作人行：未指派时静默降级，不打断卡片节奏。
+// 操作人行：只显示完整姓名；未配置操作人时明确标记为未指派。
 function tickerOperatorText(step: Screen4RunwayStep) {
-  return step.assignee?.trim() || '未指派'
+  return step.operator?.trim() || '未指派'
 }
 
 // 任务序号：两位数字的 HUD 铭牌编号，宽卡时锚定右上角平衡构图。
@@ -1243,32 +1245,25 @@ onUnmounted(() => {
   .chip-operator {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
     min-width: 0;
     max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #8fb9d0;
+    color: #a9d5e8;
     font-size: 12px;
 
-    .chip-operator-glyph {
-      flex: 0 0 auto;
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 32%, #bfe8fa, #3f7ea6 78%);
-      box-shadow: 0 0 6px rgba(80, 200, 240, 0.4);
+    .chip-operator-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-shadow: 0 0 8px rgba(76, 196, 232, 0.18);
     }
 
-    // 占位态：未指派时降为半透明空心微章，与已指派拉开层级。
     &.is-unassigned {
-      color: #5f7d92;
+      color: #607f93;
 
-      .chip-operator-glyph {
-        background: none;
-        border: 1px dashed rgba(143, 185, 208, 0.55);
-        box-shadow: none;
-      }
+      .chip-operator-name { font-weight: 500; text-shadow: none; }
     }
   }
 
@@ -1327,6 +1322,12 @@ onUnmounted(() => {
 
     .chip-name { color: #ffe3ad; }
     .chip-index { color: rgba(255, 202, 112, 0.55); border-left-color: rgba(255, 202, 112, 0.24); }
+
+    .chip-operator:not(.is-unassigned) {
+      color: #f3c978;
+
+      .chip-operator-name { text-shadow: 0 0 9px rgba(255, 180, 61, 0.24); }
+    }
 
     .chip-dot {
       background: #ffb43d;

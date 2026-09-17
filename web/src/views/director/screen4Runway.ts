@@ -309,12 +309,41 @@ export function truncateScreen4RunwayText(text: string, maxLength = 12): string 
 
 // ===== 底部任务传送带：卡片装填测算 =====
 
+export interface Screen4StepOperatorSource {
+  operator_name?: string
+  assignee_names?: string
+  attributes?: { operator?: unknown } | string | null
+}
+
+export function getScreen4StepOperatorName(step: Screen4StepOperatorSource): string {
+  const liveOperator = step.operator_name?.trim()
+  if (liveOperator) return liveOperator
+
+  let attributes = step.attributes
+  if (typeof attributes === 'string') {
+    try {
+      attributes = JSON.parse(attributes) as { operator?: unknown }
+    } catch {
+      attributes = null
+    }
+  }
+
+  if (attributes && typeof attributes === 'object') {
+    const configuredOperator = attributes.operator
+    if (typeof configuredOperator === 'string' && configuredOperator.trim()) {
+      return configuredOperator.trim()
+    }
+  }
+
+  return step.assignee_names?.trim() || ''
+}
+
 // 卡片装饰宽度：左右内边距(15+14) + 边框(2) + 状态点(8) + 点距(10) + 测算余量(6)。
 const TICKER_CARD_CHROME = 55
 // 名称行附加宽度：名称-序号间距(12) + 序号铭牌(30)。
 const TICKER_HEAD_EXTRA = 42
-// 元信息行附加宽度：操作人图标(14) + 行内间距(9) + 状态徽章(52)。
-const TICKER_META_EXTRA = 75
+// 元信息行附加宽度：姓名与状态间距(9) + 状态徽章(52) + 测算余量。
+const TICKER_META_EXTRA = 66
 const TICKER_NAME_FONT_SIZE = 15
 const TICKER_META_FONT_SIZE = 12
 const TICKER_OPERATOR_MAX_WIDTH = 220
@@ -323,7 +352,7 @@ const TICKER_MORE_BADGE_WIDTH = 110
 
 export interface Screen4TickerTask {
   name: string
-  assignee?: string
+  operator?: string
 }
 
 // 等宽估算文本像素宽：CJK 记满宽（略含字距），其余按比例折算；宁可少排不裁字。
@@ -351,7 +380,7 @@ function measureScreen4TickerCard(task: Screen4TickerTask): number {
   )
   const operatorWidth = Math.min(
     TICKER_OPERATOR_MAX_WIDTH,
-    measureScreen4TickerTextWidth(task.assignee?.trim() || '未指派', TICKER_META_FONT_SIZE, .58),
+    measureScreen4TickerTextWidth(task.operator?.trim() || '未指派', TICKER_META_FONT_SIZE, .58),
   )
 
   return Math.max(nameWidth + TICKER_HEAD_EXTRA, operatorWidth + TICKER_META_EXTRA) + TICKER_CARD_CHROME
