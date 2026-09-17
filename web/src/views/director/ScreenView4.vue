@@ -2836,36 +2836,25 @@ function fmt(d: Date): string {
   top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px));
   bottom: clamp(8px, 1vh, 16px);
   left: clamp(18px, 2vw, 36px);
-  width: 28px;
+  width: 18px;
   contain: strict;
-  background: linear-gradient(90deg, transparent, rgba(55, 225, 235, 0.08) 72%, rgba(255, 217, 126, 0.18));
-  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(75, 229, 239, 0.05) 34%, rgba(104, 240, 244, 0.13) 76%, transparent);
+  opacity: 0.72;
   pointer-events: none;
-  transform: translate3d(-64px, 0, 0);
+  transform: translate3d(-48px, 0, 0);
   backface-visibility: hidden;
-  will-change: transform, opacity;
+  will-change: transform;
   animation: rect-sweep-lite 10s linear infinite;
 }
 
-.main-rect-sweep::before,
-.main-rect-sweep::after {
+.main-rect-sweep::before {
   content: "";
   position: absolute;
-  top: 5%;
-  bottom: 5%;
-  right: 0;
+  top: 7%;
+  bottom: 7%;
+  right: 3px;
   width: 1px;
-}
-
-.main-rect-sweep::before {
-  background: linear-gradient(180deg, transparent, rgba(255, 226, 160, 0.82), transparent);
-  box-shadow: 0 0 6px rgba(255, 213, 106, 0.48);
-}
-
-.main-rect-sweep::after {
-  right: 5px;
-  background: repeating-linear-gradient(180deg, rgba(90, 233, 245, 0.52) 0 3px, transparent 3px 11px);
-  opacity: 0.5;
+  background: linear-gradient(180deg, transparent, rgba(255, 223, 151, 0.88) 48%, rgba(119, 242, 246, 0.78) 72%, transparent);
 }
 
 .phase-flow-chamber {
@@ -3331,9 +3320,8 @@ function fmt(d: Date): string {
 }
 
 @keyframes rect-sweep-lite {
-  0%, 8% { opacity: 0; transform: translate3d(-64px, 0, 0); }
-  10%, 90% { opacity: 0.78; }
-  92%, 100% { opacity: 0; transform: translate3d(calc(100vw + 64px), 0, 0); }
+  0%, 8% { transform: translate3d(-48px, 0, 0); }
+  92%, 100% { transform: translate3d(calc(100vw + 48px), 0, 0); }
 }
 
 @keyframes accent-flow {

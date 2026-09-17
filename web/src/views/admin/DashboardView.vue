@@ -96,13 +96,13 @@
                 <span class="value">{{ getCurrentStepName(drill.id) }}</span>
               </div>
               <div class="drill-actions">
-                <el-button type="primary" size="small" @click="viewMonitor(drill.id)">
+                <el-button class="action-detail" type="primary" size="small" @click="viewMonitor(drill.id)">
                   详情
                 </el-button>
-                <el-button type="success" size="small" @click="viewScreen(drill.id)">
+                <el-button class="action-screen" type="success" size="small" @click="viewScreen(drill.id)">
                   大屏
                 </el-button>
-                <el-button type="warning" size="small" @click.stop="viewScreen2(drill.id)">
+                <el-button class="action-screen2" type="warning" size="small" @click.stop="viewScreen2(drill.id)">
                   大屏2
                 </el-button>
                 <el-button class="action-screen3" type="primary" size="small" @click.stop="viewScreen3(drill.id)">
@@ -434,13 +434,36 @@ onMounted(() => {
           }
         }
 
-        // 按钮紧凑左对齐，宽度不足时自然换行。
+        // 大屏启动按钮同族样式：色调幽灵态，悬停点燃渐变并轻微上浮。
+        @mixin screen-launcher($base, $hover) {
+          border-color: rgba($base, .38);
+          background: rgba($base, .07);
+          color: $base;
+
+          &:hover,
+          &:focus {
+            color: #ffffff;
+            border-color: transparent;
+            background: linear-gradient(135deg, $base 0%, $hover 100%);
+            box-shadow: 0 4px 12px rgba($base, .32);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0) scale(.97);
+          }
+        }
+
+        // 操作行：全宽动作栏——详情为实心锚点，四块大屏为同族色调按钮，
+        // 等宽铺满卡片消除右侧空白，色相区分四块大屏。
         .drill-actions {
           display: flex;
           flex-wrap: wrap;
-          align-items: center;
-          justify-content: flex-start;
-          gap: $spacing-sm;
+          align-items: stretch;
+          gap: 8px;
+          margin-top: 2px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(0, 0, 0, .05);
 
           // el-button 相邻兄弟自带 12px 左外距，与 gap 叠加会把按钮挤出卡片，统一交给 gap 控制。
           :deep(.el-button + .el-button) {
@@ -448,36 +471,51 @@ onMounted(() => {
           }
 
           :deep(.el-button) {
-            padding: 5px 8px;
+            flex: 1 1 56px;
+            height: 30px;
+            margin: 0;
+            padding: 0 6px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: $font-weight-semibold;
+            letter-spacing: .02em;
+            transition: all .25s cubic-bezier(.4, 0, .2, 1);
+          }
+
+          .action-detail {
+            border-color: transparent;
+            background: linear-gradient(135deg, #409EFF 0%, #2F6FED 100%);
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(47, 111, 237, .25);
+
+            &:hover,
+            &:focus {
+              color: #ffffff;
+              border-color: transparent;
+              background: linear-gradient(135deg, #5AAFFF 0%, #3B7BF5 100%);
+              box-shadow: 0 4px 14px rgba(47, 111, 237, .38);
+              transform: translateY(-1px);
+            }
+
+            &:active {
+              transform: translateY(0) scale(.97);
+            }
+          }
+
+          .action-screen {
+            @include screen-launcher(#52C41A, #73D13D);
+          }
+
+          .action-screen2 {
+            @include screen-launcher(#E6A23C, #F0B458);
           }
 
           .action-screen3 {
-            border-color: rgba(114, 46, 209, 0.45);
-            background: rgba(114, 46, 209, 0.08);
-            color: #722ED1;
-
-            &:hover,
-            &:focus {
-              color: #ffffff;
-              border-color: #722ED1;
-              background: linear-gradient(135deg, #722ED1 0%, #9254DE 100%);
-              box-shadow: 0 3px 10px rgba(114, 46, 209, 0.3);
-            }
+            @include screen-launcher(#722ED1, #9254DE);
           }
 
-          // 大屏4：极光青，悬停渐变呼应大屏4 的能量跑道主题。
           .action-screen4 {
-            border-color: rgba(19, 194, 194, 0.45);
-            background: rgba(19, 194, 194, 0.08);
-            color: #13c2c2;
-
-            &:hover,
-            &:focus {
-              color: #ffffff;
-              border-color: #13c2c2;
-              background: linear-gradient(135deg, #13c2c2 0%, #36cfc9 100%);
-              box-shadow: 0 3px 10px rgba(19, 194, 194, 0.3);
-            }
+            @include screen-launcher(#13C2C2, #36CFC9);
           }
         }
       }

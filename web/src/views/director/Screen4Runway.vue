@@ -252,7 +252,7 @@
           <div class="ticker-track">
             <div class="ticker-sequence">
               <span
-                v-for="step in displayedSteps"
+                v-for="(step, index) in displayedSteps"
                 :key="step.id"
                 class="ticker-chip"
                 :class="`is-${step.status}`"
@@ -261,9 +261,12 @@
               >
                 <i class="chip-dot" aria-hidden="true"></i>
                 <span class="chip-body">
-                  <span class="chip-name">{{ truncateScreen4RunwayText(step.name, 25) }}</span>
+                  <span class="chip-head">
+                    <span class="chip-name">{{ truncateScreen4RunwayText(step.name, 25) }}</span>
+                    <span class="chip-index" aria-hidden="true">{{ formatTickerChipIndex(index) }}</span>
+                  </span>
                   <span class="chip-meta">
-                    <span class="chip-operator"><i class="chip-operator-glyph" aria-hidden="true"></i>{{ tickerOperatorText(step) }}</span>
+                    <span class="chip-operator" :class="{ 'is-unassigned': !step.assignee?.trim() }"><i class="chip-operator-glyph" aria-hidden="true"></i>{{ tickerOperatorText(step) }}</span>
                     <span class="chip-tag">{{ tickerStatusText(step.status) }}</span>
                   </span>
                 </span>
@@ -501,7 +504,7 @@ const tickerHiddenTitle = computed(() => visibleSteps.value
 function updateTickerVisibleLimit() {
   tickerVisibleLimit.value = getScreen4TickerVisibleLimit(
     tickerViewportRef.value?.clientWidth ?? 0,
-    visibleSteps.value.length,
+    visibleSteps.value,
   )
 }
 
@@ -511,7 +514,12 @@ function syncTickerViewportObserver() {
   if (tickerViewportRef.value) tickerResizeObserver?.observe(tickerViewportRef.value)
 }
 
-watch(() => visibleSteps.value.length, () => nextTick(syncTickerViewportObserver), { flush: 'post' })
+// 卡片宽度取决于任务名与操作人：内容变化（含数量增减）都要重新测算装填。
+const tickerSizeKey = computed(() => visibleSteps.value
+  .map(step => `${step.name}·${step.assignee ?? ''}`)
+  .join('|'))
+
+watch(tickerSizeKey, () => nextTick(syncTickerViewportObserver), { flush: 'post' })
 
 // 当前环节任务收束判定：
 // 1. 运行环节的任务全部完成（收束瞬间）；
@@ -542,6 +550,11 @@ function isAbsorbedStatus(status: string) {
 // 操作人行：未指派时静默降级，不打断卡片节奏。
 function tickerOperatorText(step: Screen4RunwayStep) {
   return step.assignee?.trim() || '未指派'
+}
+
+// 任务序号：两位数字的 HUD 铭牌编号，宽卡时锚定右上角平衡构图。
+function formatTickerChipIndex(index: number) {
+  return String(index + 1).padStart(2, '0')
 }
 
 // ===== 任务完成 → 飘入终点百分数环 =====
@@ -1070,12 +1083,46 @@ onUnmounted(() => {
 }
 
 .ticker-track {
+  position: relative;
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
   height: 100%;
   contain: paint;
+
+  // 传送带车道：贯穿整行的虚线轨道，卡片落位处被卡片遮蔽、空隙与行尾透出。
+  &::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 999px;
+    background: repeating-linear-gradient(90deg, rgba(112, 178, 208, .3) 0 7px, transparent 7px 20px);
+    mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 26px), transparent);
+    animation: standby-drift 2.8s linear infinite;
+  }
+
+  // 巡游光珠：穿过卡片空隙的行进微光，保持传送带"心跳"。
+  &::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: 50%;
+    left: -30px;
+    width: 26px;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(140, 225, 255, .85), transparent);
+    box-shadow: 0 0 8px rgba(120, 215, 255, .45);
+    opacity: 0;
+    animation: standby-bead 3.6s cubic-bezier(.45, .05, .55, .95) infinite;
+  }
 }
 
 .ticker-sequence {
@@ -1087,33 +1134,40 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-// 任务卡片：两行"任务铭牌"——上行任务名，下行操作人 + 状态徽章。
-// 左缘状态能量轨与图例/进度栏的能量栏同一设计语言，卡片按状态换色。
+// 任务卡片：两行"任务铭牌"——上行任务名 + 序号，下行操作人 + 状态徽章。
+// 宽度自适应任务名长度：≤25 字完整显示，超出 25 字截断省略；
+// 卡片各自按内容自然定宽，行内余白由传送带车道延伸填充，后置溢出由徽章收纳。
 .ticker-chip {
   position: relative;
   display: inline-flex;
   align-items: flex-start;
-  flex: 1 1 320px;
-  gap: 9px;
+  flex: 0 1 auto;
+  gap: 10px;
   min-width: 0;
-  max-width: 440px;
-  padding: 9px 14px 8px 16px;
+  max-width: 560px;
+  padding: 10px 14px 9px 15px;
   border: 1px solid rgba(88, 148, 186, 0.28);
   border-radius: 12px;
   color: #a8cbe0;
-  background: linear-gradient(163deg, rgba(9, 38, 62, 0.92), rgba(4, 21, 38, 0.8));
+  background:
+    linear-gradient(163deg, rgba(9, 38, 62, 0.92), rgba(4, 21, 38, 0.82)),
+    repeating-linear-gradient(90deg, rgba(103, 232, 249, 0.04) 0 1px, transparent 1px 18px);
   box-shadow:
     inset 0 1px 0 rgba(140, 224, 255, 0.08),
     0 8px 22px rgba(0, 7, 18, 0.35);
   white-space: nowrap;
   overflow: hidden;
+  transition: filter .2s ease;
 
+  &:hover { filter: brightness(1.07); }
+
+  // 左缘状态能量轨：与图例/进度栏的能量栏同一设计语言，卡片按状态换色。
   &::before {
     content: '';
     position: absolute;
     left: 0;
-    top: 8px;
-    bottom: 8px;
+    top: 9px;
+    bottom: 9px;
     width: 3px;
     border-radius: 999px;
     background: #4e98c8;
@@ -1122,19 +1176,29 @@ onUnmounted(() => {
 
   .chip-dot {
     flex: 0 0 auto;
-    margin-top: 5px;
+    margin-top: 6px;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: #4e98c8;
+    box-shadow: 0 0 0 3px rgba(78, 152, 200, 0.14);
   }
 
   .chip-body {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     min-width: 0;
+  }
+
+  .chip-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    line-height: 19px;
   }
 
   .chip-name {
@@ -1147,8 +1211,25 @@ onUnmounted(() => {
     color: #d7ecf7;
     font-size: 15px;
     font-weight: 700;
-    line-height: 18px;
+    line-height: 19px;
     letter-spacing: .02em;
+    text-shadow: 0 1px 6px rgba(0, 10, 22, 0.35);
+  }
+
+  // 序号铭牌：竖线分隔的 HUD 编号，宽卡时锚定右侧平衡构图。
+  .chip-index {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    align-self: stretch;
+    padding-left: 10px;
+    border-left: 1px solid rgba(88, 148, 186, 0.24);
+    color: #5f8aa5;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 8px rgba(95, 138, 165, 0.35);
   }
 
   .chip-meta {
@@ -1156,7 +1237,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 9px;
     min-width: 0;
-    line-height: 14px;
+    line-height: 15px;
   }
 
   .chip-operator {
@@ -1178,14 +1259,28 @@ onUnmounted(() => {
       background: radial-gradient(circle at 35% 32%, #bfe8fa, #3f7ea6 78%);
       box-shadow: 0 0 6px rgba(80, 200, 240, 0.4);
     }
+
+    // 占位态：未指派时降为半透明空心微章，与已指派拉开层级。
+    &.is-unassigned {
+      color: #5f7d92;
+
+      .chip-operator-glyph {
+        background: none;
+        border: 1px dashed rgba(143, 185, 208, 0.55);
+        box-shadow: none;
+      }
+    }
   }
 
+  // 状态徽章：胶囊随状态轻染，与左缘能量轨同语义。
   .chip-tag {
     flex: 0 0 auto;
-    padding: 1px 8px;
+    margin-left: auto;
+    padding: 2px 9px;
     border: 1px solid rgba(111, 147, 168, 0.42);
     border-radius: 999px;
     color: #7fb2cf;
+    background: rgba(111, 147, 168, 0.12);
     font-size: 11px;
     letter-spacing: .06em;
   }
@@ -1195,15 +1290,15 @@ onUnmounted(() => {
 
     &::before { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6); }
 
-    .chip-dot { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6); }
-    .chip-tag { color: #58c9a4; border-color: rgba(88, 201, 164, 0.42); }
+    .chip-dot { background: #38e7a7; box-shadow: 0 0 8px rgba(56, 231, 167, 0.6), 0 0 0 3px rgba(56, 231, 167, 0.14); }
+    .chip-tag { color: #58c9a4; border-color: rgba(88, 201, 164, 0.42); background: rgba(56, 231, 167, 0.1); }
   }
 
   &.is-skipped {
     opacity: .68;
 
     &::before { background: #6d93ab; box-shadow: none; }
-    .chip-dot { background: #6d93ab; }
+    .chip-dot { background: #6d93ab; box-shadow: none; }
   }
 
   &.is-issue {
@@ -1211,13 +1306,15 @@ onUnmounted(() => {
 
     &::before { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.55); }
 
-    .chip-dot { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.6); }
-    .chip-tag { color: #ff8b95; border-color: rgba(255, 139, 149, 0.45); }
+    .chip-dot { background: #ff626e; box-shadow: 0 0 8px rgba(255, 98, 110, 0.6), 0 0 0 3px rgba(255, 98, 110, 0.16); }
+    .chip-tag { color: #ff8b95; border-color: rgba(255, 139, 149, 0.45); background: rgba(255, 98, 110, 0.12); }
   }
 
   &.is-running {
     border-color: rgba(255, 180, 61, 0.55);
-    background: linear-gradient(163deg, rgba(66, 45, 12, 0.55), rgba(26, 19, 8, 0.78));
+    background:
+      linear-gradient(163deg, rgba(66, 45, 12, 0.55), rgba(26, 19, 8, 0.78)),
+      repeating-linear-gradient(90deg, rgba(255, 210, 115, 0.05) 0 1px, transparent 1px 18px);
     box-shadow:
       inset 0 1px 0 rgba(255, 226, 173, 0.14),
       0 0 18px rgba(255, 171, 45, 0.16),
@@ -1229,10 +1326,11 @@ onUnmounted(() => {
     }
 
     .chip-name { color: #ffe3ad; }
+    .chip-index { color: rgba(255, 202, 112, 0.55); border-left-color: rgba(255, 202, 112, 0.24); }
 
     .chip-dot {
       background: #ffb43d;
-      box-shadow: 0 0 9px rgba(255, 180, 61, 0.8);
+      box-shadow: 0 0 9px rgba(255, 180, 61, 0.8), 0 0 0 3px rgba(255, 180, 61, 0.16);
       animation: ticker-blink 1.2s ease-in-out infinite;
     }
 
@@ -1245,20 +1343,22 @@ onUnmounted(() => {
   }
 }
 
+// 省略徽章：装不下的后置任务收纳位，虚线描边 + 同族圆角表达"未尽列表"。
 .ticker-more {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 5px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid rgba(89, 177, 219, 0.32);
-  border-radius: 999px;
+  gap: 6px;
+  height: 42px;
+  padding: 0 14px 0 13px;
+  border: 1px dashed rgba(89, 177, 219, 0.48);
+  border-radius: 12px;
   color: #8fb9d0;
-  background: linear-gradient(135deg, rgba(10, 48, 75, 0.88), rgba(4, 25, 43, 0.82));
+  background: linear-gradient(135deg, rgba(10, 48, 75, 0.78), rgba(4, 25, 43, 0.7));
   box-shadow: inset 0 1px 0 rgba(164, 231, 255, 0.08);
   font-size: 12px;
   white-space: nowrap;
+  cursor: help;
 
   i {
     color: #58c9ed;
@@ -1271,6 +1371,7 @@ onUnmounted(() => {
     color: #d8f6ff;
     font-size: 15px;
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -1908,6 +2009,8 @@ onUnmounted(() => {
   .runway-complete-flow { animation-duration: 2.4s; }
   .runway-active-path { animation-duration: 2.6s; }
   .runway-node.is-completed .node-orbit-outer { animation-duration: 18s; }
+  .ticker-track::after { animation-duration: 4.2s; }
+  .ticker-track::before { animation-duration: 5.2s; }
   .ticker-standby { animation-duration: 4.2s; }
   .ticker-standby::after { animation-duration: 5.2s; }
 }
@@ -1938,6 +2041,8 @@ onUnmounted(() => {
   .milestone-dial.is-absorbing,
   .ticker-node i,
   .ticker-chip.is-running .chip-dot,
+  .ticker-track::before,
+  .ticker-track::after,
   .ticker-standby,
   .ticker-standby::after,
   .ticker-complete,

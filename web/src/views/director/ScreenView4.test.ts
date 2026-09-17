@@ -79,12 +79,16 @@ describe('independent screen4 entry', () => {
 
   it('keeps the ambient scan narrow and compositor-friendly for software rendering', () => {
     const sweepStyles = screen4Source.match(/\.main-rect-sweep\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
-    expect(sweepStyles).toContain('width: 28px')
+    const sweepKeyframes = screen4Source.match(/@keyframes rect-sweep-lite\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+    expect(sweepStyles).toContain('width: 18px')
     expect(sweepStyles).toContain('contain: strict')
     expect(sweepStyles).toContain('translate3d(')
     expect(sweepStyles).toContain('10s linear infinite')
+    expect(sweepStyles).toContain('will-change: transform')
+    expect(sweepStyles).not.toContain('will-change: transform, opacity')
     expect(sweepStyles).not.toContain('box-shadow')
     expect(sweepStyles).not.toContain('repeating-linear-gradient')
+    expect(sweepKeyframes).not.toContain('opacity')
   })
 
   it('removes the pending task area so the runway uses the released space', () => {

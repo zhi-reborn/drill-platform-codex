@@ -145,12 +145,25 @@ describe('screen4 runway geometry', () => {
     expect(truncateScreen4RunwayText('一'.repeat(26), 25)).toBe(`${'一'.repeat(25)}…`)
   })
 
-  it('adapts the ticker card count to the available width', () => {
-    expect(getScreen4TickerVisibleLimit(0, 4)).toBe(1)
-    expect(getScreen4TickerVisibleLimit(860, 2)).toBe(2)
-    expect(getScreen4TickerVisibleLimit(860, 4)).toBe(2)
-    expect(getScreen4TickerVisibleLimit(1160, 5)).toBe(3)
-    expect(getScreen4TickerVisibleLimit(1600, 6)).toBe(5)
-    expect(getScreen4TickerVisibleLimit(1600, 0)).toBe(0)
+  it('fits ticker cards by their measured content width', () => {
+    const shortTask = { name: '临时权限申请' }
+    const longTask = { name: '一'.repeat(25) }
+
+    expect(getScreen4TickerVisibleLimit(0, [])).toBe(0)
+    expect(getScreen4TickerVisibleLimit(0, [shortTask, shortTask])).toBe(1)
+    expect(getScreen4TickerVisibleLimit(560, [shortTask, shortTask, shortTask])).toBe(2)
+    expect(getScreen4TickerVisibleLimit(860, [shortTask, shortTask])).toBe(2)
+    expect(getScreen4TickerVisibleLimit(1600, Array.from({ length: 6 }, () => shortTask))).toBe(6)
+    // 宽名卡优先保证 ≤25 字任务名完整显示，装不下的后置卡片交由省略徽章收纳。
+    expect(getScreen4TickerVisibleLimit(860, [longTask, longTask, longTask, longTask])).toBe(1)
+    expect(getScreen4TickerVisibleLimit(1160, Array.from({ length: 5 }, () => longTask))).toBe(2)
+  })
+
+  it('counts operator metadata toward the ticker card width', () => {
+    const shortTask = { name: '临时权限申请' }
+    const wideOperatorTask = { name: '短', assignee: '一'.repeat(30) }
+
+    expect(getScreen4TickerVisibleLimit(700, [shortTask, shortTask, shortTask])).toBe(3)
+    expect(getScreen4TickerVisibleLimit(700, [wideOperatorTask, shortTask, shortTask])).toBe(2)
   })
 })

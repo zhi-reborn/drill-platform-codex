@@ -307,19 +307,78 @@ export function truncateScreen4RunwayText(text: string, maxLength = 12): string 
     : characters.join('')
 }
 
-export function getScreen4TickerVisibleLimit(viewportWidth: number, taskCount: number): number {
-  if (taskCount <= 0) return 0
-  const cardMinWidth = 280
-  const itemGap = 8
-  const moreBadgeWidth = 88
-  const width = Math.max(0, viewportWidth)
-  const fullCapacity = Math.max(1, Math.floor((width + itemGap) / (cardMinWidth + itemGap)))
-  if (taskCount <= fullCapacity) return taskCount
-  const capacityWithMoreBadge = Math.max(
-    1,
-    Math.floor((width - moreBadgeWidth + itemGap) / (cardMinWidth + itemGap)),
+// ===== 底部任务传送带：卡片装填测算 =====
+
+// 卡片装饰宽度：左右内边距(15+14) + 边框(2) + 状态点(8) + 点距(10) + 测算余量(6)。
+const TICKER_CARD_CHROME = 55
+// 名称行附加宽度：名称-序号间距(12) + 序号铭牌(30)。
+const TICKER_HEAD_EXTRA = 42
+// 元信息行附加宽度：操作人图标(14) + 行内间距(9) + 状态徽章(52)。
+const TICKER_META_EXTRA = 75
+const TICKER_NAME_FONT_SIZE = 15
+const TICKER_META_FONT_SIZE = 12
+const TICKER_OPERATOR_MAX_WIDTH = 220
+const TICKER_ITEM_GAP = 8
+const TICKER_MORE_BADGE_WIDTH = 110
+
+export interface Screen4TickerTask {
+  name: string
+  assignee?: string
+}
+
+// 等宽估算文本像素宽：CJK 记满宽（略含字距），其余按比例折算；宁可少排不裁字。
+function measureScreen4TickerTextWidth(
+  text: string,
+  fontSize: number,
+  asciiRatio: number,
+  cjkRatio = 1,
+): number {
+  let units = 0
+  for (const char of text) {
+    units += (char.codePointAt(0) ?? 0) > 0x2e80 ? cjkRatio : asciiRatio
+  }
+  return Math.ceil(units * fontSize)
+}
+
+// 卡片理想宽度：取"任务名 + 序号"行与"操作人 + 状态徽章"行的较宽者，
+// 让 ≤25 字的任务名在装得下时完整显示。
+function measureScreen4TickerCard(task: Screen4TickerTask): number {
+  const nameWidth = measureScreen4TickerTextWidth(
+    truncateScreen4RunwayText(task.name, 25),
+    TICKER_NAME_FONT_SIZE,
+    .68,
+    1.02,
   )
-  return Math.min(taskCount, capacityWithMoreBadge)
+  const operatorWidth = Math.min(
+    TICKER_OPERATOR_MAX_WIDTH,
+    measureScreen4TickerTextWidth(task.assignee?.trim() || '未指派', TICKER_META_FONT_SIZE, .58),
+  )
+
+  return Math.max(nameWidth + TICKER_HEAD_EXTRA, operatorWidth + TICKER_META_EXTRA) + TICKER_CARD_CHROME
+}
+
+// 可见卡片数：全部装得下就全显；装不下时预留"另有 N 项"省略徽章，
+// 按业务顺序（执行中优先）装填完整卡片，装不下的后置卡片省略。
+export function getScreen4TickerVisibleLimit(viewportWidth: number, tasks: Screen4TickerTask[]): number {
+  if (!tasks.length) return 0
+  const width = Math.max(0, viewportWidth)
+  const cardWidths = tasks.map(task => measureScreen4TickerCard(task))
+  const totalWidth = cardWidths.reduce(
+    (sum, cardWidth, index) => sum + cardWidth + (index ? TICKER_ITEM_GAP : 0),
+    0,
+  )
+  if (totalWidth <= width) return tasks.length
+
+  const budget = width - TICKER_MORE_BADGE_WIDTH - TICKER_ITEM_GAP
+  let usedWidth = 0
+  let visibleCount = 0
+  for (const cardWidth of cardWidths) {
+    const nextWidth = usedWidth + (visibleCount ? TICKER_ITEM_GAP : 0) + cardWidth
+    if (nextWidth > budget) break
+    usedWidth = nextWidth
+    visibleCount += 1
+  }
+  return Math.max(1, visibleCount)
 }
 
 export function splitScreen4RunwayName(name: string): string[] {
