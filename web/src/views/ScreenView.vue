@@ -3400,66 +3400,106 @@ $font-cn: $font-ui;
   }
 
   .log-line {
+    position: relative;
     display: flex; align-items: center; gap: 10px;
-    height: 26px;
-    padding: 0 12px;
+    height: 28px;
+    padding: 0 12px 0 15px;
     font-size: clamp(12px, 0.78vw, 13.5px);
     line-height: 1;
     white-space: nowrap;
 
-    // 偶数行微弱底色，终端行码感
-    &:nth-child(even) {
-      background: rgba(0, 212, 255, 0.035);
+    // 行首状态灯：语义色圆点，颜色由 log-ok/log-danger 等行级类覆盖
+    &::before {
+      content: '';
+      position: absolute;
+      left: 5px; top: 50%;
+      width: 5px; height: 5px;
+      margin-top: -2.5px;
+      border-radius: 50%;
+      background: #35c4ff;
+      box-shadow: 0 0 6px rgba(0, 212, 255, 0.5);
     }
 
-    // 最新一条：入场动效（轻微下落淡入），配合列表整体上移形成"新日志挤入"的节奏
+    // 行间细分隔线：两端渐隐，终端日志质感
+    & + .log-line::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 15px; right: 12px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.14) 22%, rgba(0, 212, 255, 0.14) 78%, transparent);
+    }
+
+    // 最新一条：入场下落动效 + 左侧青色微光，持续标记实时焦点
     &.is-newest {
       animation: log-line-in 0.45s cubic-bezier(0.22, 0.9, 0.32, 1);
+      background: linear-gradient(90deg, rgba(0, 212, 255, 0.12), rgba(0, 212, 255, 0.02) 50%, transparent 78%);
     }
 
+    // 时间列：定宽右对齐 + 表格数字，保证所有行的时间竖向严格对齐
     .log-time {
+      display: flex; align-items: center; justify-content: flex-end;
+      flex: 0 0 auto;
+      width: 62px;
       font-family: $font-mono;
       font-size: 11.5px;
-      font-weight: 700;
-      color: rgba(120, 175, 215, 0.75);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
       letter-spacing: 0.5px;
-      flex-shrink: 0;
+      color: rgba(112, 170, 220, 0.8);
+
+      // 时间与内容之间的刻度竖线：上下渐隐，模拟终端游标
+      &::after {
+        content: '';
+        width: 1px;
+        height: 11px;
+        margin-left: 10px;
+        background: linear-gradient(180deg, transparent, rgba(0, 212, 255, 0.38), transparent);
+      }
     }
     .log-step {
       // 占满剩余空间并允许收缩：任务名过长时省略号截断，不与右侧动作徽标重叠
       flex: 1 1 auto;
       min-width: 0;
       overflow: hidden; text-overflow: ellipsis;
-      font-weight: 700;
+      font-size: clamp(11.5px, 0.74vw, 12.5px);
+      font-weight: 600;
+      letter-spacing: 0.3px;
       color: rgba(226, 240, 255, 0.92);
     }
     .log-action {
       flex-shrink: 0;
       font-family: $font-cn;
       font-size: 11px;
-      font-weight: 900;
+      font-weight: 700;
       letter-spacing: 1px;
-      padding: 2.5px 7px;
-      border-radius: 2px;
+      padding: 3px 8px;
+      border-radius: 3px;
       line-height: 1;
     }
   }
 
   // 动作语义配色：启动绿 / 完成青 / 异常超时红 / 跳过灰 / 强制橙
-  .log-ok .log-action { color: #55ffb0; background: rgba(73, 255, 166, 0.1); border: 1px solid rgba(73, 255, 166, 0.28); }
-  .log-step .log-action { color: #6fd8ff; background: rgba(0, 212, 255, 0.09); border: 1px solid rgba(0, 212, 255, 0.25); }
-  .log-danger .log-action { color: #ff6b8a; background: rgba(255, 77, 106, 0.1); border: 1px solid rgba(255, 77, 106, 0.32); }
-  .log-skip .log-action { color: rgba(178, 196, 220, 0.85); background: rgba(150, 175, 205, 0.08); border: 1px solid rgba(150, 175, 205, 0.25); }
-  .log-force .log-action { color: #ffb547; background: rgba(255, 182, 72, 0.1); border: 1px solid rgba(255, 182, 72, 0.3); }
+  .log-ok .log-action { color: #55ffb0; background: rgba(73, 255, 166, 0.12); border: 1px solid rgba(73, 255, 166, 0.32); }
+  .log-step .log-action { color: #6fd8ff; background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.28); }
+  .log-danger .log-action { color: #ff6b8a; background: rgba(255, 77, 106, 0.12); border: 1px solid rgba(255, 77, 106, 0.36); }
+  .log-skip .log-action { color: rgba(178, 196, 220, 0.88); background: rgba(150, 175, 205, 0.1); border: 1px solid rgba(150, 175, 205, 0.28); }
+  .log-force .log-action { color: #ffb547; background: rgba(255, 182, 72, 0.12); border: 1px solid rgba(255, 182, 72, 0.34); }
+
+  // 行首状态灯语义色（限定 log-line 行元素，避免命中内部同名 span）
+  .log-ok.log-line::before { background: #55ffb0; box-shadow: 0 0 6px rgba(73, 255, 166, 0.55); }
+  .log-step.log-line::before { background: #35c4ff; box-shadow: 0 0 6px rgba(0, 212, 255, 0.5); }
+  .log-danger.log-line::before { background: #ff6b8a; box-shadow: 0 0 6px rgba(255, 77, 106, 0.55); }
+  .log-skip.log-line::before { background: rgba(178, 196, 220, 0.7); box-shadow: none; }
+  .log-force.log-line::before { background: #ffb547; box-shadow: 0 0 6px rgba(255, 182, 72, 0.5); }
 
   .log-empty {
     position: absolute;
     inset: 0;
     display: flex; align-items: center; justify-content: center;
     font-family: $font-mono;
-    font-size: 13px;
-    letter-spacing: 0.1em;
-    color: rgba(150, 195, 235, 0.5);
+    font-size: 12.5px;
+    letter-spacing: 0.12em;
+    color: rgba(150, 195, 235, 0.45);
   }
 }
 
@@ -3599,8 +3639,12 @@ $font-cn: $font-ui;
     flex-basis: clamp(150px, 21vh, 210px);
 
     .log-line {
-      height: 22px;
+      height: 24px;
       font-size: 12px;
+
+      .log-time {
+        width: 56px;
+      }
     }
   }
 
