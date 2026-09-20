@@ -90,7 +90,6 @@
       </header>
 
       <main class="command-main">
-        <div class="main-rect-sweep" aria-hidden="true" />
         <section ref="phaseFlowRef" class="phase-flow-chamber" :class="'phase-state-' + selectedPhaseStatus" aria-label="阶段与环节流程">
           <svg class="phase-chamber-surface" aria-hidden="true">
             <defs>
@@ -2830,33 +2829,6 @@ function fmt(d: Date): string {
   overflow: hidden;
 }
 
-.main-rect-sweep {
-  position: absolute;
-  z-index: 0;
-  top: calc(clamp(10px, 1.2vh, 18px) + clamp(108px, 14vh, 150px));
-  bottom: clamp(8px, 1vh, 16px);
-  left: clamp(18px, 2vw, 36px);
-  width: 18px;
-  contain: strict;
-  background: linear-gradient(90deg, transparent, rgba(75, 229, 239, 0.05) 34%, rgba(104, 240, 244, 0.13) 76%, transparent);
-  opacity: 0.72;
-  pointer-events: none;
-  transform: translate3d(-48px, 0, 0);
-  backface-visibility: hidden;
-  will-change: transform;
-  animation: rect-sweep-lite 10s linear infinite;
-}
-
-.main-rect-sweep::before {
-  content: "";
-  position: absolute;
-  top: 7%;
-  bottom: 7%;
-  right: 3px;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(255, 223, 151, 0.88) 48%, rgba(119, 242, 246, 0.78) 72%, transparent);
-}
-
 .phase-flow-chamber {
   --phase-height: clamp(132px, 15.5vh, 170px);
   --phase-link-color: #52dfff;
@@ -3319,11 +3291,6 @@ function fmt(d: Date): string {
   100% { transform: translateX(420%); opacity: 0; }
 }
 
-@keyframes rect-sweep-lite {
-  0%, 8% { transform: translate3d(-48px, 0, 0); }
-  92%, 100% { transform: translate3d(calc(100vw + 48px), 0, 0); }
-}
-
 @keyframes accent-flow {
   0%, 100% { opacity: 0.42; transform: scaleX(0.72); }
   50% { opacity: 0.9; transform: scaleX(1); }
@@ -3340,7 +3307,6 @@ function fmt(d: Date): string {
   .header-scanline,
   .command-title::after,
   .title-rail::before,
-  .main-rect-sweep,
   .phase-card.is-running .phase-accent,
   .seq-flow,
   .seq-comet,

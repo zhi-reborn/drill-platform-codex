@@ -1059,10 +1059,12 @@ onUnmounted(() => {
   }
 
   em {
-    color: #8cb6c7;
+    color: #b5dce5;
     font-family: inherit;
-    font-size: 11px;
+    font-size: 15px;
     font-style: normal;
+    font-weight: 600;
+    letter-spacing: .04em;
   }
 }
 
@@ -1109,22 +1111,6 @@ onUnmounted(() => {
     animation: standby-drift 2.8s linear infinite;
   }
 
-  // 巡游光珠：穿过卡片空隙的行进微光，保持传送带"心跳"。
-  &::before {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    top: 50%;
-    left: -30px;
-    width: 26px;
-    height: 3px;
-    margin-top: -1.5px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(140, 225, 255, .85), transparent);
-    box-shadow: 0 0 8px rgba(120, 215, 255, .45);
-    opacity: 0;
-    animation: standby-bead 3.6s cubic-bezier(.45, .05, .55, .95) infinite;
-  }
 }
 
 .ticker-sequence {
@@ -2011,7 +1997,6 @@ onUnmounted(() => {
   .runway-active-path { animation-duration: 2.6s; }
   .runway-node.is-completed .node-orbit-outer { animation-duration: 18s; }
   .ticker-track::after { animation-duration: 4.2s; }
-  .ticker-track::before { animation-duration: 5.2s; }
   .ticker-standby { animation-duration: 4.2s; }
   .ticker-standby::after { animation-duration: 5.2s; }
 }
@@ -2042,7 +2027,6 @@ onUnmounted(() => {
   .milestone-dial.is-absorbing,
   .ticker-node i,
   .ticker-chip.is-running .chip-dot,
-  .ticker-track::before,
   .ticker-track::after,
   .ticker-standby,
   .ticker-standby::after,
