@@ -1103,12 +1103,8 @@ onUnmounted(() => {
     top: 50%;
     left: 0;
     right: 0;
-    height: 3px;
-    margin-top: -1.5px;
-    border-radius: 999px;
-    background: repeating-linear-gradient(90deg, rgba(112, 178, 208, .3) 0 7px, transparent 7px 20px);
-    mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 26px), transparent);
-    animation: standby-drift 2.8s linear infinite;
+    height: 2px;
+    margin-top: -1px;
   }
 
 }
@@ -1362,31 +1358,19 @@ onUnmounted(() => {
   }
 }
 
-// 传送带空载待机：以缓慢漂移的虚线车道替代文字占位，静默表达"待命中"。
+// 静态刻度导轨：细实线承托短刻度，保持层次而不持续重绘。
+.ticker-track::after,
 .ticker-standby {
-  position: relative;
-  flex: 1 1 auto;
-  height: 3px;
-  margin: 0 22px;
-  border-radius: 999px;
-  background: repeating-linear-gradient(90deg, rgba(112, 178, 208, .32) 0 7px, transparent 7px 20px);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  animation: standby-drift 2.8s linear infinite;
+  background:
+    repeating-linear-gradient(90deg, rgba(112, 178, 208, .28) 0 6px, transparent 6px 20px),
+    linear-gradient(rgba(65, 130, 160, .12), rgba(65, 130, 160, .12));
+}
 
-  // 待命光珠：沿空载车道巡游的微光，保持系统"心跳"。
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 26px;
-    height: 3px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(140, 225, 255, .9), transparent);
-    box-shadow: 0 0 8px rgba(120, 215, 255, .45);
-    opacity: 0;
-    animation: standby-bead 3.6s cubic-bezier(.45, .05, .55, .95) infinite;
-  }
+// 空载时沿用同一条静态导轨。
+.ticker-standby {
+  flex: 1 1 auto;
+  height: 2px;
+  margin: 0 22px;
 }
 
 // 全部完成：在分隔线右侧以导通的对勾徽记宣告环节收束，与完成链路同色系。
@@ -1946,17 +1930,6 @@ onUnmounted(() => {
   50% { opacity: .35; }
 }
 
-// -20px = 待机车道虚线周期(7+13)，保证漂移无缝循环。
-@keyframes standby-drift {
-  to { background-position: -20px 0; }
-}
-
-@keyframes standby-bead {
-  from { left: -30px; opacity: 0; }
-  18%, 82% { opacity: 1; }
-  to { left: 100%; opacity: 0; }
-}
-
 @keyframes legend-arrive {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -1996,9 +1969,6 @@ onUnmounted(() => {
   .runway-complete-flow { animation-duration: 2.4s; }
   .runway-active-path { animation-duration: 2.6s; }
   .runway-node.is-completed .node-orbit-outer { animation-duration: 18s; }
-  .ticker-track::after { animation-duration: 4.2s; }
-  .ticker-standby { animation-duration: 4.2s; }
-  .ticker-standby::after { animation-duration: 5.2s; }
 }
 
 .screen4-runway.is-motion-paused *,
@@ -2027,9 +1997,6 @@ onUnmounted(() => {
   .milestone-dial.is-absorbing,
   .ticker-node i,
   .ticker-chip.is-running .chip-dot,
-  .ticker-track::after,
-  .ticker-standby,
-  .ticker-standby::after,
   .ticker-complete,
   .runway-baton,
   .baton-beam {
