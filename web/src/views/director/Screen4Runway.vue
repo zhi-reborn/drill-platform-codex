@@ -1,6 +1,7 @@
 <template>
   <div ref="rootRef" class="screen4-runway" :class="{ 'is-complete': phaseComplete, 'is-motion-paused': motionPaused }">
     <div class="runway-ambient" aria-hidden="true"></div>
+    <div class="runway-scanline" aria-hidden="true"></div>
 
     <div class="runway-legend" aria-label="跑道状态图例">
       <span class="legend-kicker" aria-hidden="true">状态</span>
@@ -800,6 +801,63 @@ onUnmounted(() => {
   inset: 0;
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 60%, rgba(27, 94, 150, 0.05), transparent 72%);
+}
+
+// 雷达扫描带：从左到右循环掠过跑道面板，置于 SVG 之下，光自轨道与节点下方透出。
+// 性能：仅动画 transform/opacity 两个合成器属性——无 GPU 机器上光栅化一次后逐帧位图搬运，
+// 不触发重绘；前沿光晕用静态 box-shadow 烘焙进位图（阴影不逐帧重绘）。
+.runway-scanline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 20%;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform;
+  background: linear-gradient(90deg,
+    rgba(73, 217, 249, 0) 0%,
+    rgba(73, 217, 249, 0.045) 42%,
+    rgba(73, 217, 249, 0.1) 74%,
+    rgba(122, 239, 255, 0.24) 100%);
+  animation: runway-scanline-sweep 8s linear 1.1s infinite both;
+
+  // 扫描前沿热线：拖尾渐暗、前沿锐亮，上下端羽化避免硬切。
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(180deg,
+      rgba(158, 239, 255, 0) 0%,
+      #9defff 16%,
+      #7deaff 50%,
+      #9defff 84%,
+      rgba(158, 239, 255, 0) 100%);
+    box-shadow: 0 0 12px 1px rgba(73, 217, 249, 0.55), 0 0 3px rgba(190, 245, 255, 0.75);
+  }
+}
+
+// 阶段达成：扫描带切换为完成链路的绿色能量语义，与里程碑同色系。
+.screen4-runway.is-complete .runway-scanline {
+  background: linear-gradient(90deg,
+    rgba(66, 240, 164, 0) 0%,
+    rgba(66, 240, 164, 0.045) 42%,
+    rgba(66, 240, 164, 0.1) 74%,
+    rgba(160, 255, 214, 0.24) 100%);
+
+  &::after {
+    background: linear-gradient(180deg,
+      rgba(180, 255, 217, 0) 0%,
+      #b4ffd9 16%,
+      #7df5ba 50%,
+      #b4ffd9 84%,
+      rgba(180, 255, 217, 0) 100%);
+    box-shadow: 0 0 12px 1px rgba(66, 240, 164, 0.55), 0 0 3px rgba(200, 255, 230, 0.75);
+  }
 }
 
 // 状态图例：左上角 HUD 状态铭牌，与底部信息栏同一套玻璃质感。
@@ -1877,6 +1935,15 @@ onUnmounted(() => {
   to { stroke-dashoffset: -30; }
 }
 
+// 扫描带位移以元素自身宽度计（面板宽 20%）：-100% 从左缘外入场，500% 抵右缘外离场，循环无缝。
+// 拖尾渐变已含"尾暗头亮"，位移保持全程线性；进出场两端以 opacity 快速羽化衔接。
+@keyframes runway-scanline-sweep {
+  0% { transform: translateX(-100%); opacity: 0; }
+  8% { opacity: 1; }
+  86% { opacity: 1; }
+  100% { transform: translateX(500%); opacity: 0; }
+}
+
 @keyframes active-energy {
   to { stroke-dashoffset: -42; }
 }
@@ -1986,6 +2053,7 @@ onUnmounted(() => {
 
   .runway-legend,
   .legend-item.is-running i,
+  .runway-scanline,
   .runway-dashes,
   .runway-complete-flow,
   .runway-active-path,

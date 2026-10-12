@@ -293,7 +293,8 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.ticker-chip\s*\{[^}]*display: inline-flex;[^}]*border-radius: 12px;/s)
     // 卡片宽度自适应任务名长度（≤25 字完整、超出截断省略），行内余白由传送带车道延伸。
     expect(styles).toMatch(/\.ticker-chip\s*\{[^}]*flex: 0 1 auto;[^}]*max-width: 560px;/s)
-    expect(styles).toMatch(/\.ticker-track\s*\{[^}]*&::after\s*\{[^}]*animation: standby-drift/s)
+    // 传送带车道：静态刻度导轨（无 GPU 优化——不逐帧重绘），车道与空载导轨共用同一条静态背景。
+    expect(styles).toMatch(/\.ticker-track::after,\s*\.ticker-standby\s*\{/)
     expect(styles).toMatch(/\.chip-index\s*\{[^}]*border-left: 1px solid/s)
     expect(styles).toMatch(/\.chip-name\s*\{[^}]*white-space: nowrap;/s)
     expect(styles).toContain('.ticker-standby')
@@ -302,8 +303,9 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.ticker-node\s*\{[^}]*font-size: 18px;/s)
     expect(styles).toMatch(/\.ticker-count[\s\S]*?strong\s*\{[^}]*font-size: 18px;/)
     expect(styles).toMatch(/\.ticker-complete\s*\{[^}]*font-size: 18px;/s)
-    expect(styles).toContain('@keyframes standby-drift')
-    expect(styles).toContain('@keyframes standby-bead')
+    // 旧的漂移动画已随静态导轨优化移除，防止回归。
+    expect(styles).not.toContain('@keyframes standby-drift')
+    expect(styles).not.toContain('@keyframes standby-bead')
     // 完成宣告：分隔线右侧的绿色对勾徽记，与完成链路同色系。
     expect(styles).toContain('.ticker-complete')
     expect(styles).not.toContain('.ticker-head.is-complete')
