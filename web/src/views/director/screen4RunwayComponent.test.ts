@@ -141,13 +141,21 @@ describe('screen4 runway component', () => {
     expect(styles).toMatch(/\.runway-progress-head\s*\{[^}]*will-change: transform, opacity;/s)
     expect(styles).toMatch(/\.milestone-scan\s*\{[^}]*will-change: transform;/s)
     expect(extractCssBlock(styles, '@media (max-width: 1280px)')).not.toContain('animation: none !important')
-    // 扫描线软件渲染（无 GPU）约定：纯 transform 动画、渐变辉光替代 box-shadow 模糊、独立合成层。
+    // 扫描线软件渲染（无 GPU）约定：整设备像素步进驱动替代 CSS animation（防亚像素微振）、
+    // 渐变辉光替代 box-shadow 模糊、独立合成层、10% 层面积硬上限。
     expect(template).toContain('class="runway-scanline"')
+    expect(template).toContain('ref="scanlineRef"')
     expect(styles).toMatch(/\.runway-scanline\s*\{[^}]*will-change: transform;/s)
     // 光带宽度是合成层位图面积的硬上限（内网无 GPU 机器流畅性关键指标），放宽需重新评估性能。
     expect(styles).toMatch(/\.runway-scanline\s*\{[^}]*width: 10%;/s)
-    expect(styles).toContain('@keyframes runway-scanline-sweep')
-    expect(extractCssBlock(styles, '@keyframes runway-scanline-sweep')).not.toContain('opacity')
+    // 运动全部由 driveScanline 按设备像素取整推进，不再有 CSS 关键帧；基础 transform 停靠左缘外。
+    expect(extractCssBlock(styles, '.runway-scanline')).not.toContain('animation')
+    expect(extractCssBlock(styles, '.runway-scanline')).toContain('translateX(-100%)')
+    expect(styles).not.toContain('@keyframes runway-scanline-sweep')
+    expect(source).toContain('window.devicePixelRatio')
+    expect(source).toContain('Math.round(rawX * dpr) / dpr')
+    expect(source).toContain('requestAnimationFrame(driveScanline)')
+    expect(source).toContain('cancelAnimationFrame(scanlineRafId)')
     expect(extractCssBlock(styles, '.runway-scanline')).not.toContain('box-shadow')
     expect(extractCssBlock(styles, '@media (prefers-reduced-motion: reduce)')).toMatch(/\.runway-scanline\s*\{[^}]*display: none !important;/s)
   })

@@ -1,7 +1,7 @@
 <template>
   <div ref="rootRef" class="screen4-runway" :class="{ 'is-complete': phaseComplete, 'is-motion-paused': motionPaused }">
     <div class="runway-ambient" aria-hidden="true"></div>
-    <div class="runway-scanline" aria-hidden="true"></div>
+    <div ref="scanlineRef" class="runway-scanline" aria-hidden="true"></div>
 
     <div class="runway-legend" aria-label="跑道状态图例">
       <span class="legend-kicker" aria-hidden="true">状态</span>
@@ -758,6 +758,46 @@ function triggerRunwayAbsorption(root: HTMLElement, x: number, y: number) {
   }
 }
 
+// ===== 扫描线步进驱动（无 GPU 机器防微振） =====
+// 百分比位移让光带每帧落在亚像素位置：软件渲染下热线与渐变按不同小数相位逐帧重采样，
+// 表现为持续"抖动/微振"（内网普通机明显，高分屏开发机被 GPU 合成与 DPR 掩盖）。
+// 改由 rAF 驱动：1. 位移按设备像素取整——位图逐帧内容一致、仅整数平移，从根上消除微振；
+// 2. 位置是绝对时间的纯函数——丢帧只表现为"慢半拍"，不会忽快忽慢；
+// 3. 只写 transform（层保持缓存位图、不触发布局），宽度读取在无布局失效时零回流。
+const scanlineRef = ref<HTMLElement | null>(null)
+const SCANLINE_PERIOD_MS = 16000
+const SCANLINE_DELAY_MS = 1100
+let scanlineEpoch = 0
+let scanlineRafId = 0
+
+function driveScanline(now: number) {
+  const beam = scanlineRef.value
+  const panel = rootRef.value
+  if (beam && panel) {
+    const elapsed = now - scanlineEpoch
+    if (elapsed >= 0) {
+      const beamWidth = beam.offsetWidth
+      const travel = panel.clientWidth + beamWidth
+      const progress = (elapsed % SCANLINE_PERIOD_MS) / SCANLINE_PERIOD_MS
+      const rawX = progress * travel - beamWidth
+      const dpr = window.devicePixelRatio || 1
+      const snappedX = Math.round(rawX * dpr) / dpr
+      beam.style.transform = `translateX(${snappedX}px)`
+    }
+  }
+  scanlineRafId = requestAnimationFrame(driveScanline)
+}
+
+onMounted(() => {
+  if (prefersReducedMotion()) return
+  scanlineRafId = requestAnimationFrame(now => {
+    scanlineEpoch = now + SCANLINE_DELAY_MS
+    driveScanline(now)
+  })
+})
+
+onUnmounted(() => cancelAnimationFrame(scanlineRafId))
+
 defineExpose({ playTaskCompletions })
 
 // 环体吸收脉冲：缩放 + 辉光闪烁，与进度弧推进同步。
@@ -804,11 +844,13 @@ onUnmounted(() => {
 }
 
 // 雷达扫描带：从左到右循环掠过跑道面板，置于 SVG 之下，光自轨道与节点下方透出。
-// 无 GPU（软件渲染）流畅性四原则：
-// 1. 仅动画 transform 单一合成属性——层光栅化一次后逐帧位图搬运，主线程回退时也只改矩阵不重绘；
+// 无 GPU（软件渲染）流畅性约定：
+// 1. 位移由 driveScanline 脚本按设备像素取整推进——百分比位移每帧落在亚像素位置，
+//    软件渲染下热线与渐变按不同小数相位逐帧重采样，表现为持续微振（内网低分屏尤甚）；
 // 2. 前沿辉光用渐变烘焙进静态位图，禁用 box-shadow 模糊（主线程路径下模糊会逐帧重算）；
-// 3. 进出场交给面板 overflow 裁切做几何揭示（光束"入画"），不做 opacity 第二属性动画；
-// 4. 光带仅占面板宽 10%、时长放慢到 16s——合成层位图面积与低帧率下的每帧跳距同时压到最低。
+// 3. 进出场交给面板 overflow 裁切做几何揭示（光束"入画"），不引入第二运动属性；
+// 4. 光带仅占面板宽 10%——合成层位图面积与每次搬运量的硬上限。
+// 基础 transform 停靠左缘外：脚本接管前保持不可见，起点即"入画"。
 .runway-scanline {
   position: absolute;
   top: 0;
@@ -816,13 +858,13 @@ onUnmounted(() => {
   left: 0;
   width: 10%;
   pointer-events: none;
+  transform: translateX(-100%);
   will-change: transform;
   background: linear-gradient(90deg,
     rgba(73, 217, 249, 0) 0%,
     rgba(73, 217, 249, 0.045) 42%,
     rgba(73, 217, 249, 0.1) 74%,
     rgba(122, 239, 255, 0.24) 100%);
-  animation: runway-scanline-sweep 16s linear 1.1s infinite both;
 
   // 前沿辉光带：渐变模拟柔光（无模糊运算），随母层一次性光栅化。
   &::before {
@@ -1954,13 +1996,6 @@ onUnmounted(() => {
 
 @keyframes runway-drift {
   to { stroke-dashoffset: -30; }
-}
-
-// 扫描带位移以元素自身宽度计（面板宽 10%）：-100% 从左缘外入场，1000%（=100%/10%）抵右缘外离场。
-// 纯 transform 单属性动画，进出场由面板 overflow 裁切做几何揭示，循环无缝。
-@keyframes runway-scanline-sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(1000%); }
 }
 
 @keyframes active-energy {
