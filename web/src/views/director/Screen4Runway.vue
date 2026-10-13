@@ -804,23 +804,39 @@ onUnmounted(() => {
 }
 
 // 雷达扫描带：从左到右循环掠过跑道面板，置于 SVG 之下，光自轨道与节点下方透出。
-// 性能：仅动画 transform/opacity 两个合成器属性——无 GPU 机器上光栅化一次后逐帧位图搬运，
-// 不触发重绘；前沿光晕用静态 box-shadow 烘焙进位图（阴影不逐帧重绘）。
+// 无 GPU（软件渲染）流畅性三原则：
+// 1. 仅动画 transform 单一合成属性——层光栅化一次后逐帧位图搬运，主线程回退时也只改矩阵不重绘；
+// 2. 前沿辉光用渐变烘焙进静态位图，禁用 box-shadow 模糊（主线程路径下模糊会逐帧重算）；
+// 3. 进出场交给面板 overflow 裁切做几何揭示（光束"入画"），不做 opacity 第二属性动画。
+// 扫描时长取 12s：低帧率下每帧跳距减半，肉眼不产生颗粒感。
 .runway-scanline {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  width: 20%;
+  width: 16%;
   pointer-events: none;
-  opacity: 0;
   will-change: transform;
   background: linear-gradient(90deg,
     rgba(73, 217, 249, 0) 0%,
     rgba(73, 217, 249, 0.045) 42%,
     rgba(73, 217, 249, 0.1) 74%,
     rgba(122, 239, 255, 0.24) 100%);
-  animation: runway-scanline-sweep 8s linear 1.1s infinite both;
+  animation: runway-scanline-sweep 12s linear 1.1s infinite both;
+
+  // 前沿辉光带：渐变模拟柔光（无模糊运算），随母层一次性光栅化。
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 22px;
+    background: linear-gradient(90deg,
+      rgba(73, 217, 249, 0) 0%,
+      rgba(73, 217, 249, 0.12) 55%,
+      rgba(140, 240, 255, 0.38) 100%);
+  }
 
   // 扫描前沿热线：拖尾渐暗、前沿锐亮，上下端羽化避免硬切。
   &::after {
@@ -837,7 +853,6 @@ onUnmounted(() => {
       #7deaff 50%,
       #9defff 84%,
       rgba(158, 239, 255, 0) 100%);
-    box-shadow: 0 0 12px 1px rgba(73, 217, 249, 0.55), 0 0 3px rgba(190, 245, 255, 0.75);
   }
 }
 
@@ -849,6 +864,13 @@ onUnmounted(() => {
     rgba(66, 240, 164, 0.1) 74%,
     rgba(160, 255, 214, 0.24) 100%);
 
+  &::before {
+    background: linear-gradient(90deg,
+      rgba(66, 240, 164, 0) 0%,
+      rgba(66, 240, 164, 0.12) 55%,
+      rgba(160, 255, 214, 0.38) 100%);
+  }
+
   &::after {
     background: linear-gradient(180deg,
       rgba(180, 255, 217, 0) 0%,
@@ -856,7 +878,6 @@ onUnmounted(() => {
       #7df5ba 50%,
       #b4ffd9 84%,
       rgba(180, 255, 217, 0) 100%);
-    box-shadow: 0 0 12px 1px rgba(66, 240, 164, 0.55), 0 0 3px rgba(200, 255, 230, 0.75);
   }
 }
 
@@ -1935,13 +1956,11 @@ onUnmounted(() => {
   to { stroke-dashoffset: -30; }
 }
 
-// 扫描带位移以元素自身宽度计（面板宽 20%）：-100% 从左缘外入场，500% 抵右缘外离场，循环无缝。
-// 拖尾渐变已含"尾暗头亮"，位移保持全程线性；进出场两端以 opacity 快速羽化衔接。
+// 扫描带位移以元素自身宽度计（面板宽 16%）：-100% 从左缘外入场，625%（=100%/16%-100%）抵右缘外离场。
+// 纯 transform 单属性动画，进出场由面板 overflow 裁切做几何揭示，循环无缝。
 @keyframes runway-scanline-sweep {
-  0% { transform: translateX(-100%); opacity: 0; }
-  8% { opacity: 1; }
-  86% { opacity: 1; }
-  100% { transform: translateX(500%); opacity: 0; }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(625%); }
 }
 
 @keyframes active-energy {
@@ -2045,6 +2064,11 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  // 基础样式不再隐藏扫描带，无动画时直接整体隐藏。
+  .runway-scanline {
+    display: none !important;
+  }
+
   .runway-complete-path,
   .runway-complete-core,
   .runway-baton-anchor {
@@ -2053,7 +2077,6 @@ onUnmounted(() => {
 
   .runway-legend,
   .legend-item.is-running i,
-  .runway-scanline,
   .runway-dashes,
   .runway-complete-flow,
   .runway-active-path,
