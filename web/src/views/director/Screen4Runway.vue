@@ -804,17 +804,17 @@ onUnmounted(() => {
 }
 
 // 雷达扫描带：从左到右循环掠过跑道面板，置于 SVG 之下，光自轨道与节点下方透出。
-// 无 GPU（软件渲染）流畅性三原则：
+// 无 GPU（软件渲染）流畅性四原则：
 // 1. 仅动画 transform 单一合成属性——层光栅化一次后逐帧位图搬运，主线程回退时也只改矩阵不重绘；
 // 2. 前沿辉光用渐变烘焙进静态位图，禁用 box-shadow 模糊（主线程路径下模糊会逐帧重算）；
-// 3. 进出场交给面板 overflow 裁切做几何揭示（光束"入画"），不做 opacity 第二属性动画。
-// 扫描时长取 12s：低帧率下每帧跳距减半，肉眼不产生颗粒感。
+// 3. 进出场交给面板 overflow 裁切做几何揭示（光束"入画"），不做 opacity 第二属性动画；
+// 4. 光带仅占面板宽 10%、时长放慢到 16s——合成层位图面积与低帧率下的每帧跳距同时压到最低。
 .runway-scanline {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  width: 16%;
+  width: 10%;
   pointer-events: none;
   will-change: transform;
   background: linear-gradient(90deg,
@@ -822,7 +822,7 @@ onUnmounted(() => {
     rgba(73, 217, 249, 0.045) 42%,
     rgba(73, 217, 249, 0.1) 74%,
     rgba(122, 239, 255, 0.24) 100%);
-  animation: runway-scanline-sweep 12s linear 1.1s infinite both;
+  animation: runway-scanline-sweep 16s linear 1.1s infinite both;
 
   // 前沿辉光带：渐变模拟柔光（无模糊运算），随母层一次性光栅化。
   &::before {
@@ -1956,11 +1956,11 @@ onUnmounted(() => {
   to { stroke-dashoffset: -30; }
 }
 
-// 扫描带位移以元素自身宽度计（面板宽 16%）：-100% 从左缘外入场，625%（=100%/16%-100%）抵右缘外离场。
+// 扫描带位移以元素自身宽度计（面板宽 10%）：-100% 从左缘外入场，1000%（=100%/10%）抵右缘外离场。
 // 纯 transform 单属性动画，进出场由面板 overflow 裁切做几何揭示，循环无缝。
 @keyframes runway-scanline-sweep {
   from { transform: translateX(-100%); }
-  to { transform: translateX(625%); }
+  to { transform: translateX(1000%); }
 }
 
 @keyframes active-energy {

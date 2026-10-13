@@ -144,6 +144,8 @@ describe('screen4 runway component', () => {
     // 扫描线软件渲染（无 GPU）约定：纯 transform 动画、渐变辉光替代 box-shadow 模糊、独立合成层。
     expect(template).toContain('class="runway-scanline"')
     expect(styles).toMatch(/\.runway-scanline\s*\{[^}]*will-change: transform;/s)
+    // 光带宽度是合成层位图面积的硬上限（内网无 GPU 机器流畅性关键指标），放宽需重新评估性能。
+    expect(styles).toMatch(/\.runway-scanline\s*\{[^}]*width: 10%;/s)
     expect(styles).toContain('@keyframes runway-scanline-sweep')
     expect(extractCssBlock(styles, '@keyframes runway-scanline-sweep')).not.toContain('opacity')
     expect(extractCssBlock(styles, '.runway-scanline')).not.toContain('box-shadow')
