@@ -56,6 +56,7 @@ func SetupRouter(services *service.Services, wsManager *websocket.Manager, jwtSe
 			v1.GET("/users", authHandler.ListUsers)
 			v1.GET("/departments", authHandler.GetDepartments)
 			v1.GET("/users/:id", authHandler.GetUser)
+			v1.GET("/system/health", middleware.RequireAdmin(), healthHandler.SystemHealth)
 			v1.POST("/users", middleware.RequireAdmin(), authHandler.CreateUser)
 			v1.PUT("/users/:id", middleware.RequireAdmin(), authHandler.UpdateUser)
 			v1.POST("/users/:id/reset-password", middleware.RequireAdmin(), authHandler.ResetPassword)

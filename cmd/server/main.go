@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -15,6 +17,7 @@ import (
 	"drill-platform/internal/api/handler/health"
 	"drill-platform/internal/api/router"
 	"drill-platform/internal/infrastructure/events"
+	"drill-platform/internal/infrastructure/nodereg"
 	"drill-platform/internal/infrastructure/presence"
 	"drill-platform/internal/infrastructure/redis"
 	"drill-platform/internal/infrastructure/websocket"
@@ -293,6 +296,63 @@ func main() {
 		healthHandler.SetPublisher(redisClient)
 	}
 
+	// 10b. Node health heartbeat (optional - requires Redis). Each instance
+	// publishes its snapshot every 10s so the admin health page can aggregate
+	// every deployed node; offline detection uses the Redis clock.
+	healthHandler.SetWSStats(wsManager.GetStats)
+	if repository.DB != nil {
+		healthHandler.SetDBStats(func() *sql.DBStats {
+			if sqlDB, err := repository.DB.DB(); err == nil {
+				stats := sqlDB.Stats()
+				return &stats
+			}
+			return nil
+		})
+	}
+	var nodeReporter *nodereg.Reporter
+	var hbCancel context.CancelFunc
+	var hbDone chan struct{}
+	if redisClient != nil {
+		nodeReporter = nodereg.NewReporter(redisClient.Raw(), cfg.InstanceID)
+		healthHandler.SetRegistry(nodereg.NewRegistry(redisClient.Raw()))
+
+		hbCtx, cancel := context.WithCancel(context.Background())
+		hbCancel = cancel
+		hbDone = make(chan struct{})
+		go func() {
+			defer close(hbDone)
+			report := func() {
+				data, err := json.Marshal(healthHandler.BuildSnapshot(hbCtx))
+				if err != nil {
+					return
+				}
+				if err := nodeReporter.Report(hbCtx, data); err != nil {
+					log.Printf("节点心跳上报失败: %v", err)
+				}
+			}
+			report()
+			log.Println("节点心跳已启动")
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					report()
+				case <-hbCtx.Done():
+					// 独立超时：hbCtx 已取消，注销须用新 context
+					dctx, dcancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := nodeReporter.Deregister(dctx); err != nil {
+						log.Printf("节点注销失败: %v", err)
+					} else {
+						log.Println("已从节点注册中心注销")
+					}
+					dcancel()
+					return
+				}
+			}
+		}()
+	}
+
 	// 11. Router and HTTP server.
 	r := router.SetupRouter(services, wsManager, cfg.JWT.Secret, loginLogger, healthHandler)
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -327,14 +387,21 @@ func main() {
 
 	// 15. Graceful shutdown sequence:
 	//   a. mark readiness false so load balancers drain traffic;
-	//   b. stop the Worker and release its lease;
-	//   c. cancel the events subscriber;
-	//   d. shut down the HTTP server with a timeout (closes WebSocket conns);
-	//   e. close the login logger;
-	//   f. close Redis;
-	//   g. close MySQL.
+	//   b. stop the node heartbeat and deregister from the Redis registry;
+	//   c. stop the Worker and release its lease;
+	//   d. cancel the events subscriber;
+	//   e. shut down the HTTP server with a timeout (closes WebSocket conns);
+	//   f. close the login logger;
+	//   g. close Redis;
+	//   h. close MySQL.
 	healthHandler.SetReady(false)
 	log.Println("已标记为未就绪")
+
+	// 停止节点心跳并从注册中心注销（必须在 Redis 关闭之前完成）
+	if hbCancel != nil {
+		hbCancel()
+		<-hbDone
+	}
 
 	if flowWorker != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)

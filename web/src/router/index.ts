@@ -52,6 +52,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '用户管理', icon: 'User' },
       },
       {
+        path: 'health',
+        name: 'AdminHealth',
+        component: () => import('@/views/admin/HealthView.vue'),
+        meta: { title: '节点健康', icon: 'Connection' },
+      },
+      {
         path: 'drills',
         name: 'AdminDrills',
         component: () => import('@/views/admin/DrillListView.vue'),
