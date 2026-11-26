@@ -112,6 +112,17 @@ describe('screen4 runway component', () => {
     expect(template).toContain("'is-energized': indicator.energized")
     expect(source).toContain('energized: end !== null && end >= index + 1')
     expect(styles).toContain('.turn-indicator.is-energized')
+    expect(styles).toContain('@keyframes turn-chevron-drop')
+    expect(styles).toContain('@keyframes turn-surge')
+    expect(styles).toContain('@keyframes turn-guide-spin')
+    expect(styles).toContain('@keyframes turn-comet-orbit')
+    expect(styles).toContain('@keyframes turn-core-breathe')
+    expect(template).toContain('class="turn-comet-leader"')
+    expect(template).toContain('class="turn-core-glow"')
+    // 无 GPU 性能约定：动画元素不得携带 feGaussianBlur 滤镜，辉光一律用宽描边层实现。
+    expect(template).toContain('class="turn-indicator-halo"')
+    expect(template).toContain('class="turn-comet-halo"')
+    expect(extractCssBlock(styles, '.turn-indicator {')).not.toContain('filter')
   })
 
   it('provides distinct status colors and reduced motion', () => {
@@ -161,8 +172,10 @@ describe('screen4 runway component', () => {
   })
 
   it('shows row turns as a downward continuation', () => {
-    expect(template).toContain('class="turn-indicator-arrow"')
-    expect(template).toContain('d="M -7 -9 L 0 -2 L 7 -9 M -7 1 L 0 8 L 7 1"')
+    expect(template).toContain('class="turn-chevron is-a"')
+    expect(template).toContain('d="M -7 -9 L 0 -2 L 7 -9"')
+    expect(template).toContain('class="turn-chevron is-b"')
+    expect(template).toContain('d="M -7 1 L 0 8 L 7 1"')
     expect(template).not.toContain("indicator.direction === 'right'")
   })
 

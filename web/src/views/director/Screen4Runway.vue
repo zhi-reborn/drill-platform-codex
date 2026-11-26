@@ -135,8 +135,24 @@
         :transform="`translate(${indicator.x} ${indicator.y})`"
         aria-hidden="true"
       >
-        <circle r="18" />
-        <path class="turn-indicator-arrow" d="M -7 -9 L 0 -2 L 7 -9 M -7 1 L 0 8 L 7 1" />
+        <circle class="turn-pulse" r="18" />
+        <circle class="turn-pulse is-late" r="18" />
+        <g class="turn-comet">
+          <path class="turn-comet-tail" d="M -27 0 A 27 27 0 1 1 27 0 A 27 27 0 1 1 -27 0" />
+          <path class="turn-comet-halo" d="M -27 0 A 27 27 0 1 1 27 0 A 27 27 0 1 1 -27 0" />
+          <path class="turn-comet-leader" d="M -27 0 A 27 27 0 1 1 27 0 A 27 27 0 1 1 -27 0" />
+        </g>
+        <circle class="turn-guide" r="24" />
+        <circle class="turn-disc" r="18" />
+        <circle class="turn-core-glow" r="13" />
+        <g class="turn-chevron is-a">
+          <path class="turn-indicator-halo" d="M -7 -9 L 0 -2 L 7 -9" />
+          <path class="turn-indicator-arrow" d="M -7 -9 L 0 -2 L 7 -9" />
+        </g>
+        <g class="turn-chevron is-b">
+          <path class="turn-indicator-halo" d="M -7 1 L 0 8 L 7 1" />
+          <path class="turn-indicator-arrow" d="M -7 1 L 0 8 L 7 1" />
+        </g>
       </g>
 
       <g
@@ -1657,30 +1673,146 @@ onUnmounted(() => {
 }
 
 .turn-indicator {
-  circle {
+  // 折返弯头：跑道换行处的下行枢纽。未导通时青色"待命带电"，导通后转为绿色能量仪式。
+  .turn-disc {
     fill: rgba(5, 35, 56, 0.92);
     stroke: rgba(77, 198, 237, 0.5);
   }
 
-  path {
+  // 外圈虚线导环缓旋：r=24 与网格边缘齐平。
+  .turn-guide {
+    fill: none;
+    stroke: rgba(88, 196, 236, 0.32);
+    stroke-width: 1;
+    stroke-dasharray: 3 7;
+    animation: turn-guide-spin 14s linear infinite;
+  }
+
+  // 箭羽组整体动画：辉光层与箭羽同组下落，组透明度一次生效——
+  // 宽描边辉光替代 feGaussianBlur，无 GPU 机器上无需逐帧重算滤镜。
+  .turn-chevron {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: turn-arrow-breathe 2.6s ease-in-out infinite;
+  }
+
+  .turn-chevron.is-b {
+    animation-delay: -1.3s;
+  }
+
+  // 未导通时箭羽缓慢错相呼吸，提示下行通路尚在前方。
+  .turn-indicator-halo {
+    fill: none;
+    stroke: rgba(114, 223, 255, 0.22);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .turn-indicator-arrow {
     fill: none;
     stroke: #72dfff;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter: url('#s4-soft-glow');
+  }
+
+  // 彗星巡游环、涌出环、辉光核心仅在导通后登场。
+  .turn-comet,
+  .turn-core-glow,
+  .turn-pulse {
+    display: none;
+  }
+
+  .turn-pulse {
+    fill: none;
+    stroke-width: 1.5;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .turn-comet path {
+    fill: none;
+    stroke-linecap: round;
   }
 }
 
-// 完成链越过折返点：半透明绿罩让导轨与光珠透出，读作链路穿针而过。
+// 完成链越过折返点：半透明绿罩让导轨与光珠透出，读作链路穿针而过；
+// 箭羽逐级下压、双涌出环错相放电、彗星沿外环巡游、核心绿灯呼吸——弯头成为链路最亮的下行仪式。
 .turn-indicator.is-energized {
-  circle {
+  .turn-disc {
     fill: rgba(7, 34, 26, 0.55);
     stroke: rgba(61, 240, 174, 0.72);
   }
 
-  path {
+  .turn-guide {
+    stroke: rgba(61, 240, 174, 0.42);
+    animation-duration: 7s;
+  }
+
+  // 弯头核心点亮：与完成节点共用同一枚绿灯语言。
+  .turn-core-glow {
+    display: block;
+    fill: url('#s4-node-lit-core');
+    opacity: .5;
+    animation: turn-core-breathe 1.6s ease-in-out infinite;
+  }
+
+  // 箭羽逐级下压：辉光层与箭羽同组下落，加粗提亮，读作能量逐级灌向下一行。
+  .turn-chevron {
+    animation: turn-chevron-drop 1.6s cubic-bezier(.55, 0, .35, 1) infinite;
+  }
+
+  .turn-chevron.is-b {
+    animation-delay: -1.15s;
+  }
+
+  .turn-indicator-halo {
+    stroke: rgba(169, 255, 214, 0.28);
+  }
+
+  .turn-indicator-arrow {
     stroke: #a9ffd6;
+    stroke-width: 2.6;
+  }
+
+  // 双涌出环错半周期放电：弯头向下一行持续涌流。
+  .turn-pulse {
+    display: block;
+    stroke: rgba(66, 240, 164, 0.8);
+    animation: turn-surge 1.6s cubic-bezier(.3, 0, .4, 1) infinite;
+  }
+
+  .turn-pulse.is-late {
+    animation-delay: -0.8s;
+  }
+
+  // 环绕彗星：辉光环 + 亮弧领航 + 短弧拖尾，沿 r=27 外环巡游；
+  // 辉光用宽描边层而非滤镜，保证无 GPU 机器流畅。
+  .turn-comet {
+    display: block;
+  }
+
+  .turn-comet-halo {
+    stroke: rgba(93, 247, 189, 0.3);
+    stroke-width: 7;
+    stroke-dasharray: 46 123.65;
+    animation: turn-comet-orbit 2.4s linear infinite;
+  }
+
+  .turn-comet-leader {
+    stroke: #7dfcc0;
+    stroke-width: 3;
+    stroke-dasharray: 46 123.65;
+    animation: turn-comet-orbit 2.4s linear infinite;
+  }
+
+  .turn-comet-tail {
+    stroke: rgba(125, 252, 192, 0.5);
+    stroke-width: 2;
+    stroke-dasharray: 20 149.65;
+    animation: turn-comet-orbit 2.4s linear infinite;
+    animation-delay: .14s;
   }
 }
 
@@ -2064,6 +2196,41 @@ onUnmounted(() => {
   100% { transform: scale(1); }
 }
 
+// -40 = 折返导环虚线周期(3+7)×4，保证旋转无缝。
+@keyframes turn-guide-spin {
+  to { stroke-dashoffset: -40; }
+}
+
+@keyframes turn-arrow-breathe {
+  0%, 100% { opacity: .4; }
+  50% { opacity: 1; }
+}
+
+// 箭羽逐级下压：上羽先落、下羽错相跟进，读作能量逐级灌向下一行。
+@keyframes turn-chevron-drop {
+  0% { opacity: 0; transform: translateY(-6px) scale(.92); }
+  36% { opacity: 1; transform: translateY(-1px) scale(1); }
+  72% { opacity: .85; transform: translateY(3px) scale(1); }
+  100% { opacity: 0; transform: translateY(7px) scale(1); }
+}
+
+// 折返弯头向下一行放电的涌出环。
+@keyframes turn-surge {
+  0% { transform: scale(.7); opacity: .68; }
+  100% { transform: scale(1.95); opacity: 0; }
+}
+
+// 弯头核心绿灯呼吸。
+@keyframes turn-core-breathe {
+  0%, 100% { opacity: .45; }
+  50% { opacity: .9; }
+}
+
+// 169.65 = 彗星外环周长 2π×27，保证巡游无缝。
+@keyframes turn-comet-orbit {
+  to { stroke-dashoffset: -169.65; }
+}
+
 @media (max-width: 1280px) {
   .runway-deck {
     gap: 8px;
@@ -2090,6 +2257,10 @@ onUnmounted(() => {
   .runway-complete-flow { animation-duration: 2.4s; }
   .runway-active-path { animation-duration: 2.6s; }
   .runway-node.is-completed .node-orbit-outer { animation-duration: 18s; }
+  .turn-guide { animation-duration: 22s; }
+  .turn-comet-leader,
+  .turn-comet-halo,
+  .turn-comet-tail { animation-duration: 3.6s; }
 }
 
 .screen4-runway.is-motion-paused *,
@@ -2101,6 +2272,16 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: reduce) {
   // 基础样式不再隐藏扫描带，无动画时直接整体隐藏。
   .runway-scanline {
+    display: none !important;
+  }
+
+  // 静态涌出环与圆盘重叠会读作脏边框，直接隐藏。
+  .turn-pulse {
+    display: none !important;
+  }
+
+  // 冻结的彗星弧会读作悬停的装饰边，直接隐藏。
+  .turn-comet {
     display: none !important;
   }
 
@@ -2125,7 +2306,10 @@ onUnmounted(() => {
   .ticker-chip.is-running .chip-dot,
   .ticker-complete,
   .runway-baton,
-  .baton-beam {
+  .baton-beam,
+  .turn-guide,
+  .turn-chevron,
+  .turn-core-glow {
     animation: none !important;
   }
 }
